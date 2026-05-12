@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { parseNominal, cn } from './lib/utils'
 import type { Transaction } from './types'
 
@@ -64,6 +64,21 @@ const App: React.FC = () => {
   const [editNominal, setEditNominal] = useState('')
   const [editAdmin, setEditAdmin] = useState('')
   const [editKeterangan, setEditKeterangan] = useState('')
+
+  const editNominalRef = useRef<HTMLInputElement>(null)
+  const editAdminRef = useRef<HTMLInputElement>(null)
+  const editKeteranganRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (isLast) {
+        handleSaveEdit()
+      } else {
+        nextRef?.current?.focus()
+      }
+    }
+  }
 
   // Persistence Effects
   useEffect(() => {
@@ -167,8 +182,8 @@ const App: React.FC = () => {
   const handleStartEdit = (tx: Transaction) => {
     setEditingTx(tx)
     setEditKategori(tx.kategori)
-    setEditNominal(tx.nominal.toString())
-    setEditAdmin(tx.adminFee.toString())
+    setEditNominal(tx.nominal.toLocaleString('id-ID').replace(/,/g, '.'))
+    setEditAdmin(tx.adminFee.toLocaleString('id-ID').replace(/,/g, '.'))
     setEditKeterangan(tx.keterangan)
   }
 
@@ -337,6 +352,7 @@ const App: React.FC = () => {
                 <select 
                   value={editKategori} 
                   onChange={e => setEditKategori(e.target.value)}
+                  onKeyDown={(e) => handleEditKeyDown(e, editNominalRef)}
                   className="form-input-modern w-full"
                 >
                   <option value="Transfer Bank">Transfer Bank</option>
@@ -352,16 +368,20 @@ const App: React.FC = () => {
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Nominal</label>
                   <input 
+                    ref={editNominalRef}
                     value={editNominal} 
-                    onChange={e => setEditNominal(e.target.value)}
+                    onChange={e => setEditNominal(formatInputRupiah(e.target.value))}
+                    onKeyDown={(e) => handleEditKeyDown(e, editAdminRef)}
                     className="form-input-modern w-full"
                   />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Admin</label>
                   <input 
+                    ref={editAdminRef}
                     value={editAdmin} 
-                    onChange={e => setEditAdmin(e.target.value)}
+                    onChange={e => setEditAdmin(formatInputRupiah(e.target.value))}
+                    onKeyDown={(e) => handleEditKeyDown(e, editKeteranganRef)}
                     className="form-input-modern w-full text-emerald-600"
                   />
                 </div>
@@ -370,9 +390,11 @@ const App: React.FC = () => {
               <div>
                 <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Keterangan</label>
                 <textarea 
+                  ref={editKeteranganRef}
                   value={editKeterangan} 
                   onChange={e => setEditKeterangan(e.target.value)}
                   rows={2}
+                  onKeyDown={(e) => handleEditKeyDown(e, undefined, true)}
                   className="form-input-modern w-full resize-none"
                 />
               </div>

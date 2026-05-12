@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Receipt, Plus, Trash2, Edit, Check, Search, Ban, X, Camera, ImageIcon, Loader2 } from "lucide-react";
 import { formatRupiah, formatInputRupiah, parseNominal, cn } from "../lib/utils";
 
@@ -26,6 +26,21 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
   const [photoUrl, setPhotoUrl] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const namaRef = useRef<HTMLInputElement>(null);
+  const nominalRef = useRef<HTMLInputElement>(null);
+  const keteranganRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isLast) {
+        handleSave();
+      } else {
+        nextRef?.current?.focus();
+      }
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem("hutang_list", JSON.stringify(hutangList));
@@ -217,9 +232,11 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA PELANGGAN</label>
                 <input 
+                  ref={namaRef}
                   value={nama} 
                   onChange={e => setNama(e.target.value)} 
                   placeholder="Masukkan nama..." 
+                  onKeyDown={(e) => handleKeyDown(e, nominalRef)}
                   className="form-input-modern w-full" 
                 />
               </div>
@@ -228,10 +245,12 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
                   <input 
+                    ref={nominalRef}
                     value={nominalDisplay} 
                     onChange={e => setNominalDisplay(formatInputRupiah(e.target.value))} 
                     inputMode="numeric" 
                     placeholder="0" 
+                    onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
                     className="form-input-modern w-full pl-8" 
                   />
                 </div>
@@ -239,10 +258,12 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
                 <textarea 
+                  ref={keteranganRef}
                   value={keterangan} 
                   onChange={e => setKeterangan(e.target.value)} 
                   placeholder="Contoh: Pinjam saldo bank, belum bayar..." 
                   rows={2} 
+                  onKeyDown={(e) => handleKeyDown(e, undefined, true)}
                   className="form-input-modern w-full resize-none" 
                 />
               </div>

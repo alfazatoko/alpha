@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { BookUser, Plus, Trash2, Edit, Search, X, Camera, ImageIcon, Loader2, Phone, Copy } from "lucide-react";
 
 interface KontakRecord {
@@ -21,6 +21,21 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
   const [photoUrl, setPhotoUrl] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const namaRef = useRef<HTMLInputElement>(null);
+  const nomorRef = useRef<HTMLInputElement>(null);
+  const keteranganRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isLast) {
+        handleSave();
+      } else {
+        nextRef?.current?.focus();
+      }
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem("kontak_list", JSON.stringify(kontakList));
@@ -179,29 +194,35 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA</label>
                 <input 
+                  ref={namaRef}
                   value={nama} 
                   onChange={e => setNama(e.target.value)} 
                   placeholder="Masukkan nama..." 
+                  onKeyDown={(e) => handleKeyDown(e, nomorRef)}
                   className="form-input-modern w-full" 
                 />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMOR HP / WHATSAPP</label>
                 <input 
+                  ref={nomorRef}
                   value={nomor} 
                   onChange={e => setNomor(e.target.value)} 
                   inputMode="tel" 
                   placeholder="0812..." 
+                  onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
                   className="form-input-modern w-full" 
                 />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
                 <textarea 
+                  ref={keteranganRef}
                   value={keterangan} 
                   onChange={e => setKeterangan(e.target.value)} 
                   placeholder="Contoh: Pelanggan setia..." 
                   rows={2} 
+                  onKeyDown={(e) => handleKeyDown(e, undefined, true)}
                   className="form-input-modern w-full resize-none" 
                 />
               </div>

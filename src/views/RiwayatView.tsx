@@ -227,13 +227,16 @@ const TransactionRow: React.FC<{ t: Transaction, index: number, onEdit: (tx: Tra
         <span className="font-bold text-emerald-600 text-xs tabular-nums text-center">
           {t.adminFee.toLocaleString('id-ID')}
         </span>
-        <span className="text-center">
-          <i className={cn("fa-solid fa-chevron-down text-gray-300 text-[10px] transition-transform duration-300", isOpen && "rotate-180 text-violet-500")}></i>
+        <span className="flex justify-center items-center">
+          <div className="w-6 h-6 rounded-full bg-blue-600 text-white shadow-md shadow-blue-500/20 flex items-center justify-center transition-all duration-300">
+            <i className={cn("fa-solid fa-chevron-down text-[8px] transition-transform duration-300", isOpen && "rotate-180")}></i>
+          </div>
         </span>
       </div>
       {isOpen && (
         <div className="bg-gray-50 border-t border-gray-100 block w-full">
-          <div className="py-4 px-6 space-y-3">
+          <div className="py-4 px-6 space-y-4">
+            {/* Baris 2: Detail Utama & Edit */}
             <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
               <div className="space-y-1">
                 <p className="text-[10px] text-gray-500 flex items-center gap-2">
@@ -241,8 +244,8 @@ const TransactionRow: React.FC<{ t: Transaction, index: number, onEdit: (tx: Tra
                   <span className="text-gray-700 font-black flex items-center gap-2">
                     {fullDate} - {jam}
                     {t.isEdited && (
-                      <span className="bg-amber-50 text-amber-600 text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <i className="fa-solid fa-eye"></i> EDITED
+                      <span className="bg-amber-50 text-amber-600 text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1 border border-amber-200">
+                        <i className="fa-solid fa-eye text-[7px]"></i> TEREDIT
                       </span>
                     )}
                   </span>
@@ -259,6 +262,30 @@ const TransactionRow: React.FC<{ t: Transaction, index: number, onEdit: (tx: Tra
                 <i className="fa-solid fa-pen-to-square"></i> EDIT
               </button>
             </div>
+
+            {/* Baris 3: Data Asli (Jika Ada) */}
+            {t.isEdited && (
+              <div className="bg-amber-50/50 p-3 rounded-2xl border border-dashed border-amber-200 animate-in fade-in duration-500">
+                <div className="flex items-center gap-2 mb-2">
+                  <i className="fa-solid fa-clock-rotate-left text-amber-600 text-[10px]"></i>
+                  <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Data Sebelum Edit</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white/80 p-2 rounded-xl border border-amber-100/50">
+                    <p className="text-[7px] text-amber-600/60 uppercase font-black tracking-tighter">Kategori</p>
+                    <p className="text-[10px] font-black text-gray-400 italic line-through">{t.originalKategori}</p>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-xl border border-amber-100/50">
+                    <p className="text-[7px] text-amber-600/60 uppercase font-black tracking-tighter">Nominal</p>
+                    <p className="text-[10px] font-black text-gray-400 italic line-through">{t.originalNominal?.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-xl border border-amber-100/50">
+                    <p className="text-[7px] text-amber-600/60 uppercase font-black tracking-tighter">Admin</p>
+                    <p className="text-[10px] font-black text-gray-400 italic line-through">{t.originalAdminFee?.toLocaleString('id-ID')}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

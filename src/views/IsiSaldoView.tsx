@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
 
 interface IsiSaldoViewProps {
@@ -14,6 +14,20 @@ interface IsiSaldoViewProps {
 }
 
 const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
+  const nominalRef = useRef<HTMLInputElement>(null)
+  const keteranganRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (isLast) {
+        props.handleSimpanIsiSaldo()
+      } else {
+        nextRef?.current?.focus()
+      }
+    }
+  }
+
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
       <div className="px-5 pt-7 pb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6">
@@ -27,14 +41,6 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
       </div>
 
       <div className="px-5 pb-8 space-y-5">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-100/50 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl"></div>
-          <p className="text-xs text-blue-700 font-bold flex items-center gap-2">
-            <i className="fa-solid fa-circle-info"></i> Panduan
-          </p>
-          <p className="text-[11px] text-blue-600/80 mt-1 leading-relaxed">Gunakan fitur ini untuk menambah modal bank atau mencatat hasil penjualan fisik ke sistem.</p>
-        </div>
-
         <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
           <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
             <i className="fa-solid fa-vault text-blue-700"></i> MANAJEMEN SALDO
@@ -45,6 +51,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
             <select 
               value={props.isiJenis}
               onChange={(e) => props.setIsiJenis(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, nominalRef)}
               className="form-input-modern w-full"
             >
               <option value="" disabled>Pilih jenis saldo</option>
@@ -55,31 +62,32 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
           <div>
             <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL TOP-UP (RP)</label>
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={props.isiNominal}
-                onChange={(e) => props.setIsiNominal(formatInputRupiah(e.target.value))}
-                className="form-input-modern w-full pl-8"
-              />
-            </div>
+            <input 
+              ref={nominalRef}
+              type="text" 
+              inputMode="numeric" 
+              placeholder="0" 
+              value={props.isiNominal}
+              onChange={(e) => props.setIsiNominal(formatInputRupiah(e.target.value))}
+              onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+              className="form-input-modern w-full"
+            />
           </div>
 
           <div>
             <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
             <textarea 
+              ref={keteranganRef}
               rows={2} 
               placeholder="Contoh: Setoran tunai sore hari..." 
               value={props.isiKeterangan}
               onChange={(e) => props.setIsiKeterangan(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, undefined, true)}
               className="form-input-modern w-full resize-none"
             ></textarea>
           </div>
 
-          <button onClick={props.handleSimpanIsiSaldo} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest">
+          <button onClick={props.handleSimpanIsiSaldo} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest mt-2">
             SIMPAN SALDO
           </button>
         </div>

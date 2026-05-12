@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { ArrowLeft, Printer, Plus, Trash2 } from "lucide-react";
 import { formatRupiah, formatInputRupiah, parseNominal } from "../lib/utils";
 
@@ -17,6 +17,22 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
 
   const [isPreview, setIsPreview] = useState(false);
+  
+  const namaRef = useRef<HTMLInputElement>(null);
+  const hargaRef = useRef<HTMLInputElement>(null);
+  const jumlahRef = useRef<HTMLInputElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isLast) {
+        handleSimpanItem();
+        namaRef.current?.focus();
+      } else {
+        nextRef?.current?.focus();
+      }
+    }
+  };
 
   const handleSimpanItem = () => {
     if (!currentItem.nama || !currentItem.harga || !currentItem.jumlah) return;
@@ -151,9 +167,11 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
             <div>
               <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA BARANG / JASA</label>
               <input 
+                ref={namaRef}
                 value={currentItem.nama} 
                 onChange={e => setCurrentItem({...currentItem, nama: e.target.value})} 
                 placeholder="Contoh: Tarik Tunai 1jt" 
+                onKeyDown={(e) => handleKeyDown(e, hargaRef)}
                 className="form-input-modern w-full" 
               />
             </div>
@@ -164,9 +182,11 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
                   <input 
+                    ref={hargaRef}
                     value={currentItem.harga} 
                     onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} 
                     placeholder="0" 
+                    onKeyDown={(e) => handleKeyDown(e, jumlahRef)}
                     className="form-input-modern w-full pl-8" 
                   />
                 </div>
@@ -174,10 +194,12 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JUMLAH (QTY)</label>
                 <input 
+                  ref={jumlahRef}
                   type="number" 
                   value={currentItem.jumlah} 
                   onChange={e => setCurrentItem({...currentItem, jumlah: e.target.value})} 
                   placeholder="1" 
+                  onKeyDown={(e) => handleKeyDown(e, undefined, true)}
                   className="form-input-modern w-full" 
                 />
               </div>
