@@ -140,11 +140,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               ))
             )}
           </div>
-          <div className="px-5 py-4 bg-gradient-to-r from-gray-50 to-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
-            <span className="bg-white px-2 py-1 rounded-lg border border-gray-100 shadow-sm">{filteredTransactions.length} item</span>
-            <div className="flex gap-3">
-              <span className="text-blue-700 font-black">Nom: {formatRupiah(totalNominal)}</span>
-              <span className="text-emerald-600 font-black border-l border-gray-200 pl-3">Adm: {formatRupiah(totalAdmin)}</span>
+          <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
+            <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{filteredTransactions.length} item</span>
+            <div className="flex items-center gap-3 pr-2">
+              <span className="text-blue-700 font-black text-[10px]">Nom: {formatRupiah(totalNominal)}</span>
+              <span className="w-px h-3 bg-gray-200"></span>
+              <span className="text-emerald-600 font-black text-[10px]">Adm: {formatRupiah(totalAdmin)}</span>
             </div>
           </div>
         </div>

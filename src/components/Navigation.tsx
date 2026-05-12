@@ -1,5 +1,5 @@
-import React from 'react'
-import { Home, Clock, Wallet, BarChart2, User } from 'lucide-react'
+import React, { useState } from 'react'
+import { Home, Clock, Wallet, BarChart2, User, ChevronDown, ChevronUp } from 'lucide-react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -13,6 +13,8 @@ interface NavigationProps {
 }
 
 const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) => {
+  const [isVisible, setIsVisible] = useState(true)
+  
   const items = [
     { id: 'view-beranda', label: 'Beranda', Icon: Home },
     { id: 'view-transaksi', label: 'Riwayat', Icon: Clock },
@@ -22,35 +24,50 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-2 pb-6 z-50">
-      <ul className="flex justify-around items-center max-w-lg mx-auto">
-        {items.map((item) => {
-          const isActive = activeView === item.id
-          return (
-            <li 
-              key={item.id} 
-              className="flex-1"
-              onClick={() => setActiveView(item.id)}
-            >
-              <div className="flex flex-col items-center gap-1 cursor-pointer group">
-                <div className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300",
-                  isActive ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-transparent text-gray-900 group-hover:bg-gray-50"
-                )}>
-                  <item.Icon className={cn("w-6 h-6", isActive ? "stroke-[2.5px]" : "stroke-[2px]")} />
+    <>
+      <button 
+        onClick={() => setIsVisible(!isVisible)}
+        className={cn(
+          "fixed right-10 z-[60] w-8 h-8 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-100 flex items-center justify-center text-blue-600 transition-all duration-300 active:scale-90",
+          isVisible ? "bottom-[48px]" : "bottom-6"
+        )}
+      >
+        {isVisible ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+      </button>
+
+      <nav className={cn(
+        "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-1.5 z-50 transition-all duration-500 transform shadow-[0_-4px_20px_rgba(0,0,0,0.03)]",
+        isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
+      )}>
+        <ul className="flex justify-around items-center max-w-lg mx-auto">
+          {items.map((item) => {
+            const isActive = activeView === item.id
+            return (
+              <li 
+                key={item.id} 
+                className="flex-1"
+                onClick={() => setActiveView(item.id)}
+              >
+                <div className="flex flex-col items-center cursor-pointer group py-1">
+                  <div className={cn(
+                    "transition-all duration-300 mb-0.5",
+                    isActive ? "text-blue-600 scale-110" : "text-gray-400 group-hover:text-gray-600"
+                  )}>
+                    <item.Icon className={cn("w-5 h-5", isActive ? "stroke-[2.5px]" : "stroke-[2px]")} />
+                  </div>
+                  <span className={cn(
+                    "text-[9px] font-black tracking-tight transition-colors duration-300",
+                    isActive ? "text-blue-600" : "text-gray-400"
+                  )}>
+                    {item.label}
+                  </span>
                 </div>
-                <span className={cn(
-                  "text-[10px] font-bold tracking-tight transition-colors duration-300",
-                  isActive ? "text-blue-600" : "text-gray-900"
-                )}>
-                  {item.label}
-                </span>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+    </>
   )
 }
 

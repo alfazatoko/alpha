@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { parseNominal, formatInputRupiah, cn } from './lib/utils'
 import type { Transaction } from './types'
 
 // Components
 import Navigation from './components/Navigation'
 import SidePanel from './components/SidePanel'
+import LoginScreen, { KASIR_ACCOUNTS, type KasirAccount } from './components/LoginScreen'
 
 // Views
 import BerandaView from './views/BerandaView'
@@ -26,18 +27,80 @@ declare global {
   }
 }
 
+// Helper: get namespaced localStorage key for multi-kasir
+const getKey = (username: string, key: string) => `alphaPro_${username}_${key}`
+
 const App: React.FC = () => {
+  // ── Auth State ──
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [currentUsername, setCurrentUsername] = useState('')
+  const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(null)
+
+  // Check persisted login on mount
+  useEffect(() => {
+    const storedLoggedIn = localStorage.getItem('alphaPro_loggedIn')
+    const storedUsername = localStorage.getItem('alphaPro_username')
+    if (storedLoggedIn === 'true' && storedUsername && KASIR_ACCOUNTS[storedUsername]) {
+      setIsLoggedIn(true)
+      setCurrentUsername(storedUsername)
+      setCurrentAccount(KASIR_ACCOUNTS[storedUsername])
+    }
+  }, [])
+
+  // ── Login / Logout Handlers ──
+  const handleLogin = useCallback((username: string, account: KasirAccount) => {
+    localStorage.setItem('alphaPro_loggedIn', 'true')
+    localStorage.setItem('alphaPro_username', username)
+    localStorage.setItem('alphaPro_name', account.name)
+    localStorage.setItem('alphaPro_role', account.role)
+    setIsLoggedIn(true)
+    setCurrentUsername(username)
+    setCurrentAccount(account)
+  }, [])
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('alphaPro_loggedIn')
+    localStorage.removeItem('alphaPro_username')
+    localStorage.removeItem('alphaPro_name')
+    localStorage.removeItem('alphaPro_role')
+    setIsLoggedIn(false)
+    setCurrentUsername('')
+    setCurrentAccount(null)
+  }, [])
+
+  // ── Show login screen if not logged in ──
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />
+  }
+
+  // ── Everything below only renders when logged in ──
+  return <MainApp username={currentUsername} account={currentAccount!} onLogout={handleLogout} />
+}
+
+// ════════════════════════════════════════════════
+// MainApp — the original App, now receiving kasir info
+// ════════════════════════════════════════════════
+interface MainAppProps {
+  username: string
+  account: KasirAccount
+  onLogout: () => void
+}
+
+const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
+  // Namespaced localStorage helper
+  const k = (key: string) => getKey(username, key)
+
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light')
-  const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'auto')
+  const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
   
-  // App Data State (LocalStorage for persistence until Supabase is fully connected)
-  const [saldoBank, setSaldoBank] = useState<number>(Number(localStorage.getItem('saldoBank')) || 1000000)
-  const [totalPenjualan, setTotalPenjualan] = useState<number>(Number(localStorage.getItem('totalPenjualan')) || 0)
-  const [transactions, setTransactions] = useState<Transaction[]>(JSON.parse(localStorage.getItem('transactions') || '[]'))
-  const [kasModal, setKasModal] = useState<number>(Number(localStorage.getItem('kas_modal')) || 0)
+  // App Data State — namespaced per kasir
+  const [saldoBank, setSaldoBank] = useState<number>(Number(localStorage.getItem(k('saldoBank'))) || 1000000)
+  const [totalPenjualan, setTotalPenjualan] = useState<number>(Number(localStorage.getItem(k('totalPenjualan'))) || 0)
+  const [transactions, setTransactions] = useState<Transaction[]>(JSON.parse(localStorage.getItem(k('transactions')) || '[]'))
+  const [kasModal, setKasModal] = useState<number>(Number(localStorage.getItem(k('kas_modal'))) || 0)
   
   // Form State
   const [formKategori, setFormKategori] = useState('')
@@ -67,6 +130,7 @@ const App: React.FC = () => {
   // Loading & Notification State
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState<{ show: boolean, message: string } | null>(null)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const editNominalRef = useRef<HTMLInputElement>(null)
   const editAdminRef = useRef<HTMLInputElement>(null)
@@ -94,17 +158,17 @@ const App: React.FC = () => {
   }, [screenSize])
 
   useEffect(() => {
-    localStorage.setItem('saldoBank', saldoBank.toString())
-    localStorage.setItem('totalPenjualan', totalPenjualan.toString())
-    localStorage.setItem('transactions', JSON.stringify(transactions))
-    localStorage.setItem('kas_modal', kasModal.toString())
+    localStorage.setItem(k('saldoBank'), saldoBank.toString())
+    localStorage.setItem(k('totalPenjualan'), totalPenjualan.toString())
+    localStorage.setItem(k('transactions'), JSON.stringify(transactions))
+    localStorage.setItem(k('kas_modal'), kasModal.toString())
   }, [saldoBank, totalPenjualan, transactions, kasModal])
 
   // Daily Reset Check
   useEffect(() => {
     const checkReset = () => {
       const today = new Date().toLocaleDateString('id-ID')
-      const lastReset = localStorage.getItem('last_reset_date')
+      const lastReset = localStorage.getItem(k('last_reset_date'))
 
       if (lastReset && lastReset !== today) {
         // Day has changed! 
@@ -113,7 +177,7 @@ const App: React.FC = () => {
         alert(`Selamat datang di hari baru (${today}). Dashboard Anda sekarang menampilkan rekap harian yang baru. Data hari sebelumnya tersimpan aman di Riwayat.`)
       }
       
-      localStorage.setItem('last_reset_date', today)
+      localStorage.setItem(k('last_reset_date'), today)
     }
 
     checkReset()
@@ -190,8 +254,8 @@ const App: React.FC = () => {
       if (isiJenis === 'Saldo Bank') {
         newSaldoBank += nominal
       } else if (isiJenis === 'Modal Tunai Kasir') {
-        const currentModal = Number(localStorage.getItem('kas_modal') || '0')
-        localStorage.setItem('kas_modal', (currentModal + nominal).toString())
+        const currentModal = Number(localStorage.getItem(k('kas_modal')) || '0')
+        localStorage.setItem(k('kas_modal'), (currentModal + nominal).toString())
         setKasModal(currentModal + nominal)
       }
 
@@ -317,6 +381,8 @@ const App: React.FC = () => {
         totalSaldoKas={totalSaldoKas}
         penjualanDigital={penjualanDigital}
         kasModal={kasModal}
+        kasirName={account.name}
+        kasirRole={account.role}
       />
 
       <RiwayatView 
@@ -350,7 +416,13 @@ const App: React.FC = () => {
         onEdit={handleStartEdit}
       />
 
-      <AkunView active={activeView === 'view-akun'} />
+      <AkunView 
+        active={activeView === 'view-akun'} 
+        kasirName={account.name}
+        kasirRole={account.role}
+        onLogout={onLogout}
+        onRequestLogout={() => setShowLogoutConfirm(true)}
+      />
 
       <IsiSaldoView 
         active={activeView === 'view-isi-saldo'}
@@ -468,12 +540,40 @@ const App: React.FC = () => {
 
       {/* Floating Success Notification */}
       {toast && (
-        <div className="fixed top-20 left-0 right-0 z-[200] flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="fixed bottom-24 left-0 right-0 z-[200] flex justify-center pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-white/20 backdrop-blur-md">
             <div className="w-5 h-5 bg-white text-emerald-600 rounded-full flex items-center justify-center shadow-inner">
               <i className="fa-solid fa-check text-[10px] font-black"></i>
             </div>
             <span className="font-black text-[10px] uppercase tracking-widest">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Notif */}
+      {showLogoutConfirm && (
+        <div className="fixed bottom-24 left-0 right-0 z-[210] flex justify-center p-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white border-2 border-red-500 text-red-600 px-5 py-4 rounded-[2rem] shadow-2xl flex flex-col items-center gap-3 backdrop-blur-md max-w-[300px]">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center shadow-inner">
+                <i className="fa-solid fa-power-off text-[12px] font-black"></i>
+              </div>
+              <span className="font-black text-[11px] uppercase tracking-tight">Yakin ingin keluar?</span>
+            </div>
+            <div className="flex gap-2 w-full mt-1">
+              <button 
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+              >
+                BATAL
+              </button>
+              <button 
+                onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"
+              >
+                KELUAR
+              </button>
+            </div>
           </div>
         </div>
       )}

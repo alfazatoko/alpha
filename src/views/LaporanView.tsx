@@ -126,13 +126,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
         {/* Daftar Transaksi Hari Ini */}
         <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-8">
-          <div className="px-5 py-4 border-b border-gray-50 flex justify-between items-center">
+          <div className="px-5 py-4 border-b border-gray-50 flex justify-between items-center bg-white">
             <h3 className="font-black text-[10px] text-gray-800 uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-list-check text-blue-600"></i> Detail Transaksi Hari Ini
+              <i className="fa-solid fa-list-ul text-violet-500"></i> Daftar Transaksi
             </h3>
-            <span className="bg-blue-50 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Today</span>
           </div>
-          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[8px] font-black text-gray-400 bg-gray-50/50 px-3 py-2.5 uppercase tracking-tighter border-b border-gray-50">
+          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[8px] font-black text-gray-400 bg-gray-50/50 px-3 py-3 uppercase tracking-tighter border-b border-gray-50 items-center">
             <span className="text-center">#</span>
             <span className="text-center">Jam</span>
             <span className="text-center">Tipe</span>
@@ -148,6 +147,14 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} />
               ))
             )}
+          </div>
+          <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
+            <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{props.transactions.length} item</span>
+            <div className="flex items-center gap-3 pr-2">
+              <span className="text-blue-700 font-black text-[10px]">Nom: {formatRupiah(props.transactions.reduce((s,t) => s+t.nominal, 0))}</span>
+              <span className="w-px h-3 bg-gray-200"></span>
+              <span className="text-emerald-600 font-black text-[10px]">Adm: {formatRupiah(props.transactions.reduce((s,t) => s+t.adminFee, 0))}</span>
+            </div>
           </div>
         </div>
       </div>

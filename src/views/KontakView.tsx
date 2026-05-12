@@ -180,7 +180,7 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4" onClick={resetForm}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={resetForm}>
           <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">

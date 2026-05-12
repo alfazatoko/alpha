@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
@@ -29,9 +29,24 @@ interface BerandaViewProps {
   penjualanDigital: number
   kasModal: number
   isSaving?: boolean
+  kasirName?: string
+  kasirRole?: string
+  onLogout?: () => void
 }
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
+  const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  
   const totalPendapatanBersih = props.totalSaldoKas
   const penjualanDigital = props.penjualanDigital
   const kasModal = props.kasModal
@@ -42,12 +57,34 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         <button onClick={() => props.setIsSidePanelOpen(true)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-900">
           <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
         </button>
-        <div className="flex-1 ml-3">
-          <p className="text-gray-900 text-[10px] font-bold uppercase tracking-tight">Selamat datang,</p>
-          <h1 className="text-lg font-black text-black leading-tight">
-            ALPHA
-            <span className="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full ml-1 font-black">AGEN</span>
-          </h1>
+        <div className="flex-1 ml-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <img src="/logo-alpha.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
+            <div>
+              <p className="text-gray-900 text-[10px] font-bold uppercase tracking-tight">Selamat datang,</p>
+              <h1 className="text-lg font-black text-black leading-tight">
+                {props.kasirName || 'ALPHA'}
+                <span className={cn(
+                  "text-[9px] px-2 py-0.5 rounded-full ml-1 font-black",
+                  props.kasirRole === 'owner' ? "bg-amber-500 text-white" : "bg-blue-600 text-white"
+                )}>
+                  {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                </span>
+              </h1>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">
+              {dayName}
+            </p>
+            <p className="text-gray-900 text-[10px] font-black tracking-tight leading-none mb-1">
+              {fullDate}
+            </p>
+            <p className="text-blue-600 text-xs font-black tabular-nums tracking-widest">
+              {clockStr}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -212,19 +249,243 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         ))}
       </div>
 
-      <div className="px-5 mb-4">
-        <TransactionForm 
-          kategori={props.formKategori}
-          setKategori={props.setFormKategori}
-          nominal={props.formNominal}
-          setNominal={props.setFormNominal}
-          admin={props.formAdmin}
-          setAdmin={props.setFormAdmin}
-          keterangan={props.formKeterangan}
-          setKeterangan={props.setFormKeterangan}
-          onSave={props.handleSimpanTransaksi}
-        />
-      </div>
+      {props.kasirRole === 'owner' && (
+        <div className="px-5 mb-8">
+          {/* Header Panel Owner ala Image */}
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center gap-4 border-b-4 border-orange-600/20">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/30 shadow-inner">
+              <i className="fa-solid fa-shield-halved text-2xl"></i>
+            </div>
+            <div>
+              <h3 className="font-black text-white text-xl tracking-tight leading-none">Panel Owner</h3>
+              <p className="text-white/80 text-[11px] font-bold mt-1.5 uppercase tracking-widest">Kelola semua data toko</p>
+            </div>
+          </div>
+
+          {/* Grid Menu Owner ala Image */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { id: 'monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
+              { id: 'laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
+              { id: 'grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
+              { id: 'performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
+              { id: 'absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
+              { id: 'izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
+              { id: 'gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
+              { id: 'backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+              { id: 'view-akun', title: 'Setting', desc: 'Pengaturan app', icon: 'fa-gear', color: 'bg-slate-600' },
+            ].map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => item.id === 'view-akun' ? props.setActiveView('view-akun') : setActiveOwnerModal(item.id)}
+                className="bg-white border border-gray-100 rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 shadow-sm active:scale-95 transition-all hover:border-orange-200"
+              >
+                <div className={cn("w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg", item.color)}>
+                  <i className={`fa-solid ${item.icon} text-lg`}></i>
+                </div>
+                <div className="text-center">
+                  <p className="text-[11px] font-black text-gray-800 leading-none mb-1">{item.title}</p>
+                  <p className="text-[8px] font-bold text-gray-400 leading-tight">{item.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Owner Modals Container */}
+      {activeOwnerModal && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-md flex items-end justify-center sm:items-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300">
+            {/* Modal Header */}
+            <div className={cn(
+              "p-5 text-white flex justify-between items-start",
+              activeOwnerModal === 'monitor' ? "bg-blue-600" : 
+              activeOwnerModal === 'laporan' ? "bg-emerald-600" : "bg-purple-600"
+            )}>
+              <div>
+                <h3 className="font-black text-lg tracking-tight uppercase leading-none">
+                  {activeOwnerModal === 'monitor' ? 'MONITORING KASIR' : 
+                   activeOwnerModal === 'laporan' ? 'LAPORAN GLOBAL' : 'AUDIT LACI KAS'}
+                </h3>
+                <p className="text-[10px] text-white/80 mt-1.5 font-bold uppercase tracking-widest">
+                  {activeOwnerModal === 'monitor' ? 'Pantau aktivitas kasir aktif' : 
+                   activeOwnerModal === 'laporan' ? 'Rekapitulasi seluruh cabang' : 
+                   activeOwnerModal === 'audit' ? 'Verifikasi uang fisik vs sistem' :
+                   activeOwnerModal === 'absen' ? 'Data kehadiran seluruh kasir' :
+                   activeOwnerModal === 'gaji' ? 'Manajemen insentif & payroll' : 
+                   activeOwnerModal === 'grafik' ? 'Analitik penjualan toko' :
+                   activeOwnerModal === 'performa' ? 'Evaluasi kerja kasir' :
+                   activeOwnerModal === 'backup' ? 'Keamanan data & reset sistem' : 'Daftar permohonan izin'}
+                </p>
+              </div>
+              <button onClick={() => setActiveOwnerModal(null)} className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-all shadow-inner">
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 max-h-[60vh] overflow-y-auto hide-scrollbar">
+              {activeOwnerModal === 'monitor' && (
+                <div className="space-y-3">
+                  {['kasir1', 'kasir2'].map(id => {
+                    const name = id === 'kasir1' ? 'Kasir 1' : 'Kasir 2';
+                    const txs = JSON.parse(localStorage.getItem(`alphaPro_${id}_transactions`) || '[]');
+                    const volume = txs.reduce((s: any, t: any) => s + t.nominal, 0);
+                    return (
+                      <div key={id} className="p-4 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black">
+                            {id.slice(-1)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">{name}</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">{txs.length} Transaksi</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-black text-blue-700">Rp {volume.toLocaleString('id-ID')}</p>
+                          <span className="text-[8px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-black">ONLINE</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {activeOwnerModal === 'laporan' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                      <p className="text-[9px] font-black text-emerald-800 uppercase tracking-tighter">Total Admin Fee</p>
+                      <p className="text-sm font-black text-emerald-700 mt-1">Rp 750.000</p>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                      <p className="text-[9px] font-black text-blue-800 uppercase tracking-tighter">Total Volume</p>
+                      <p className="text-sm font-black text-blue-700 mt-1">Rp 12.500.000</p>
+                    </div>
+                  </div>
+                  <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
+                  </button>
+                </div>
+              )}
+
+              {activeOwnerModal === 'audit' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                    <p className="text-[10px] font-bold text-purple-800 text-center uppercase tracking-widest mb-3">Masukkan Uang Fisik Di Laci</p>
+                    <div className="relative">
+                      <span className="absolute left-4 top-3 text-sm font-black text-purple-400">Rp</span>
+                      <input type="text" placeholder="0" className="w-full py-3 pl-10 pr-4 bg-white border border-purple-200 rounded-xl font-black text-purple-700 outline-none" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center px-2">
+                    <span className="text-[10px] font-bold text-gray-400">HITUNGAN SISTEM:</span>
+                    <span className="text-xs font-black text-gray-800">Rp {totalPendapatanBersih.toLocaleString('id-ID')}</span>
+                  </div>
+                  <button className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">
+                    PROSES AUDIT
+                  </button>
+                </div>
+              )}
+
+              {activeOwnerModal === 'absen' && (
+                <div className="space-y-3">
+                  <div className="p-4 border border-orange-100 rounded-2xl bg-orange-50/30 flex justify-between items-center">
+                    <div>
+                      <p className="text-xs font-black text-gray-800">Kasir 1</p>
+                      <p className="text-[9px] text-orange-600 font-bold uppercase">Masuk: 08:00</p>
+                    </div>
+                    <span className="text-[8px] px-2 py-1 bg-green-500 text-white rounded-md font-black">HADIR</span>
+                  </div>
+                  <div className="p-4 border border-orange-100 rounded-2xl bg-orange-50/30 flex justify-between items-center">
+                    <div>
+                      <p className="text-xs font-black text-gray-800">Kasir 2</p>
+                      <p className="text-[9px] text-gray-400 font-bold uppercase">Belum Absen</p>
+                    </div>
+                    <span className="text-[8px] px-2 py-1 bg-gray-400 text-white rounded-md font-black">OFF</span>
+                  </div>
+                </div>
+              )}
+
+              {activeOwnerModal === 'gaji' && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
+                    <i className="fa-solid fa-sack-dollar text-2xl"></i>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Modul Penggajian Sedang Disiapkan</p>
+                </div>
+              )}
+
+              {activeOwnerModal === 'izin' && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-16 h-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto text-cyan-600">
+                    <i className="fa-solid fa-envelope-open-text text-2xl"></i>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tidak Ada Permohonan Izin Hari Ini</p>
+                </div>
+              )}
+
+              {activeOwnerModal === 'grafik' && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+                    <i className="fa-solid fa-chart-area text-2xl"></i>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Grafik Tren Segera Hadir</p>
+                </div>
+              )}
+
+              {activeOwnerModal === 'performa' && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto text-purple-600">
+                    <i className="fa-solid fa-award text-2xl"></i>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ranking Kasir Sedang Diproses</p>
+                </div>
+              )}
+
+              {activeOwnerModal === 'backup' && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
+                    <i className="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Data Anda Aman Di Cloud</p>
+                  <button className="bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Mulai Backup</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {props.kasirRole !== 'owner' && (
+        <div className="px-5 mb-4">
+          <TransactionForm 
+            kategori={props.formKategori}
+            setKategori={props.setFormKategori}
+            nominal={props.formNominal}
+            setNominal={props.setFormNominal}
+            admin={props.formAdmin}
+            setAdmin={props.setFormAdmin}
+            keterangan={props.formKeterangan}
+            setKeterangan={props.setFormKeterangan}
+            onSave={props.handleSimpanTransaksi}
+          />
+        </div>
+      )}
+
+      {props.kasirRole === 'owner' && !activeOwnerModal && (
+        <div className="px-5 mb-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-3xl p-6 text-center shadow-inner">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600 shadow-sm">
+              <i className="fa-solid fa-chart-line text-2xl"></i>
+            </div>
+            <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest">Mode Pantau Aktif</h3>
+            <p className="text-[10px] text-blue-400 font-bold mt-1">Anda masuk sebagai Owner. Fitur transaksi dinonaktifkan untuk keamanan data.</p>
+          </div>
+        </div>
+      )}
 
       <div className="px-5 mb-3">
         <div className="bg-white border border-gray-300 rounded-xl p-2 shadow-sm mb-2">

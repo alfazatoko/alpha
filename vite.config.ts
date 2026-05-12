@@ -14,6 +14,7 @@ export default defineConfig({
         short_name: 'ALPHA',
         description: 'Aplikasi Agen BRILink ALPHA',
         theme_color: '#005daa',
+        orientation: 'any',
         icons: [
           {
             src: 'logo-alpha.png',

@@ -32,27 +32,27 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit }) => 
     <>
       <div 
         className={cn(
-          "grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 px-3 py-3.5 items-center text-[11px] text-gray-700 hover:bg-gray-50 cursor-pointer border-l-4 transition-all",
+          "grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 px-3 py-4 items-center text-[11px] text-gray-700 hover:bg-gray-50/80 cursor-pointer border-l-[3px] transition-all relative overflow-hidden",
           catColor
         )}
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className="font-bold text-gray-400 text-center text-[10px]">{index + 1}</span>
-        <span className="text-gray-500 text-[10px] text-center font-bold">{jam}</span>
+        <span className="text-gray-500 text-[10px] text-center font-bold tracking-tighter">{jam}</span>
         <span className="flex justify-center">
-          <span className={cn("px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter block text-center truncate max-w-[65px]", catBadge)}>
-            {t.kategori === 'Transfer Bank' ? 'Transfer' : 
-             t.kategori === 'Order Kuota' ? 'Kuota' : t.kategori}
+          <span className={cn("px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-tighter block text-center truncate max-w-[60px]", catBadge)}>
+            {t.kategori === 'Transfer Bank' ? 'TRANSFER' : 
+             t.kategori === 'Order Kuota' ? 'KUOTA' : t.kategori}
           </span>
         </span>
-        <span className="font-black text-gray-800 text-xs tabular-nums text-right pr-4">
+        <span className="font-black text-black text-sm tabular-nums text-right pr-4 tracking-tighter">
           {t.nominal.toLocaleString('id-ID')}
         </span>
-        <span className="font-bold text-emerald-600 text-xs tabular-nums text-right pr-2">
+        <span className="font-bold text-emerald-600 text-xs tabular-nums text-right pr-2 tracking-tighter">
           {t.adminFee.toLocaleString('id-ID')}
         </span>
         <span className="flex justify-center items-center">
-          <div className="w-6 h-6 rounded-full bg-blue-600 text-white shadow-md shadow-blue-500/20 flex items-center justify-center transition-all duration-300">
+          <div className="w-6 h-6 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/40 flex items-center justify-center transition-all duration-300 active:scale-90">
             <i className={cn("fa-solid fa-chevron-down text-[8px] transition-transform duration-300", isOpen && "rotate-180")}></i>
           </div>
         </span>
