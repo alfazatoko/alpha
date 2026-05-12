@@ -1,0 +1,178 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: #f8fafc;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: none;
+  border-radius: 0;
+  transition: all 0.3s ease;
+}
+
+/* Override Sizing - Only when forced */
+.app-container.hp {
+  width: 420px !important;
+  height: 90vh !important;
+  margin: 5vh auto !important;
+  border-radius: 2rem !important;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
+}
+
+.app-container.tablet {
+  width: 768px !important;
+  height: 90vh !important;
+  margin: 5vh auto !important;
+  border-radius: 2rem !important;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
+}
+
+.app-container.pc {
+  width: 1200px !important;
+  height: 90vh !important;
+  margin: 5vh auto !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
+}
+
+/* Navigasi Responsive */
+.navigation ul li a {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+
+.page-view {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 90px;
+}
+
+.page-view.active {
+  display: block;
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.nominal-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+button:active { transform: scale(0.97); }
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%239ca3af'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+}
+
+.side-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100%;
+  background: white;
+  z-index: 200;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.side-panel.open { transform: translateX(0); }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 199;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.overlay.show { opacity: 1; pointer-events: auto; }
+
+.form-transaksi-container {
+  background: linear-gradient(135deg, #eff6ff 0%, #bfdbfe 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 1.5rem;
+}
+
+.navigation ul li.active a .text {
+  opacity: 1;
+  transform: translateY(4px);
+}
+
+/* Tema */
+.theme-light .app-container { background-color: #f8fafc; }
+.theme-gray .app-container { background-color: #d1d5db; }
+.theme-neon .app-container { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
+
+.theme-light body { background-color: #f3f4f6; }
+.theme-gray body { background-color: #4b5563; }
+.theme-neon body { background: #dcfce7; }
+
+.theme-neon body { background: #dcfce7; }
+
+.detail-row {
+  display: none;
+  background: #f9fafb;
+  font-size: 0.7rem;
+  color: #4b5563;
+  padding: 4px 12px;
+}
+
+.detail-row.show {
+  display: block;
+}

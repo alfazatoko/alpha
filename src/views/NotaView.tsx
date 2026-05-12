@@ -1,0 +1,205 @@
+import React, { useState } from "react";
+import { ArrowLeft, Printer, Plus, Trash2 } from "lucide-react";
+import { formatRupiah, formatInputRupiah, parseNominal } from "../lib/utils";
+
+interface NotaItem {
+  nama: string;
+  harga: string;
+  jumlah: string;
+}
+
+const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+  
+  const [shopName] = useState("ALPHA - Agen BRILink");
+  const [address] = useState("Jl. Merdeka No. 123, Indonesia");
+  const [items, setItems] = useState<NotaItem[]>([]);
+  const [currentItem, setCurrentItem] = useState<NotaItem>({ nama: "", harga: "", jumlah: "" });
+  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+
+  const [isPreview, setIsPreview] = useState(false);
+
+  const handleSimpanItem = () => {
+    if (!currentItem.nama || !currentItem.harga || !currentItem.jumlah) return;
+    setItems([...items, currentItem]);
+    setCurrentItem({ nama: "", harga: "", jumlah: "" });
+  };
+
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const calculateTotal = () => {
+    return items.reduce((total, item) => {
+      const harga = parseNominal(item.harga);
+      const jumlah = parseFloat(item.jumlah) || 0;
+      return total + (harga * jumlah);
+    }, 0);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  if (!active) return null;
+
+  if (isPreview) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-white overflow-y-auto">
+        <div className="fixed top-4 left-4 right-4 flex justify-between z-50 no-print">
+          <button onClick={() => setIsPreview(false)} className="px-5 py-2.5 bg-gray-900 text-white rounded-full font-bold shadow-xl flex items-center gap-2">
+            <ArrowLeft className="w-4 h-4" /> BATAL
+          </button>
+          <button onClick={handlePrint} className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-black shadow-xl flex items-center gap-2">
+            <Printer className="w-5 h-5" /> CETAK NOTA
+          </button>
+        </div>
+
+        <div className="pt-24 px-6 pb-12 max-w-lg mx-auto font-serif">
+          <div className="text-center mb-8 border-b-2 border-black pb-6">
+            <h2 className="text-3xl font-black mb-1">{shopName}</h2>
+            <p className="text-sm font-bold text-gray-600">{address}</p>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex justify-between text-sm font-bold mb-1">
+              <span>TANGGAL:</span>
+              <span>{tanggal}</span>
+            </div>
+            <div className="flex justify-between text-sm font-bold">
+              <span>NOMOR:</span>
+              <span>#{Date.now().toString().slice(-6)}</span>
+            </div>
+          </div>
+
+          <table className="w-full mb-8">
+            <thead>
+              <tr className="border-b-2 border-black text-left text-xs">
+                <th className="py-2">ITEM</th>
+                <th className="py-2 text-center">QTY</th>
+                <th className="py-2 text-right">HARGA</th>
+                <th className="py-2 text-right">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {items.map((item, i) => (
+                <tr key={i} className="text-sm">
+                  <td className="py-3 font-bold">{item.nama}</td>
+                  <td className="py-3 text-center">{item.jumlah}</td>
+                  <td className="py-3 text-right">{item.harga}</td>
+                  <td className="py-3 text-right font-bold">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-black">
+                <td colSpan={3} className="py-4 text-right font-black text-lg">TOTAL:</td>
+                <td className="py-4 text-right font-black text-lg text-blue-700">{formatRupiah(calculateTotal())}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div className="text-center mt-12 border-t border-dashed border-gray-300 pt-6">
+            <p className="text-lg font-black italic">TERIMA KASIH</p>
+            <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Atas Kepercayaan Anda</p>
+          </div>
+        </div>
+
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { margin: 0; padding: 0; }
+            .fixed { position: static !important; }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
+      <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-5 shadow-lg flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setActiveView('view-beranda')} className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-lg font-black tracking-tight">NOTA DIGITAL</h2>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setIsPreview(true)} className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+            <Printer className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6">
+          <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">Input Data Nota</h3>
+          
+          <div className="space-y-4 mb-6">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Tanggal Transaksi</label>
+              <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Nama Barang / Jasa</label>
+                <input value={currentItem.nama} onChange={e => setCurrentItem({...currentItem, nama: e.target.value})} placeholder="Contoh: Tarik Tunai 1jt" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Harga Satuan</label>
+                  <input value={currentItem.harga} onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} placeholder="0" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Jumlah (Qty)</label>
+                  <input type="number" value={currentItem.jumlah} onChange={e => setCurrentItem({...currentItem, jumlah: e.target.value})} placeholder="1" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+                </div>
+              </div>
+            </div>
+
+            <button onClick={handleSimpanItem} className="w-full bg-blue-50 text-blue-600 font-black py-4 rounded-2xl text-xs flex items-center justify-center gap-2 border-2 border-dashed border-blue-200 hover:bg-blue-100 transition-all">
+              <Plus className="w-4 h-4" /> TAMBAH KE DAFTAR
+            </button>
+          </div>
+
+          <div className="space-y-3 pt-6 border-t border-gray-100">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Belanja</h4>
+            {items.length === 0 ? (
+              <div className="py-10 text-center text-gray-300 italic text-xs">Belum ada barang ditambahkan</div>
+            ) : (
+              <div className="space-y-3">
+                {items.map((item, index) => (
+                  <div key={index} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl group">
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-gray-800">{item.nama}</p>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase">{item.jumlah} x {item.harga}</p>
+                    </div>
+                    <div className="text-right flex items-center gap-3">
+                      <p className="text-xs font-black text-blue-600">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</p>
+                      <button onClick={() => removeItem(index)} className="p-1.5 rounded-lg bg-red-50 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                
+                <div className="bg-blue-600 p-5 rounded-2xl flex justify-between items-center text-white shadow-lg shadow-blue-100 mt-6">
+                  <div>
+                    <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest">Total Bayar</p>
+                    <p className="text-xl font-black leading-none mt-1">{formatRupiah(calculateTotal())}</p>
+                  </div>
+                  <button onClick={() => setIsPreview(true)} className="bg-white/20 hover:bg-white/30 p-3 rounded-xl transition-all">
+                    <Printer className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default NotaView;
