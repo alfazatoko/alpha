@@ -15,6 +15,7 @@ interface RiwayatViewProps {
   setFilterKategori: (v: string) => void
   activeSaldoFilter: string
   setActiveSaldoFilter: (v: string) => void
+  onEdit: (tx: Transaction) => void
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
@@ -33,7 +34,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     const matchDate = date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
     const matchType = props.activeSaldoFilter === 'Semua' || 
                     (props.activeSaldoFilter === 'Bank' && t.kategori.includes('Bank')) ||
-                    (props.activeSaldoFilter === 'Cash' && t.kategori.includes('Penjualan'))
+                    (props.activeSaldoFilter === 'TUNAI' && t.kategori.includes('Penjualan'))
     return matchDate && matchType
   })
 
@@ -118,7 +119,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               </div>
             ) : (
               filteredTransactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={i} />
+                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} />
               ))
             )}
           </div>
@@ -135,7 +136,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         </div>
 
         <div className="flex gap-2 mb-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm inline-flex">
-          {['Semua', 'Bank', 'Cash'].map(f => (
+          {['Semua', 'Bank', 'TUNAI'].map(f => (
             <button 
               key={f}
               onClick={() => props.setActiveSaldoFilter(f)}
@@ -183,7 +184,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   )
 }
 
-const TransactionRow: React.FC<{ t: Transaction, index: number }> = ({ t, index }) => {
+const TransactionRow: React.FC<{ t: Transaction, index: number, onEdit: (tx: Transaction) => void }> = ({ t, index, onEdit }) => {
   const [isOpen, setIsOpen] = useState(false)
   const jam = new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   const fullDate = new Date(t.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -197,6 +198,11 @@ const TransactionRow: React.FC<{ t: Transaction, index: number }> = ({ t, index 
   if (t.kategori === 'Order Kuota') { catColor = "border-emerald-400"; catBadge = "bg-emerald-50 text-emerald-600"; }
   if (t.kategori === 'Tarik Tunai') { catColor = "border-rose-400"; catBadge = "bg-rose-50 text-rose-600"; }
   if (t.kategori === 'Aksesoris') { catColor = "border-fuchsia-400"; catBadge = "bg-fuchsia-50 text-fuchsia-600"; }
+
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit(t);
+  }
 
   return (
     <>
@@ -225,36 +231,37 @@ const TransactionRow: React.FC<{ t: Transaction, index: number }> = ({ t, index 
           <i className={cn("fa-solid fa-chevron-down text-gray-300 text-[10px] transition-transform duration-300", isOpen && "rotate-180 text-violet-500")}></i>
         </span>
       </div>
-      <div className={cn("detail-row overflow-hidden transition-all duration-500 ease-in-out", isOpen ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0")}>
-        <div className="py-5 px-6 bg-gray-50/50 border-t border-gray-100 space-y-4">
-          <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
-            <div className="space-y-1">
-              <p className="text-[10px] text-gray-500 flex items-center gap-2">
-                <span className="w-20 font-bold text-gray-400 uppercase tracking-widest text-[8px]">Tanggal:</span> 
-                <span className="text-gray-700 font-black">{fullDate} - {jam}</span>
-              </p>
-              <p className="text-[10px] text-gray-500 flex items-start gap-2">
-                <span className="w-20 font-bold text-gray-400 uppercase tracking-widest text-[8px] mt-0.5">Keterangan:</span> 
-                <span className="text-gray-700 font-bold leading-relaxed max-w-[220px]">{t.keterangan || '-'}</span>
-              </p>
+      {isOpen && (
+        <div className="bg-gray-50 border-t border-gray-100 block w-full">
+          <div className="py-4 px-6 space-y-3">
+            <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-500 flex items-center gap-2">
+                  <span className="w-20 font-bold text-gray-400 uppercase tracking-widest text-[8px]">Tanggal:</span> 
+                  <span className="text-gray-700 font-black flex items-center gap-2">
+                    {fullDate} - {jam}
+                    {t.isEdited && (
+                      <span className="bg-amber-50 text-amber-600 text-[8px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <i className="fa-solid fa-eye"></i> EDITED
+                      </span>
+                    )}
+                  </span>
+                </p>
+                <p className="text-[10px] text-gray-500 flex items-start gap-2">
+                  <span className="w-20 font-bold text-gray-400 uppercase tracking-widest text-[8px] mt-0.5">Keterangan:</span> 
+                  <span className="text-gray-700 font-black leading-relaxed max-w-[220px] text-[11px]">{t.keterangan || '-'}</span>
+                </p>
+              </div>
+              <button 
+                onClick={handleEditClick}
+                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all"
+              >
+                <i className="fa-solid fa-pen-to-square"></i> EDIT
+              </button>
             </div>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all">
-              <i className="fa-solid fa-pen-to-square"></i> EDIT
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-             <div className="bg-white px-4 py-3 rounded-2xl border border-gray-100 shadow-sm">
-                <p className="text-[8px] text-gray-400 uppercase font-black tracking-widest mb-1">Nominal Transaksi</p>
-                <p className="text-sm font-black text-gray-800">{formatRupiah(t.nominal)}</p>
-             </div>
-             <div className="bg-white px-4 py-3 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-emerald-500">
-                <p className="text-[8px] text-emerald-500 uppercase font-black tracking-widest mb-1">Admin (Keuntungan)</p>
-                <p className="text-sm font-black text-emerald-600">{formatRupiah(t.adminFee)}</p>
-             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   )
 }

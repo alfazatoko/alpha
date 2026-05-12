@@ -132,34 +132,59 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
       </div>
 
       <div className="p-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6">
-          <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">Input Data Nota</h3>
+        <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
+          <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
+            <i className="fa-solid fa-file-invoice text-blue-700"></i> INPUT DATA NOTA
+          </h3>
           
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3">
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Tanggal Transaksi</label>
-              <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+              <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">TANGGAL TRANSAKSI</label>
+              <input 
+                type="date" 
+                value={tanggal} 
+                onChange={e => setTanggal(e.target.value)} 
+                className="form-input-modern w-full" 
+              />
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA BARANG / JASA</label>
+              <input 
+                value={currentItem.nama} 
+                onChange={e => setCurrentItem({...currentItem, nama: e.target.value})} 
+                placeholder="Contoh: Tarik Tunai 1jt" 
+                className="form-input-modern w-full" 
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Nama Barang / Jasa</label>
-                <input value={currentItem.nama} onChange={e => setCurrentItem({...currentItem, nama: e.target.value})} placeholder="Contoh: Tarik Tunai 1jt" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400" />
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">HARGA SATUAN (RP)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
+                  <input 
+                    value={currentItem.harga} 
+                    onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} 
+                    placeholder="0" 
+                    className="form-input-modern w-full pl-8" 
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Harga Satuan</label>
-                  <input value={currentItem.harga} onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} placeholder="0" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Jumlah (Qty)</label>
-                  <input type="number" value={currentItem.jumlah} onChange={e => setCurrentItem({...currentItem, jumlah: e.target.value})} placeholder="1" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
-                </div>
+              <div>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JUMLAH (QTY)</label>
+                <input 
+                  type="number" 
+                  value={currentItem.jumlah} 
+                  onChange={e => setCurrentItem({...currentItem, jumlah: e.target.value})} 
+                  placeholder="1" 
+                  className="form-input-modern w-full" 
+                />
               </div>
             </div>
 
-            <button onClick={handleSimpanItem} className="w-full bg-blue-50 text-blue-600 font-black py-4 rounded-2xl text-xs flex items-center justify-center gap-2 border-2 border-dashed border-blue-200 hover:bg-blue-100 transition-all">
-              <Plus className="w-4 h-4" /> TAMBAH KE DAFTAR
+            <button onClick={handleSimpanItem} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2">
+              <Plus className="w-3.5 h-3.5" /> TAMBAH KE DAFTAR
             </button>
           </div>
 

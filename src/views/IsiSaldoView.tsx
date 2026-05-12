@@ -35,15 +35,17 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           <p className="text-[11px] text-blue-600/80 mt-1 leading-relaxed">Gunakan fitur ini untuk menambah modal bank atau mencatat hasil penjualan fisik ke sistem.</p>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+        <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
+          <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
+            <i className="fa-solid fa-vault text-blue-700"></i> MANAJEMEN SALDO
+          </h3>
+          
           <div>
-            <label className="text-[10px] font-extrabold text-indigo-600 mb-2 flex items-center gap-2 tracking-widest uppercase">
-              <i className="fa-solid fa-wallet text-indigo-400"></i> Jenis Saldo
-            </label>
+            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JENIS SALDO</label>
             <select 
               value={props.isiJenis}
               onChange={(e) => props.setIsiJenis(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200/80 rounded-2xl py-3.5 px-4 text-sm font-bold text-gray-700 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 focus:bg-white transition-all outline-none appearance-none"
+              className="form-input-modern w-full"
             >
               <option value="" disabled>Pilih jenis saldo</option>
               <option value="Saldo Bank">🏦 Saldo Bank</option>
@@ -52,39 +54,35 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           </div>
 
           <div>
-            <label className="text-[10px] font-extrabold text-emerald-600 mb-2 flex items-center gap-2 tracking-widest uppercase">
-              <i className="fa-solid fa-coins text-emerald-400"></i> Nominal Top-Up
-            </label>
+            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL TOP-UP (RP)</label>
             <div className="relative">
-              <span className="absolute left-4 top-3.5 text-gray-400 font-bold">Rp</span>
+              <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
               <input 
                 type="text" 
                 inputMode="numeric" 
                 placeholder="0" 
                 value={props.isiNominal}
                 onChange={(e) => props.setIsiNominal(formatInputRupiah(e.target.value))}
-                className="w-full bg-gray-50 border border-gray-200/80 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-black text-gray-800 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 focus:bg-white transition-all outline-none"
+                className="form-input-modern w-full pl-8"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-[10px] font-extrabold text-amber-600 mb-2 flex items-center gap-2 tracking-widest uppercase">
-              <i className="fa-solid fa-note-sticky text-amber-400"></i> Keterangan Tambahan
-            </label>
+            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
             <textarea 
               rows={2} 
               placeholder="Contoh: Setoran tunai sore hari..." 
               value={props.isiKeterangan}
               onChange={(e) => props.setIsiKeterangan(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200/80 rounded-2xl py-3.5 px-4 text-sm font-medium text-gray-700 resize-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-400 focus:bg-white transition-all outline-none"
+              className="form-input-modern w-full resize-none"
             ></textarea>
           </div>
-        </div>
 
-        <button onClick={props.handleSimpanIsiSaldo} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold py-4 rounded-2xl hover:opacity-90 shadow-xl shadow-indigo-600/20 transition-all active:scale-95 mt-2 flex items-center justify-center gap-2">
-          <i className="fa-solid fa-check-circle"></i> KONFIRMASI TAMBAH SALDO
-        </button>
+          <button onClick={props.handleSimpanIsiSaldo} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest">
+            SIMPAN SALDO
+          </button>
+        </div>
       </div>
     </div>
   )

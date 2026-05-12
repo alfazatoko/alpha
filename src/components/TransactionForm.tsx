@@ -32,7 +32,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }
 
   return (
-    <div className="form-transaksi-container p-4 shadow-sm border border-gray-200 rounded-xl bg-white">
+    <div className="form-transaksi-container p-4 shadow-sm border border-gray-200 rounded-xl">
       <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
         <i className="fa-solid fa-cart-shopping text-blue-700"></i> TRANSAKSI BARU
       </h3>
@@ -45,7 +45,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               setKategori(e.target.value)
               nominalRef.current?.focus()
             }}
-            className="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-xs font-bold text-black focus:border-blue-600 outline-none transition-all"
+            className="form-input-modern w-full"
           >
             <option value="" disabled>Pilih kategori</option>
             <option value="Transfer Bank">Transfer Bank</option>
@@ -69,7 +69,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={nominal}
                 onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
                 onKeyDown={(e) => handleKeyDown(e, adminRef)}
-                className="nominal-input w-full bg-white border border-gray-300 rounded-lg py-2 pl-8 pr-3 text-xs font-black text-black focus:border-blue-600 outline-none transition-all"
+                className="form-input-modern w-full pl-8"
               />
             </div>
           </div>
@@ -99,7 +99,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             value={keterangan}
             onChange={(e) => setKeterangan(e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-            className="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-xs font-bold text-black resize-none focus:border-blue-600 outline-none transition-all"
+            className="form-input-modern w-full resize-none"
           ></textarea>
         </div>
         <button onClick={onSave} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest">

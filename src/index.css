@@ -7,6 +7,9 @@
 :root {
   font-family: 'Plus Jakarta Sans', sans-serif;
   -webkit-tap-highlight-color: transparent;
+  --input-bg: #eff6ff;
+  --input-border: #d1d5db;
+  --container-bg: #ffffff;
 }
 
 body {
@@ -159,11 +162,45 @@ select {
 .theme-gray .app-container { background-color: #d1d5db; }
 .theme-neon .app-container { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
 
+.theme-light {
+  --input-bg: #eff6ff;
+  --input-border: #dbeafe;
+  --container-bg: #ffffff;
+}
+
+.theme-gray {
+  --input-bg: #f3f4f6;
+  --input-border: #d1d5db;
+  --container-bg: #ffffff;
+}
+
+.theme-neon {
+  --input-bg: #f0fdf4;
+  --input-border: #bbf7d0;
+  --container-bg: #ffffff;
+}
+
 .theme-light body { background-color: #f3f4f6; }
 .theme-gray body { background-color: #4b5563; }
 .theme-neon body { background: #dcfce7; }
 
-.theme-neon body { background: #dcfce7; }
+.form-input-modern {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #000000;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.form-input-modern:focus {
+  border-color: #2563eb;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
 
 .detail-row {
   display: none;

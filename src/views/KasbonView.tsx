@@ -204,59 +204,72 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4" onClick={resetForm}>
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="font-bold text-lg">{editItem ? "Edit Kasbon" : "Tambah Kasbon Baru"}</h3>
-              <button onClick={resetForm} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
+          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
+                <i className="fa-solid fa-file-invoice-dollar text-blue-700"></i> {editItem ? "EDIT KASBON" : "TAMBAH KASBON BARU"}
+              </h3>
+              <button onClick={resetForm} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-all">
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-3 mb-5">
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Nama Pelanggan</label>
-                <input value={nama} onChange={e => setNama(e.target.value)} placeholder="Masukkan nama..." className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50" />
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA PELANGGAN</label>
+                <input 
+                  value={nama} 
+                  onChange={e => setNama(e.target.value)} 
+                  placeholder="Masukkan nama..." 
+                  className="form-input-modern w-full" 
+                />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Nominal Hutang</label>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL HUTANG (RP)</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-400 text-sm">Rp</span>
+                  <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
                   <input 
                     value={nominalDisplay} 
                     onChange={e => setNominalDisplay(formatInputRupiah(e.target.value))} 
                     inputMode="numeric" 
                     placeholder="0" 
-                    className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50" 
+                    className="form-input-modern w-full pl-8" 
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 block">Keterangan</label>
-                <textarea value={keterangan} onChange={e => setKeterangan(e.target.value)} placeholder="Contoh: Pinjam saldo bank, belum bayar..." rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-none" />
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
+                <textarea 
+                  value={keterangan} 
+                  onChange={e => setKeterangan(e.target.value)} 
+                  placeholder="Contoh: Pinjam saldo bank, belum bayar..." 
+                  rows={2} 
+                  className="form-input-modern w-full resize-none" 
+                />
               </div>
               
               <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col items-center justify-center gap-2 bg-blue-50 border-2 border-dashed border-blue-200 rounded-2xl py-4 cursor-pointer hover:bg-blue-100 transition-all">
-                  {isCapturing ? <Loader2 className="w-6 h-6 animate-spin text-blue-600" /> : <Camera className="w-6 h-6 text-blue-600" />}
-                  <span className="text-[10px] font-bold text-blue-700">Kamera</span>
+                <label className="flex flex-col items-center justify-center gap-1.5 bg-gray-50 border border-dashed border-gray-300 rounded-xl py-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all group">
+                  {isCapturing ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : <Camera className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />}
+                  <span className="text-[9px] font-black text-gray-400 group-hover:text-blue-700 uppercase tracking-widest">Kamera</span>
                   <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
                 </label>
-                <label className="flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl py-4 cursor-pointer hover:bg-gray-100 transition-all">
-                  <ImageIcon className="w-6 h-6 text-gray-400" />
-                  <span className="text-[10px] font-bold text-gray-500">Galeri</span>
+                <label className="flex flex-col items-center justify-center gap-1.5 bg-gray-50 border border-dashed border-gray-300 rounded-xl py-3 cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-all group">
+                  <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
+                  <span className="text-[9px] font-black text-gray-400 group-hover:text-gray-700 uppercase tracking-widest">Galeri</span>
                   <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                 </label>
               </div>
 
               {photoUrl && (
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-gray-200 group">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-gray-200 shadow-inner bg-gray-50">
                   <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
-                  <button onClick={() => setPhotoUrl("")} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg active:scale-90 transition-all">
-                    <X className="w-4 h-4" />
+                  <button onClick={() => setPhotoUrl("")} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg active:scale-90 transition-all">
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
             </div>
-            <button onClick={handleSave} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl text-sm shadow-lg shadow-blue-200 active:scale-95 transition-all">
+            <button onClick={handleSave} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest">
               SIMPAN DATA KASBON
             </button>
           </div>

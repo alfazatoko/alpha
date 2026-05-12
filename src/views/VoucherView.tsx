@@ -311,11 +311,11 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                         <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                           <td className="p-3">
                             {activeEditingCell === 'master' ? (
-                              <input 
-                                value={item.name} 
-                                onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
-                                className="text-xs font-bold text-blue-600 bg-blue-50 border-none rounded px-1 w-full outline-none"
-                              />
+                                <input 
+                                  value={item.name} 
+                                  onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
+                                  className="form-input-modern w-full h-7 px-1.5"
+                                />
                             ) : (
                               <span className="text-xs font-bold text-gray-800 block leading-tight">{item.name}</span>
                             )}
@@ -378,12 +378,12 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                           </td>
                           <td className="p-3 text-right">
                             {activeEditingCell === 'master' ? (
-                              <input 
-                                type="number"
-                                value={item.price} 
-                                onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
-                                className="text-[10px] font-black text-blue-600 bg-blue-50 border-none rounded px-1 w-12 text-right outline-none"
-                              />
+                                <input 
+                                  type="number"
+                                  value={item.price} 
+                                  onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
+                                  className="form-input-modern w-full h-7 px-1 text-right"
+                                />
                             ) : (
                               <span className="text-[10px] font-black text-gray-600">{(item.price/1000)}k</span>
                             )}

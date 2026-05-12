@@ -57,6 +57,13 @@ const App: React.FC = () => {
   const [filterPencarian, setFilterPencarian] = useState('')
   const [filterKategori, setFilterKategori] = useState('Semua')
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
+  
+  // Edit Transaction State
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [editKategori, setEditKategori] = useState('')
+  const [editNominal, setEditNominal] = useState('')
+  const [editAdmin, setEditAdmin] = useState('')
+  const [editKeterangan, setEditKeterangan] = useState('')
 
   // Persistence Effects
   useEffect(() => {
@@ -152,8 +159,57 @@ const App: React.FC = () => {
     setIsiJenis('')
     setIsiNominal('')
     setIsiKeterangan('')
+    setIsiKeterangan('')
     alert('Saldo Berhasil Diperbarui!')
     setActiveView('view-beranda')
+  }
+
+  const handleStartEdit = (tx: Transaction) => {
+    setEditingTx(tx)
+    setEditKategori(tx.kategori)
+    setEditNominal(tx.nominal.toString())
+    setEditAdmin(tx.adminFee.toString())
+    setEditKeterangan(tx.keterangan)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingTx) return
+    const newNominal = parseNominal(editNominal)
+    const newAdmin = parseNominal(editAdmin)
+
+    const updatedTransactions = transactions.map(t => {
+      if (t.id === editingTx.id) {
+        return {
+          ...t,
+          kategori: editKategori,
+          nominal: newNominal,
+          adminFee: newAdmin,
+          keterangan: editKeterangan,
+          isEdited: true,
+          originalNominal: t.isEdited ? t.originalNominal : t.nominal,
+          originalAdminFee: t.isEdited ? t.originalAdminFee : t.adminFee,
+          originalKategori: t.isEdited ? t.originalKategori : t.kategori
+        }
+      }
+      return t
+    })
+
+    // Adjust Bank Balance if needed (revert old, apply new)
+    let newSaldoBank = saldoBank
+    
+    // Revert old tx effect
+    if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editingTx.kategori)) {
+      newSaldoBank += editingTx.nominal
+    }
+    // Apply new tx effect
+    if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editKategori)) {
+      newSaldoBank -= newNominal
+    }
+
+    setTransactions(updatedTransactions)
+    setSaldoBank(newSaldoBank)
+    setEditingTx(null)
+    alert('Transaksi Berhasil Diperbarui!')
   }
 
   // Derived Calculations
@@ -212,6 +268,7 @@ const App: React.FC = () => {
         setFilterKategori={setFilterKategori}
         activeSaldoFilter={activeSaldoFilter}
         setActiveSaldoFilter={setActiveSaldoFilter}
+        onEdit={handleStartEdit}
       />
 
       <LaporanView 
@@ -260,6 +317,76 @@ const App: React.FC = () => {
       />
 
       <InspectOverlay />
+
+      {/* Edit Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-black text-xs uppercase tracking-widest text-blue-800">
+                <i className="fa-solid fa-pen-to-square mr-2"></i> Edit Transaksi
+              </h3>
+              <button onClick={() => setEditingTx(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-all">
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Kategori</label>
+                <select 
+                  value={editKategori} 
+                  onChange={e => setEditKategori(e.target.value)}
+                  className="form-input-modern w-full"
+                >
+                  <option value="Transfer Bank">Transfer Bank</option>
+                  <option value="DANA">DANA</option>
+                  <option value="FLIP">FLIP</option>
+                  <option value="Order Kuota">Order Kuota</option>
+                  <option value="Tarik Tunai">Tarik Tunai</option>
+                  <option value="Aksesoris">Aksesoris</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Nominal</label>
+                  <input 
+                    value={editNominal} 
+                    onChange={e => setEditNominal(e.target.value)}
+                    className="form-input-modern w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Admin</label>
+                  <input 
+                    value={editAdmin} 
+                    onChange={e => setEditAdmin(e.target.value)}
+                    className="form-input-modern w-full text-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Keterangan</label>
+                <textarea 
+                  value={editKeterangan} 
+                  onChange={e => setEditKeterangan(e.target.value)}
+                  rows={2}
+                  className="form-input-modern w-full resize-none"
+                />
+              </div>
+            </div>
+
+            <button 
+              onClick={handleSaveEdit}
+              className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl text-xs shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+            >
+              <i className="fa-solid fa-check-circle"></i> Simpan Perubahan
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

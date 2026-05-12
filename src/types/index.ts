@@ -15,6 +15,10 @@ export interface Transaction {
   adminFee: number;
   keterangan: string;
   timestamp: string;
+  isEdited?: boolean;
+  originalNominal?: number;
+  originalAdminFee?: number;
+  originalKategori?: string;
 }
 
 export interface AppState {
