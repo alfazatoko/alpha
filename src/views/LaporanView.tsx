@@ -1,6 +1,6 @@
-import React from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
+import TransactionRow from '../components/TransactionRow'
 
 interface LaporanViewProps {
   active: boolean
@@ -14,6 +14,7 @@ interface LaporanViewProps {
   totalSaldoKas: number
   penjualanDigital: number
   kasModal: number
+  onEdit: (tx: Transaction) => void
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
@@ -121,8 +122,35 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
           </div>
         </div>
+        </div>
+
+        {/* Daftar Transaksi Hari Ini */}
+        <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-8">
+          <div className="px-5 py-4 border-b border-gray-50 flex justify-between items-center">
+            <h3 className="font-black text-[10px] text-gray-800 uppercase tracking-widest flex items-center gap-2">
+              <i className="fa-solid fa-list-check text-blue-600"></i> Detail Transaksi Hari Ini
+            </h3>
+            <span className="bg-blue-50 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Today</span>
+          </div>
+          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[8px] font-black text-gray-400 bg-gray-50/50 px-3 py-2.5 uppercase tracking-tighter border-b border-gray-50">
+            <span className="text-center">#</span>
+            <span className="text-center">Jam</span>
+            <span className="text-center">Tipe</span>
+            <span className="text-right pr-4">Nominal</span>
+            <span className="text-right pr-2">Adm</span>
+            <span></span>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto hide-scrollbar">
+            {props.transactions.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-400 text-[10px] font-medium">Belum ada transaksi hari ini</div>
+            ) : (
+              props.transactions.map((t, i) => (
+                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} />
+              ))
+            )}
+          </div>
+        </div>
       </div>
-    </div>
   )
 }
 

@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { parseNominal, cn } from './lib/utils'
+import { parseNominal, formatInputRupiah, cn } from './lib/utils'
 import type { Transaction } from './types'
 
 // Components
 import Navigation from './components/Navigation'
 import SidePanel from './components/SidePanel'
-import InspectOverlay from './components/InspectOverlay'
 
 // Views
 import BerandaView from './views/BerandaView'
@@ -348,6 +347,7 @@ const App: React.FC = () => {
         totalSaldoKas={totalSaldoKas}
         penjualanDigital={penjualanDigital}
         kasModal={kasModal}
+        onEdit={handleStartEdit}
       />
 
       <AkunView active={activeView === 'view-akun'} />
@@ -382,7 +382,6 @@ const App: React.FC = () => {
         setScreenSize={setScreenSize}
       />
 
-      <InspectOverlay />
 
       {/* Edit Modal */}
       {editingTx && (

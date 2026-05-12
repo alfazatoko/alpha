@@ -62,7 +62,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           </div>
 
           <div>
-            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL TOP-UP (RP)</label>
+            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL TOP-UP</label>
             <input 
               ref={nominalRef}
               type="text" 

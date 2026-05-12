@@ -177,19 +177,16 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">HARGA SATUAN (RP)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
-                  <input 
-                    ref={hargaRef}
-                    value={currentItem.harga} 
-                    onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} 
-                    placeholder="0" 
-                    onKeyDown={(e) => handleKeyDown(e, jumlahRef)}
-                    className="form-input-modern w-full pl-8" 
-                  />
-                </div>
+              <div className="flex-1">
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">HARGA SATUAN</label>
+                <input 
+                  ref={hargaRef}
+                  value={currentItem.harga} 
+                  onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} 
+                  placeholder="0" 
+                  onKeyDown={(e) => handleKeyDown(e, jumlahRef)}
+                  className="form-input-modern w-full" 
+                />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JUMLAH (QTY)</label>

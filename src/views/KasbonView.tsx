@@ -241,19 +241,17 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL HUTANG (RP)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
-                  <input 
-                    ref={nominalRef}
-                    value={nominalDisplay} 
-                    onChange={e => setNominalDisplay(formatInputRupiah(e.target.value))} 
-                    inputMode="numeric" 
-                    placeholder="0" 
-                    onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-                    className="form-input-modern w-full pl-8" 
-                  />
-                </div>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL HUTANG</label>
+                <input 
+                  ref={nominalRef}
+                  type="text" 
+                  inputMode="numeric" 
+                  placeholder="0" 
+                  value={nominalDisplay}
+                  onChange={(e) => setNominalDisplay(formatInputRupiah(e.target.value))}
+                  onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+                  className="form-input-modern w-full"
+                />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>

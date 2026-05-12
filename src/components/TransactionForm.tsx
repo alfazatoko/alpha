@@ -59,36 +59,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL (RP)</label>
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
-              <input 
-                ref={nominalRef}
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={nominal}
-                onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
-                onKeyDown={(e) => handleKeyDown(e, adminRef)}
-                className="form-input-modern w-full pl-8"
-              />
-            </div>
+            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL</label>
+            <input 
+              ref={nominalRef}
+              type="text" 
+              inputMode="numeric" 
+              placeholder="0" 
+              value={nominal}
+              onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
+              onKeyDown={(e) => handleKeyDown(e, adminRef)}
+              className="form-input-modern w-full"
+            />
           </div>
           <div>
             <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">ADMIN FEE</label>
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-black text-[10px] font-black">Rp</span>
-              <input 
-                ref={adminRef}
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={admin}
-                onChange={(e) => setAdmin(formatInputRupiah(e.target.value))}
-                onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-                className="form-input-modern w-full pl-8"
-              />
-            </div>
+            <input 
+              ref={adminRef}
+              type="text" 
+              inputMode="numeric" 
+              placeholder="0" 
+              value={admin}
+              onChange={(e) => setAdmin(formatInputRupiah(e.target.value))}
+              onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+              className="form-input-modern w-full"
+            />
           </div>
         </div>
         <div>

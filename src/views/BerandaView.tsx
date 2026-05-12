@@ -28,6 +28,7 @@ interface BerandaViewProps {
   totalSaldoKas: number
   penjualanDigital: number
   kasModal: number
+  isSaving?: boolean
 }
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
@@ -47,10 +48,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             ALPHA
             <span className="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full ml-1 font-black">AGEN</span>
           </h1>
-        </div>
-        <div className="relative">
-          <i className="fa-regular fa-bell text-gray-500 text-xl"></i>
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
         </div>
       </div>
 
