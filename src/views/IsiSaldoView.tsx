@@ -11,6 +11,7 @@ interface IsiSaldoViewProps {
   isiKeterangan: string
   setIsiKeterangan: (v: string) => void
   handleSimpanIsiSaldo: () => void
+  isSaving?: boolean
 }
 
 const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
@@ -87,8 +88,17 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
             ></textarea>
           </div>
 
-          <button onClick={props.handleSimpanIsiSaldo} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest mt-2">
-            SIMPAN SALDO
+          <button 
+            onClick={props.handleSimpanIsiSaldo} 
+            disabled={props.isSaving}
+            className="w-full bg-blue-700 text-white text-[10px] font-black py-3 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest mt-2 flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
+          >
+            {props.isSaving ? (
+              <i className="fa-solid fa-circle-notch fa-spin"></i>
+            ) : (
+              <i className="fa-solid fa-cloud-arrow-up"></i>
+            )}
+            {props.isSaving ? 'MEMPROSES...' : 'SIMPAN SALDO'}
           </button>
         </div>
       </div>

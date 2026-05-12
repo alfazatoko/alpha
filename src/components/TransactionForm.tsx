@@ -11,10 +11,11 @@ interface TransactionFormProps {
   keterangan: string
   setKeterangan: (v: string) => void
   onSave: () => void
+  isSaving?: boolean
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave
+  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving
 }) => {
   const nominalRef = useRef<HTMLInputElement>(null)
   const adminRef = useRef<HTMLInputElement>(null)
@@ -69,7 +70,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={nominal}
                 onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
                 onKeyDown={(e) => handleKeyDown(e, adminRef)}
-                className="form-input-modern w-full pl-8"
+                className="nominal-input w-full bg-white border border-gray-300 rounded-lg py-2 pl-8 pr-3 text-xs font-black text-black focus:border-blue-600 outline-none transition-all"
               />
             </div>
           </div>
@@ -102,8 +103,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             className="form-input-modern w-full resize-none"
           ></textarea>
         </div>
-        <button onClick={onSave} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest">
-          SIMPAN TRANSAKSI
+        <button 
+          onClick={onSave} 
+          disabled={isSaving}
+          className="w-full bg-blue-700 text-white text-[10px] font-black py-3 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
+        >
+          {isSaving ? (
+            <i className="fa-solid fa-circle-notch fa-spin"></i>
+          ) : (
+            <i className="fa-solid fa-cloud-arrow-up"></i>
+          )}
+          {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
         </button>
       </div>
     </div>

@@ -64,6 +64,10 @@ const App: React.FC = () => {
   const [editNominal, setEditNominal] = useState('')
   const [editAdmin, setEditAdmin] = useState('')
   const [editKeterangan, setEditKeterangan] = useState('')
+  
+  // Loading & Notification State
+  const [isSaving, setIsSaving] = useState(false)
+  const [toast, setToast] = useState<{ show: boolean, message: string } | null>(null)
 
   const editNominalRef = useRef<HTMLInputElement>(null)
   const editAdminRef = useRef<HTMLInputElement>(null)
@@ -97,86 +101,122 @@ const App: React.FC = () => {
     localStorage.setItem('kas_modal', kasModal.toString())
   }, [saldoBank, totalPenjualan, transactions, kasModal])
 
+  // Daily Reset Check
+  useEffect(() => {
+    const checkReset = () => {
+      const today = new Date().toLocaleDateString('id-ID')
+      const lastReset = localStorage.getItem('last_reset_date')
+
+      if (lastReset && lastReset !== today) {
+        // Day has changed! 
+        // We no longer clear everything, just notify the user that 
+        // the dashboard will now show data for the new day.
+        alert(`Selamat datang di hari baru (${today}). Dashboard Anda sekarang menampilkan rekap harian yang baru. Data hari sebelumnya tersimpan aman di Riwayat.`)
+      }
+      
+      localStorage.setItem('last_reset_date', today)
+    }
+
+    checkReset()
+    // Check every minute in case the app stays open overnight
+    const interval = setInterval(checkReset, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
   // Handlers
+  const showToast = (msg: string) => {
+    setToast({ show: true, message: msg })
+    setTimeout(() => setToast(null), 3000)
+  }
+
   const handleSimpanTransaksi = () => {
+    if (isSaving) return
     const nominal = parseNominal(formNominal)
     const admin = parseNominal(formAdmin)
     
     if (!formKategori) return alert('Pilih kategori transaksi!')
     if (nominal <= 0) return alert('Masukkan nominal yang valid!')
 
-    let newSaldoBank = saldoBank
-    let newTotalPenjualan = totalPenjualan
-
-    switch (formKategori) {
-      case 'Transfer Bank':
-      case 'DANA':
-      case 'FLIP':
-      case 'Order Kuota':
-        newSaldoBank -= nominal
-        break
-      case 'Tarik Tunai':
-        // Saldo Bank tidak bertambah di aplikasi karena masuk ke rekening owner
-        break
-    }
-
-    const newTx: Transaction = {
-      id: Date.now().toString(),
-      kategori: formKategori,
-      nominal,
-      adminFee: admin,
-      keterangan: formKeterangan || '-',
-      timestamp: new Date().toISOString()
-    }
-
-    setTransactions([newTx, ...transactions])
-    setSaldoBank(newSaldoBank)
-    setTotalPenjualan(newTotalPenjualan)
+    setIsSaving(true)
     
-    // Reset Form
-    setFormKategori('')
-    setFormNominal('')
-    setFormAdmin('')
-    setFormKeterangan('')
-    alert('Transaksi Berhasil Disimpan!')
+    // Simulasi proses simpan untuk menampilkan spinner
+    setTimeout(() => {
+      let newSaldoBank = saldoBank
+      let newTotalPenjualan = totalPenjualan
+
+      switch (formKategori) {
+        case 'Transfer Bank':
+        case 'DANA':
+        case 'FLIP':
+        case 'Order Kuota':
+          newSaldoBank -= nominal
+          break
+      }
+
+      const newTx: Transaction = {
+        id: Date.now().toString(),
+        kategori: formKategori,
+        nominal,
+        adminFee: admin,
+        keterangan: formKeterangan || '-',
+        timestamp: new Date().toISOString()
+      }
+
+      setTransactions([newTx, ...transactions])
+      setSaldoBank(newSaldoBank)
+      setTotalPenjualan(newTotalPenjualan)
+      
+      setFormKategori('')
+      setFormNominal('')
+      setFormAdmin('')
+      setFormKeterangan('')
+      
+      setIsSaving(false)
+      showToast('Transaksi Berhasil Disimpan!')
+    }, 800)
   }
 
   const handleSimpanIsiSaldo = () => {
+    if (isSaving) return
     const nominal = parseNominal(isiNominal)
     if (!isiJenis) return alert('Pilih jenis saldo!')
     if (nominal <= 0) return alert('Nominal tidak valid!')
 
-    let newSaldoBank = saldoBank
-    let newTotalPenjualan = totalPenjualan
+    setIsSaving(true)
 
-    if (isiJenis === 'Saldo Bank') {
-      newSaldoBank += nominal
-    } else if (isiJenis === 'Modal Tunai Kasir') {
-      const currentModal = Number(localStorage.getItem('kas_modal') || '0')
-      localStorage.setItem('kas_modal', (currentModal + nominal).toString())
-      setKasModal(currentModal + nominal)
-    }
+    setTimeout(() => {
+      let newSaldoBank = saldoBank
+      let newTotalPenjualan = totalPenjualan
 
-    const newTx: Transaction = {
-      id: Date.now().toString(),
-      kategori: 'Isi ' + isiJenis,
-      nominal,
-      adminFee: 0,
-      keterangan: isiKeterangan || 'Setoran Saldo',
-      timestamp: new Date().toISOString()
-    }
+      if (isiJenis === 'Saldo Bank') {
+        newSaldoBank += nominal
+      } else if (isiJenis === 'Modal Tunai Kasir') {
+        const currentModal = Number(localStorage.getItem('kas_modal') || '0')
+        localStorage.setItem('kas_modal', (currentModal + nominal).toString())
+        setKasModal(currentModal + nominal)
+      }
 
-    setTransactions([newTx, ...transactions])
-    setSaldoBank(newSaldoBank)
-    setTotalPenjualan(newTotalPenjualan)
-    
-    // Reset Form
-    setIsiJenis('')
-    setIsiNominal('')
-    setIsiKeterangan('')
-    setIsiKeterangan('')
-    alert('Saldo Berhasil Diperbarui!')
-    setActiveView('view-beranda')
+      const newTx: Transaction = {
+        id: Date.now().toString(),
+        kategori: 'Isi ' + isiJenis,
+        nominal,
+        adminFee: 0,
+        keterangan: isiKeterangan || 'Setoran Saldo',
+        timestamp: new Date().toISOString()
+      }
+
+      setTransactions([newTx, ...transactions])
+      setSaldoBank(newSaldoBank)
+      setTotalPenjualan(newTotalPenjualan)
+      
+      setIsiJenis('')
+      setIsiNominal('')
+      setIsiKeterangan('')
+      
+      setIsSaving(false)
+      showToast('Saldo Berhasil Diperbarui!')
+      setActiveView('view-beranda')
+    }, 800)
   }
 
   const handleStartEdit = (tx: Transaction) => {
@@ -188,57 +228,66 @@ const App: React.FC = () => {
   }
 
   const handleSaveEdit = () => {
-    if (!editingTx) return
+    if (!editingTx || isSaving) return
     const newNominal = parseNominal(editNominal)
     const newAdmin = parseNominal(editAdmin)
 
-    const updatedTransactions = transactions.map(t => {
-      if (t.id === editingTx.id) {
-        return {
-          ...t,
-          kategori: editKategori,
-          nominal: newNominal,
-          adminFee: newAdmin,
-          keterangan: editKeterangan,
-          isEdited: true,
-          originalNominal: t.isEdited ? t.originalNominal : t.nominal,
-          originalAdminFee: t.isEdited ? t.originalAdminFee : t.adminFee,
-          originalKategori: t.isEdited ? t.originalKategori : t.kategori
+    setIsSaving(true)
+
+    setTimeout(() => {
+      const updatedTransactions = transactions.map(t => {
+        if (t.id === editingTx.id) {
+          return {
+            ...t,
+            kategori: editKategori,
+            nominal: newNominal,
+            adminFee: newAdmin,
+            keterangan: editKeterangan,
+            isEdited: true,
+            originalNominal: t.isEdited ? t.originalNominal : t.nominal,
+            originalAdminFee: t.isEdited ? t.originalAdminFee : t.adminFee,
+            originalKategori: t.isEdited ? t.originalKategori : t.kategori
+          }
         }
+        return t
+      })
+
+      let newSaldoBank = saldoBank
+      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editingTx.kategori)) {
+        newSaldoBank += editingTx.nominal
       }
-      return t
-    })
+      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editKategori)) {
+        newSaldoBank -= newNominal
+      }
 
-    // Adjust Bank Balance if needed (revert old, apply new)
-    let newSaldoBank = saldoBank
-    
-    // Revert old tx effect
-    if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editingTx.kategori)) {
-      newSaldoBank += editingTx.nominal
-    }
-    // Apply new tx effect
-    if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editKategori)) {
-      newSaldoBank -= newNominal
-    }
-
-    setTransactions(updatedTransactions)
-    setSaldoBank(newSaldoBank)
-    setEditingTx(null)
-    alert('Transaksi Berhasil Diperbarui!')
+      setTransactions(updatedTransactions)
+      setSaldoBank(newSaldoBank)
+      setEditingTx(null)
+      setIsSaving(false)
+      showToast('Transaksi Berhasil Diperbarui!')
+    }, 800)
   }
 
-  // Derived Calculations
-  const totalTarik = transactions.filter(t => t.kategori === 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)
-  const totalAdmin = transactions.reduce((s, t) => s + t.adminFee, 0)
-  const totalAksesoris = transactions.filter(t => t.kategori === 'Aksesoris').reduce((s, t) => s + t.nominal, 0)
-  const totalVolume = transactions.filter(t => !t.kategori.startsWith('Isi')).reduce((s, t) => s + t.nominal, 0)
+  // Today's Date in Local Time (YYYY-MM-DD)
+  const todayISO = new Date().toLocaleDateString('en-CA')
   
-  // Penjualan Digital: Transfer + DANA + FLIP + Kuota
-  const penjualanDigital = transactions
+  // Filtered Transactions for Dashboard (Today Only)
+  const todayTransactions = transactions.filter(t => t.timestamp.startsWith(todayISO))
+
+  // Derived Calculations (Dashboard - Today Only)
+  const totalTarik = todayTransactions.filter(t => t.kategori === 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)
+  const totalAdmin = todayTransactions.reduce((s, t) => s + t.adminFee, 0)
+  const totalAksesoris = todayTransactions.filter(t => t.kategori === 'Aksesoris').reduce((s, t) => s + t.nominal, 0)
+  const totalVolume = todayTransactions.filter(t => !t.kategori.startsWith('Isi')).reduce((s, t) => s + t.nominal, 0)
+  
+  // Penjualan Digital: Transfer + DANA + FLIP + Kuota (Today Only)
+  const penjualanDigital = todayTransactions
     .filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori))
     .reduce((s, t) => s + t.nominal, 0)
 
-  // Saldo Laci Kasir = Modal (from localStorage) + Digital + Aksesoris + Admin - Tarik
+  // Saldo Laci Kasir (Cumulative Calculation - usually doesn't reset to 0 in reality)
+  // But if the user wants it to look like it resets, we could filter this too.
+  // However, Saldo Bank and Kas Modal are cumulative.
   const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
 
   return (
@@ -250,7 +299,7 @@ const App: React.FC = () => {
         setActiveView={setActiveView}
         saldoBank={saldoBank}
         totalPenjualan={totalPenjualan}
-        lastTx={transactions.find(t => !t.kategori.startsWith('Isi'))}
+        lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
         formKategori={formKategori}
         setFormKategori={setFormKategori}
         formNominal={formNominal}
@@ -260,7 +309,8 @@ const App: React.FC = () => {
         formKeterangan={formKeterangan}
         setFormKeterangan={setFormKeterangan}
         handleSimpanTransaksi={handleSimpanTransaksi}
-        transactions={transactions}
+        transactions={todayTransactions}
+        isSaving={isSaving}
         totalAdmin={totalAdmin}
         totalVolume={totalVolume}
         totalAksesoris={totalAksesoris}
@@ -312,6 +362,7 @@ const App: React.FC = () => {
         isiKeterangan={isiKeterangan}
         setIsiKeterangan={setIsiKeterangan}
         handleSimpanIsiSaldo={handleSimpanIsiSaldo}
+        isSaving={isSaving}
       />
 
       <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} />
@@ -402,14 +453,33 @@ const App: React.FC = () => {
 
             <button 
               onClick={handleSaveEdit}
-              className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl text-xs shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+              disabled={isSaving}
+              className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl text-xs shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-70 disabled:scale-100"
             >
-              <i className="fa-solid fa-check-circle"></i> Simpan Perubahan
+              {isSaving ? (
+                <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+              ) : (
+                <i className="fa-solid fa-check-circle"></i>
+              )}
+              {isSaving ? "SEDANG MENYIMPAN..." : "Simpan Perubahan"}
             </button>
           </div>
         </div>
       )}
+
+      {/* Floating Success Notification */}
+      {toast && (
+        <div className="fixed top-20 left-0 right-0 z-[200] flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-white/20 backdrop-blur-md">
+            <div className="w-5 h-5 bg-white text-red-600 rounded-full flex items-center justify-center">
+              <i className="fa-solid fa-check text-[10px] font-black"></i>
+            </div>
+            <span className="font-black text-[11px] uppercase tracking-widest">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
+
   )
 }
 

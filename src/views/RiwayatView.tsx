@@ -19,6 +19,9 @@ interface RiwayatViewProps {
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
+
   const filteredTransactions = props.transactions.filter(t => {
     if (t.kategori.startsWith('Isi')) return false
     const date = t.timestamp.split('T')[0]
@@ -27,6 +30,14 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     const matchSearch = t.keterangan.toLowerCase().includes(props.filterPencarian.toLowerCase())
     return matchDate && matchKategori && matchSearch
   })
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const paginatedTransactions = filteredTransactions.slice(startIndex, startIndex + itemsPerPage)
+
+  const totalNominal = filteredTransactions.reduce((s, t) => s + t.nominal, 0)
+  const totalAdmin = filteredTransactions.reduce((s, t) => s + t.adminFee, 0)
 
   const filteredSaldoTransactions = props.transactions.filter(t => {
     if (!t.kategori.startsWith('Isi')) return false
@@ -108,26 +119,54 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         </div>
 
         <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-8">
-          <div className="grid grid-cols-[30px_50px_80px_1fr_80px_35px] gap-1 text-[9px] font-black text-gray-400 bg-gray-50/50 px-3 py-3 uppercase tracking-tighter border-b border-gray-50 items-center text-center">
-            <span>#</span><span>Jam</span><span>Tipe</span><span className="text-left pl-4">Nominal</span><span>ADMIN</span><span></span>
+          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[9px] font-black text-gray-400 bg-gray-50/50 px-3 py-3 uppercase tracking-tighter border-b border-gray-50 items-center">
+            <span className="text-center">#</span>
+            <span className="text-center">Jam</span>
+            <span className="text-center">Tipe</span>
+            <span className="text-right pr-4">Nominal</span>
+            <span className="text-right pr-2">ADMIN</span>
+            <span></span>
           </div>
           <div className="divide-y divide-gray-50">
-            {filteredTransactions.length === 0 ? (
+            {paginatedTransactions.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <i className="fa-solid fa-folder-open text-gray-200 text-3xl mb-2"></i>
                 <p className="text-xs text-gray-400 font-medium">Tidak ada transaksi</p>
               </div>
             ) : (
-              filteredTransactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} />
+              paginatedTransactions.map((t, i) => (
+                <TransactionRow key={t.id} t={t} index={startIndex + i} onEdit={props.onEdit} />
               ))
             )}
           </div>
-          <div className="px-5 py-4 bg-gradient-to-r from-gray-50 to-white text-[10px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
+          <div className="px-5 py-4 bg-gradient-to-r from-gray-50 to-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
             <span className="bg-white px-2 py-1 rounded-lg border border-gray-100 shadow-sm">{filteredTransactions.length} item</span>
-            <span className="text-violet-600 font-black text-xs">Vol: {formatRupiah(filteredTransactions.reduce((s,t) => s+t.nominal, 0))}</span>
+            <div className="flex gap-3">
+              <span className="text-blue-700 font-black">Nom: {formatRupiah(totalNominal)}</span>
+              <span className="text-emerald-600 font-black border-l border-gray-200 pl-3">Adm: {formatRupiah(totalAdmin)}</span>
+            </div>
           </div>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-1.5 mb-8">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i + 1)}
+                className={cn(
+                  "w-8 h-8 rounded-xl font-black text-[10px] transition-all",
+                  currentPage === i + 1 
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110" 
+                    : "bg-white text-gray-400 border border-gray-200 hover:border-blue-400"
+                )}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-3 px-1">
           <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
@@ -208,23 +247,23 @@ const TransactionRow: React.FC<{ t: Transaction, index: number, onEdit: (tx: Tra
     <>
       <div 
         className={cn(
-          "grid grid-cols-[30px_50px_80px_1fr_80px_35px] gap-1 px-3 py-3.5 items-center text-[11px] text-gray-700 hover:bg-gray-50 cursor-pointer border-l-4 transition-all",
+          "grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 px-3 py-3.5 items-center text-[11px] text-gray-700 hover:bg-gray-50 cursor-pointer border-l-4 transition-all",
           catColor
         )}
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className="font-bold text-gray-400 text-center text-[10px]">{index + 1}</span>
         <span className="text-gray-500 text-[10px] text-center font-bold">{jam}</span>
-        <span className="truncate">
-          <span className={cn("px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter block text-center truncate", catBadge)}>
+        <span className="flex justify-center">
+          <span className={cn("px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter block text-center truncate max-w-[65px]", catBadge)}>
             {t.kategori === 'Transfer Bank' ? 'Transfer' : 
              t.kategori === 'Order Kuota' ? 'Kuota' : t.kategori}
           </span>
         </span>
-        <span className="font-black text-gray-800 text-xs tabular-nums pl-4">
+        <span className="font-black text-gray-800 text-xs tabular-nums text-right pr-4">
           {t.nominal.toLocaleString('id-ID')}
         </span>
-        <span className="font-bold text-emerald-600 text-xs tabular-nums text-center">
+        <span className="font-bold text-emerald-600 text-xs tabular-nums text-right pr-2">
           {t.adminFee.toLocaleString('id-ID')}
         </span>
         <span className="flex justify-center items-center">
