@@ -470,11 +470,11 @@ const App: React.FC = () => {
       {/* Floating Success Notification */}
       {toast && (
         <div className="fixed top-20 left-0 right-0 z-[200] flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-white/20 backdrop-blur-md">
-            <div className="w-5 h-5 bg-white text-red-600 rounded-full flex items-center justify-center">
+          <div className="bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-white/20 backdrop-blur-md">
+            <div className="w-5 h-5 bg-white text-emerald-600 rounded-full flex items-center justify-center shadow-inner">
               <i className="fa-solid fa-check text-[10px] font-black"></i>
             </div>
-            <span className="font-black text-[11px] uppercase tracking-widest">{toast.message}</span>
+            <span className="font-black text-[10px] uppercase tracking-widest">{toast.message}</span>
           </div>
         </div>
       )}

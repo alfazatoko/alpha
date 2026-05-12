@@ -70,7 +70,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={nominal}
                 onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
                 onKeyDown={(e) => handleKeyDown(e, adminRef)}
-                className="nominal-input w-full bg-white border border-gray-300 rounded-lg py-2 pl-8 pr-3 text-xs font-black text-black focus:border-blue-600 outline-none transition-all"
+                className="form-input-modern w-full pl-8"
               />
             </div>
           </div>
@@ -86,7 +86,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={admin}
                 onChange={(e) => setAdmin(formatInputRupiah(e.target.value))}
                 onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-                className="nominal-input w-full bg-white border border-gray-300 rounded-lg py-2 pl-8 pr-3 text-xs font-black text-black focus:border-blue-600 outline-none transition-all"
+                className="form-input-modern w-full pl-8"
               />
             </div>
           </div>
