@@ -6,11 +6,24 @@ export interface KasirAccount {
   name: string
 }
 
-export const KASIR_ACCOUNTS: Record<string, KasirAccount> = {
+export const getDefaultKasirAccounts = (): Record<string, KasirAccount> => ({
   'owner': { pin: '0000', role: 'owner', name: 'Owner' },
   'kasir1': { pin: '1234', role: 'kasir', name: 'Kasir 1' },
   'kasir2': { pin: '5678', role: 'kasir', name: 'Kasir 2' },
+})
+
+export const getKasirAccounts = (): Record<string, KasirAccount> => {
+  const stored = localStorage.getItem('alphaPro_kasir_list')
+  if (stored) {
+    try { return JSON.parse(stored) } catch(e) {}
+  }
+  return getDefaultKasirAccounts()
 }
+
+export const saveKasirAccounts = (accounts: Record<string, KasirAccount>) => {
+  localStorage.setItem('alphaPro_kasir_list', JSON.stringify(accounts))
+}
+
 
 interface LoginScreenProps {
   onLogin: (username: string, account: KasirAccount) => void
@@ -22,6 +35,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [error, setError] = useState('')
   const [isShaking, setIsShaking] = useState(false)
   const [isPinEnabled, setIsPinEnabled] = useState(true)
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+
+  useEffect(() => {
+    setKasirList(getKasirAccounts())
+  }, [])
+
 
   // Check if PIN is enabled from localStorage
   useEffect(() => {
@@ -41,7 +60,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       return
     }
 
-    const account = KASIR_ACCOUNTS[selectedUser]
+    const account = kasirList[selectedUser]
     if (!account) {
       setError('Akun tidak valid.')
       triggerShake()
@@ -97,9 +116,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 className="login-select"
               >
                 <option value="" disabled>Pilih Pengguna</option>
-                <option value="kasir1">Kasir 1</option>
-                <option value="kasir2">Kasir 2</option>
-                <option value="owner">Owner</option>
+                {Object.entries(kasirList).map(([id, acc]) => (
+                  <option key={id} value={id}>{acc.name} ({acc.role === 'owner' ? 'Owner' : 'Kasir'})</option>
+                ))}
               </select>
               <i className="fa-solid fa-chevron-down login-select-icon"></i>
             </div>

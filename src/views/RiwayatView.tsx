@@ -16,7 +16,11 @@ interface RiwayatViewProps {
   setFilterKategori: (v: string) => void
   activeSaldoFilter: string
   setActiveSaldoFilter: (v: string) => void
+  kasirRole?: string
+  filterKasir?: string
+  setFilterKasir?: (v: string) => void
   onEdit: (tx: Transaction) => void
+  onDelete?: (tx: Transaction) => void
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
@@ -40,6 +44,17 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const totalNominal = filteredTransactions.reduce((s, t) => s + t.nominal, 0)
   const totalAdmin = filteredTransactions.reduce((s, t) => s + t.adminFee, 0)
 
+  // Perhitungan Transaksi Hari Ini Saja (Abaikan Filter)
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const todayTransactions = props.transactions.filter(t => {
+    if (t.kategori.startsWith('Isi')) return false
+    return t.timestamp.split('T')[0] === todayStr
+  })
+  const todayCount = todayTransactions.length
+  const todayVolume = todayTransactions.reduce((s, t) => s + t.nominal, 0)
+  const todayLaba = todayTransactions.reduce((s, t) => s + t.adminFee, 0)
+
   const filteredSaldoTransactions = props.transactions.filter(t => {
     if (!t.kategori.startsWith('Isi')) return false
     const date = t.timestamp.split('T')[0]
@@ -62,6 +77,20 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             LENGKAP
           </span>
         </div>
+        {props.kasirRole === 'owner' && props.setFilterKasir && (
+          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-white uppercase tracking-wider"><i className="fa-solid fa-user-tie mr-1"></i> Mode Pantau Kasir:</span>
+            <select 
+              value={props.filterKasir || 'Semua'}
+              onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+              className="bg-white text-violet-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none appearance-none"
+            >
+              <option value="Semua">Semua Kasir</option>
+              <option value="kasir1">Kasir 1</option>
+              <option value="kasir2">Kasir 2</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="px-5 pb-8">
@@ -113,6 +142,21 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         </div>
 
+        {/* SUMMARY HARI INI */}
+        <div className="flex gap-2 mb-6">
+          <div className="flex-[0.8] bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-blue-500">
+            <div className="text-[9px] font-black text-slate-500 mb-1">JUMLAH TRX</div>
+            <div className="text-[13px] font-black text-slate-800 truncate">{todayCount}</div>
+          </div>
+          <div className="flex-1 bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-purple-500">
+            <div className="text-[9px] font-black text-slate-500 mb-1">TOTAL VOLUME</div>
+            <div className="text-[13px] font-black text-slate-800 truncate">{formatRupiah(todayVolume)}</div>
+          </div>
+          <div className="flex-1 bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-emerald-500">
+            <div className="text-[9px] font-black text-slate-500 mb-1">TOTAL LABA</div>
+            <div className="text-[13px] font-black text-emerald-600 truncate">{formatRupiah(todayLaba)}</div>
+          </div>
+        </div>
         <div className="flex items-center justify-between mb-3 px-1">
           <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
             <i className="fa-solid fa-list-ul text-violet-500"></i> Daftar Transaksi
@@ -136,7 +180,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               </div>
             ) : (
               paginatedTransactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={startIndex + i} onEdit={props.onEdit} />
+                <TransactionRow key={t.id} t={t} index={startIndex + i} onEdit={props.onEdit} onDelete={props.onDelete} kasirRole={props.kasirRole} />
               ))
             )}
           </div>

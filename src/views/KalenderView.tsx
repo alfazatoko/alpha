@@ -93,24 +93,85 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
   const fetchHolidays = async (year: number) => {
     setLoading(true);
     try {
-      // Use dayoffapi which is more CORS-friendly and reliable
-      const res = await fetch(`https://dayoffapi.vercel.app/api?year=${year}`);
-      if (!res.ok) throw new Error("API response not ok");
-      const json = await res.json();
-      if (Array.isArray(json)) {
-        const formatted: Holiday[] = json.map((item: any) => {
-          const d = new Date(item.tanggal);
-          const isCuti = item.keterangan.toLowerCase().includes("cuti bersama");
-          return {
-            date: d.getDate(),
-            month: d.getMonth(),
-            year: d.getFullYear(),
-            name: item.keterangan,
-            type: isCuti ? "cuti" : "merah"
-          };
-        });
-        setYearHolidays(formatted);
+      // Nager API as base for official Gregorian holidays
+      let formatted: Holiday[] = [];
+      try {
+        const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/ID`);
+        if (res.ok) {
+          const json = await res.json();
+          formatted = json.map((item: any) => {
+            const d = new Date(item.date);
+            return {
+              date: d.getDate(),
+              month: d.getMonth(),
+              year: d.getFullYear(),
+              name: item.localName || item.name,
+              type: "merah"
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("Nager API failed", e);
       }
+
+      // Hardcoded missing holidays and Cuti Bersama for 2025 & 2026
+      const extraHolidays = [
+        // 2025
+        { date: 27, month: 0, year: 2025, name: "Isra Mikraj", type: "merah" },
+        { date: 28, month: 0, year: 2025, name: "Cuti Bersama Isra Mikraj/Imlek", type: "cuti" },
+        { date: 29, month: 0, year: 2025, name: "Tahun Baru Imlek", type: "merah" },
+        { date: 28, month: 2, year: 2025, name: "Cuti Bersama Nyepi", type: "cuti" },
+        { date: 29, month: 2, year: 2025, name: "Hari Suci Nyepi", type: "merah" },
+        { date: 31, month: 2, year: 2025, name: "Idul Fitri 1446 H", type: "merah" },
+        { date: 1, month: 3, year: 2025, name: "Idul Fitri 1446 H", type: "merah" },
+        { date: 2, month: 3, year: 2025, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 3, month: 3, year: 2025, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 4, month: 3, year: 2025, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 7, month: 3, year: 2025, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 12, month: 4, year: 2025, name: "Hari Raya Waisak", type: "merah" },
+        { date: 13, month: 4, year: 2025, name: "Cuti Bersama Waisak", type: "cuti" },
+        { date: 30, month: 4, year: 2025, name: "Cuti Bersama Kenaikan Isa Al Masih", type: "cuti" },
+        { date: 6, month: 5, year: 2025, name: "Idul Adha 1446 H", type: "merah" },
+        { date: 9, month: 5, year: 2025, name: "Cuti Bersama Idul Adha", type: "cuti" },
+        { date: 27, month: 5, year: 2025, name: "Tahun Baru Islam 1447 H", type: "merah" },
+        { date: 5, month: 8, year: 2025, name: "Maulid Nabi Muhammad SAW", type: "merah" },
+        { date: 26, month: 11, year: 2025, name: "Cuti Bersama Natal", type: "cuti" },
+        // 2026
+        { date: 17, month: 1, year: 2026, name: "Isra Mikraj / Imlek", type: "merah" },
+        { date: 18, month: 1, year: 2026, name: "Cuti Bersama", type: "cuti" },
+        { date: 19, month: 2, year: 2026, name: "Hari Suci Nyepi", type: "merah" },
+        { date: 20, month: 2, year: 2026, name: "Idul Fitri 1447 H", type: "merah" },
+        { date: 21, month: 2, year: 2026, name: "Idul Fitri 1447 H", type: "merah" },
+        { date: 18, month: 2, year: 2026, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 19, month: 2, year: 2026, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 23, month: 2, year: 2026, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 24, month: 2, year: 2026, name: "Cuti Bersama Idul Fitri", type: "cuti" },
+        { date: 27, month: 4, year: 2026, name: "Idul Adha 1447 H", type: "merah" },
+        { date: 28, month: 4, year: 2026, name: "Cuti Bersama Idul Adha", type: "cuti" },
+        { date: 31, month: 4, year: 2026, name: "Hari Raya Waisak", type: "merah" },
+        { date: 16, month: 5, year: 2026, name: "Tahun Baru Islam 1448 H", type: "merah" },
+        { date: 25, month: 7, year: 2026, name: "Maulid Nabi Muhammad SAW", type: "merah" },
+        { date: 24, month: 11, year: 2026, name: "Cuti Bersama Natal", type: "cuti" },
+        { date: 26, month: 11, year: 2026, name: "Cuti Bersama Natal", type: "cuti" },
+      ];
+
+      extraHolidays.filter(h => h.year === year).forEach(extra => {
+        if (!formatted.find(f => f.date === extra.date && f.month === extra.month)) {
+          formatted.push(extra as Holiday);
+        } else if (extra.type === "cuti") {
+          // If exist but we want it as cuti, update it
+          const idx = formatted.findIndex(f => f.date === extra.date && f.month === extra.month);
+          if (idx !== -1) formatted[idx] = extra as Holiday;
+        }
+      });
+
+      // Sort by date and month
+      formatted.sort((a, b) => {
+        if (a.month !== b.month) return a.month - b.month;
+        return a.date - b.date;
+      });
+
+      setYearHolidays(formatted);
     } catch (e) {
       console.warn("Holiday fetch suppressed or failed:", e);
       setYearHolidays([]); // Fallback to empty

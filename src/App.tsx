@@ -5,7 +5,9 @@ import type { Transaction } from './types'
 // Components
 import Navigation from './components/Navigation'
 import SidePanel from './components/SidePanel'
-import LoginScreen, { KASIR_ACCOUNTS, type KasirAccount } from './components/LoginScreen'
+import LoginScreen, { getKasirAccounts, type KasirAccount } from './components/LoginScreen'
+import { GoogleAuthScreen } from './components/GoogleAuthScreen'
+import { supabase } from './lib/supabase'
 
 // Views
 import BerandaView from './views/BerandaView'
@@ -27,23 +29,43 @@ declare global {
   }
 }
 
-// Helper: get namespaced localStorage key for multi-kasir
-const getKey = (username: string, key: string) => `alphaPro_${username}_${key}`
+// Constants and helpers
 
 const App: React.FC = () => {
-  // ── Auth State ──
+  // ── Google Auth State ──
+  const [googleSession, setGoogleSession] = useState<any>(null)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
+  // ── Kasir Profile State ──
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [currentUsername, setCurrentUsername] = useState('')
   const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(null)
+
+  // Check Supabase Auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setGoogleSession(session)
+      setIsCheckingAuth(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setGoogleSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Check persisted login on mount
   useEffect(() => {
     const storedLoggedIn = localStorage.getItem('alphaPro_loggedIn')
     const storedUsername = localStorage.getItem('alphaPro_username')
-    if (storedLoggedIn === 'true' && storedUsername && KASIR_ACCOUNTS[storedUsername]) {
+    const kasirList = getKasirAccounts()
+    if (storedLoggedIn === 'true' && storedUsername && kasirList[storedUsername]) {
       setIsLoggedIn(true)
       setCurrentUsername(storedUsername)
-      setCurrentAccount(KASIR_ACCOUNTS[storedUsername])
+      setCurrentAccount(kasirList[storedUsername])
     }
   }, [])
 
@@ -68,13 +90,33 @@ const App: React.FC = () => {
     setCurrentAccount(null)
   }, [])
 
-  // ── Show login screen if not logged in ──
-  if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />
+  // ── Show loading if checking auth ──
+  if (isCheckingAuth) {
+    return <div className="h-screen w-screen flex items-center justify-center bg-gray-50"><i className="fa-solid fa-circle-notch fa-spin text-blue-600 text-3xl"></i></div>
   }
 
-  // ── Everything below only renders when logged in ──
-  return <MainApp username={currentUsername} account={currentAccount!} onLogout={handleLogout} />
+  // ── Show Google Login if not authenticated ──
+  if (!googleSession) {
+    return <GoogleAuthScreen />
+  }
+
+  // ── Show Profile Selection (Kasir) if not selected ──
+  if (!isLoggedIn) {
+    return (
+      <div className="relative">
+        <button 
+          onClick={() => supabase.auth.signOut()} 
+          className="absolute top-4 right-4 z-50 bg-white/50 backdrop-blur-md px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 hover:bg-red-50 transition-all"
+        >
+          Logout Google
+        </button>
+        <LoginScreen onLogin={handleLogin} />
+      </div>
+    )
+  }
+
+  // ── Everything below only renders when fully logged in ──
+  return <MainApp username={currentUsername} account={currentAccount!} googleUid={googleSession.user.id} onLogout={handleLogout} />
 }
 
 // ════════════════════════════════════════════════
@@ -83,12 +125,13 @@ const App: React.FC = () => {
 interface MainAppProps {
   username: string
   account: KasirAccount
+  googleUid: string
   onLogout: () => void
 }
 
-const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
-  // Namespaced localStorage helper
-  const k = (key: string) => getKey(username, key)
+const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout }) => {
+  // Namespaced localStorage helper (isolated per Google UID and Kasir Username)
+  const k = (key: string) => `alphaPro_${googleUid}_${username}_${key}`
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
@@ -96,11 +139,86 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
   const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
   
-  // App Data State — namespaced per kasir
-  const [saldoBank, setSaldoBank] = useState<number>(Number(localStorage.getItem(k('saldoBank'))) || 1000000)
-  const [totalPenjualan, setTotalPenjualan] = useState<number>(Number(localStorage.getItem(k('totalPenjualan'))) || 0)
-  const [transactions, setTransactions] = useState<Transaction[]>(JSON.parse(localStorage.getItem(k('transactions')) || '[]'))
-  const [kasModal, setKasModal] = useState<number>(Number(localStorage.getItem(k('kas_modal'))) || 0)
+  // App Data State — synced with Supabase
+  const [saldoBank, setSaldoBank] = useState<number>(0)
+  const [totalPenjualan, setTotalPenjualan] = useState<number>(0)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [kasModal, setKasModal] = useState<number>(0)
+
+  // Fetch from Supabase
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', googleUid)
+        .order('timestamp', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching transactions:', error)
+      } else if (data) {
+        // Map database row to Transaction type
+        const mappedTx = data.map(row => ({
+          id: row.id,
+          kategori: row.kategori,
+          nominal: Number(row.nominal),
+          adminFee: Number(row.admin_fee),
+          keterangan: row.keterangan || '-',
+          timestamp: row.timestamp,
+          kasir_id: row.kasir_id
+        }))
+        setTransactions(mappedTx)
+      }
+    }
+
+    fetchTransactions()
+
+    // Realtime Subscription
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${googleUid}`
+        },
+        () => {
+          // Re-fetch everything on change for simplicity and consistency
+          fetchTransactions()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [googleUid])
+
+  // Recalculate daily balances whenever transactions change
+  useEffect(() => {
+    const todayISO = new Date().toLocaleDateString('en-CA')
+    const todayTxs = transactions.filter(t => t.timestamp.startsWith(todayISO))
+    
+    let calcSaldoBank = 0
+    let calcKasModal = 0
+    let calcPenjualan = 0
+
+    todayTxs.forEach(tx => {
+      if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
+      if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
+      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
+        calcSaldoBank -= tx.nominal
+        calcPenjualan += tx.nominal
+      }
+      if (tx.kategori === 'Aksesoris') calcPenjualan += tx.nominal
+    })
+
+    setSaldoBank(calcSaldoBank)
+    setKasModal(calcKasModal)
+    setTotalPenjualan(calcPenjualan)
+  }, [transactions])
   
   // Form State
   const [formKategori, setFormKategori] = useState('')
@@ -119,6 +237,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
   const [filterPencarian, setFilterPencarian] = useState('')
   const [filterKategori, setFilterKategori] = useState('Semua')
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
+  const [filterKasir, setFilterKasir] = useState('Semua')
   
   // Edit Transaction State
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
@@ -147,44 +266,22 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
     }
   }
 
-  // Persistence Effects
-  useEffect(() => {
-    localStorage.setItem('theme', theme)
-    document.body.className = `theme-${theme}`
-  }, [theme])
-
-  useEffect(() => {
-    localStorage.setItem('screen', screenSize)
-  }, [screenSize])
-
-  useEffect(() => {
-    localStorage.setItem(k('saldoBank'), saldoBank.toString())
-    localStorage.setItem(k('totalPenjualan'), totalPenjualan.toString())
-    localStorage.setItem(k('transactions'), JSON.stringify(transactions))
-    localStorage.setItem(k('kas_modal'), kasModal.toString())
-  }, [saldoBank, totalPenjualan, transactions, kasModal])
-
-  // Daily Reset Check
+  // Daily Reset Check (Only alerts now, balances are calculated from today's txs automatically)
   useEffect(() => {
     const checkReset = () => {
       const today = new Date().toLocaleDateString('id-ID')
-      const lastReset = localStorage.getItem(k('last_reset_date'))
+      const lastReset = localStorage.getItem(`alphaPro_${googleUid}_${username}_last_reset_date`)
 
       if (lastReset && lastReset !== today) {
-        // Day has changed! 
-        // We no longer clear everything, just notify the user that 
-        // the dashboard will now show data for the new day.
-        alert(`Selamat datang di hari baru (${today}). Dashboard Anda sekarang menampilkan rekap harian yang baru. Data hari sebelumnya tersimpan aman di Riwayat.`)
+        alert(`Selamat datang di hari baru (${today}). Dashboard menampilkan rekap harian baru.`)
       }
-      
-      localStorage.setItem(k('last_reset_date'), today)
+      localStorage.setItem(`alphaPro_${googleUid}_${username}_last_reset_date`, today)
     }
 
     checkReset()
-    // Check every minute in case the app stays open overnight
     const interval = setInterval(checkReset, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [googleUid, username])
 
   // Handlers
   const showToast = (msg: string) => {
@@ -202,41 +299,43 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
 
     setIsSaving(true)
     
-    // Simulasi proses simpan untuk menampilkan spinner
-    setTimeout(() => {
-      let newSaldoBank = saldoBank
-      let newTotalPenjualan = totalPenjualan
+    // Proses simpan ke Supabase
+    const id = Date.now().toString()
+    const newTx = {
+      id,
+      user_id: googleUid,
+      kasir_id: username,
+      kategori: formKategori,
+      nominal,
+      admin_fee: admin,
+      keterangan: formKeterangan || '-',
+      timestamp: new Date().toISOString()
+    }
 
-      switch (formKategori) {
-        case 'Transfer Bank':
-        case 'DANA':
-        case 'FLIP':
-        case 'Order Kuota':
-          newSaldoBank -= nominal
-          break
-      }
-
-      const newTx: Transaction = {
-        id: Date.now().toString(),
-        kategori: formKategori,
-        nominal,
-        adminFee: admin,
-        keterangan: formKeterangan || '-',
-        timestamp: new Date().toISOString()
-      }
-
-      setTransactions([newTx, ...transactions])
-      setSaldoBank(newSaldoBank)
-      setTotalPenjualan(newTotalPenjualan)
-      
-      setFormKategori('')
-      setFormNominal('')
-      setFormAdmin('')
-      setFormKeterangan('')
-      
+    supabase.from('transactions').insert(newTx).then(({ error }) => {
       setIsSaving(false)
-      showToast('Transaksi Berhasil Disimpan!')
-    }, 800)
+      if (error) {
+        alert('Gagal menyimpan ke server: ' + error.message)
+      } else {
+        // Optimistic UI Update
+        const optimisticTx: Transaction = {
+          id: newTx.id,
+          kategori: newTx.kategori,
+          nominal: newTx.nominal,
+          adminFee: newTx.admin_fee,
+          keterangan: newTx.keterangan,
+          timestamp: newTx.timestamp,
+          kasir_id: newTx.kasir_id
+        }
+        setTransactions(prev => [optimisticTx, ...prev])
+
+        setFormKategori('')
+        setFormNominal('')
+        setFormAdmin('')
+        setFormKeterangan('')
+        showToast('Transaksi Berhasil Disimpan!')
+      }
+    })
   }
 
   const handleSimpanIsiSaldo = () => {
@@ -247,39 +346,42 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
 
     setIsSaving(true)
 
-    setTimeout(() => {
-      let newSaldoBank = saldoBank
-      let newTotalPenjualan = totalPenjualan
+    const id = Date.now().toString()
+    const newTx = {
+      id,
+      user_id: googleUid,
+      kasir_id: username,
+      kategori: 'Isi ' + isiJenis,
+      nominal,
+      admin_fee: 0,
+      keterangan: isiKeterangan || 'Setoran Saldo',
+      timestamp: new Date().toISOString()
+    }
 
-      if (isiJenis === 'Saldo Bank') {
-        newSaldoBank += nominal
-      } else if (isiJenis === 'Modal Tunai Kasir') {
-        const currentModal = Number(localStorage.getItem(k('kas_modal')) || '0')
-        localStorage.setItem(k('kas_modal'), (currentModal + nominal).toString())
-        setKasModal(currentModal + nominal)
-      }
-
-      const newTx: Transaction = {
-        id: Date.now().toString(),
-        kategori: 'Isi ' + isiJenis,
-        nominal,
-        adminFee: 0,
-        keterangan: isiKeterangan || 'Setoran Saldo',
-        timestamp: new Date().toISOString()
-      }
-
-      setTransactions([newTx, ...transactions])
-      setSaldoBank(newSaldoBank)
-      setTotalPenjualan(newTotalPenjualan)
-      
-      setIsiJenis('')
-      setIsiNominal('')
-      setIsiKeterangan('')
-      
+    supabase.from('transactions').insert(newTx).then(({ error }) => {
       setIsSaving(false)
-      showToast('Saldo Berhasil Diperbarui!')
-      setActiveView('view-beranda')
-    }, 800)
+      if (error) {
+        alert('Gagal update saldo: ' + error.message)
+      } else {
+        // Optimistic UI Update
+        const optimisticTx: Transaction = {
+          id: newTx.id,
+          kategori: newTx.kategori,
+          nominal: newTx.nominal,
+          adminFee: newTx.admin_fee,
+          keterangan: newTx.keterangan,
+          timestamp: newTx.timestamp,
+          kasir_id: newTx.kasir_id
+        }
+        setTransactions(prev => [optimisticTx, ...prev])
+
+        setIsiJenis('')
+        setIsiNominal('')
+        setIsiKeterangan('')
+        showToast('Saldo Berhasil Diperbarui!')
+        setActiveView('view-beranda')
+      }
+    })
   }
 
   const handleStartEdit = (tx: Transaction) => {
@@ -297,45 +399,60 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
 
     setIsSaving(true)
 
-    setTimeout(() => {
-      const updatedTransactions = transactions.map(t => {
-        if (t.id === editingTx.id) {
-          return {
-            ...t,
-            kategori: editKategori,
-            nominal: newNominal,
-            adminFee: newAdmin,
-            keterangan: editKeterangan,
-            isEdited: true,
-            originalNominal: t.isEdited ? t.originalNominal : t.nominal,
-            originalAdminFee: t.isEdited ? t.originalAdminFee : t.adminFee,
-            originalKategori: t.isEdited ? t.originalKategori : t.kategori
-          }
-        }
-        return t
-      })
-
-      let newSaldoBank = saldoBank
-      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editingTx.kategori)) {
-        newSaldoBank += editingTx.nominal
-      }
-      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(editKategori)) {
-        newSaldoBank -= newNominal
-      }
-
-      setTransactions(updatedTransactions)
-      setSaldoBank(newSaldoBank)
-      setEditingTx(null)
+    supabase.from('transactions').update({
+      kategori: editKategori,
+      nominal: newNominal,
+      admin_fee: newAdmin,
+      keterangan: editKeterangan,
+    }).eq('id', editingTx.id).then(({ error }) => {
       setIsSaving(false)
-      showToast('Transaksi Berhasil Diperbarui!')
-    }, 800)
+      if (error) {
+        alert('Gagal edit: ' + error.message)
+      } else {
+        // Optimistic UI Update
+        setTransactions(prev => prev.map(t => {
+          if (t.id === editingTx.id) {
+            return {
+              ...t,
+              kategori: editKategori,
+              nominal: newNominal,
+              adminFee: newAdmin,
+              keterangan: editKeterangan,
+              isEdited: true,
+            }
+          }
+          return t
+        }))
+
+        setEditingTx(null)
+        showToast('Transaksi Berhasil Diperbarui!')
+      }
+    })
+  }
+
+  const handleDeleteTx = (tx: Transaction) => {
+    if (window.confirm('Yakin ingin menghapus transaksi ini permanen?')) {
+      supabase.from('transactions').delete().eq('id', tx.id).then(({ error }) => {
+        if (error) {
+          alert('Gagal menghapus: ' + error.message)
+        } else {
+          setTransactions(prev => prev.filter(t => t.id !== tx.id))
+          showToast('Transaksi Berhasil Dihapus!')
+        }
+      })
+    }
   }
 
   // Today's Date in Local Time (YYYY-MM-DD)
   const todayISO = new Date().toLocaleDateString('en-CA')
   
+  // Apply Kasir Filter (Only if Owner and specific Kasir is selected)
+  const displayTransactions = (account.role === 'owner' && filterKasir !== 'Semua') 
+    ? transactions.filter(t => t.kasir_id === filterKasir)
+    : transactions;
+
   // Filtered Transactions for Dashboard (Today Only)
-  const todayTransactions = transactions.filter(t => t.timestamp.startsWith(todayISO))
+  const todayTransactions = displayTransactions.filter(t => t.timestamp.startsWith(todayISO))
 
   // Derived Calculations (Dashboard - Today Only)
   const totalTarik = todayTransactions.filter(t => t.kategori === 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)
@@ -398,14 +515,18 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
         setFilterKategori={setFilterKategori}
         activeSaldoFilter={activeSaldoFilter}
         setActiveSaldoFilter={setActiveSaldoFilter}
+        kasirRole={account.role}
+        filterKasir={filterKasir}
+        setFilterKasir={setFilterKasir}
         onEdit={handleStartEdit}
+        onDelete={handleDeleteTx}
       />
 
       <LaporanView 
         active={activeView === 'view-laporan'}
         saldoBank={saldoBank}
         totalPenjualan={totalPenjualan}
-        transactions={transactions}
+        transactions={displayTransactions}
         totalTarik={totalTarik}
         totalAdmin={totalAdmin}
         totalAksesoris={totalAksesoris}
@@ -413,7 +534,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, onLogout }) => {
         totalSaldoKas={totalSaldoKas}
         penjualanDigital={penjualanDigital}
         kasModal={kasModal}
+        kasirRole={account.role}
+        filterKasir={filterKasir}
+        setFilterKasir={setFilterKasir}
         onEdit={handleStartEdit}
+        onDelete={handleDeleteTx}
       />
 
       <AkunView 

@@ -6,9 +6,11 @@ interface TransactionRowProps {
   t: Transaction
   index: number
   onEdit: (tx: Transaction) => void
+  onDelete?: (tx: Transaction) => void
+  kasirRole?: string
 }
 
-const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit }) => {
+const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDelete, kasirRole }) => {
   const [isOpen, setIsOpen] = useState(false)
   const jam = new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   const fullDate = new Date(t.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -27,6 +29,15 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit }) => 
     e.stopPropagation();
     onEdit(t);
   }
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete?.(t);
+  }
+
+  const isToday = t.timestamp.startsWith(new Date().toLocaleDateString('en-CA'))
+  const canEdit = isToday
+  const canDelete = isToday && kasirRole === 'owner'
 
   return (
     <>
@@ -79,12 +90,29 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit }) => 
                   <span className="text-gray-700 font-black leading-relaxed max-w-[220px] text-[11px]">{t.keterangan || '-'}</span>
                 </p>
               </div>
-              <button 
-                onClick={handleEditClick}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all"
-              >
-                <i className="fa-solid fa-pen-to-square"></i> EDIT
-              </button>
+              <div className="flex gap-2">
+                {!isToday && (
+                  <span className="text-[9px] text-gray-400 font-bold italic bg-gray-50 px-3 py-2 rounded-xl border border-gray-100 flex items-center">
+                    <i className="fa-solid fa-lock mr-1.5"></i> Terkunci (Hari Lama)
+                  </span>
+                )}
+                {canEdit && (
+                  <button 
+                    onClick={handleEditClick}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all"
+                  >
+                    <i className="fa-solid fa-pen-to-square"></i> EDIT
+                  </button>
+                )}
+                {canDelete && (
+                  <button 
+                    onClick={handleDeleteClick}
+                    className="bg-rose-600 text-white px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 shadow-lg shadow-rose-500/30 hover:bg-rose-700 active:scale-95 transition-all"
+                  >
+                    <i className="fa-solid fa-trash-can"></i> HAPUS
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Baris 3: Data Asli (Jika Ada) */}

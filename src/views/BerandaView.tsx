@@ -3,6 +3,7 @@ import { formatRupiah, cn } from '../lib/utils'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
+import { getKasirAccounts, saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 
 interface BerandaViewProps {
   active: boolean
@@ -31,12 +32,26 @@ interface BerandaViewProps {
   isSaving?: boolean
   kasirName?: string
   kasirRole?: string
+  filterKasir?: string
+  setFilterKasir?: (v: string) => void
   onLogout?: () => void
 }
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
   const [currentTime, setCurrentTime] = useState(new Date())
+
+  // Kasir Management State
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  const [kasirFormId, setKasirFormId] = useState('')
+  const [kasirFormName, setKasirFormName] = useState('')
+  const [kasirFormPin, setKasirFormPin] = useState('')
+
+  useEffect(() => {
+    if (activeOwnerModal) {
+      setKasirList(getKasirAccounts())
+    }
+  }, [activeOwnerModal])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -327,45 +342,124 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             {/* Modal Content */}
             <div className="p-5 max-h-[60vh] overflow-y-auto hide-scrollbar">
               {activeOwnerModal === 'monitor' && (
-                <div className="space-y-3">
-                  {['kasir1', 'kasir2'].map(id => {
-                    const name = id === 'kasir1' ? 'Kasir 1' : 'Kasir 2';
-                    const txs = JSON.parse(localStorage.getItem(`alphaPro_${id}_transactions`) || '[]');
-                    const volume = txs.reduce((s: any, t: any) => s + t.nominal, 0);
-                    return (
-                      <div key={id} className="p-4 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black">
-                            {id.slice(-1)}
-                          </div>
+                <div className="space-y-4">
+                  {/* Add Kasir Form */}
+                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                    <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>
+                    <div className="space-y-2">
+                      <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                      <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                      <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                      <button onClick={() => {
+                        if(!kasirFormId || !kasirFormName || !kasirFormPin) return alert('Lengkapi data kasir');
+                        const newKasirList = { ...kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
+                        saveKasirAccounts(newKasirList);
+                        setKasirList(newKasirList);
+                        setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
+                      }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {Object.entries(kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
+                      return (
+                        <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
                           <div>
-                            <p className="text-xs font-black text-gray-800">{name}</p>
-                            <p className="text-[9px] text-gray-400 font-bold uppercase">{txs.length} Transaksi</p>
+                            <p className="text-xs font-black text-gray-800">{account.name}</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                              <i className="fa-solid fa-pen text-[10px]"></i>
+                            </button>
+                            <button onClick={() => {
+                              if(confirm(`Hapus ${account.name}?`)) {
+                                const n = {...kasirList}; delete n[id];
+                                saveKasirAccounts(n); setKasirList(n);
+                              }
+                            }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                              <i className="fa-solid fa-trash text-[10px]"></i>
+                            </button>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs font-black text-blue-700">Rp {volume.toLocaleString('id-ID')}</p>
-                          <span className="text-[8px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-black">ONLINE</span>
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
               {activeOwnerModal === 'laporan' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                      <p className="text-[9px] font-black text-emerald-800 uppercase tracking-tighter">Total Admin Fee</p>
-                      <p className="text-sm font-black text-emerald-700 mt-1">Rp 750.000</p>
+                  <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest pl-2">Filter Data Kasir</p>
+                    <select
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 px-3 rounded-lg outline-none cursor-pointer"
+                    >
+                      <option value="Semua">Semua Kasir</option>
+                      <option value="kasir1">Kasir 1</option>
+                      <option value="kasir2">Kasir 2</option>
+                      <option value="owner">Owner</option>
+                    </select>
+                  </div>
+
+                  {/* KAS MASUK */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-[10px]">
+                        <i className="fa-solid fa-arrow-down"></i>
+                      </div>
+                      <h4 className="text-[11px] font-black text-green-700 uppercase tracking-widest">KAS MASUK</h4>
                     </div>
-                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                      <p className="text-[9px] font-black text-blue-800 uppercase tracking-tighter">Total Volume</p>
-                      <p className="text-sm font-black text-blue-700 mt-1">Rp 12.500.000</p>
+                    <div className="space-y-2 pl-7">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Modal Tunai Kasir</p>
+                        <span className="text-xs font-black text-gray-800">Rp {Number(kasModal).toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Penjualan Digital</p>
+                        <span className="text-xs font-black text-gray-800">Rp {penjualanDigital.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Penjualan Aksesoris</p>
+                        <span className="text-xs font-black text-gray-800">Rp {props.totalAksesoris.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Total Admin Fee</p>
+                        <span className="text-xs font-black text-gray-800">Rp {props.totalAdmin.toLocaleString('id-ID')}</span>
+                      </div>
                     </div>
                   </div>
-                  <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+
+                  <div className="h-px bg-gray-100"></div>
+
+                  {/* KAS KELUAR */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-[10px]">
+                        <i className="fa-solid fa-arrow-up"></i>
+                      </div>
+                      <h4 className="text-[11px] font-black text-red-600 uppercase tracking-widest">KAS KELUAR</h4>
+                    </div>
+                    <div className="space-y-2 pl-7">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Tarik Tunai Nasabah</p>
+                        <span className="text-xs font-black text-red-600">-Rp {props.totalTarik.toLocaleString('id-ID')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total Balance */}
+                  <div className="mt-3 p-4 bg-gradient-to-r from-blue-700 to-blue-800 rounded-2xl shadow-inner text-white flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest">SALDO LACI KASIR</p>
+                      <p className="text-[8px] text-blue-200 mt-0.5">Total uang fisik hari ini</p>
+                    </div>
+                    <span className="text-lg font-black text-green-300">Rp {totalPendapatanBersih.toLocaleString('id-ID')}</span>
+                  </div>
+
+                  <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
                     <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
                   </button>
                 </div>
@@ -427,23 +521,64 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'grafik' && (
-                <div className="text-center py-10 space-y-4">
-                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
-                    <i className="fa-solid fa-chart-area text-2xl"></i>
+              {activeOwnerModal === 'grafik' && (() => {
+                const todayISO = new Date().toLocaleDateString('en-CA');
+                const volHarian = props.transactions.filter(t => t.timestamp.startsWith(todayISO)).reduce((s,t) => s + t.nominal, 0);
+                const volBulanIni = props.transactions.reduce((s,t) => s + t.nominal, 0); // approx all data for now
+                return (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+                      <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Transaksi Harian</p>
+                      <h2 className="text-2xl font-black text-emerald-600 mt-1">Rp {volHarian.toLocaleString('id-ID')}</h2>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
+                      <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Total Transaksi (Semua)</p>
+                      <h2 className="text-2xl font-black text-blue-600 mt-1">Rp {volBulanIni.toLocaleString('id-ID')}</h2>
+                    </div>
+                    <div className="h-32 bg-gray-50 rounded-2xl border border-gray-100 flex items-end justify-between p-4 px-6">
+                      {/* Fake simple bar chart */}
+                      {[40, 70, 45, 90, 60, 80, 100].map((h, i) => (
+                        <div key={i} className="w-4 bg-blue-400 rounded-t-sm" style={{ height: `${h}%` }}></div>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-center font-bold text-gray-400 uppercase">Grafik 7 Hari Terakhir</p>
                   </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Grafik Tren Segera Hadir</p>
-                </div>
-              )}
+                )
+              })()}
 
-              {activeOwnerModal === 'performa' && (
-                <div className="text-center py-10 space-y-4">
-                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto text-purple-600">
-                    <i className="fa-solid fa-award text-2xl"></i>
+              {activeOwnerModal === 'performa' && (() => {
+                const performa = Object.keys(kasirList).filter(k => k !== 'owner').map(kId => {
+                  const txs = props.transactions.filter(t => t.kasir_id === kId);
+                  return {
+                    id: kId,
+                    name: kasirList[kId]?.name || kId,
+                    count: txs.length,
+                    vol: txs.reduce((s,t)=>s+t.nominal, 0)
+                  }
+                }).sort((a,b) => b.vol - a.vol);
+
+                return (
+                  <div className="space-y-3">
+                    {performa.map((p, index) => (
+                      <div key={p.id} className="p-4 border border-purple-100 rounded-2xl bg-purple-50/30 flex justify-between items-center">
+                        <div className="flex gap-3 items-center">
+                          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center font-black text-white", index === 0 ? "bg-amber-400 shadow-md" : "bg-purple-300")}>
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">{p.name}</p>
+                            <p className="text-[9px] text-purple-600 font-bold uppercase">{p.count} Transaksi</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-black text-purple-800">Rp {p.vol.toLocaleString('id-ID')}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {performa.length === 0 && <p className="text-center text-xs font-bold text-gray-400">Belum ada data</p>}
                   </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ranking Kasir Sedang Diproses</p>
-                </div>
-              )}
+                )
+              })()}
 
               {activeOwnerModal === 'backup' && (
                 <div className="text-center py-10 space-y-4">

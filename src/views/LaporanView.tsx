@@ -14,7 +14,11 @@ interface LaporanViewProps {
   totalSaldoKas: number
   penjualanDigital: number
   kasModal: number
+  kasirRole?: string
+  filterKasir?: string
+  setFilterKasir?: (v: string) => void
   onEdit: (tx: Transaction) => void
+  onDelete?: (tx: Transaction) => void
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
@@ -30,6 +34,20 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             <i className="fa-solid fa-chart-line text-white"></i>
           </div>
         </div>
+        {props.kasirRole === 'owner' && props.setFilterKasir && (
+          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-white uppercase tracking-wider"><i className="fa-solid fa-user-tie mr-1"></i> Mode Pantau Kasir:</span>
+            <select 
+              value={props.filterKasir || 'Semua'}
+              onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none appearance-none"
+            >
+              <option value="Semua">Semua Kasir</option>
+              <option value="kasir1">Kasir 1</option>
+              <option value="kasir2">Kasir 2</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="px-5 pb-5 space-y-2.5">
@@ -93,29 +111,46 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 space-y-1">
-          <div className="flex justify-between items-center bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100/50">
-            <span className="text-[11px] font-bold text-gray-700 flex items-center gap-2"><i className="fa-solid fa-vault text-[10px]"></i> Modal Tunai Kasir</span>
-            <span className="font-black text-xs text-gray-800">{formatRupiah(props.kasModal)}</span>
+        <div className="space-y-4">
+          {/* KAS MASUK */}
+          <div>
+            <h4 className="text-[10px] font-extrabold text-emerald-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
+              <i className="fa-solid fa-arrow-down-long"></i> KAS MASUK
+            </h4>
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-emerald-100 space-y-1">
+              <div className="flex justify-between items-center bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100/50">
+                <span className="text-[11px] font-bold text-gray-700 flex items-center gap-2"><i className="fa-solid fa-vault text-[10px]"></i> Modal Tunai Kasir</span>
+                <span className="font-black text-xs text-gray-800">{formatRupiah(props.kasModal)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-blue-50/50 px-3 py-1.5 rounded-xl border border-blue-100/50">
+                <span className="text-[11px] font-bold text-blue-700 flex items-center gap-2"><i className="fa-solid fa-globe text-[10px]"></i> Penjualan Digital</span>
+                <span className="font-black text-xs text-blue-600">{formatRupiah(props.penjualanDigital)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-fuchsia-50/50 px-3 py-1.5 rounded-xl border border-fuchsia-100/50">
+                <span className="text-[11px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-headphones text-[10px]"></i> Penjualan Aksesoris</span>
+                <span className="font-black text-xs text-fuchsia-600">{formatRupiah(props.totalAksesoris)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50">
+                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[10px]"></i> Total Admin Fee</span>
+                <span className="font-black text-xs text-emerald-600">{formatRupiah(props.totalAdmin)}</span>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between items-center bg-blue-50/50 px-3 py-1.5 rounded-xl border border-blue-100/50">
-            <span className="text-[11px] font-bold text-blue-700 flex items-center gap-2"><i className="fa-solid fa-globe text-[10px]"></i> Penjualan Digital</span>
-            <span className="font-black text-xs text-blue-600">{formatRupiah(props.penjualanDigital)}</span>
+
+          {/* KAS KELUAR */}
+          <div>
+            <h4 className="text-[10px] font-extrabold text-rose-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
+              <i className="fa-solid fa-arrow-up-long"></i> KAS KELUAR
+            </h4>
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-rose-100 space-y-1">
+              <div className="flex justify-between items-center bg-rose-50/50 px-3 py-1.5 rounded-xl border border-rose-100/50">
+                <span className="text-[11px] font-bold text-rose-700 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i> Tarik Tunai Nasabah</span>
+                <span className="font-black text-xs text-rose-600">-{formatRupiah(props.totalTarik)}</span>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between items-center bg-fuchsia-50/50 px-3 py-1.5 rounded-xl border border-fuchsia-100/50">
-            <span className="text-[11px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-headphones text-[10px]"></i> Penjualan Aksesoris</span>
-            <span className="font-black text-xs text-fuchsia-600">{formatRupiah(props.totalAksesoris)}</span>
-          </div>
-          <div className="flex justify-between items-center bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50">
-            <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[10px]"></i> Total Admin Fee</span>
-            <span className="font-black text-xs text-emerald-600">{formatRupiah(props.totalAdmin)}</span>
-          </div>
-          <div className="flex justify-between items-center bg-rose-50/50 px-3 py-1.5 rounded-xl border border-rose-100/50">
-            <span className="text-[11px] font-bold text-rose-700 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i> Tarik Tunai Nasabah</span>
-            <span className="font-black text-xs text-rose-600">-{formatRupiah(props.totalTarik)}</span>
-          </div>
-          
-          <div className="pt-0.5">
+
+          <div className="pt-1">
             <div className="bg-[#051c5f] px-3 py-2.5 rounded-xl flex justify-between items-center shadow-lg">
               <span className="font-bold text-[10px] text-blue-100 tracking-wider uppercase">Total Saldo Laci Kasir</span>
               <span className="font-black text-base text-green-400">{formatRupiah(props.totalSaldoKas)}</span>
@@ -144,7 +179,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <div className="px-4 py-8 text-center text-gray-400 text-[10px] font-medium">Belum ada transaksi hari ini</div>
             ) : (
               props.transactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} />
+                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} onDelete={props.onDelete} kasirRole={props.kasirRole} />
               ))
             )}
           </div>

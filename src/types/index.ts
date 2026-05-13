@@ -19,6 +19,7 @@ export interface Transaction {
   originalNominal?: number;
   originalAdminFee?: number;
   originalKategori?: string;
+  kasir_id?: string;
 }
 
 export interface AppState {
