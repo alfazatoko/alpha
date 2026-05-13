@@ -201,6 +201,10 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [filterKategori, setFilterKategori] = useState('Semua')
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
   const [filterKasir, setFilterKasir] = useState('Semua')
+  
+  // Laporan Date Filter
+  const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(new Date().toLocaleDateString('en-CA'))
+  const [dailyReport, setDailyReport] = useState<any>(null)
 
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
@@ -234,6 +238,73 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
   }, [transactions, account.role, username, filterKasir])
+
+  // Fetch Aggregated Report for LaporanView
+  useEffect(() => {
+    const fetchDailyReport = async () => {
+      let targetKasir = filterKasir;
+      if (account.role !== 'owner') targetKasir = username;
+
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select('*')
+        .eq('user_id', googleUid)
+        .eq('kasir_id', targetKasir)
+        .eq('report_date', filterTanggalLaporan)
+        .single()
+
+      if (!error && data) {
+        setDailyReport({
+          saldoBank: Number(data.saldo_bank),
+          kasModal: Number(data.modal_kasir),
+          penjualanDigital: Number(data.penjualan_digital),
+          totalAksesoris: Number(data.penjualan_aksesoris),
+          totalAdmin: Number(data.total_admin),
+          totalTarik: Number(data.total_tarik),
+          saldoReal: Number(data.saldo_real || 0),
+          totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) - Number(data.total_tarik)
+        })
+      } else {
+        // Fallback: Calculate manually from transactions state for the selected date
+        let relevantTxs = transactions;
+        if (account.role !== 'owner') {
+          relevantTxs = transactions.filter(t => t.kasir_id === username);
+        } else if (filterKasir !== 'Semua') {
+          relevantTxs = transactions.filter(t => t.kasir_id === filterKasir);
+        }
+
+        const filtered = relevantTxs.filter(t => t.timestamp.startsWith(filterTanggalLaporan));
+        
+        let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0;
+        filtered.forEach(tx => {
+          if (tx.kategori === 'Isi Saldo Bank') sBank += tx.nominal;
+          if (tx.kategori === 'Isi Modal Tunai Kasir') kMod += tx.nominal;
+          if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
+            sBank -= tx.nominal;
+            pDig += tx.nominal;
+          }
+          if (tx.kategori === 'Aksesoris') pAks += tx.nominal;
+          if (tx.kategori === 'Tarik Tunai') tTar += tx.nominal;
+          tAdm += tx.adminFee;
+        });
+
+        setDailyReport({
+          saldoBank: sBank,
+          kasModal: kMod,
+          penjualanDigital: pDig,
+          totalAksesoris: pAks,
+          totalAdmin: tAdm,
+          totalTarik: tTar,
+          saldoReal: 0,
+          totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
+        });
+      }
+    }
+
+    if (activeView === 'view-laporan') {
+      fetchDailyReport()
+    }
+  }, [filterTanggalLaporan, filterKasir, googleUid, activeView, account.role, username])
   
   // Form State
   const [formKategori, setFormKategori] = useState('')
@@ -473,6 +544,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     .filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori))
     .reduce((s, t) => s + t.nominal, 0)
 
+  // Saldo Real Aplikasi: Akumulasi dari input manual di Isi Saldo (Today Only)
+  const totalSaldoReal = todayTransactions
+    .filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
+    .reduce((s, t) => s + t.nominal, 0)
+
   // Saldo Laci Kasir (Cumulative Calculation - usually doesn't reset to 0 in reality)
   // But if the user wants it to look like it resets, we could filter this too.
   // However, Saldo Bank and Kas Modal are cumulative.
@@ -532,19 +608,28 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
       <LaporanView 
         active={activeView === 'view-laporan'}
-        saldoBank={saldoBank}
-        totalPenjualan={totalPenjualan}
-        transactions={displayTransactions}
-        totalTarik={totalTarik}
-        totalAdmin={totalAdmin}
-        totalAksesoris={totalAksesoris}
+        saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
+        totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
+        transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
+        totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
+        totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
+        totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
         totalVolume={totalVolume}
-        totalSaldoKas={totalSaldoKas}
-        penjualanDigital={penjualanDigital}
-        kasModal={kasModal}
+        totalSaldoKas={dailyReport ? dailyReport.totalSaldoKas : totalSaldoKas}
+        penjualanDigital={dailyReport ? dailyReport.penjualanDigital : penjualanDigital}
+        kasModal={dailyReport ? dailyReport.kasModal : kasModal}
         kasirRole={account.role}
         filterKasir={filterKasir}
         setFilterKasir={setFilterKasir}
+        filterTanggal={filterTanggalLaporan}
+        setFilterTanggal={setFilterTanggalLaporan}
+        saldoReal={
+          filterTanggalLaporan === todayISO 
+            ? totalSaldoReal 
+            : displayTransactions
+                .filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi')
+                .reduce((s, t) => s + t.nominal, 0)
+        }
         onEdit={handleStartEdit}
         onDelete={handleDeleteTx}
       />

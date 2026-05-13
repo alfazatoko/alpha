@@ -56,7 +56,8 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
               className="form-input-modern w-full"
             >
               <option value="" disabled>Pilih jenis saldo</option>
-              <option value="Saldo Bank">🏦 Saldo Bank</option>
+              <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
+              <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
               <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
             </select>
           </div>

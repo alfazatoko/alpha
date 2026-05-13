@@ -1,6 +1,6 @@
+import React from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
-import TransactionRow from '../components/TransactionRow'
 
 interface LaporanViewProps {
   active: boolean
@@ -17,11 +17,15 @@ interface LaporanViewProps {
   kasirRole?: string
   filterKasir?: string
   setFilterKasir?: (v: string) => void
+  filterTanggal: string
+  setFilterTanggal: (v: string) => void
+  saldoReal: number
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
+
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
       <div className="px-5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
@@ -48,6 +52,27 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </select>
           </div>
         )}
+
+        <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex-shrink-0"><i className="fa-solid fa-calendar-day mr-1"></i> Tanggal Laporan:</span>
+          <div className="flex items-center gap-2 flex-grow">
+            <input 
+              type="date"
+              defaultValue={props.filterTanggal}
+              id="input-tanggal-laporan"
+              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none flex-grow"
+            />
+            <button 
+              onClick={() => {
+                const el = document.getElementById('input-tanggal-laporan') as HTMLInputElement;
+                if (el) props.setFilterTanggal(el.value);
+              }}
+              className="bg-emerald-800 text-white text-[9px] font-black px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition-all uppercase tracking-widest"
+            >
+              Cek
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="px-5 pb-5 space-y-2.5">
@@ -156,43 +181,97 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <span className="font-black text-base text-green-400">{formatRupiah(props.totalSaldoKas)}</span>
             </div>
           </div>
-        </div>
-        </div>
 
-        {/* Daftar Transaksi Hari Ini */}
-        <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-8">
-          <div className="px-5 py-4 border-b border-gray-50 flex justify-between items-center bg-white">
-            <h3 className="font-black text-[10px] text-gray-800 uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-list-ul text-violet-500"></i> Daftar Transaksi
-            </h3>
-          </div>
-          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[8px] font-black text-gray-400 bg-gray-50/50 px-3 py-3 uppercase tracking-tighter border-b border-gray-50 items-center">
-            <span className="text-center">#</span>
-            <span className="text-center">Jam</span>
-            <span className="text-center">Tipe</span>
-            <span className="text-right pr-4">Nominal</span>
-            <span className="text-right pr-2">Adm</span>
-            <span></span>
-          </div>
-          <div className="divide-y divide-gray-50 max-h-[400px] overflow-y-auto hide-scrollbar">
-            {props.transactions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-400 text-[10px] font-medium">Belum ada transaksi hari ini</div>
-            ) : (
-              props.transactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={i} onEdit={props.onEdit} onDelete={props.onDelete} kasirRole={props.kasirRole} />
-              ))
-            )}
-          </div>
-          <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
-            <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{props.transactions.length} item</span>
-            <div className="flex items-center gap-3 pr-2">
-              <span className="text-blue-700 font-black text-[10px]">Nom: {formatRupiah(props.transactions.reduce((s,t) => s+t.nominal, 0))}</span>
-              <span className="w-px h-3 bg-gray-200"></span>
-              <span className="text-emerald-600 font-black text-[10px]">Adm: {formatRupiah(props.transactions.reduce((s,t) => s+t.adminFee, 0))}</span>
+          {/* JURNAL PENYESUAIAN SALDO */}
+          <div className="bg-white border-2 border-indigo-100 rounded-3xl p-4 shadow-xl shadow-indigo-500/10">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-[11px] font-black text-indigo-800 tracking-widest uppercase flex items-center gap-2">
+                <i className="fa-solid fa-scale-balanced text-indigo-500"></i> JURNAL PENYESUAIAN SALDO
+              </h4>
+              <span className="text-[8px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
             </div>
+            
+            <div className="space-y-2">
+              {/* 1. MODAL SALDO BANK */}
+              <div className="flex justify-between items-center p-2 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
+                <div>
+                  <p className="text-[9px] font-bold text-indigo-700 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
+                  <p className="text-[7px] text-indigo-400 font-medium italic -mt-0.5">Total pengisian/setoran saldo hari ini</p>
+                </div>
+                <span className="font-black text-[11px] text-indigo-900">
+                  {formatRupiah(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0))}
+                </span>
+              </div>
+
+              {/* 2. PENJUALAN DIGITAL */}
+              <div className="flex justify-between items-center p-2 bg-orange-50/50 rounded-xl border border-orange-100/50">
+                <div>
+                  <p className="text-[9px] font-bold text-orange-700 uppercase tracking-tight">2. Penjualan Digital</p>
+                  <p className="text-[7px] text-orange-400 font-medium italic -mt-0.5">Saldo yang sudah terpakai transaksi</p>
+                </div>
+                <span className="font-black text-[11px] text-orange-900">-{formatRupiah(props.penjualanDigital)}</span>
+              </div>
+
+              {/* 3. SISA SALDO (CATATAN BUKU) */}
+              {(() => {
+                const modalBank = props.transactions.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0);
+                const sisaBuku = modalBank - props.penjualanDigital;
+                return (
+                  <div className="flex justify-between items-center p-2 bg-blue-50/80 rounded-xl border-2 border-blue-100">
+                    <div>
+                      <p className="text-[9px] font-bold text-blue-700 uppercase tracking-tight">3. Sisa Saldo (Catatan Buku)</p>
+                      <p className="text-[7px] text-blue-400 font-medium italic -mt-0.5">Uang yang seharusnya ada di bank</p>
+                    </div>
+                    <span className="font-black text-[11px] text-blue-900">{formatRupiah(sisaBuku)}</span>
+                  </div>
+                );
+              })()}
+
+              {/* 4. SALDO REAL APLIKASI (OTOMATIS) */}
+              <div className="flex justify-between items-center p-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
+                <div>
+                  <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real Aplikasi (HP)</p>
+                  <p className="text-[7px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input melalui menu 'Isi Saldo'</p>
+                </div>
+                <span className="font-black text-[11px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
+              </div>
+
+              {/* STATUS KLOP / SELISIH */}
+              {(() => {
+                const modalBank = props.transactions.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0);
+                const sisaBuku = modalBank - props.penjualanDigital;
+                const selisih = props.saldoReal - sisaBuku;
+                
+                return (
+                  <div className={cn(
+                    "mt-3 p-4 rounded-2xl flex justify-between items-center border-2",
+                    selisih === 0 ? "bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30" : 
+                    selisih > 0 ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/30" : "bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-500/30"
+                  )}>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        {selisih === 0 ? <><i className="fa-solid fa-circle-check"></i> STATUS: KLOP</> : 
+                         selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> STATUS: SURPLUS</> : 
+                         <><i className="fa-solid fa-circle-xmark"></i> STATUS: SELISIH</>}
+                      </p>
+                      <p className="text-[8px] opacity-90 font-bold italic mt-0.5">
+                        {selisih === 0 ? 'Sisa saldo di HP cocok dengan catatan buku' : 
+                         selisih > 0 ? 'Saldo di HP lebih besar dari catatan' : 'Saldo di HP lebih kecil (Uang kurang)'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-sm block">{selisih === 0 ? '✓ MATCH' : formatRupiah(selisih)}</span>
+                      {selisih !== 0 && <span className="text-[8px] font-black opacity-80 uppercase tracking-tighter">Periksa Kembali</span>}
+                    </div>
+                  </div>
+                );
+              })()
+            }
           </div>
         </div>
       </div>
+    </div>
+  </div>
   )
 }
 

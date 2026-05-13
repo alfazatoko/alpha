@@ -134,6 +134,28 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             </div>
             
             <div className="p-5 space-y-5 max-h-[75vh] overflow-y-auto hide-scrollbar">
+              {/* SALDO BANK */}
+              <div className="space-y-3 pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-5 h-5 rounded-full bg-blue-700 flex items-center justify-center text-white text-[9px]">
+                    <i className="fa-solid fa-building-columns"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-black text-blue-800 uppercase leading-none">SALDO BANK</h4>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5 opacity-80">Total uang di rekening/digital</p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-start pl-1.5">
+                  <div className="flex gap-2.5">
+                    <div className="w-1 h-1 rounded-full bg-blue-700 mt-1.5 opacity-60"></div>
+                    <div>
+                      <p className="text-xs font-black text-gray-800">Total Saldo Bank</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black text-blue-700">{formatRupiah(props.saldoBank)}</span>
+                </div>
+              </div>
+
               {/* KAS MASUK */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2.5">
@@ -402,6 +424,22 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <option value="kasir2">Kasir 2</option>
                       <option value="owner">Owner</option>
                     </select>
+                  </div>
+
+                  {/* SALDO BANK */}
+                  <div className="space-y-2.5 mb-4 pb-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px]">
+                        <i className="fa-solid fa-building-columns"></i>
+                      </div>
+                      <h4 className="text-[11px] font-black text-blue-700 uppercase tracking-widest">SALDO BANK</h4>
+                    </div>
+                    <div className="space-y-2 pl-7">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Total Saldo Bank</p>
+                        <span className="text-xs font-black text-blue-700">{formatRupiah(props.saldoBank)}</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* KAS MASUK */}

@@ -60,10 +60,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     const date = t.timestamp.split('T')[0]
     const matchDate = date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
     const matchType = props.activeSaldoFilter === 'Semua' || 
-                    (props.activeSaldoFilter === 'Bank' && t.kategori.includes('Bank')) ||
-                    (props.activeSaldoFilter === 'TUNAI' && t.kategori.includes('Penjualan'))
+                    (props.activeSaldoFilter === 'Saldo Bank' && t.kategori.includes('Saldo Bank')) ||
+                    (props.activeSaldoFilter === 'Saldo Real' && t.kategori.includes('Real Aplikasi')) ||
+                    (props.activeSaldoFilter === 'Modal Tunai' && t.kategori.includes('Modal Tunai'))
     return matchDate && matchType
   })
+
+  const totalSaldoNominal = filteredSaldoTransactions.reduce((s, t) => s + t.nominal, 0)
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
@@ -73,9 +76,6 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
             <p className="text-violet-100 text-[11px] mt-1 opacity-90">Pantau semua arus kas keluar masuk</p>
           </div>
-          <span className="text-[10px] bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-full font-bold border border-white/30">
-            LENGKAP
-          </span>
         </div>
         {props.kasirRole === 'owner' && props.setFilterKasir && (
           <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
@@ -131,12 +131,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               onChange={(e) => props.setFilterKategori(e.target.value)}
               className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-2 py-2.5 text-xs font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all appearance-none text-center"
             >
-              <option value="Semua">Kategori</option>
-              <option value="Transfer Bank">Transfer</option>
+              <option value="Semua">Semua Kategori</option>
+              <option value="Transfer Bank">Transfer Bank</option>
               <option value="DANA">DANA</option>
               <option value="FLIP">FLIP</option>
-              <option value="Order Kuota">Kuota</option>
-              <option value="Tarik Tunai">Tarik</option>
+              <option value="Order Kuota">Order Kuota</option>
+              <option value="Tarik Tunai">Tarik Tunai</option>
               <option value="Aksesoris">Aksesoris</option>
             </select>
           </div>
@@ -220,13 +220,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </h3>
         </div>
 
-        <div className="flex gap-2 mb-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm inline-flex">
-          {['Semua', 'Bank', 'TUNAI'].map(f => (
+        <div className="flex gap-2 mb-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm inline-flex overflow-x-auto hide-scrollbar max-w-full">
+          {['Semua', 'Saldo Bank', 'Saldo Real', 'Modal Tunai'].map(f => (
             <button 
               key={f}
               onClick={() => props.setActiveSaldoFilter(f)}
               className={cn(
-                "px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all",
+                "px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap",
                 props.activeSaldoFilter === f 
                   ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20" 
                   : "text-gray-400 hover:text-gray-600"
@@ -252,7 +252,8 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                   <span>
                     <span className={cn(
                       "px-2 py-0.5 rounded-lg text-[9px] font-bold",
-                      t.kategori.includes('Bank') ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
+                      t.kategori.includes('Bank') ? "bg-blue-50 text-blue-600" : 
+                      t.kategori.includes('Real') ? "bg-emerald-50 text-emerald-600" : "bg-fuchsia-50 text-fuchsia-600"
                     )}>
                       {t.kategori.replace('Isi ', '')}
                     </span>
@@ -263,6 +264,14 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               ))
             )}
           </div>
+          {filteredSaldoTransactions.length > 0 && (
+            <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
+              <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{filteredSaldoTransactions.length} item</span>
+              <div className="flex items-center gap-3 pr-2">
+                <span className="text-emerald-700 font-black text-[10px]">TOTAL: {formatRupiah(totalSaldoNominal)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

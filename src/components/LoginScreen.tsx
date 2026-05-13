@@ -117,7 +117,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               >
                 <option value="" disabled>Pilih Pengguna</option>
                 {Object.entries(kasirList).map(([id, acc]) => (
-                  <option key={id} value={id}>{acc.name} ({acc.role === 'owner' ? 'Owner' : 'Kasir'})</option>
+                  <option key={id} value={id}>
+                    {acc.role === 'owner' ? `👑 ${acc.name} (Owner)` : `${acc.name} (Kasir)`}
+                  </option>
                 ))}
               </select>
               <i className="fa-solid fa-chevron-down login-select-icon"></i>
