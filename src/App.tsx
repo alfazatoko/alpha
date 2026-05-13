@@ -205,11 +205,18 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     let calcKasModal = 0
     let calcPenjualan = 0
 
-    todayTxs.forEach(tx => {
+    // Saldo Bank dihitung dari semua riwayat transaksi (bersifat berkelanjutan, tidak reset per hari)
+    transactions.forEach(tx => {
       if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
-      if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
       if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
         calcSaldoBank -= tx.nominal
+      }
+    })
+
+    // Modal Tunai Kasir dan Penjualan dihitung per hari (hanya transaksi hari ini)
+    todayTxs.forEach(tx => {
+      if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
+      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
         calcPenjualan += tx.nominal
       }
       if (tx.kategori === 'Aksesoris') calcPenjualan += tx.nominal
