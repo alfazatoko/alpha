@@ -196,8 +196,15 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
+    let relevantTxs = transactions;
+    if (account.role !== 'owner') {
+      relevantTxs = transactions.filter(t => t.kasir_id === username);
+    } else if (filterKasir !== 'Semua') {
+      relevantTxs = transactions.filter(t => t.kasir_id === filterKasir);
+    }
+
     const todayISO = new Date().toLocaleDateString('en-CA')
-    const todayTxs = transactions.filter(t => t.timestamp.startsWith(todayISO))
+    const todayTxs = relevantTxs.filter(t => t.timestamp.startsWith(todayISO))
     
     let calcSaldoBank = 0
     let calcKasModal = 0
@@ -218,7 +225,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setSaldoBank(calcSaldoBank)
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
-  }, [transactions])
+  }, [transactions, account.role, username, filterKasir])
   
   // Form State
   const [formKategori, setFormKategori] = useState('')
@@ -446,10 +453,10 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   // Today's Date in Local Time (YYYY-MM-DD)
   const todayISO = new Date().toLocaleDateString('en-CA')
   
-  // Apply Kasir Filter (Only if Owner and specific Kasir is selected)
-  const displayTransactions = (account.role === 'owner' && filterKasir !== 'Semua') 
-    ? transactions.filter(t => t.kasir_id === filterKasir)
-    : transactions;
+  // Apply Kasir Filter (Owner sees all/filtered, Kasir ONLY sees their own)
+  const displayTransactions = account.role === 'owner' 
+    ? (filterKasir !== 'Semua' ? transactions.filter(t => t.kasir_id === filterKasir) : transactions)
+    : transactions.filter(t => t.kasir_id === username);
 
   // Filtered Transactions for Dashboard (Today Only)
   const todayTransactions = displayTransactions.filter(t => t.timestamp.startsWith(todayISO))
@@ -504,7 +511,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
       <RiwayatView 
         active={activeView === 'view-transaksi'}
-        transactions={transactions}
+        transactions={displayTransactions}
         filterTanggalMulai={filterTanggalMulai}
         setFilterTanggalMulai={setFilterTanggalMulai}
         filterTanggalAkhir={filterTanggalAkhir}
