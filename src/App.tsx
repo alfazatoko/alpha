@@ -194,6 +194,14 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     }
   }, [googleUid])
 
+  // Filter State
+  const [filterTanggalMulai, setFilterTanggalMulai] = useState(new Date().toISOString().split('T')[0])
+  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(new Date().toISOString().split('T')[0])
+  const [filterPencarian, setFilterPencarian] = useState('')
+  const [filterKategori, setFilterKategori] = useState('Semua')
+  const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
+  const [filterKasir, setFilterKasir] = useState('Semua')
+
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
     let relevantTxs = transactions;
@@ -238,14 +246,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [isiNominal, setIsiNominal] = useState('')
   const [isiKeterangan, setIsiKeterangan] = useState('')
 
-  // Filter State
-  const [filterTanggalMulai, setFilterTanggalMulai] = useState(new Date().toISOString().split('T')[0])
-  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(new Date().toISOString().split('T')[0])
-  const [filterPencarian, setFilterPencarian] = useState('')
-  const [filterKategori, setFilterKategori] = useState('Semua')
-  const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
-  const [filterKasir, setFilterKasir] = useState('Semua')
-  
+  // Filter states moved above useEffect
   // Edit Transaction State
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [editKategori, setEditKategori] = useState('')
