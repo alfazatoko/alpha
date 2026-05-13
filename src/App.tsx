@@ -130,8 +130,6 @@ interface MainAppProps {
 }
 
 const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout }) => {
-  // Namespaced localStorage helper (isolated per Google UID and Kasir Username)
-  const k = (key: string) => `alphaPro_${googleUid}_${username}_${key}`
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
@@ -205,18 +203,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     let calcKasModal = 0
     let calcPenjualan = 0
 
-    // Saldo Bank dihitung dari semua riwayat transaksi (bersifat berkelanjutan, tidak reset per hari)
-    transactions.forEach(tx => {
-      if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
-      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
-        calcSaldoBank -= tx.nominal
-      }
-    })
-
-    // Modal Tunai Kasir dan Penjualan dihitung per hari (hanya transaksi hari ini)
+    // Saldo Bank, Modal Tunai, dan Penjualan dihitung per hari (hanya transaksi hari ini).
+    // Cocok untuk sistem per shift kasir yang 리set setiap hari.
     todayTxs.forEach(tx => {
+      if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
       if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
       if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
+        calcSaldoBank -= tx.nominal
         calcPenjualan += tx.nominal
       }
       if (tx.kategori === 'Aksesoris') calcPenjualan += tx.nominal
