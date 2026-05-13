@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
 import TransactionRow from '../components/TransactionRow'
+import type { KasirAccount } from '../components/LoginScreen'
 
 interface RiwayatViewProps {
   active: boolean
@@ -19,6 +20,7 @@ interface RiwayatViewProps {
   kasirRole?: string
   filterKasir?: string
   setFilterKasir?: (v: string) => void
+  kasirList?: Record<string, KasirAccount>
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
 }
@@ -27,14 +29,37 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
 
-  const filteredTransactions = props.transactions.filter(t => {
+  // Local date state (hanya diterapkan saat klik TAMPILKAN)
+  const [localDari, setLocalDari] = useState(props.filterTanggalMulai)
+  const [localSampai, setLocalSampai] = useState(props.filterTanggalAkhir)
+
+  const handleTampilkan = () => {
+    props.setFilterTanggalMulai(localDari)
+    props.setFilterTanggalAkhir(localSampai)
+    setCurrentPage(1)
+  }
+
+  // 1. Filter berdasarkan Rentang Tanggal (Untuk Kartu Dashboard Atas)
+  const dateFilteredTransactions = props.transactions.filter(t => {
     if (t.kategori.startsWith('Isi')) return false
     const date = t.timestamp.split('T')[0]
-    const matchDate = date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
-    const matchKategori = props.filterKategori === 'Semua' || t.kategori === props.filterKategori
-    const matchSearch = t.keterangan.toLowerCase().includes(props.filterPencarian.toLowerCase())
-    return matchDate && matchKategori && matchSearch
+    return date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
   })
+
+  // 2. Filter berdasarkan Kategori, Pencarian, & Kasir (Untuk List & Footer Bawah)
+  const filteredTransactions = dateFilteredTransactions.filter(t => {
+    const matchKategori = props.filterKategori === 'Semua' || t.kategori === props.filterKategori
+    const matchSearch = !props.filterPencarian || 
+                      t.keterangan.toLowerCase().includes(props.filterPencarian.toLowerCase()) ||
+                      t.nominal.toString().includes(props.filterPencarian)
+    const matchKasir = !props.filterKasir || props.filterKasir === 'Semua' || t.kasir_id === props.filterKasir
+    return matchKategori && matchSearch && matchKasir
+  })
+
+  // Summary untuk Kartu Atas (Total Hari/Rentang yang dipilih)
+  const todayCount = dateFilteredTransactions.length
+  const todayVolume = dateFilteredTransactions.reduce((s, t) => s + t.nominal, 0)
+  const todayAdmin = dateFilteredTransactions.reduce((s, t) => s + t.adminFee, 0)
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
@@ -43,17 +68,6 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
   const totalNominal = filteredTransactions.reduce((s, t) => s + t.nominal, 0)
   const totalAdmin = filteredTransactions.reduce((s, t) => s + t.adminFee, 0)
-
-  // Perhitungan Transaksi Hari Ini Saja (Abaikan Filter)
-  const now = new Date()
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const todayTransactions = props.transactions.filter(t => {
-    if (t.kategori.startsWith('Isi')) return false
-    return t.timestamp.split('T')[0] === todayStr
-  })
-  const todayCount = todayTransactions.length
-  const todayVolume = todayTransactions.reduce((s, t) => s + t.nominal, 0)
-  const todayLaba = todayTransactions.reduce((s, t) => s + t.adminFee, 0)
 
   const filteredSaldoTransactions = props.transactions.filter(t => {
     if (!t.kategori.startsWith('Isi')) return false
@@ -69,67 +83,31 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const totalSaldoNominal = filteredSaldoTransactions.reduce((s, t) => s + t.nominal, 0)
 
   return (
-    <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-5 pt-7 pb-6 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20 mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
-            <p className="text-violet-100 text-[11px] mt-1 opacity-90">Pantau semua arus kas keluar masuk</p>
-          </div>
-        </div>
-        {props.kasirRole === 'owner' && props.setFilterKasir && (
-          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-white uppercase tracking-wider"><i className="fa-solid fa-user-tie mr-1"></i> Mode Pantau Kasir:</span>
-            <select 
-              value={props.filterKasir || 'Semua'}
-              onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-              className="bg-white text-violet-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none appearance-none"
-            >
-              <option value="Semua">Semua Kasir</option>
-              <option value="kasir1">Kasir 1</option>
-              <option value="kasir2">Kasir 2</option>
-            </select>
-          </div>
-        )}
+    <div className={cn("page-view hide-scrollbar", props.active && "active")} style={{ backgroundColor: 'var(--container-bg, #ffffff)' }}>
+      {/* HEADER */}
+      <div className="px-5 pt-6 pb-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20">
+        <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
+        <p className="text-violet-100 text-[11px] mt-0.5 opacity-90">Pantau semua arus kas keluar masuk</p>
       </div>
 
-      <div className="px-5 pb-8">
-        <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm mb-6 space-y-3">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="text-[9px] font-bold text-gray-400 mb-1 ml-1 block uppercase">Mulai</label>
-              <input 
-                type="date" 
-                value={props.filterTanggalMulai}
-                onChange={(e) => props.setFilterTanggalMulai(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all" 
-              />
-            </div>
-            <div className="flex-1">
-              <label className="text-[9px] font-bold text-gray-400 mb-1 ml-1 block uppercase">Akhir</label>
-              <input 
-                type="date" 
-                value={props.filterTanggalAkhir}
-                onChange={(e) => props.setFilterTanggalAkhir(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all" 
-              />
-            </div>
+      <div className="px-4 pb-20 pt-3">
+        {/* CARI + KATEGORI (1 baris, tanpa label) */}
+        <div className="flex gap-1.5 mb-2">
+          <div className="relative flex-[2]">
+            <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
+            <input 
+              type="text" 
+              placeholder="Cari..." 
+              value={props.filterPencarian}
+              onChange={(e) => props.setFilterPencarian(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-[11px] focus:outline-none focus:border-violet-500 font-bold text-slate-700" 
+            />
           </div>
-          <div className="flex gap-2">
-            <div className="flex-[2] relative">
-              <i className="fa-solid fa-magnifying-glass absolute left-3 top-3 text-gray-300 text-[10px]"></i>
-              <input 
-                type="text" 
-                placeholder="Cari keterangan..." 
-                value={props.filterPencarian}
-                onChange={(e) => props.setFilterPencarian(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all" 
-              />
-            </div>
+          <div className="relative flex-1">
             <select 
               value={props.filterKategori}
               onChange={(e) => props.setFilterKategori(e.target.value)}
-              className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-2 py-2.5 text-xs font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all appearance-none text-center"
+              className="w-full h-full bg-white border border-slate-200 pl-2 pr-6 rounded-lg text-[10px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none"
             >
               <option value="Semua">Semua Kategori</option>
               <option value="Transfer Bank">Transfer Bank</option>
@@ -139,44 +117,103 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               <option value="Tarik Tunai">Tarik Tunai</option>
               <option value="Aksesoris">Aksesoris</option>
             </select>
+            <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
-        {/* SUMMARY HARI INI */}
-        <div className="flex gap-2 mb-6">
-          <div className="flex-[0.8] bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-blue-500">
-            <div className="text-[9px] font-black text-slate-500 mb-1">JUMLAH TRX</div>
-            <div className="text-[13px] font-black text-slate-800 truncate">{todayCount}</div>
+        {/* TANGGAL + TAMPILKAN (1 baris, tanpa label) */}
+        <div className="flex gap-1.5 mb-2 items-center">
+          <div 
+            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-1.5 px-2 cursor-pointer"
+            onClick={(e) => {
+              const input = (e.currentTarget as HTMLElement).querySelector('input');
+              if (input) (input as any).showPicker?.();
+            }}
+          >
+            <span className="text-[8px] font-black text-slate-400 uppercase shrink-0 mr-1">Dari</span>
+            <input 
+              type="date"
+              className="w-full text-[10px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
+              value={localDari}
+              onChange={(e) => setLocalDari(e.target.value)}
+            />
           </div>
-          <div className="flex-1 bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-purple-500">
-            <div className="text-[9px] font-black text-slate-500 mb-1">TOTAL VOLUME</div>
-            <div className="text-[13px] font-black text-slate-800 truncate">{formatRupiah(todayVolume)}</div>
+          <div 
+            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-1.5 px-2 cursor-pointer"
+            onClick={(e) => {
+              const input = (e.currentTarget as HTMLElement).querySelector('input');
+              if (input) (input as any).showPicker?.();
+            }}
+          >
+            <span className="text-[8px] font-black text-slate-400 uppercase shrink-0 mr-1">Sampai</span>
+            <input 
+              type="date"
+              className="w-full text-[10px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
+              value={localSampai}
+              onChange={(e) => setLocalSampai(e.target.value)}
+            />
           </div>
-          <div className="flex-1 bg-white rounded-2xl py-3 pl-3 pr-1 shadow-sm border border-gray-50 border-l-[5px] border-l-emerald-500">
-            <div className="text-[9px] font-black text-slate-500 mb-1">TOTAL LABA</div>
-            <div className="text-[13px] font-black text-emerald-600 truncate">{formatRupiah(todayLaba)}</div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-            <i className="fa-solid fa-list-ul text-violet-500"></i> Daftar Transaksi
-          </h3>
+          <button 
+            onClick={handleTampilkan}
+            className="bg-violet-600 text-white px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-violet-700 active:scale-95 transition-all shadow-sm whitespace-nowrap"
+          >
+            TAMPILKAN
+          </button>
         </div>
 
-        <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-8">
-          <div className="grid grid-cols-[30px_45px_70px_1fr_60px_35px] gap-1 text-[9px] font-black text-gray-400 bg-gray-50/50 px-3 py-3 uppercase tracking-tighter border-b border-gray-50 items-center">
-            <span className="text-center">#</span>
-            <span className="text-center">Jam</span>
-            <span className="text-center">Tipe</span>
-            <span className="text-right pr-4">Nominal</span>
-            <span className="text-right pr-2">ADMIN</span>
-            <span></span>
+        {/* OWNER ONLY: FILTER KASIR (1 baris penuh) */}
+        {props.kasirRole === 'owner' && props.kasirList && (
+          <div className="flex items-center gap-1.5 mb-4 bg-white/50 border border-slate-100 p-1.5 rounded-xl">
+             <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                <i className="fa-solid fa-user-gear text-[10px]"></i>
+             </div>
+             <div className="flex-1 relative">
+                <select 
+                  value={props.filterKasir || 'Semua'}
+                  onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                  className="w-full bg-transparent text-[10px] font-black text-slate-700 outline-none pr-6 appearance-none cursor-pointer"
+                >
+                  <option value="Semua">Pilih Kasir: Semua</option>
+                  {Object.entries(props.kasirList).map(([id, acc]) => (
+                    <option key={id} value={id}>{acc.name} ({id})</option>
+                  ))}
+                </select>
+                <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[7px] text-slate-300 pointer-events-none"></i>
+             </div>
           </div>
-          <div className="divide-y divide-gray-50">
+        )}
+
+        {/* SUMMARY CARDS */}
+        <div className="grid grid-cols-3 gap-1.5 mb-4">
+          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
+            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">TRX</div>
+            <div className="text-xs font-black text-blue-600 leading-none">{todayCount}</div>
+          </div>
+          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
+            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">NOMINAL</div>
+            <div className="text-[10px] font-black text-slate-800 leading-none truncate w-full text-center px-1">
+              {formatRupiah(todayVolume).replace(',00', '').replace('Rp ', '')}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
+            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">ADMIN</div>
+            <div className="text-[10px] font-black text-emerald-600 leading-none truncate w-full text-center px-1">
+              {formatRupiah(todayAdmin).replace(',00', '').replace('Rp ', '')}
+            </div>
+          </div>
+        </div>
+
+        {/* DAFTAR TRANSAKSI SECTION */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-1 h-4 bg-violet-600 rounded-full"></div>
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Daftar Transaksi</h3>
+        </div>
+
+        <div className="flex flex-col">
+          <div className="divide-y divide-slate-200 border-t border-slate-200">
             {paginatedTransactions.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <i className="fa-solid fa-folder-open text-gray-200 text-3xl mb-2"></i>
-                <p className="text-xs text-gray-400 font-medium">Tidak ada transaksi</p>
+              <div className="py-16 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Tidak ada transaksi</p>
               </div>
             ) : (
               paginatedTransactions.map((t, i) => (
@@ -184,28 +221,35 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               ))
             )}
           </div>
-          <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
-            <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{filteredTransactions.length} item</span>
-            <div className="flex items-center gap-3 pr-2">
-              <span className="text-blue-700 font-black text-[10px]">Nom: {formatRupiah(totalNominal)}</span>
-              <span className="w-px h-3 bg-gray-200"></span>
-              <span className="text-emerald-600 font-black text-[10px]">Adm: {formatRupiah(totalAdmin)}</span>
+
+          {/* FOOTER TOTAL (Single Line with Dividers) */}
+          <div className="flex items-center justify-center gap-3 py-5 border-t border-slate-100">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+              {filteredTransactions.length} Items
+            </div>
+            <div className="w-px h-3 bg-slate-200"></div>
+            <div className="text-blue-600 font-black text-[11px]">
+              nom : {formatRupiah(totalNominal).replace(',00', '')}
+            </div>
+            <div className="w-px h-3 bg-slate-200"></div>
+            <div className="text-emerald-600 font-black text-[11px]">
+              adm : {formatRupiah(totalAdmin).replace(',00', '')}
             </div>
           </div>
         </div>
 
-        {/* Pagination Controls */}
+        {/* PAGINATION (Smaller) */}
         {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-1.5 mb-8">
+          <div className="flex justify-center items-center gap-1.5 mt-2 mb-8">
             {Array.from({ length: totalPages }).map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentPage(i + 1)}
                 className={cn(
-                  "w-8 h-8 rounded-xl font-black text-[10px] transition-all",
+                  "w-7 h-7 rounded-lg font-black text-[9px] transition-all",
                   currentPage === i + 1 
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110" 
-                    : "bg-white text-gray-400 border border-gray-200 hover:border-blue-400"
+                    ? "bg-slate-900 text-white" 
+                    : "bg-white text-slate-400 border border-slate-200"
                 )}
               >
                 {i + 1}
@@ -214,64 +258,67 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-            <i className="fa-solid fa-plus-circle text-emerald-500"></i> Riwayat Tambah Saldo
-          </h3>
-        </div>
-
-        <div className="flex gap-2 mb-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm inline-flex overflow-x-auto hide-scrollbar max-w-full">
-          {['Semua', 'Saldo Bank', 'Saldo Real', 'Modal Tunai'].map(f => (
-            <button 
-              key={f}
-              onClick={() => props.setActiveSaldoFilter(f)}
-              className={cn(
-                "px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap",
-                props.activeSaldoFilter === f 
-                  ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20" 
-                  : "text-gray-400 hover:text-gray-600"
-              )}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm mb-4">
-          <div className="grid grid-cols-5 gap-1 text-[9px] font-black text-gray-400 bg-gray-50/50 px-4 py-3 uppercase tracking-tighter border-b border-gray-50">
-            <span>#</span><span>Jam</span><span>Jenis</span><span>Nominal</span><span>Ket</span>
+        {/* RIWAYAT TAMBAH SALDO SECTION (Rapat) */}
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <div className="flex items-center gap-2 mb-4">
+            <i className="fa-solid fa-wallet text-blue-600 text-xs"></i>
+            <h3 className="text-[10px] font-black text-slate-800 tracking-widest">RIWAYAT TAMBAH SALDO</h3>
           </div>
-          <div className="divide-y divide-gray-50">
-            {filteredSaldoTransactions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-400 text-xs font-medium">Tidak ada riwayat</div>
-            ) : (
-              filteredSaldoTransactions.map((t, i) => (
-                <div key={t.id} className="grid grid-cols-5 gap-1 px-4 py-3 items-center text-[11px] text-gray-700 hover:bg-gray-50/50 transition-colors">
-                  <span className="font-bold text-gray-400">{i+1}</span>
-                  <span className="text-gray-500">{new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                  <span>
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-lg text-[9px] font-bold",
-                      t.kategori.includes('Bank') ? "bg-blue-50 text-blue-600" : 
-                      t.kategori.includes('Real') ? "bg-emerald-50 text-emerald-600" : "bg-fuchsia-50 text-fuchsia-600"
-                    )}>
-                      {t.kategori.replace('Isi ', '')}
-                    </span>
-                  </span>
-                  <span className="font-black text-gray-800">{formatRupiah(t.nominal)}</span>
-                  <span className="truncate text-gray-400 italic text-[10px]">{t.keterangan}</span>
-                </div>
-              ))
+
+          <div className="flex gap-1 mb-4">
+            {['Semua', 'Saldo Bank', 'Saldo Real', 'Modal Tunai'].map(f => (
+              <button 
+                key={f}
+                onClick={() => props.setActiveSaldoFilter(f)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-[8px] font-black transition-all border",
+                  props.activeSaldoFilter === f 
+                    ? "bg-violet-600 border-violet-600 text-white" 
+                    : "bg-white border-slate-100 text-slate-400"
+                )}
+              >
+                {f.replace('Saldo ', '').toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+            <div className="divide-y divide-slate-50">
+              {filteredSaldoTransactions.length === 0 ? (
+                <div className="py-6 text-center text-slate-300 text-[10px] font-bold">KOSONG</div>
+              ) : (
+                filteredSaldoTransactions.map((t, i) => (
+                  <div key={t.id} className="p-5 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
+                     <div className="flex gap-4 items-center">
+                        <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
+                        <div className="flex flex-col gap-0.5">
+                           <div className={cn(
+                             "text-[9px] font-black uppercase",
+                             t.kategori.includes('Bank') ? "text-blue-600" : 
+                             t.kategori.includes('Real') ? "text-emerald-600" : "text-fuchsia-600"
+                           )}>
+                             {t.kategori.replace('Isi ', '')}
+                           </div>
+                           <div className="text-[8px] text-slate-400 font-bold">
+                              {new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                           </div>
+                        </div>
+                     </div>
+                     <div className="text-right flex flex-col items-end gap-0.5">
+                        <div className="text-sm font-black text-slate-800">{formatRupiah(t.nominal).replace(',00', '')}</div>
+                        <div className="text-[9px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
+                     </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {filteredSaldoTransactions.length > 0 && (
+              <div className="bg-slate-50/50 px-6 py-5 flex justify-between items-center border-t border-slate-100">
+                <span className="text-[10px] font-black text-slate-400 uppercase">{filteredSaldoTransactions.length} Items</span>
+                <span className="text-emerald-600 font-black text-sm">TOTAL: {formatRupiah(totalSaldoNominal).replace(',00', '')}</span>
+              </div>
             )}
           </div>
-          {filteredSaldoTransactions.length > 0 && (
-            <div className="px-5 py-4 bg-white text-[9px] font-bold text-gray-600 flex justify-between items-center border-t border-gray-50">
-              <span className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm text-gray-500 font-black">{filteredSaldoTransactions.length} item</span>
-              <div className="flex items-center gap-3 pr-2">
-                <span className="text-emerald-700 font-black text-[10px]">TOTAL: {formatRupiah(totalSaldoNominal)}</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

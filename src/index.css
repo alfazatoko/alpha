@@ -1,8 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
+/* stylelint-disable at-rule-no-unknown */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* stylelint-enable at-rule-no-unknown */
 
 :root {
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -105,6 +107,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 button:active { transform: scale(0.97); }
@@ -157,29 +160,38 @@ select {
   transform: translateY(4px);
 }
 
-/* Tema */
+/* Tema — applied via class on <html> AND on .app-container */
+
+/* Background for app-container (direct class on the element) */
+.app-container.theme-light { background-color: #f8fafc; }
+.app-container.theme-gray { background-color: #6b7280; }
+.app-container.theme-neon { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
+
+/* Also support parent selector pattern (class on <html>) */
 .theme-light .app-container { background-color: #f8fafc; }
-.theme-gray .app-container { background-color: #d1d5db; }
+.theme-gray .app-container { background-color: #6b7280; }
 .theme-neon .app-container { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
 
-.theme-light {
+/* CSS Variables per theme */
+.theme-light, .theme-light .app-container {
   --input-bg: #eff6ff;
   --input-border: #dbeafe;
   --container-bg: #ffffff;
 }
 
-.theme-gray {
+.theme-gray, .theme-gray .app-container {
   --input-bg: #f3f4f6;
   --input-border: #d1d5db;
-  --container-bg: #ffffff;
+  --container-bg: #e5e7eb;
 }
 
-.theme-neon {
+.theme-neon, .theme-neon .app-container {
   --input-bg: #f0fdf4;
   --input-border: #bbf7d0;
   --container-bg: #ffffff;
 }
 
+/* Body background (class on <html>) */
 .theme-light body { background-color: #f3f4f6; }
 .theme-gray body { background-color: #4b5563; }
 .theme-neon body { background: #dcfce7; }

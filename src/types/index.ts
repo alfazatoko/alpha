@@ -6,6 +6,8 @@ export type TransactionCategory =
   | 'Tarik Tunai' 
   | 'Aksesoris'
   | 'Isi Saldo Bank'
+  | 'Isi Saldo Real Aplikasi'
+  | 'Isi Modal Tunai Kasir'
   | 'Isi Total Penjualan';
 
 export interface Transaction {

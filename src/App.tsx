@@ -40,6 +40,15 @@ const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [currentUsername, setCurrentUsername] = useState('')
   const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(null)
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+
+  const refreshKasirList = useCallback(() => {
+    setKasirList(getKasirAccounts())
+  }, [])
+
+  useEffect(() => {
+    refreshKasirList()
+  }, [refreshKasirList])
 
   // Check Supabase Auth
   useEffect(() => {
@@ -116,7 +125,16 @@ const App: React.FC = () => {
   }
 
   // ── Everything below only renders when fully logged in ──
-  return <MainApp username={currentUsername} account={currentAccount!} googleUid={googleSession.user.id} onLogout={handleLogout} />
+  return (
+    <MainApp 
+      username={currentUsername} 
+      account={currentAccount!} 
+      googleUid={googleSession.user.id} 
+      onLogout={handleLogout}
+      kasirList={kasirList}
+      refreshKasirList={refreshKasirList}
+    />
+  )
 }
 
 // ════════════════════════════════════════════════
@@ -127,15 +145,30 @@ interface MainAppProps {
   account: KasirAccount
   googleUid: string
   onLogout: () => void
+  kasirList: Record<string, KasirAccount>
+  refreshKasirList: () => void
 }
 
-const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout }) => {
+const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout, kasirList, refreshKasirList }) => {
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light')
   const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
+
+  // Apply theme class to <html> element and persist to localStorage
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('theme-light', 'theme-gray', 'theme-neon')
+    root.classList.add(`theme-${theme}`)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  // Persist screen size to localStorage
+  useEffect(() => {
+    localStorage.setItem('screen', screenSize)
+  }, [screenSize])
   
   // App Data State — synced with Supabase
   const [saldoBank, setSaldoBank] = useState<number>(0)
@@ -555,7 +588,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
 
   return (
-    <div className={cn("app-container", screenSize !== 'auto' && screenSize)}>
+    <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
       
       <BerandaView 
         active={activeView === 'view-beranda'}
@@ -584,6 +617,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         kasModal={kasModal}
         kasirName={account.name}
         kasirRole={account.role}
+        kasirList={kasirList}
+        refreshKasirList={refreshKasirList}
       />
 
       <RiwayatView 
@@ -602,6 +637,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         kasirRole={account.role}
         filterKasir={filterKasir}
         setFilterKasir={setFilterKasir}
+        kasirList={kasirList}
         onEdit={handleStartEdit}
         onDelete={handleDeleteTx}
       />

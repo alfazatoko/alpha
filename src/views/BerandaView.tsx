@@ -3,7 +3,7 @@ import { formatRupiah, cn } from '../lib/utils'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
-import { getKasirAccounts, saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
+import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 
 interface BerandaViewProps {
   active: boolean
@@ -35,21 +35,37 @@ interface BerandaViewProps {
   filterKasir?: string
   setFilterKasir?: (v: string) => void
   onLogout?: () => void
+  kasirList: Record<string, KasirAccount>
+  refreshKasirList: () => void
 }
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
   const [currentTime, setCurrentTime] = useState(new Date())
 
-  // Kasir Management State
-  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  // Kasir Management State (Form inputs remain local)
   const [kasirFormId, setKasirFormId] = useState('')
   const [kasirFormName, setKasirFormName] = useState('')
   const [kasirFormPin, setKasirFormPin] = useState('')
 
+  // Izin State
+  const [izinNamaKasir, setIzinNamaKasir] = useState('')
+  const [izinTanggal, setIzinTanggal] = useState(new Date().toLocaleDateString('en-CA'))
+  const [izinAlasan, setIzinAlasan] = useState('')
+  const [catatanIzin, setCatatanIzin] = useState<any[]>([])
+  const STORAGE_KEY_IZIN = 'alphaPro_catatanIzin'
+
+  // Pantau State
+  const [pantauTanggal, setPantauTanggal] = useState(new Date().toLocaleDateString('en-CA'))
+
   useEffect(() => {
-    if (activeOwnerModal) {
-      setKasirList(getKasirAccounts())
+    if (activeOwnerModal === 'izin') {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_IZIN)
+        if (saved) setCatatanIzin(JSON.parse(saved))
+      } catch (e) {
+        console.error('Failed to load izin', e)
+      }
     }
   }, [activeOwnerModal])
 
@@ -57,6 +73,22 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  const simpanIzin = () => {
+    if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return alert('Lengkapi semua data!')
+    const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: new Date().toISOString() }
+    const updated = [baru, ...catatanIzin]
+    setCatatanIzin(updated)
+    localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+    setIzinNamaKasir(''); setIzinAlasan('')
+  }
+
+  const hapusIzin = (index: number) => {
+    if (!confirm('Hapus catatan izin ini?')) return
+    const updated = catatanIzin.filter((_, i) => i !== index)
+    setCatatanIzin(updated)
+    localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+  }
 
   const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -68,53 +100,66 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
-      <div className="px-5 pt-6 pb-2 flex justify-between items-center">
-        <button onClick={() => props.setIsSidePanelOpen(true)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-900">
-          <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
-        </button>
-        <div className="flex-1 ml-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <img src="/logo-alpha.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
-            <div>
-              <p className="text-gray-900 text-[10px] font-bold uppercase tracking-tight">Selamat datang,</p>
-              <h1 className="text-lg font-black text-black leading-tight">
-                {props.kasirName || 'ALPHA'}
-                <span className={cn(
-                  "text-[9px] px-2 py-0.5 rounded-full ml-1 font-black",
-                  props.kasirRole === 'owner' ? "bg-amber-500 text-white" : "bg-blue-600 text-white"
-                )}>
-                  {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
-                </span>
-              </h1>
+      {/* Header with blue gradient background — flat top, curved bottom */}
+      <div className="relative" style={{ background: '#0000c6', borderRadius: '0 0 2.5rem 2.5rem', paddingBottom: '3.5rem' }}>
+        <div className="px-5 pt-6 pb-4 flex justify-between items-center">
+          <button onClick={() => props.setIsSidePanelOpen(true)} className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white">
+            <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
+          </button>
+          <div className="flex-1 ml-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {/* Metallic Gray/White Logo (Background removed via Invert+Screen trick) */}
+              <img 
+                src="/logo-alpha.png" 
+                alt="Logo" 
+                className="w-12 h-12 object-contain" 
+                style={{ 
+                  filter: 'invert(1) brightness(1.2)', 
+                  mixBlendMode: 'screen' 
+                }} 
+              />
+              <div>
+                <p className="text-blue-100 text-[10px] font-bold uppercase tracking-tight">Selamat datang,</p>
+                <h1 className="text-lg font-black text-white leading-tight">
+                  {props.kasirName || 'ALPHA'}
+                  <span className={cn(
+                    "text-[9px] px-2 py-0.5 rounded-full ml-1 font-black",
+                    props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white"
+                  )}>
+                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                </h1>
+              </div>
             </div>
-          </div>
 
-          <div className="text-right">
-            <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">
-              {dayName}
-            </p>
-            <p className="text-gray-900 text-[10px] font-black tracking-tight leading-none mb-1">
-              {fullDate}
-            </p>
-            <p className="text-blue-600 text-xs font-black tabular-nums tracking-widest">
-              {clockStr}
-            </p>
+            <div className="text-right">
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">
+                {dayName}
+              </p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">
+                {fullDate}
+              </p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">
+                {clockStr}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-5 bg-gradient-to-br from-blue-700 to-blue-800 rounded-2xl p-4 text-white shadow-lg mb-3">
+      {/* Saldo card — overlaps the blue header */}
+      <div className="mx-5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
         <div className="flex justify-between items-start mb-2">
           <div>
-            <p className="text-[9px] text-blue-50 font-black uppercase tracking-widest opacity-90">SALDO BANK</p>
-            <h2 className="text-base font-black tracking-tight">{formatRupiah(props.saldoBank)}</h2>
+            <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">SALDO BANK</p>
+            <h2 className="text-base font-black tracking-tight text-blue-800">{formatRupiah(props.saldoBank)}</h2>
           </div>
           <div className="text-right">
-            <p className="text-[9px] text-blue-50 font-black uppercase tracking-widest opacity-90">SALDO LACI KASIR</p>
-            <h2 className="text-base font-black tracking-tight text-emerald-300">{formatRupiah(totalPendapatanBersih)}</h2>
+            <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">SALDO LACI KASIR</p>
+            <h2 className="text-base font-black tracking-tight text-emerald-600">{formatRupiah(totalPendapatanBersih)}</h2>
           </div>
         </div>
-        <button onClick={() => setShowRincian(true)} className="bg-white/20 hover:bg-white/30 transition text-white text-[9px] px-4 py-1.5 rounded-xl font-black backdrop-blur-md border border-white/20 w-full mt-1 uppercase tracking-widest">
+        <button onClick={() => setShowRincian(true)} className="bg-blue-600 hover:bg-blue-700 transition text-white text-[9px] px-4 py-1.5 rounded-xl font-black w-full mt-1 uppercase tracking-widest">
           Detail rincian <i className="fa-solid fa-chevron-right ml-1 text-[7px]"></i>
         </button>
       </div>
@@ -338,22 +383,34 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             <div className={cn(
               "p-5 text-white flex justify-between items-start",
               activeOwnerModal === 'monitor' ? "bg-blue-600" : 
-              activeOwnerModal === 'laporan' ? "bg-emerald-600" : "bg-purple-600"
+              activeOwnerModal === 'laporan' ? "bg-indigo-600" :
+              activeOwnerModal === 'grafik' ? "bg-emerald-600" :
+              activeOwnerModal === 'performa' ? "bg-purple-600" :
+              activeOwnerModal === 'absen' ? "bg-teal-600" :
+              activeOwnerModal === 'izin' ? "bg-orange-600" :
+              activeOwnerModal === 'gaji' ? "bg-green-600" :
+              activeOwnerModal === 'backup' ? "bg-red-600" : "bg-purple-600"
             )}>
               <div>
                 <h3 className="font-black text-lg tracking-tight uppercase leading-none">
-                  {activeOwnerModal === 'monitor' ? 'MONITORING KASIR' : 
-                   activeOwnerModal === 'laporan' ? 'LAPORAN GLOBAL' : 'AUDIT LACI KAS'}
+                  {activeOwnerModal === 'monitor' ? 'KELOLA KASIR' : 
+                   activeOwnerModal === 'laporan' ? 'RINGKASAN HARIAN' : 
+                   activeOwnerModal === 'grafik' ? 'GRAFIK TRANSAKSI' :
+                   activeOwnerModal === 'performa' ? 'PERFORMA KASIR' :
+                   activeOwnerModal === 'absen' ? 'ABSENSI KASIR' :
+                   activeOwnerModal === 'izin' ? 'CATATAN IZIN KASIR' :
+                   activeOwnerModal === 'gaji' ? 'DATA GAJI' :
+                   activeOwnerModal === 'backup' ? 'BACKUP DATA' : 'AUDIT LACI KAS'}
                 </h3>
                 <p className="text-[10px] text-white/80 mt-1.5 font-bold uppercase tracking-widest">
-                  {activeOwnerModal === 'monitor' ? 'Pantau aktivitas kasir aktif' : 
+                  {activeOwnerModal === 'monitor' ? 'Tambah, edit, dan hapus kasir' : 
                    activeOwnerModal === 'laporan' ? 'Rekapitulasi seluruh cabang' : 
                    activeOwnerModal === 'audit' ? 'Verifikasi uang fisik vs sistem' :
                    activeOwnerModal === 'absen' ? 'Data kehadiran seluruh kasir' :
                    activeOwnerModal === 'gaji' ? 'Manajemen insentif & payroll' : 
                    activeOwnerModal === 'grafik' ? 'Analitik penjualan toko' :
                    activeOwnerModal === 'performa' ? 'Evaluasi kerja kasir' :
-                   activeOwnerModal === 'backup' ? 'Keamanan data & reset sistem' : 'Daftar permohonan izin'}
+                   activeOwnerModal === 'backup' ? 'Keamanan data & reset sistem' : 'Pengingat untuk penggajian'}
                 </p>
               </div>
               <button onClick={() => setActiveOwnerModal(null)} className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-all shadow-inner">
@@ -374,16 +431,16 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                       <button onClick={() => {
                         if(!kasirFormId || !kasirFormName || !kasirFormPin) return alert('Lengkapi data kasir');
-                        const newKasirList = { ...kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
+                        const newKasirList = { ...props.kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
                         saveKasirAccounts(newKasirList);
-                        setKasirList(newKasirList);
+                        props.refreshKasirList();
                         setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
                       }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    {Object.entries(kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
+                    {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
                       return (
                         <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
                           <div>
@@ -396,8 +453,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             </button>
                             <button onClick={() => {
                               if(confirm(`Hapus ${account.name}?`)) {
-                                const n = {...kasirList}; delete n[id];
-                                saveKasirAccounts(n); setKasirList(n);
+                                const n = {...props.kasirList}; delete n[id];
+                                saveKasirAccounts(n); props.refreshKasirList();
                               }
                             }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
                               <i className="fa-solid fa-trash text-[10px]"></i>
@@ -406,6 +463,74 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         </div>
                       )
                     })}
+                  </div>
+
+                  {/* PANTAU AKTIVITAS PER KASIR */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="fa-solid fa-chart-bar"></i> Pantau Aktivitas
+                      </h4>
+                      <input 
+                        type="date" 
+                        value={pantauTanggal} 
+                        onChange={e => setPantauTanggal(e.target.value)}
+                        className="text-[10px] font-bold border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-blue-400"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
+                        const kasirTxs = props.transactions.filter(t => 
+                          t.kasir_id === id && 
+                          t.timestamp.startsWith(pantauTanggal) && 
+                          !t.kategori.startsWith('Isi')
+                        )
+                        const totalNom = kasirTxs.reduce((s, t) => s + t.nominal, 0)
+                        const totalAdm = kasirTxs.reduce((s, t) => s + t.adminFee, 0)
+                        const totalIsi = props.transactions.filter(t => 
+                          t.kasir_id === id && 
+                          t.timestamp.startsWith(pantauTanggal) && 
+                          t.kategori === 'Isi Saldo Bank'
+                        ).reduce((s, t) => s + t.nominal, 0)
+
+                        return (
+                          <div key={id} className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
+                                  {account.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-black text-gray-800">{account.name}</p>
+                                  <p className="text-[8px] text-gray-400 font-bold uppercase">{new Date(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                </div>
+                              </div>
+                              <span className={cn(
+                                "text-[8px] px-2 py-0.5 rounded-full font-black uppercase",
+                                kasirTxs.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                              )}>
+                                {kasirTxs.length > 0 ? `${kasirTxs.length} TRX` : 'KOSONG'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-blue-100/50">
+                                <p className="text-[7px] font-black text-gray-400 uppercase">Nominal</p>
+                                <p className="text-[10px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
+                              </div>
+                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-emerald-100/50">
+                                <p className="text-[7px] font-black text-gray-400 uppercase">Admin</p>
+                                <p className="text-[10px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
+                              </div>
+                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-indigo-100/50">
+                                <p className="text-[7px] font-black text-gray-400 uppercase">Isi Saldo</p>
+                                <p className="text-[10px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -420,9 +545,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 px-3 rounded-lg outline-none cursor-pointer"
                     >
                       <option value="Semua">Semua Kasir</option>
-                      <option value="kasir1">Kasir 1</option>
-                      <option value="kasir2">Kasir 2</option>
-                      <option value="owner">Owner</option>
+                      {Object.entries(props.kasirList).map(([id, acc]) => (
+                        <option key={id} value={id}>{acc.name}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -551,11 +676,83 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerModal === 'izin' && (
-                <div className="text-center py-10 space-y-4">
-                  <div className="w-16 h-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto text-cyan-600">
-                    <i className="fa-solid fa-envelope-open-text text-2xl"></i>
+                <div className="space-y-4">
+                  {/* Form Input Izin */}
+                  <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
+                    <h4 className="text-[10px] font-black text-orange-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <i className="fa-solid fa-pen-to-square"></i> Catat Izin Baru
+                    </h4>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NAMA KASIR</label>
+                        <select 
+                          value={izinNamaKasir} 
+                          onChange={e => setIzinNamaKasir(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400"
+                        >
+                          <option value="" disabled>Pilih kasir</option>
+                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                            <option key={id} value={acc.name}>{acc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL IZIN</label>
+                        <input 
+                          type="date" 
+                          value={izinTanggal} 
+                          onChange={e => setIzinTanggal(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">ALASAN</label>
+                        <textarea 
+                          value={izinAlasan} 
+                          onChange={e => setIzinAlasan(e.target.value)}
+                          placeholder="Tulis alasan izin..." 
+                          rows={2}
+                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white resize-none focus:border-orange-400"
+                        ></textarea>
+                      </div>
+                      <button 
+                        onClick={simpanIzin}
+                        className="w-full bg-orange-600 text-white text-[10px] font-black py-2.5 rounded-lg uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-save"></i> Simpan Catatan
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tidak Ada Permohonan Izin Hari Ini</p>
+
+                  {/* Daftar Catatan Izin */}
+                  {catatanIzin.length === 0 ? (
+                    <div className="text-center py-8 space-y-2">
+                      <i className="fa-solid fa-clipboard-list text-2xl text-gray-300"></i>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada catatan izin</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Riwayat Izin ({catatanIzin.length})</p>
+                      {catatanIzin.map((item: any, index: number) => (
+                        <div key={index} className="p-3 border border-gray-100 rounded-2xl bg-gray-50/50 flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black text-gray-800">{item.nama}</p>
+                            <p className="text-[9px] text-orange-600 font-bold mt-0.5">
+                              <i className="fa-regular fa-calendar-alt mr-1"></i>
+                              {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </p>
+                            <p className="text-[10px] text-gray-600 mt-1 leading-snug">{item.alasan}</p>
+                          </div>
+                          <button 
+                            onClick={() => hapusIzin(index)} 
+                            className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 hover:bg-red-200 transition-all"
+                          >
+                            <i className="fa-solid fa-trash text-[10px]"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -585,11 +782,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               })()}
 
               {activeOwnerModal === 'performa' && (() => {
-                const performa = Object.keys(kasirList).filter(k => k !== 'owner').map(kId => {
+                const performa = Object.keys(props.kasirList).filter(k => k !== 'owner').map(kId => {
                   const txs = props.transactions.filter(t => t.kasir_id === kId);
                   return {
                     id: kId,
-                    name: kasirList[kId]?.name || kId,
+                    name: props.kasirList[kId]?.name || kId,
                     count: txs.length,
                     vol: txs.reduce((s,t)=>s+t.nominal, 0)
                   }
