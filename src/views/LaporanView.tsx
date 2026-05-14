@@ -28,7 +28,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
+      <div className="px-1.5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
         <div className="flex justify-between items-center">
           <div>
             <h2 className="font-bold text-lg tracking-wide">Laporan Keuangan</h2>
@@ -82,7 +82,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         </div>
       </div>
 
-      <div className="px-5 pb-5 space-y-2.5">
+      <div className="px-1.5 pb-5 space-y-2.5">
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-3xl shadow-lg shadow-blue-500/20 relative overflow-hidden">
             <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
@@ -146,66 +146,66 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         <div className="space-y-4">
           {/* KAS MASUK */}
           <div>
-            <h4 className="text-[10px] font-extrabold text-emerald-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
+            <h4 className="text-[13px] font-extrabold text-emerald-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
               <i className="fa-solid fa-arrow-down-long"></i> KAS MASUK
             </h4>
             <div className="bg-white rounded-2xl p-2 shadow-sm border border-emerald-100 space-y-1">
               <div className="flex justify-between items-center bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100/50">
-                <span className="text-[11px] font-bold text-gray-700 flex items-center gap-2"><i className="fa-solid fa-vault text-[10px]"></i> Modal Tunai Kasir</span>
-                <span className="font-black text-xs text-gray-800">{formatRupiah(props.kasModal)}</span>
+                <span className="text-[14px] font-bold text-gray-700 flex items-center gap-2"><i className="fa-solid fa-vault text-[13px]"></i> Modal Tunai Kasir</span>
+                <span className="font-black text-[15px] text-gray-800">{formatRupiah(props.kasModal)}</span>
               </div>
               <div className="flex justify-between items-center bg-blue-50/50 px-3 py-1.5 rounded-xl border border-blue-100/50">
-                <span className="text-[11px] font-bold text-blue-700 flex items-center gap-2"><i className="fa-solid fa-globe text-[10px]"></i> Penjualan Digital</span>
-                <span className="font-black text-xs text-blue-600">{formatRupiah(props.penjualanDigital)}</span>
+                <span className="text-[14px] font-bold text-blue-700 flex items-center gap-2"><i className="fa-solid fa-globe text-[13px]"></i> Penjualan Digital</span>
+                <span className="font-black text-[15px] text-blue-600">{formatRupiah(props.penjualanDigital)}</span>
               </div>
               <div className="flex justify-between items-center bg-fuchsia-50/50 px-3 py-1.5 rounded-xl border border-fuchsia-100/50">
-                <span className="text-[11px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-headphones text-[10px]"></i> Penjualan Aksesoris</span>
-                <span className="font-black text-xs text-fuchsia-600">{formatRupiah(props.totalAksesoris)}</span>
+                <span className="text-[14px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-headphones text-[13px]"></i> Penjualan Aksesoris</span>
+                <span className="font-black text-[15px] text-fuchsia-600">{formatRupiah(props.totalAksesoris)}</span>
               </div>
               <div className="flex justify-between items-center bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50">
-                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[10px]"></i> Total Admin Fee</span>
-                <span className="font-black text-xs text-emerald-600">{formatRupiah(props.totalAdmin)}</span>
+                <span className="text-[14px] font-bold text-emerald-700 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[13px]"></i> Total Admin Fee</span>
+                <span className="font-black text-[15px] text-emerald-600">{formatRupiah(props.totalAdmin)}</span>
               </div>
             </div>
           </div>
 
           {/* KAS KELUAR */}
           <div>
-            <h4 className="text-[10px] font-extrabold text-rose-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
+            <h4 className="text-[13px] font-extrabold text-rose-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
               <i className="fa-solid fa-arrow-up-long"></i> KAS KELUAR
             </h4>
             <div className="bg-white rounded-2xl p-2 shadow-sm border border-rose-100 space-y-1">
               <div className="flex justify-between items-center bg-rose-50/50 px-3 py-1.5 rounded-xl border border-rose-100/50">
-                <span className="text-[11px] font-bold text-rose-700 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i> Tarik Tunai Nasabah</span>
-                <span className="font-black text-xs text-rose-600">-{formatRupiah(props.totalTarik)}</span>
+                <span className="text-[14px] font-bold text-rose-700 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[13px]"></i> Tarik Tunai Nasabah</span>
+                <span className="font-black text-[15px] text-rose-600">-{formatRupiah(props.totalTarik)}</span>
               </div>
             </div>
           </div>
 
           <div className="pt-1">
             <div className="bg-[#051c5f] px-3 py-2.5 rounded-xl flex justify-between items-center shadow-lg">
-              <span className="font-bold text-[10px] text-blue-100 tracking-wider uppercase">Total Saldo Laci Kasir</span>
-              <span className="font-black text-base text-green-400">{formatRupiah(props.totalSaldoKas)}</span>
+              <span className="font-bold text-[13px] text-blue-100 tracking-wider uppercase">Total Saldo Laci Kasir</span>
+              <span className="font-black text-[19px] text-green-400">{formatRupiah(props.totalSaldoKas)}</span>
             </div>
           </div>
 
           {/* JURNAL PENYESUAIAN SALDO */}
           <div className="bg-white border-2 border-indigo-100 rounded-3xl p-4 shadow-xl shadow-indigo-500/10">
             <div className="flex justify-between items-center mb-3">
-              <h4 className="text-[11px] font-black text-indigo-800 tracking-widest uppercase flex items-center gap-2">
+              <h4 className="text-[14px] font-black text-indigo-800 tracking-widest uppercase flex items-center gap-2">
                 <i className="fa-solid fa-scale-balanced text-indigo-500"></i> JURNAL PENYESUAIAN SALDO
               </h4>
-              <span className="text-[8px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
+              <span className="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
             </div>
             
             <div className="space-y-2">
               {/* 1. MODAL SALDO BANK */}
               <div className="flex justify-between items-center p-2 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
                 <div>
-                  <p className="text-[9px] font-bold text-indigo-700 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
-                  <p className="text-[8px] text-indigo-400 font-medium italic -mt-0.5">Total pengisian/setoran saldo hari ini</p>
+                  <p className="text-[12px] font-bold text-indigo-700 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
+                  <p className="text-[11px] text-indigo-400 font-medium italic -mt-0.5">Total pengisian/setoran saldo hari ini</p>
                 </div>
-                <span className="font-black text-[11px] text-indigo-900">
+                <span className="font-black text-[14px] text-indigo-900">
                   {formatRupiah(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0))}
                 </span>
               </div>
@@ -213,10 +213,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               {/* 2. PENJUALAN DIGITAL */}
               <div className="flex justify-between items-center p-2 bg-orange-50/50 rounded-xl border border-orange-100/50">
                 <div>
-                  <p className="text-[9px] font-bold text-orange-700 uppercase tracking-tight">2. Penjualan Digital</p>
-                  <p className="text-[8px] text-orange-400 font-medium italic -mt-0.5">Saldo yang sudah terpakai transaksi</p>
+                  <p className="text-[12px] font-bold text-orange-700 uppercase tracking-tight">2. Penjualan Digital</p>
+                  <p className="text-[11px] text-orange-400 font-medium italic -mt-0.5">Saldo yang sudah terpakai transaksi</p>
                 </div>
-                <span className="font-black text-[11px] text-orange-900">-{formatRupiah(props.penjualanDigital)}</span>
+                <span className="font-black text-[14px] text-orange-900">-{formatRupiah(props.penjualanDigital)}</span>
               </div>
 
               {/* 3. SISA SALDO (CATATAN BUKU) */}
@@ -226,10 +226,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 return (
                   <div className="flex justify-between items-center p-2 bg-blue-50/80 rounded-xl border-2 border-blue-100">
                     <div>
-                      <p className="text-[9px] font-bold text-blue-700 uppercase tracking-tight">3. Sisa Saldo (Catatan Buku)</p>
-                      <p className="text-[8px] text-blue-400 font-medium italic -mt-0.5">Uang yang seharusnya ada di bank</p>
+                      <p className="text-[12px] font-bold text-blue-700 uppercase tracking-tight">3. Sisa Saldo (Catatan Buku)</p>
+                      <p className="text-[11px] text-blue-400 font-medium italic -mt-0.5">Uang yang seharusnya ada di bank</p>
                     </div>
-                    <span className="font-black text-[11px] text-blue-900">{formatRupiah(sisaBuku)}</span>
+                    <span className="font-black text-[14px] text-blue-900">{formatRupiah(sisaBuku)}</span>
                   </div>
                 );
               })()}
@@ -237,10 +237,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               {/* 4. SALDO REAL APLIKASI (OTOMATIS) */}
               <div className="flex justify-between items-center p-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
                 <div>
-                  <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real Aplikasi (HP)</p>
-                  <p className="text-[8px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input melalui menu 'Isi Saldo'</p>
+                  <p className="text-[12px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real Aplikasi (HP)</p>
+                  <p className="text-[11px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input melalui menu 'Isi Saldo'</p>
                 </div>
-                <span className="font-black text-[11px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
+                <span className="font-black text-[14px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
               </div>
 
               {/* STATUS KLOP / SELISIH */}
@@ -256,19 +256,19 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                     selisih > 0 ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/30" : "bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-500/30"
                   )}>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                      <p className="text-[13px] font-black uppercase tracking-widest flex items-center gap-2">
                         {selisih === 0 ? <><i className="fa-solid fa-circle-check"></i> STATUS: KLOP</> : 
                          selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> STATUS: SURPLUS</> : 
                          <><i className="fa-solid fa-circle-xmark"></i> STATUS: SELISIH</>}
                       </p>
-                      <p className="text-[9px] opacity-90 font-bold italic mt-0.5">
+                      <p className="text-[11px] opacity-90 font-bold italic mt-0.5">
                         {selisih === 0 ? 'Sisa saldo di HP cocok dengan catatan buku' : 
                          selisih > 0 ? 'Saldo di HP lebih besar dari catatan' : 'Saldo di HP lebih kecil (Uang kurang)'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-sm block">{selisih === 0 ? '✓ MATCH' : formatRupiah(selisih)}</span>
-                      {selisih !== 0 && <span className="text-[8px] font-black opacity-80 uppercase tracking-tighter">Periksa Kembali</span>}
+                      <span className="font-black text-[17px] block">{selisih === 0 ? '✓ MATCH' : formatRupiah(selisih)}</span>
+                      {selisih !== 0 && <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">Periksa Kembali</span>}
                     </div>
                   </div>
                 );

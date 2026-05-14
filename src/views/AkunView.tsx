@@ -28,11 +28,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-white", props.active && "active")}>
-      <div className="px-5 pt-7 pb-4 border-b flex justify-between items-center">
+      <div className="px-1.5 pt-7 pb-4 border-b flex justify-between items-center">
         <h2 className="font-bold text-gray-800">Profil & Pengaturan</h2>
         <i className="fa-solid fa-gear text-gray-400"></i>
       </div>
-      <div className="px-5 py-6">
+      <div className="px-1.5 py-6">
         <div className="flex items-center gap-4 p-5 border border-blue-100 rounded-3xl mb-6 bg-blue-50/30">
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg border-4 border-white">{initial}</div>
           <div>

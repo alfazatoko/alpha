@@ -46,8 +46,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
             <div className="text-[14px] font-black text-slate-800 tracking-tight uppercase">
                {t.kategori}
             </div>
-            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-               {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {jam}
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-tighter">
+               {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
         </div>

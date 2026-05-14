@@ -85,7 +85,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")} style={{ backgroundColor: 'var(--container-bg, #ffffff)' }}>
       {/* HEADER */}
-      <div className="px-5 pt-6 pb-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20">
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20">
         <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
         <p className="text-violet-100 text-[11px] mt-0.5 opacity-90">Pantau semua arus kas keluar masuk</p>
 
@@ -112,7 +112,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         )}
       </div>
 
-      <div className="px-4 pb-20 pt-3">
+      <div className="px-1.5 pb-20 pt-3">
         {/* CARI + KATEGORI (1 baris, tanpa label) */}
         <div className="flex gap-1.5 mb-2">
           <div className="relative flex-[2]">
@@ -299,8 +299,8 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                            )}>
                              {t.kategori.replace('Isi ', '')}
                            </div>
-                           <div className="text-[8px] text-slate-400 font-bold">
-                              {new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                           <div className="text-[10px] text-slate-400 font-bold">
+                              {new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                            </div>
                         </div>
                      </div>

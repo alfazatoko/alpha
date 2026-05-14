@@ -34,32 +34,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <div className="form-transaksi-container p-4 shadow-sm border border-gray-200 rounded-xl">
-      <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
+      <h3 className="font-black text-black text-[13px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
         <i className="fa-solid fa-cart-shopping text-blue-700"></i> TRANSAKSI BARU
       </h3>
       <div className="space-y-3">
         <div>
-          <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KATEGORI</label>
+          <label className="block text-[11px] font-black text-black mb-1 uppercase tracking-widest">KATEGORI</label>
           <select 
             value={kategori} 
             onChange={(e) => {
               setKategori(e.target.value)
               nominalRef.current?.focus()
             }}
-            className="form-input-modern w-full"
+            className="form-input-modern w-full text-[14px] font-black text-black"
           >
-            <option value="" disabled>Pilih kategori</option>
-            <option value="Transfer Bank">Transfer Bank</option>
-            <option value="DANA">DANA</option>
-            <option value="FLIP">FLIP</option>
-            <option value="Order Kuota">Order Kuota</option>
-            <option value="Tarik Tunai">Tarik Tunai</option>
-            <option value="Aksesoris">Aksesoris</option>
+            <option value="" disabled className="text-black">Pilih kategori</option>
+            <option value="Transfer Bank" className="text-black">Transfer Bank</option>
+            <option value="DANA" className="text-black">DANA</option>
+            <option value="FLIP" className="text-black">FLIP</option>
+            <option value="Order Kuota" className="text-black">Order Kuota</option>
+            <option value="Tarik Tunai" className="text-black">Tarik Tunai</option>
+            <option value="Aksesoris" className="text-black">Aksesoris</option>
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL</label>
+            <label className="block text-[11px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL</label>
             <input 
               ref={nominalRef}
               type="text" 
@@ -68,11 +68,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               value={nominal}
               onChange={(e) => setNominal(formatInputRupiah(e.target.value))}
               onKeyDown={(e) => handleKeyDown(e, adminRef)}
-              className="form-input-modern w-full"
+              className="form-input-modern w-full text-[14px]"
             />
           </div>
           <div>
-            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">ADMIN FEE</label>
+            <label className="block text-[11px] font-black text-black mb-1 uppercase tracking-widest">ADMIN FEE</label>
             <input 
               ref={adminRef}
               type="text" 
@@ -81,12 +81,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               value={admin}
               onChange={(e) => setAdmin(formatInputRupiah(e.target.value))}
               onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-              className="form-input-modern w-full"
+              className="form-input-modern w-full text-[14px]"
             />
           </div>
         </div>
         <div>
-          <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
+          <label className="block text-[11px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
           <textarea 
             ref={keteranganRef}
             rows={1} 
@@ -94,13 +94,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             value={keterangan}
             onChange={(e) => setKeterangan(e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-            className="form-input-modern w-full resize-none"
+            className="form-input-modern w-full resize-none text-[14px] font-black text-black"
           ></textarea>
         </div>
         <button 
           onClick={onSave} 
           disabled={isSaving}
-          className="w-full bg-blue-700 text-white text-[10px] font-black py-3 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
+          className="w-full bg-blue-700 text-white text-[13px] font-black py-3 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
         >
           {isSaving ? (
             <i className="fa-solid fa-circle-notch fa-spin"></i>

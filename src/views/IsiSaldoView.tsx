@@ -31,7 +31,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-5 pt-7 pb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6">
+      <div className="px-1.5 pt-7 pb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6">
         <div className="flex items-center gap-3">
           <button onClick={() => props.setActiveView('view-beranda')} className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center transition-all">
             <i className="fa-solid fa-arrow-left text-sm text-white"></i>
@@ -41,7 +41,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         <p className="text-blue-100 text-[11px] mt-2 opacity-90">Atur modal bank & rekap penjualan tunai</p>
       </div>
 
-      <div className="px-5 pb-8 space-y-5">
+      <div className="px-1.5 pb-8 space-y-5">
         <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
           <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
             <i className="fa-solid fa-vault text-blue-700"></i> MANAJEMEN SALDO
