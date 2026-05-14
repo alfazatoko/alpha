@@ -39,7 +39,36 @@ interface BerandaViewProps {
   refreshKasirList: () => void
   jamAbsen?: string
   absensiList?: any[]
+  runningTexts?: string[]
+  mainAnnouncement?: string
 }
+
+const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
+  const [index, setIndex] = useState(0)
+  const [animKey, setAnimKey] = useState(0)
+  
+  useEffect(() => {
+    if (texts.length <= 1) return
+    const interval = setInterval(() => {
+      setIndex(prev => (prev + 1) % texts.length)
+      setAnimKey(k => k + 1)
+    }, 8000) 
+    return () => clearInterval(interval)
+  }, [texts.length])
+
+  const current = texts[index]
+  if (!current) return null
+
+  return (
+    <div key={animKey} className={cn(
+      "animate-marquee-center font-black uppercase tracking-widest transition-all",
+      current.isMain ? "text-red-600 text-[11px]" : "text-blue-900 text-[10px]"
+    )}>
+      {current.text}
+    </div>
+  )
+}
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
@@ -168,6 +197,40 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           Detail rincian <i className="fa-solid fa-chevron-right ml-1 text-[7px]"></i>
         </button>
       </div>
+
+      {/* Running Text Column — BELOW Saldo card */}
+      {(props.mainAnnouncement || (props.runningTexts && props.runningTexts.some(t => t.trim() !== ''))) && (
+        <div className="mx-5 bg-blue-50/50 rounded-xl py-2.5 px-4 shadow-sm mb-4 border border-blue-100/50 flex items-center overflow-hidden">
+          <style>{`
+            @keyframes marquee-center {
+              0% { transform: translateX(100%); opacity: 0; }
+              10% { opacity: 1; }
+              40% { transform: translateX(0); }
+              60% { transform: translateX(0); }
+              90% { opacity: 1; }
+              100% { transform: translateX(-100%); opacity: 0; }
+            }
+            .animate-marquee-center {
+              animation: marquee-center 8s linear forwards;
+              width: 100%;
+              text-align: center;
+              white-space: nowrap;
+            }
+          `}</style>
+          <div className="w-full">
+            {(() => {
+              const activeTexts = [
+                props.mainAnnouncement ? { text: props.mainAnnouncement, isMain: true } : null,
+                ...(props.runningTexts || [])
+                  .filter(t => t.trim() !== '')
+                  .map(t => ({ text: t, isMain: false }))
+              ].filter(Boolean) as { text: string, isMain: boolean }[];
+              
+              return <CyclingText texts={activeTexts} />
+            })()}
+          </div>
+        </div>
+      )}
 
       {showRincian && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -934,39 +997,93 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 )
               })()}
 
-              {activeOwnerModal === 'performa' && (() => {
-                const performa = Object.keys(props.kasirList).filter(k => k !== 'owner').map(kId => {
-                  const txs = props.transactions.filter(t => t.kasir_id === kId);
-                  return {
-                    id: kId,
-                    name: props.kasirList[kId]?.name || kId,
-                    count: txs.length,
-                    vol: txs.reduce((s,t)=>s+t.nominal, 0)
-                  }
-                }).sort((a,b) => b.vol - a.vol);
+                              {activeOwnerModal === 'performa' && (() => {
+  const now = new Date();
+  const startDay = new Date(now);
+  startDay.setHours(0,0,0,0);
+  const startWeek = new Date(startDay);
+  startWeek.setDate(startDay.getDate() - 6); // last 7 days inclusive
+  const startMonth = new Date(startDay);
+  startMonth.setMonth(startDay.getMonth() - 1); // approx one month back
 
-                return (
-                  <div className="space-y-3">
-                    {performa.map((p, index) => (
-                      <div key={p.id} className="p-4 border border-purple-100 rounded-2xl bg-purple-50/30 flex justify-between items-center">
-                        <div className="flex gap-3 items-center">
-                          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center font-black text-white", index === 0 ? "bg-amber-400 shadow-md" : "bg-purple-300")}>
-                            {index + 1}
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-gray-800">{p.name}</p>
-                            <p className="text-[9px] text-purple-600 font-bold uppercase">{p.count} Transaksi</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-black text-purple-800">Rp {p.vol.toLocaleString('id-ID')}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {performa.length === 0 && <p className="text-center text-xs font-bold text-gray-400">Belum ada data</p>}
-                  </div>
-                )
-              })()}
+  const performa = Object.keys(props.kasirList)
+    .filter(k => k !== 'owner')
+    .map(kId => {
+      const txs = props.transactions.filter(t => t.kasir_id === kId);
+      const filter = (arr: Transaction[], from: Date) => arr.filter(t => {
+        const d = new Date(t.timestamp);
+        return d >= from && d <= now;
+      });
+      const dayTx = filter(txs, startDay);
+      const weekTx = filter(txs, startWeek);
+      const monthTx = filter(txs, startMonth);
+      const sum = (arr: Transaction[]) => arr.reduce((s: number, t: Transaction) => s + t.nominal, 0);
+      const sumAdmin = (arr: Transaction[]) => arr.reduce((s: number, t: Transaction) => s + t.adminFee, 0);
+      return {
+        id: kId,
+        name: props.kasirList[kId]?.name || kId,
+        day: { count: dayTx.length, vol: sum(dayTx), admin: sumAdmin(dayTx) },
+        week: { count: weekTx.length, vol: sum(weekTx), admin: sumAdmin(weekTx) },
+        month: { count: monthTx.length, vol: sum(monthTx), admin: sumAdmin(monthTx) },
+        totalVol: sum(txs),
+      };
+    })
+    .sort((a, b) => b.totalVol - a.totalVol);
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-black text-purple-800 uppercase tracking-widest mb-2">Performa Kasir</h3>
+      {performa.map(p => (
+        <div key={p.id} className="p-4 border border-purple-200 rounded-xl bg-purple-50/30 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center font-black text-white",
+                p.id===performa[0].id ? "bg-amber-400 shadow-md" : "bg-purple-300"
+              )}>
+                {performa.indexOf(p)+1}
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-800">{p.name}</p>
+                <p className="text-[9px] text-purple-600 font-bold uppercase">{p.month.count} Transaksi (Bulan)</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-black text-purple-800">Rp {p.month.vol.toLocaleString('id-ID')}</p>
+              <p className="text-[9px] text-gray-500">Admin: Rp {p.month.admin.toLocaleString('id-ID')}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-[9px] text-gray-600">
+            <div>
+              <p className="font-bold">Hari Ini</p>
+              <p>{p.day.count} trx</p>
+              <p>Rp {p.day.vol.toLocaleString('id-ID')}</p>
+            </div>
+            <div>
+              <p className="font-bold">Minggu Ini</p>
+              <p>{p.week.count} trx</p>
+              <p>Rp {p.week.vol.toLocaleString('id-ID')}</p>
+            </div>
+            <div>
+              <p className="font-bold">Bulan Ini</p>
+              <p>{p.month.count} trx</p>
+              <p>Rp {p.month.vol.toLocaleString('id-ID')}</p>
+            </div>
+          </div>
+          {/* Mini bar visualising month volume proportion */}
+          <div className="w-full bg-purple-100 rounded h-2">
+            <div className="bg-purple-600 h-full rounded" style={{ width: `${(p.month.vol/props.totalVolume*100).toFixed(1)}%` }} />
+          </div>
+        </div>
+      ))}
+      {performa.length===0 && <p className="text-center text-xs font-bold text-gray-400">Belum ada data</p>}
+    </div>
+  );
+})()}
+
+
+
+
 
               {activeOwnerModal === 'backup' && (
                 <div className="text-center py-10 space-y-4">

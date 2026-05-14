@@ -7,6 +7,10 @@ interface AkunViewProps {
   kasirRole?: string
   onLogout?: () => void
   onRequestLogout?: () => void
+  runningTexts?: string[]
+  mainAnnouncement?: string
+  onSaveRunningTexts?: (texts: string[]) => void
+  onSaveMainAnnouncement?: (text: string) => void
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -65,6 +69,48 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     isPinEnabled ? "translate-x-6" : "translate-x-0"
                   )}></div>
                 </button>
+              </div>
+
+              {/* Announcement Management */}
+              <div className="mb-6">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Pengumuman & Teks Berjalan</p>
+                <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm space-y-4">
+                  <div>
+                    <label className="text-[9px] font-black text-blue-600 uppercase tracking-tight ml-1 mb-1.5 block">Teks Utama (Highlight)</label>
+                    <input 
+                      type="text" 
+                      value={props.mainAnnouncement || ''} 
+                      onChange={(e) => props.onSaveMainAnnouncement?.(e.target.value)}
+                      placeholder="Contoh: Promo Aksesoris 20%..."
+                      className="w-full bg-gray-200 border border-gray-300 rounded-xl px-4 py-3 text-xs font-black text-gray-900 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-200 transition-all"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-tight">Teks Tambahan (Max 15)</label>
+                      <span className="text-[8px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Slide Otomatis</span>
+                    </div>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 hide-scrollbar">
+                      {(props.runningTexts || Array(15).fill('')).map((text, idx) => (
+                        <div key={idx} className="flex items-center gap-2 group">
+                          <span className="text-[8px] font-black text-gray-300 w-4">{idx + 1}</span>
+                          <input 
+                            type="text" 
+                            value={text} 
+                            onChange={(e) => {
+                              const newTexts = [...(props.runningTexts || Array(15).fill(''))]
+                              newTexts[idx] = e.target.value
+                              props.onSaveRunningTexts?.(newTexts)
+                            }}
+                            placeholder={`Pesan ke-${idx + 1}...`}
+                            className="flex-1 bg-gray-200 border border-gray-300 group-hover:border-gray-400 rounded-xl px-3 py-2 text-[11px] font-bold text-gray-900 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

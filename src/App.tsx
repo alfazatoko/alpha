@@ -180,6 +180,25 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [absensi, setAbsensi] = useState<any[]>([])
   const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
 
+  // Running Text State
+  const [runningTexts, setRunningTexts] = useState<string[]>(() => {
+    const saved = localStorage.getItem('alphaPro_runningTexts')
+    return saved ? JSON.parse(saved) : Array(15).fill('')
+  })
+  const [mainAnnouncement, setMainAnnouncement] = useState<string>(() => {
+    return localStorage.getItem('alphaPro_mainAnnouncement') || 'Selamat Datang di ALFAZA CELL'
+  })
+
+  const saveRunningTexts = (texts: string[]) => {
+    setRunningTexts(texts)
+    localStorage.setItem('alphaPro_runningTexts', JSON.stringify(texts))
+  }
+
+  const saveMainAnnouncement = (text: string) => {
+    setMainAnnouncement(text)
+    localStorage.setItem('alphaPro_mainAnnouncement', text)
+  }
+
   // Fetch from Supabase
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -684,6 +703,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         refreshKasirList={refreshKasirList}
         jamAbsen={todayAbsen}
         absensiList={absensi}
+        runningTexts={runningTexts}
+        mainAnnouncement={mainAnnouncement}
       />
 
       <RiwayatView 
@@ -741,6 +762,10 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         kasirRole={account.role}
         onLogout={onLogout}
         onRequestLogout={() => setShowLogoutConfirm(true)}
+        runningTexts={runningTexts}
+        mainAnnouncement={mainAnnouncement}
+        onSaveRunningTexts={saveRunningTexts}
+        onSaveMainAnnouncement={saveMainAnnouncement}
       />
 
       <IsiSaldoView 
