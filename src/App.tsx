@@ -133,6 +133,7 @@ const App: React.FC = () => {
       onLogout={handleLogout}
       kasirList={kasirList}
       refreshKasirList={refreshKasirList}
+      isLoggedIn={isLoggedIn}
     />
   )
 }
@@ -147,9 +148,10 @@ interface MainAppProps {
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
   refreshKasirList: () => void
+  isLoggedIn: boolean
 }
 
-const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout, kasirList, refreshKasirList }) => {
+const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout, kasirList, refreshKasirList, isLoggedIn }) => {
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
@@ -175,6 +177,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [totalPenjualan, setTotalPenjualan] = useState<number>(0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [kasModal, setKasModal] = useState<number>(0)
+  const [absensi, setAbsensi] = useState<any[]>([])
+  const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
 
   // Fetch from Supabase
   useEffect(() => {
@@ -226,6 +230,62 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       supabase.removeChannel(channel)
     }
   }, [googleUid])
+
+  // Fetch and Record Attendance
+  useEffect(() => {
+    if (!googleUid || !isLoggedIn || !username) return
+
+    const today = new Date().toLocaleDateString('en-CA')
+    
+    const manageAbsensi = async () => {
+      // 1. Check/Record today's attendance for current user
+      const { data: current, error: checkError } = await supabase
+        .from('absensi')
+        .select('*')
+        .eq('user_id', googleUid)
+        .eq('username', username)
+        .eq('tanggal', today)
+        .maybeSingle()
+
+      if (!checkError && !current) {
+        // Record new attendance
+        const now = new Date()
+        const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+        await supabase.from('absensi').insert({
+          user_id: googleUid,
+          username,
+          nama: account.name,
+          tanggal: today,
+          jam_masuk: jam,
+          status: 'Hadir'
+        })
+        setTodayAbsen(jam)
+      } else if (current) {
+        setTodayAbsen(current.jam_masuk)
+      }
+
+      // 2. Fetch all attendance for owner view
+      const { data: allData } = await supabase
+        .from('absensi')
+        .select('*')
+        .eq('user_id', googleUid)
+        .order('tanggal', { ascending: false })
+      
+      if (allData) setAbsensi(allData)
+    }
+
+    manageAbsensi()
+
+    // Realtime attendance updates
+    const channel = supabase
+      .channel('absensi-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi', filter: `user_id=eq.${googleUid}` }, () => {
+        manageAbsensi()
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [googleUid, isLoggedIn, username, account.name])
 
   // Filter State
   const [filterTanggalMulai, setFilterTanggalMulai] = useState(new Date().toISOString().split('T')[0])
@@ -617,8 +677,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         kasModal={kasModal}
         kasirName={account.name}
         kasirRole={account.role}
+        filterKasir={filterKasir}
+        setFilterKasir={setFilterKasir}
+        onLogout={onLogout}
         kasirList={kasirList}
         refreshKasirList={refreshKasirList}
+        jamAbsen={todayAbsen}
+        absensiList={absensi}
       />
 
       <RiwayatView 
@@ -706,6 +771,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         setTheme={setTheme}
         screenSize={screenSize}
         setScreenSize={setScreenSize}
+        jamAbsen={todayAbsen}
+        kasirName={account.name}
       />
 
 

@@ -41,15 +41,22 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         {props.kasirRole === 'owner' && props.setFilterKasir && (
           <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
             <span className="text-[10px] font-bold text-white uppercase tracking-wider"><i className="fa-solid fa-user-tie mr-1"></i> Mode Pantau Kasir:</span>
-            <select 
-              value={props.filterKasir || 'Semua'}
-              onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none appearance-none"
-            >
-              <option value="Semua">Semua Kasir</option>
-              <option value="kasir1">Kasir 1</option>
-              <option value="kasir2">Kasir 2</option>
-            </select>
+            <div className="relative">
+              <select 
+                value={props.filterKasir || 'Semua'}
+                onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                className="bg-white bg-none text-emerald-700 text-[10px] font-black rounded-lg pl-2 pr-6 py-1 outline-none border-none appearance-none cursor-pointer"
+              >
+                <option value="Semua">Semua Kasir</option>
+                {/* Dynamically render options if kasirList is available in App.tsx passes it, 
+                    but for now sticking to the existing hardcoded ones if that's what was there or improving it.
+                    Actually, I should check if props.kasirList exists here. 
+                */}
+                <option value="kasir1">Kasir 1</option>
+                <option value="kasir2">Kasir 2</option>
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-emerald-400 pointer-events-none"></i>
+            </div>
           </div>
         )}
 
@@ -94,13 +101,13 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             <i className="fa-solid fa-chart-pie text-indigo-500"></i> Rekap per Kategori
           </h3>
           <div className="overflow-x-auto hide-scrollbar">
-            <table className="w-full text-xs">
+            <table className="w-full text-[14px]">
               <thead>
                 <tr className="text-left text-gray-400 border-b border-gray-100">
-                  <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Kategori</th>
-                  <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Qty</th>
-                  <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Nominal</th>
-                  <th className="py-2.5 font-bold uppercase text-[9px] tracking-wider">Laba</th>
+                  <th className="py-2.5 font-bold uppercase text-[11px] tracking-wider">Kategori</th>
+                  <th className="py-2.5 font-bold uppercase text-[11px] tracking-wider">Qty</th>
+                  <th className="py-2.5 font-bold uppercase text-[11px] tracking-wider">Nominal</th>
+                  <th className="py-2.5 font-bold uppercase text-[11px] tracking-wider">Laba</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-gray-700">
@@ -120,7 +127,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   return (
                     <tr key={cat} className="hover:bg-gray-50/50 transition-colors">
                       <td className="py-2 pr-2">
-                        <span className={cn("px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap", catColor)}>
+                        <span className={cn("px-2 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap", catColor)}>
                           {cat === 'Tarik Tunai' ? 'Tarik Tunai Nasabah' : 
                            cat === 'Aksesoris' ? 'Penjualan Aksesoris' : cat}
                         </span>
@@ -196,7 +203,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <div className="flex justify-between items-center p-2 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
                 <div>
                   <p className="text-[9px] font-bold text-indigo-700 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
-                  <p className="text-[7px] text-indigo-400 font-medium italic -mt-0.5">Total pengisian/setoran saldo hari ini</p>
+                  <p className="text-[8px] text-indigo-400 font-medium italic -mt-0.5">Total pengisian/setoran saldo hari ini</p>
                 </div>
                 <span className="font-black text-[11px] text-indigo-900">
                   {formatRupiah(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0))}
@@ -207,7 +214,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <div className="flex justify-between items-center p-2 bg-orange-50/50 rounded-xl border border-orange-100/50">
                 <div>
                   <p className="text-[9px] font-bold text-orange-700 uppercase tracking-tight">2. Penjualan Digital</p>
-                  <p className="text-[7px] text-orange-400 font-medium italic -mt-0.5">Saldo yang sudah terpakai transaksi</p>
+                  <p className="text-[8px] text-orange-400 font-medium italic -mt-0.5">Saldo yang sudah terpakai transaksi</p>
                 </div>
                 <span className="font-black text-[11px] text-orange-900">-{formatRupiah(props.penjualanDigital)}</span>
               </div>
@@ -220,7 +227,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   <div className="flex justify-between items-center p-2 bg-blue-50/80 rounded-xl border-2 border-blue-100">
                     <div>
                       <p className="text-[9px] font-bold text-blue-700 uppercase tracking-tight">3. Sisa Saldo (Catatan Buku)</p>
-                      <p className="text-[7px] text-blue-400 font-medium italic -mt-0.5">Uang yang seharusnya ada di bank</p>
+                      <p className="text-[8px] text-blue-400 font-medium italic -mt-0.5">Uang yang seharusnya ada di bank</p>
                     </div>
                     <span className="font-black text-[11px] text-blue-900">{formatRupiah(sisaBuku)}</span>
                   </div>
@@ -231,7 +238,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <div className="flex justify-between items-center p-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
                 <div>
                   <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real Aplikasi (HP)</p>
-                  <p className="text-[7px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input melalui menu 'Isi Saldo'</p>
+                  <p className="text-[8px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input melalui menu 'Isi Saldo'</p>
                 </div>
                 <span className="font-black text-[11px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
               </div>
@@ -254,7 +261,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                          selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> STATUS: SURPLUS</> : 
                          <><i className="fa-solid fa-circle-xmark"></i> STATUS: SELISIH</>}
                       </p>
-                      <p className="text-[8px] opacity-90 font-bold italic mt-0.5">
+                      <p className="text-[9px] opacity-90 font-bold italic mt-0.5">
                         {selisih === 0 ? 'Sisa saldo di HP cocok dengan catatan buku' : 
                          selisih > 0 ? 'Saldo di HP lebih besar dari catatan' : 'Saldo di HP lebih kecil (Uang kurang)'}
                       </p>

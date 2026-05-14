@@ -88,6 +88,28 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       <div className="px-5 pt-6 pb-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20">
         <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
         <p className="text-violet-100 text-[11px] mt-0.5 opacity-90">Pantau semua arus kas keluar masuk</p>
+
+        {/* OWNER ONLY: FILTER KASIR DI DALAM HEADER */}
+        {props.kasirRole === 'owner' && props.kasirList && (
+          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
+             <span className="text-[12px] font-bold text-white uppercase tracking-wider">
+               <i className="fa-solid fa-user-gear mr-1"></i> Mode Pantau Kasir:
+             </span>
+             <div className="relative">
+                <select 
+                  value={props.filterKasir || 'Semua'}
+                  onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                  className="bg-white bg-none text-violet-700 text-[12px] font-black rounded-lg pl-2 pr-6 py-1 outline-none border-none appearance-none cursor-pointer"
+                >
+                  <option value="Semua">Semua Kasir</option>
+                  {Object.entries(props.kasirList).map(([id, acc]) => (
+                    <option key={id} value={id}>{acc.name}</option>
+                  ))}
+                </select>
+                <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-violet-400 pointer-events-none"></i>
+             </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 pb-20 pt-3">
@@ -107,7 +129,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             <select 
               value={props.filterKategori}
               onChange={(e) => props.setFilterKategori(e.target.value)}
-              className="w-full h-full bg-white border border-slate-200 pl-2 pr-6 rounded-lg text-[10px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none"
+              className="w-full h-full bg-white bg-none border border-slate-200 pl-2 pr-6 rounded-lg text-[10px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none"
             >
               <option value="Semua">Semua Kategori</option>
               <option value="Transfer Bank">Transfer Bank</option>
@@ -161,43 +183,21 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </button>
         </div>
 
-        {/* OWNER ONLY: FILTER KASIR (1 baris penuh) */}
-        {props.kasirRole === 'owner' && props.kasirList && (
-          <div className="flex items-center gap-1.5 mb-4 bg-white/50 border border-slate-100 p-1.5 rounded-xl">
-             <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                <i className="fa-solid fa-user-gear text-[10px]"></i>
-             </div>
-             <div className="flex-1 relative">
-                <select 
-                  value={props.filterKasir || 'Semua'}
-                  onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                  className="w-full bg-transparent text-[10px] font-black text-slate-700 outline-none pr-6 appearance-none cursor-pointer"
-                >
-                  <option value="Semua">Pilih Kasir: Semua</option>
-                  {Object.entries(props.kasirList).map(([id, acc]) => (
-                    <option key={id} value={id}>{acc.name} ({id})</option>
-                  ))}
-                </select>
-                <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[7px] text-slate-300 pointer-events-none"></i>
-             </div>
-          </div>
-        )}
-
         {/* SUMMARY CARDS */}
         <div className="grid grid-cols-3 gap-1.5 mb-4">
           <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">TRX</div>
-            <div className="text-xs font-black text-blue-600 leading-none">{todayCount}</div>
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">TRX</div>
+            <div className="text-[14px] font-black text-blue-600 leading-none">{todayCount}</div>
           </div>
           <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">NOMINAL</div>
-            <div className="text-[10px] font-black text-slate-800 leading-none truncate w-full text-center px-1">
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">NOMINAL</div>
+            <div className="text-[12px] font-black text-slate-800 leading-none truncate w-full text-center px-1">
               {formatRupiah(todayVolume).replace(',00', '').replace('Rp ', '')}
             </div>
           </div>
           <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">ADMIN</div>
-            <div className="text-[10px] font-black text-emerald-600 leading-none truncate w-full text-center px-1">
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">ADMIN</div>
+            <div className="text-[12px] font-black text-emerald-600 leading-none truncate w-full text-center px-1">
               {formatRupiah(todayAdmin).replace(',00', '').replace('Rp ', '')}
             </div>
           </div>
@@ -224,15 +224,15 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
           {/* FOOTER TOTAL (Single Line with Dividers) */}
           <div className="flex items-center justify-center gap-3 py-5 border-t border-slate-100">
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+            <div className="text-[12px] font-black text-slate-400 uppercase tracking-tighter">
               {filteredTransactions.length} Items
             </div>
             <div className="w-px h-3 bg-slate-200"></div>
-            <div className="text-blue-600 font-black text-[11px]">
+            <div className="text-blue-600 font-black text-[13px]">
               nom : {formatRupiah(totalNominal).replace(',00', '')}
             </div>
             <div className="w-px h-3 bg-slate-200"></div>
-            <div className="text-emerald-600 font-black text-[11px]">
+            <div className="text-emerald-600 font-black text-[13px]">
               adm : {formatRupiah(totalAdmin).replace(',00', '')}
             </div>
           </div>

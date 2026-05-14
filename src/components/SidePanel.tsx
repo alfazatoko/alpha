@@ -13,9 +13,11 @@ interface SidePanelProps {
   setTheme: (theme: string) => void
   screenSize: string
   setScreenSize: (size: string) => void
+  jamAbsen?: string
+  kasirName?: string
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName }) => {
   return (
     <>
       <div className={cn("overlay", isOpen && "show")} onClick={() => setIsOpen(false)}></div>
@@ -30,10 +32,42 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
               <i className="fa-solid fa-times"></i>
             </button>
           </div>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between"><span>Jam</span><span className="font-semibold">{new Date().toLocaleTimeString('id-ID')}</span></div>
-            <div className="flex justify-between"><span>Hari, Tanggal</span><span className="font-semibold">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-            <div className="flex justify-between"><span>Status</span><span className="font-semibold text-green-600">Aktif</span></div>
+          <div className="space-y-2 text-[10px] font-black uppercase tracking-tighter">
+            <div className="flex justify-between items-center bg-blue-50 p-2.5 rounded-xl border border-blue-100">
+              <span className="text-blue-600">Jam Sekarang</span>
+              <span className="text-blue-900 font-black">{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            </div>
+            <div className="flex justify-between items-center bg-indigo-50 p-2.5 rounded-xl border border-indigo-100">
+              <span className="text-indigo-600">Hari, Tanggal</span>
+              <span className="text-indigo-900 font-black">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            </div>
+
+            <div className="flex justify-between items-center bg-amber-50 p-2.5 rounded-xl border border-amber-100">
+              <span className="text-amber-600">Nama Kasir</span>
+              <span className="text-amber-900 font-black">{kasirName || '---'}</span>
+            </div>
+            
+            {/* Highlighted Jam Absen */}
+            <div className="relative group my-4">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-600 to-amber-500 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+              <div className="relative flex justify-between items-center bg-gradient-to-r from-orange-500 to-amber-500 p-3.5 rounded-2xl border border-orange-400 shadow-xl shadow-orange-200">
+                <div className="flex flex-col">
+                  <span className="text-white/80 text-[8px] font-black tracking-widest leading-none mb-1">DATA ABSENSI</span>
+                  <span className="text-white text-[11px] font-black tracking-widest leading-none">JAM ABSEN</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-white text-lg font-black leading-none drop-shadow-md">{jamAbsen || '--:--:--'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+              <span className="text-emerald-600">Status Aplikasi</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span className="text-emerald-900 font-black">AKTIF</span>
+              </div>
+            </div>
           </div>
         </div>
 

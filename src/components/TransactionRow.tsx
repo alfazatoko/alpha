@@ -37,13 +37,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         <div className="flex gap-3">
           {/* NOMOR & ACTION */}
           <div className="flex flex-col items-center justify-center w-7 gap-1 mt-0.5">
-            <span className="text-[10px] font-bold text-slate-400">{index + 1}</span>
+            <span className="text-[12px] font-bold text-slate-400">{index + 1}</span>
             <i className={cn("fa-solid fa-chevron-down text-[8px] text-blue-500 transition-transform duration-300", isOpen && "rotate-180")}></i>
           </div>
 
           {/* INFO UTAMA */}
           <div className="flex flex-col gap-0.5">
-            <div className="text-[12px] font-black text-slate-800 tracking-tight uppercase">
+            <div className="text-[14px] font-black text-slate-800 tracking-tight uppercase">
                {t.kategori}
             </div>
             <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
@@ -55,12 +55,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         {/* NOMINAL & ADMIN */}
         <div className="flex flex-col items-end gap-0.5">
           <div className={cn(
-            "text-[12px] font-black tracking-tight",
+            "text-[14px] font-black tracking-tight",
             t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-800"
           )}>
             {t.nominal.toLocaleString('id-ID')}
           </div>
-          <div className="text-[9px] text-emerald-600 font-extrabold uppercase">
+          <div className="text-[11px] text-emerald-600 font-extrabold uppercase">
             Admin: {t.adminFee.toLocaleString('id-ID')}
           </div>
         </div>

@@ -51,13 +51,13 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
                 <div className="flex flex-col items-center cursor-pointer group py-1">
                   <div className={cn(
                     "transition-all duration-300 mb-0.5",
-                    isActive ? "text-blue-600 scale-110" : "text-gray-400 group-hover:text-gray-600"
+                    isActive ? "text-blue-600 scale-110" : "text-black group-hover:text-black/70"
                   )}>
                     <item.Icon className={cn("w-5 h-5", isActive ? "stroke-[2.5px]" : "stroke-[2px]")} />
                   </div>
                   <span className={cn(
                     "text-[9px] font-black tracking-tight transition-colors duration-300",
-                    isActive ? "text-blue-600" : "text-gray-400"
+                    isActive ? "text-blue-600" : "text-black"
                   )}>
                     {item.label}
                   </span>

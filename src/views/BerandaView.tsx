@@ -37,6 +37,8 @@ interface BerandaViewProps {
   onLogout?: () => void
   kasirList: Record<string, KasirAccount>
   refreshKasirList: () => void
+  jamAbsen?: string
+  absensiList?: any[]
 }
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
@@ -57,6 +59,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   // Pantau State
   const [pantauTanggal, setPantauTanggal] = useState(new Date().toLocaleDateString('en-CA'))
+
+  // Absensi Modal State
+  const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
 
   useEffect(() => {
     if (activeOwnerModal === 'izin') {
@@ -151,11 +156,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       <div className="mx-5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
         <div className="flex justify-between items-start mb-2">
           <div>
-            <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">SALDO BANK</p>
+            <p className="text-[11px] text-gray-600 font-black uppercase tracking-widest">SALDO BANK</p>
             <h2 className="text-base font-black tracking-tight text-blue-800">{formatRupiah(props.saldoBank)}</h2>
           </div>
           <div className="text-right">
-            <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">SALDO LACI KASIR</p>
+            <p className="text-[11px] text-gray-600 font-black uppercase tracking-widest">SALDO LACI KASIR</p>
             <h2 className="text-base font-black tracking-tight text-emerald-600">{formatRupiah(totalPendapatanBersih)}</h2>
           </div>
         </div>
@@ -186,7 +191,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <i className="fa-solid fa-building-columns"></i>
                   </div>
                   <div>
-                    <h4 className="text-[11px] font-black text-blue-800 uppercase leading-none">SALDO BANK</h4>
+                    <h4 className="text-[13px] font-black text-blue-800 uppercase leading-none">SALDO BANK</h4>
                     <p className="text-[9px] text-gray-400 font-medium mt-0.5 opacity-80">Total uang di rekening/digital</p>
                   </div>
                 </div>
@@ -208,7 +213,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <i className="fa-solid fa-arrow-down"></i>
                   </div>
                   <div>
-                    <h4 className="text-[11px] font-black text-green-800 uppercase leading-none">KAS MASUK</h4>
+                    <h4 className="text-[13px] font-black text-green-800 uppercase leading-none">KAS MASUK</h4>
                     <p className="text-[9px] text-gray-400 font-medium mt-0.5 opacity-80">Uang/cash masuk ke laci kasir</p>
                   </div>
                 </div>
@@ -269,7 +274,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <i className="fa-solid fa-arrow-up"></i>
                   </div>
                   <div>
-                    <h4 className="text-[11px] font-black text-red-700 uppercase leading-none">KAS KELUAR</h4>
+                    <h4 className="text-[13px] font-black text-red-700 uppercase leading-none">KAS KELUAR</h4>
                     <p className="text-[9px] text-gray-400 font-medium mt-0.5 opacity-80">Uang/cash keluar dari laci kasir</p>
                   </div>
                 </div>
@@ -291,7 +296,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               {/* Total Saldo Laci Kasir Box - Updated Layout */}
               <div className="bg-[#051c5f] p-4 rounded-3xl text-white mt-1 shadow-lg">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[9px] font-black uppercase tracking-tight text-blue-100">TOTAL SALDO LACI KASIR</span>
+                  <span className="text-[11px] font-black uppercase tracking-tight text-blue-100">TOTAL SALDO LACI KASIR</span>
                   <h2 className="text-lg font-black text-green-400 tracking-tighter">
                     {formatRupiah(totalPendapatanBersih)}
                   </h2>
@@ -507,7 +512,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 </div>
                               </div>
                               <span className={cn(
-                                "text-[8px] px-2 py-0.5 rounded-full font-black uppercase",
+                                "text-[10px] px-2 py-0.5 rounded-full font-black uppercase",
                                 kasirTxs.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
                               )}>
                                 {kasirTxs.length > 0 ? `${kasirTxs.length} TRX` : 'KOSONG'}
@@ -515,16 +520,16 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             </div>
                             <div className="grid grid-cols-3 gap-1.5">
                               <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-blue-100/50">
-                                <p className="text-[7px] font-black text-gray-400 uppercase">Nominal</p>
-                                <p className="text-[10px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
+                                <p className="text-[9px] font-black text-gray-400 uppercase">Nominal</p>
+                                <p className="text-[12px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
                               </div>
                               <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-emerald-100/50">
-                                <p className="text-[7px] font-black text-gray-400 uppercase">Admin</p>
-                                <p className="text-[10px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
+                                <p className="text-[9px] font-black text-gray-400 uppercase">Admin</p>
+                                <p className="text-[12px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
                               </div>
                               <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-indigo-100/50">
-                                <p className="text-[7px] font-black text-gray-400 uppercase">Isi Saldo</p>
-                                <p className="text-[10px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
+                                <p className="text-[9px] font-black text-gray-400 uppercase">Isi Saldo</p>
+                                <p className="text-[12px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
                               </div>
                             </div>
                           </div>
@@ -557,7 +562,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px]">
                         <i className="fa-solid fa-building-columns"></i>
                       </div>
-                      <h4 className="text-[11px] font-black text-blue-700 uppercase tracking-widest">SALDO BANK</h4>
+                      <h4 className="text-[13px] font-black text-blue-700 uppercase tracking-widest">SALDO BANK</h4>
                     </div>
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
@@ -573,7 +578,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-[10px]">
                         <i className="fa-solid fa-arrow-down"></i>
                       </div>
-                      <h4 className="text-[11px] font-black text-green-700 uppercase tracking-widest">KAS MASUK</h4>
+                      <h4 className="text-[13px] font-black text-green-700 uppercase tracking-widest">KAS MASUK</h4>
                     </div>
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
@@ -603,7 +608,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-[10px]">
                         <i className="fa-solid fa-arrow-up"></i>
                       </div>
-                      <h4 className="text-[11px] font-black text-red-600 uppercase tracking-widest">KAS KELUAR</h4>
+                      <h4 className="text-[13px] font-black text-red-600 uppercase tracking-widest">KAS KELUAR</h4>
                     </div>
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
@@ -616,7 +621,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   {/* Total Balance */}
                   <div className="mt-3 p-4 bg-gradient-to-r from-blue-700 to-blue-800 rounded-2xl shadow-inner text-white flex justify-between items-center">
                     <div>
-                      <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest">SALDO LACI KASIR</p>
+                      <p className="text-[12px] font-black text-blue-100 uppercase tracking-widest">SALDO LACI KASIR</p>
                       <p className="text-[8px] text-blue-200 mt-0.5">Total uang fisik hari ini</p>
                     </div>
                     <span className="text-lg font-black text-green-300">Rp {totalPendapatanBersih.toLocaleString('id-ID')}</span>
@@ -648,21 +653,169 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerModal === 'absen' && (
-                <div className="space-y-3">
-                  <div className="p-4 border border-orange-100 rounded-2xl bg-orange-50/30 flex justify-between items-center">
-                    <div>
-                      <p className="text-xs font-black text-gray-800">Kasir 1</p>
-                      <p className="text-[9px] text-orange-600 font-bold uppercase">Masuk: 08:00</p>
-                    </div>
-                    <span className="text-[8px] px-2 py-1 bg-green-500 text-white rounded-md font-black">HADIR</span>
+                <div className="space-y-6">
+                  {/* TABS RINGKASAN vs FULL */}
+                  <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                    <button 
+                      onClick={() => setAbsenTab('summary')} 
+                      className={cn(
+                        "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                        absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                      )}
+                    >
+                      Ringkasan
+                    </button>
+                    <button 
+                      onClick={() => setAbsenTab('full')} 
+                      className={cn(
+                        "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                        absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                      )}
+                    >
+                      Riwayat Full
+                    </button>
                   </div>
-                  <div className="p-4 border border-orange-100 rounded-2xl bg-orange-50/30 flex justify-between items-center">
-                    <div>
-                      <p className="text-xs font-black text-gray-800">Kasir 2</p>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">Belum Absen</p>
-                    </div>
-                    <span className="text-[8px] px-2 py-1 bg-gray-400 text-white rounded-md font-black">OFF</span>
-                  </div>
+
+                  {absenTab === 'summary' ? (() => {
+                    const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
+                    const todayStr = new Date().toLocaleDateString('en-CA')
+                    
+                    return (
+                      <div className="space-y-4">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Kehadiran Hari Ini ({new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })})</p>
+                        
+                        <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                          {/* Header Summary */}
+                          <div className="bg-teal-50/50 px-4 py-2.5 border-b border-gray-50 flex justify-between items-center">
+                            <h4 className="text-[11px] font-black text-teal-900 uppercase tracking-widest">
+                              Ringkasan Absen
+                            </h4>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
+                              <span className="text-[8px] font-black text-teal-600 uppercase tracking-tighter">Live Monitor</span>
+                            </span>
+                          </div>
+                          
+                          <div className="divide-y divide-gray-50">
+                            {cashiers.map(([id, acc]) => {
+                              const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
+                              
+                              let shiftLabel = 'BELUM ABSEN'
+                              let shiftColor = 'text-gray-300'
+                              
+                              if (entry) {
+                                const hour = parseInt(entry.jam_masuk.split(':')[0])
+                                if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-500'; }
+                                else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-500'; }
+                                else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600'; }
+                              }
+
+                              return (
+                                <div key={id} className="px-4 py-3.5 flex justify-between items-center bg-white">
+                                  <div className="w-1/3">
+                                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                  </div>
+                                  
+                                  <div className="flex-1 text-center">
+                                    <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                      {shiftLabel}
+                                    </p>
+                                  </div>
+                                  
+                                  <div className="w-1/4 text-right">
+                                    <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
+                                    <p className={cn(
+                                      "text-[10px] font-black tabular-nums leading-none",
+                                      entry ? "text-blue-600" : "text-gray-200"
+                                    )}>
+                                      {entry ? entry.jam_masuk : '--:--'}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })() : (() => {
+                    const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
+                    const last30Days = Array.from({length: 30}, (_, i) => {
+                      const d = new Date()
+                      d.setDate(d.getDate() - i)
+                      return d
+                    })
+
+                    return (
+                      <div className="space-y-4">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Riwayat 30 Hari Terakhir</p>
+                        
+                        {last30Days.map(date => {
+                          const dateStr = date.toLocaleDateString('en-CA')
+                          const dayAttendance = props.absensiList?.filter(a => a.tanggal === dateStr) || []
+                          
+                          // Only show if there's at least one attendance or if it's within a few days
+                          if (dayAttendance.length === 0 && date > new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) {
+                             // Keep showing last 3 days even if empty as per user request to see "Belum Absen"
+                          } else if (dayAttendance.length === 0) {
+                            return null; // Don't show empty old dates
+                          }
+
+                          return (
+                            <div key={dateStr} className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                              {/* Date Header */}
+                              <div className="bg-blue-50/50 px-4 py-2.5 border-b border-gray-50">
+                                <h4 className="text-[11px] font-black text-blue-900">
+                                  {date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </h4>
+                              </div>
+                              
+                              <div className="divide-y divide-gray-50">
+                                {cashiers.map(([id, acc]) => {
+                                  const entry = dayAttendance.find(a => a.username === id)
+                                  
+                                  // Determine Shift/Color based on time (matching photo aesthetics)
+                                  let shiftLabel = 'BELUM ABSEN'
+                                  let shiftColor = 'text-gray-300'
+                                  
+                                  if (entry) {
+                                    const hour = parseInt(entry.jam_masuk.split(':')[0])
+                                    if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-500'; }
+                                    else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-500'; }
+                                    else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600'; }
+                                  }
+
+                                  return (
+                                    <div key={id} className="px-4 py-3 flex justify-between items-center bg-white">
+                                      <div className="w-1/3">
+                                        <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                      </div>
+                                      
+                                      <div className="flex-1 text-center">
+                                        <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                          {shiftLabel}
+                                        </p>
+                                      </div>
+                                      
+                                      <div className="w-1/4 text-right">
+                                        <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
+                                        <p className={cn(
+                                          "text-[10px] font-black tabular-nums leading-none",
+                                          entry ? "text-blue-600" : "text-gray-200"
+                                        )}>
+                                          {entry ? entry.jam_masuk : '--:--'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 

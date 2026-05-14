@@ -1,13 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 /* stylelint-disable at-rule-no-unknown */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 /* stylelint-enable at-rule-no-unknown */
 
 :root {
   font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 17px;
   -webkit-tap-highlight-color: transparent;
   --input-bg: #eff6ff;
   --input-border: #d1d5db;

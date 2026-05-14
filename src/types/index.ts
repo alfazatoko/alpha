@@ -29,3 +29,11 @@ export interface AppState {
   totalPenjualan: number;
   transactions: Transaction[];
 }
+export interface Absensi {
+  id?: number;
+  username: string;
+  nama: string;
+  tanggal: string; // YYYY-MM-DD
+  jam_masuk: string; // HH:mm:ss
+  status: 'Hadir' | 'Libur';
+}
