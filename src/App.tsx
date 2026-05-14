@@ -155,6 +155,48 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
+
+  // Sync activeView with URL Hash
+  useEffect(() => {
+    const viewToHash: Record<string, string> = {
+      'view-beranda': 'beranda',
+      'view-transaksi': 'riwayat',
+      'view-saldo': 'saldo',
+      'view-laporan': 'laporan',
+      'view-akun': 'akun'
+    }
+    const hashToView: Record<string, string> = Object.fromEntries(
+      Object.entries(viewToHash).map(([v, h]) => [h, v])
+    )
+
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#/', '')
+      if (hashToView[hash]) {
+        setActiveView(hashToView[hash])
+      } else if (hash === '' || hash === '/') {
+        setActiveView('view-beranda')
+      }
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    handleHashChange() // Initial check on load
+
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  useEffect(() => {
+    const viewToHash: Record<string, string> = {
+      'view-beranda': 'beranda',
+      'view-transaksi': 'riwayat',
+      'view-saldo': 'saldo',
+      'view-laporan': 'laporan',
+      'view-akun': 'akun'
+    }
+    const hash = viewToHash[activeView] || activeView.replace('view-', '')
+    if (window.location.hash !== `#/${hash}`) {
+      window.history.pushState(null, '', `#/${hash}`)
+    }
+  }, [activeView])
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light')
   const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
