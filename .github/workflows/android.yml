@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main # Jalankan otomatis jika ada kode baru di branch main
+      - master # Jalankan otomatis jika ada kode baru di branch master
   workflow_dispatch: # Mengizinkan Anda menekan tombol "Run workflow" secara manual di GitHub
 
 jobs:
