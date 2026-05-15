@@ -188,22 +188,43 @@ const GajiPanel: React.FC<{
       pdf.setTextColor(150, 150, 150)
       pdf.text(`Dicetak pada: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`, pdfWidth / 2, imgHeight + 25, { align: "center" })
 
-      const blob = pdf.output("blob")
       const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.pdf`
-      const file = new File([blob], filename, { type: "application/pdf" })
+
+      const { Capacitor } = await import('@capacitor/core')
       
-      if (navigator.share) {
-        await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {})
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem')
+        const { Share } = await import('@capacitor/share')
+        
+        const pdfBase64 = pdf.output("datauristring").split(',')[1]
+        
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: pdfBase64,
+          directory: Directory.Cache
+        })
+        
+        await Share.share({
+          title: `Slip Gaji ${selectedName}`,
+          url: result.uri
+        })
       } else {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = filename
-        a.click()
-        URL.revokeObjectURL(url)
+        const blob = pdf.output("blob")
+        const file = new File([blob], filename, { type: "application/pdf" })
+        
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {})
+        } else {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = filename
+          a.click()
+          URL.revokeObjectURL(url)
+        }
       }
-    } catch (e) {
-      alert("Gagal share PDF")
+    } catch (e: any) {
+      alert("Gagal share PDF: " + (e?.message || "Error unknown"))
       console.error(e)
     }
   }

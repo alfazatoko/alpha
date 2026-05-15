@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 
 export const GoogleAuthScreen: React.FC = () => {
   const [loading, setLoading] = useState(false)
@@ -14,13 +15,20 @@ export const GoogleAuthScreen: React.FC = () => {
         ? 'com.alfazacell.alpha://login' 
         : window.location.origin;
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
+          skipBrowserRedirect: Capacitor.isNativePlatform(),
         }
       })
-      if (error) throw error
+
+      if (error) throw error;
+
+      // Jika di native, buka browser secara manual agar state terjaga
+      if (Capacitor.isNativePlatform() && data?.url) {
+        await Browser.open({ url: data.url, windowName: '_self' });
+      }
     } catch (err: any) {
       setError(err.message || 'Gagal login dengan Google')
     } finally {

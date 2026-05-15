@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { App } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 import { parseNominal, formatInputRupiah, cn, getLocalISOString } from './lib/utils'
 import type { Transaction } from './types'
 
@@ -63,7 +66,23 @@ const App: React.FC = () => {
       setGoogleSession(session)
     })
 
-    return () => subscription.unsubscribe()
+    // Tangani Deep Link untuk Capacitor
+    const handleAppUrlOpen = async (event: any) => {
+      const url = new URL(event.url);
+      const code = url.searchParams.get('code');
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+        if (Capacitor.isNativePlatform()) {
+          await Browser.close();
+        }
+      }
+    };
+
+    App.addListener('appUrlOpen', handleAppUrlOpen);
+
+    return () => {
+      subscription.unsubscribe();
+    }
   }, [])
 
   // Check persisted login on mount
