@@ -3,14 +3,14 @@ name: Full Deployment (Web & Android)
 on:
   push:
     branches:
-      - master # Jalankan otomatis jika ada kode baru di branch master
-  workflow_dispatch: # Mengizinkan Anda menekan tombol "Run workflow" secara manual di GitHub
+      - master
+  workflow_dispatch:
 
 jobs:
-  build-and-deploy:
-    name: Build and Deploy
+  # JOB 1: Build & Deploy Website
+  deploy-web:
+    name: Deploy to Firebase Hosting
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -33,26 +33,44 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ALFALIA }}'
           channelId: live
           projectId: alfalia
+        continue-on-error: true # Tetap lanjut walau secret belum disetup
 
-      - name: Setup Java JDK (Dibutuhkan untuk Android)
+  # JOB 2: Build APK Android
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Web App
+        run: npm run build
+
+      - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Sinkronisasi ke Android (Capacitor)
+      - name: Sinkronisasi Capacitor
         run: npx cap sync android
-
-      - name: Beri Izin Eksekusi untuk Gradle
-        working-directory: ./android
-        run: chmod +x gradlew
 
       - name: Build APK (Mode Debug)
         working-directory: ./android
-        run: ./gradlew assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Upload File APK ke Artifacts
+      - name: Upload APK ke Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ALFAZA-ALPHA-APP.apk
+          name: ALFAZA-ALPHA-APP
           path: android/app/build/outputs/apk/debug/app-debug.apk
