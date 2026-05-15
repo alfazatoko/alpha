@@ -33,11 +33,11 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ALFALIA }}'
           channelId: live
           projectId: alfalia
-        continue-on-error: true # Tetap lanjut walau secret belum disetup
+        continue-on-error: true
 
-  # JOB 2: Build APK Android
+  # JOB 2: Build APK Android (RELEASE)
   build-android:
-    name: Build Android APK
+    name: Build Android APK Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
@@ -63,14 +63,31 @@ jobs:
       - name: Sinkronisasi Capacitor
         run: npx cap sync android
 
-      - name: Build APK (Mode Debug)
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+
+      - name: Run Signing Report (Untuk Ambil SHA-1)
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew signingReport
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload APK ke Artifacts
+      - name: Build APK (Mode Release)
+        working-directory: ./android
+        run: ./gradlew assembleRelease
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload Release APK ke Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ALFAZA-ALPHA-APP
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: ALFAZA-ALPHA-RELEASE-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
