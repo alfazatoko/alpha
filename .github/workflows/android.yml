@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Sesuai dengan versi Node lokal Anda
+          node-version: 22 # Menggunakan versi Node yang lebih baru
 
       - name: Install Dependencies
         run: npm install
