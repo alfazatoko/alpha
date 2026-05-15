@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { App } from '@capacitor/app'
+import { App as CapApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 import { parseNominal, formatInputRupiah, cn, getLocalISOString } from './lib/utils'
@@ -78,7 +78,7 @@ const App: React.FC = () => {
       }
     };
 
-    App.addListener('appUrlOpen', handleAppUrlOpen);
+    CapApp.addListener('appUrlOpen', handleAppUrlOpen);
 
     return () => {
       subscription.unsubscribe();
