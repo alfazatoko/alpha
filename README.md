@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# ALPHA PRO - ALFAZA CELL
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistem manajemen toko dan kasir modern berbasis React, Vite, dan Supabase.
 
-Currently, two official plugins are available:
+## Fitur Utama
+- **Dashboard Owner**: Pantau volume transaksi dan estimasi profit secara real-time.
+- **Filter Kasir**: Pantau performa per kasir langsung dari halaman depan dengan opsi yang bisa diatur di pengaturan.
+- **Manajemen Transaksi**: Pencatatan transaksi digital (DANA, Transfer, Kuota) dan fisik dengan antarmuka yang sangat padat (*compact*).
+- **Otomatisasi Deployment**: Integrasi GitHub Actions untuk update website dan build APK Android secara otomatis setiap kali melakukan push kode.
+- **PWA & Native**: Dapat diakses melalui browser sebagai PWA atau diinstal sebagai aplikasi Android native menggunakan Capacitor.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Teknologi
+- **Frontend**: React 19, TypeScript, Vite.
+- **Styling**: Tailwind CSS dengan desain premium dan responsif.
+- **Backend/Database**: Supabase.
+- **Native Bridge**: Capacitor 6.
+- **Hosting**: Firebase Hosting.
 
-## React Compiler
+## Panduan Pengembangan Lokal
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Clone repositori ini ke komputer Anda.
+2. Jalankan `npm install` untuk menginstal semua dependensi.
+3. Pastikan file `.env` sudah terisi dengan URL dan API Key Supabase Anda.
+4. Jalankan `npm run dev` untuk menjalankan aplikasi di browser.
 
-## Expanding the ESLint configuration
+## Deployment & Build APK
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 1. Update Website
+Cukup jalankan file `deploy.bat`. Script ini akan mengirimkan kode Anda ke GitHub, lalu GitHub akan otomatis memperbarui website `alfalia.web.app`.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 2. Build APK Android
+Setiap kali Anda melakukan push kode, GitHub akan membuatkan APK versi **Release** terbaru.
+- Buka repositori di GitHub.
+- Pergi ke tab **Actions**.
+- Pilih workflow terbaru dan unduh file di bagian **Artifacts**.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+*Catatan: Pastikan GitHub Secrets sudah dikonfigurasi sesuai panduan di `README_KEYSTORE.md` agar build berjalan lancar.*
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
+© 2026 ALFAZA CELL - Premium Store Management System
