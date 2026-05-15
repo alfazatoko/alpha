@@ -92,6 +92,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
 
+  // Grafik State
+  const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
+  const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
+
   useEffect(() => {
     if (activeOwnerModal === 'izin') {
       try {
@@ -973,26 +977,158 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerModal === 'grafik' && (() => {
-                const todayISO = new Date().toLocaleDateString('en-CA');
-                const volHarian = props.transactions.filter(t => t.timestamp.startsWith(todayISO)).reduce((s,t) => s + t.nominal, 0);
-                const volBulanIni = props.transactions.reduce((s,t) => s + t.nominal, 0); // approx all data for now
+                const now = new Date()
+                now.setHours(0,0,0,0)
+                
+                // Helper to format Date or timestamp string to 'YYYY-MM-DD' in LOCAL timezone
+                const formatLocalISO = (d: Date | string) => {
+                  const dateObj = typeof d === 'string' ? new Date(d) : d;
+                  const tzOffset = dateObj.getTimezoneOffset() * 60000;
+                  return (new Date(dateObj.getTime() - tzOffset)).toISOString().split('T')[0];
+                }
+
+                // Filter transactions by selected Kasir and EXCLUDE non-sales (Isi Saldo, dsb)
+                let filteredTxs = props.transactions.filter(t => !t.kategori.startsWith('Isi'))
+                if (grafikFilterKasir !== 'Semua') {
+                  filteredTxs = filteredTxs.filter(t => t.kasir_id === grafikFilterKasir)
+                }
+
+                // Function to group by date string prefix (comparing using Local ISO)
+                const sumByPrefix = (prefix: string) => 
+                  filteredTxs.filter(t => formatLocalISO(t.timestamp).startsWith(prefix)).reduce((s, t) => s + t.nominal, 0)
+
+                let chartData: { label: string, value: number }[] = []
+                
+                if (grafikRange === 'harian') {
+                  // Last 7 days
+                  chartData = Array.from({length: 7}, (_, i) => {
+                    const d = new Date(now)
+                    d.setDate(d.getDate() - (6 - i))
+                    const val = sumByPrefix(formatLocalISO(d))
+                    return { label: d.toLocaleDateString('id-ID', { weekday: 'short' }), value: val }
+                  })
+                } else if (grafikRange === 'mingguan') {
+                  // Last 4 weeks
+                  chartData = Array.from({length: 4}, (_, i) => {
+                    const d = new Date(now)
+                    d.setDate(d.getDate() - (21 - i * 7)) // 3 weeks ago, 2 weeks, 1 week, this week
+                    // To simplify, we'll just sum the 7 days of that week
+                    let weekSum = 0
+                    for(let j=0; j<7; j++) {
+                      const wd = new Date(d)
+                      wd.setDate(wd.getDate() + j)
+                      weekSum += sumByPrefix(formatLocalISO(wd))
+                    }
+                    return { label: `M${i+1}`, value: weekSum }
+                  })
+                } else {
+                  // Last 6 months
+                  chartData = Array.from({length: 6}, (_, i) => {
+                    const d = new Date(now)
+                    d.setMonth(d.getMonth() - (5 - i))
+                    const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                    const val = sumByPrefix(yearMonth)
+                    return { label: d.toLocaleDateString('id-ID', { month: 'short' }), value: val }
+                  })
+                }
+
+                const maxVal = Math.max(...chartData.map(d => d.value), 1) // avoid div by 0
+
+                const todayISO = formatLocalISO(now)
+                const volHarian = sumByPrefix(todayISO)
+                const volSemua = filteredTxs.reduce((s,t) => s + t.nominal, 0)
+
                 return (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
-                      <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Transaksi Harian</p>
-                      <h2 className="text-2xl font-black text-emerald-600 mt-1">Rp {volHarian.toLocaleString('id-ID')}</h2>
+                  <div className="space-y-5">
+                    {/* Controls */}
+                    <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                      <select
+                        value={grafikFilterKasir}
+                        onChange={(e) => setGrafikFilterKasir(e.target.value)}
+                        className="bg-white border border-gray-200 text-emerald-800 text-[10px] font-black py-1.5 px-2 rounded-lg outline-none cursor-pointer flex-1 mr-2"
+                      >
+                        <option value="Semua">Semua Kasir</option>
+                        {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
+                      </select>
+
+                      <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0">
+                        {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
+                          <button 
+                            key={range}
+                            onClick={() => setGrafikRange(range)}
+                            className={cn(
+                              "text-[9px] font-black uppercase px-2 py-1.5 transition-colors",
+                              grafikRange === range ? "bg-emerald-600 text-white" : "text-gray-500 hover:bg-gray-50"
+                            )}
+                          >
+                            {range === 'harian' ? 'HARI' : range === 'mingguan' ? 'MINGGU' : 'BULAN'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
-                      <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Total Transaksi (Semua)</p>
-                      <h2 className="text-2xl font-black text-blue-600 mt-1">Rp {volBulanIni.toLocaleString('id-ID')}</h2>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[1.5rem] text-white shadow-lg shadow-emerald-200 text-center relative overflow-hidden">
+                        <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+                        <p className="text-[9px] font-black text-emerald-100 uppercase tracking-widest relative z-10">Hari Ini</p>
+                        <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volHarian/1000).toLocaleString('id-ID')}K</h2>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[1.5rem] text-white shadow-lg shadow-blue-200 text-center relative overflow-hidden">
+                        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+                        <p className="text-[9px] font-black text-blue-100 uppercase tracking-widest relative z-10">Total ({grafikFilterKasir === 'Semua' ? 'All' : 'Kasir'})</p>
+                        <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volSemua/1000).toLocaleString('id-ID')}K</h2>
+                      </div>
                     </div>
-                    <div className="h-32 bg-gray-50 rounded-2xl border border-gray-100 flex items-end justify-between p-4 px-6">
-                      {/* Fake simple bar chart */}
-                      {[40, 70, 45, 90, 60, 80, 100].map((h, i) => (
-                        <div key={i} className="w-4 bg-blue-400 rounded-t-sm" style={{ height: `${h}%` }}></div>
-                      ))}
+
+                    {/* Chart Area */}
+                    <div className="bg-white rounded-[2rem] border border-gray-100 p-5 shadow-sm">
+                      <div className="flex justify-between items-end mb-6">
+                        <div>
+                          <h4 className="text-[12px] font-black text-gray-800 uppercase tracking-tighter">Tren Penjualan</h4>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                            {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
+                          </p>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
+                          <i className="fa-solid fa-chart-line text-sm"></i>
+                        </div>
+                      </div>
+
+                      {/* Bar Chart Representation */}
+                      <div className="h-40 flex items-end justify-between gap-1 pt-4 relative">
+                        {/* Horizontal Grid lines */}
+                        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
+                          <div className="w-full h-px bg-gray-100"></div>
+                          <div className="w-full h-px bg-gray-100"></div>
+                          <div className="w-full h-px bg-gray-100"></div>
+                          <div className="w-full h-px bg-gray-200"></div>
+                        </div>
+
+                        {chartData.map((d, i) => {
+                          const heightPct = Math.max((d.value / maxVal) * 100, 4); // min height 4% for visibility
+                          return (
+                            <div key={i} className="relative flex flex-col items-center flex-1 group h-full justify-end z-10 pb-6">
+                              {/* Tooltip on hover/active */}
+                              <div className="absolute -top-8 bg-gray-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                                Rp {(d.value/1000).toLocaleString('id-ID')}K
+                              </div>
+                              {/* Bar */}
+                              <div 
+                                className="w-full max-w-[28px] bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t-[4px] transition-all duration-500 hover:from-emerald-400 hover:to-teal-300 shadow-sm"
+                                style={{ height: `${heightPct}%` }}
+                              ></div>
+                              {/* Label */}
+                              <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
+                                {d.label}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                    <p className="text-[9px] text-center font-bold text-gray-400 uppercase">Grafik 7 Hari Terakhir</p>
                   </div>
                 )
               })()}

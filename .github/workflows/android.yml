@@ -1,0 +1,50 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main # Jalankan otomatis jika ada kode baru di branch main
+  workflow_dispatch: # Mengizinkan Anda menekan tombol "Run workflow" secara manual di GitHub
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20 # Sesuai dengan versi Node lokal Anda
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Web App
+        run: npm run build
+
+      - name: Setup Java JDK (Dibutuhkan untuk Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # Capacitor 6 butuh minimal Java 17
+
+      - name: Sinkronisasi ke Android (Capacitor)
+        run: npx cap sync android
+
+      - name: Beri Izin Eksekusi untuk Gradle
+        working-directory: ./android
+        run: chmod +x gradlew
+
+      - name: Build APK (Mode Debug)
+        working-directory: ./android
+        run: ./gradlew assembleDebug
+
+      - name: Upload File APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALFAZA-ALPHA-APP.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
