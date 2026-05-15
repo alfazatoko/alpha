@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { parseNominal, formatInputRupiah, cn } from './lib/utils'
+import { parseNominal, formatInputRupiah, cn, getLocalISOString } from './lib/utils'
 import type { Transaction } from './types'
 
 // Components
@@ -349,8 +349,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   }, [googleUid, isLoggedIn, username, account.name])
 
   // Filter State
-  const [filterTanggalMulai, setFilterTanggalMulai] = useState(new Date().toISOString().split('T')[0])
-  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(new Date().toISOString().split('T')[0])
+  const [filterTanggalMulai, setFilterTanggalMulai] = useState(getLocalISOString().split('T')[0])
+  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(getLocalISOString().split('T')[0])
   const [filterPencarian, setFilterPencarian] = useState('')
   const [filterKategori, setFilterKategori] = useState('Semua')
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
@@ -542,7 +542,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       nominal,
       admin_fee: admin,
       keterangan: formKeterangan || '-',
-      timestamp: new Date().toISOString()
+      timestamp: getLocalISOString()
     }
 
     supabase.from('transactions').insert(newTx).then(({ error }) => {
@@ -588,7 +588,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       nominal,
       admin_fee: 0,
       keterangan: isiKeterangan || 'Setoran Saldo',
-      timestamp: new Date().toISOString()
+      timestamp: getLocalISOString()
     }
 
     supabase.from('transactions').insert(newTx).then(({ error }) => {

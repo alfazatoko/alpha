@@ -23,3 +23,9 @@ export const formatInputRupiah = (value: string) => {
   const nominal = value.replace(/[^0-9]/g, '');
   return nominal.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
+
+export const getLocalISOString = () => {
+  const d = new Date();
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, -1);
+};

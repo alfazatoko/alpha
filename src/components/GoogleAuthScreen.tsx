@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { Capacitor } from '@capacitor/core'
 
 export const GoogleAuthScreen: React.FC = () => {
   const [loading, setLoading] = useState(false)
@@ -9,10 +10,14 @@ export const GoogleAuthScreen: React.FC = () => {
     try {
       setLoading(true)
       setError('')
+      const redirectTo = Capacitor.isNativePlatform() 
+        ? 'com.alfazacell.alpha://login' 
+        : window.location.origin;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo,
         }
       })
       if (error) throw error

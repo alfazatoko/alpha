@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, CreditCard, Plus, Minus, Calendar } from "lucide-react";
-import { formatRupiah, cn } from "../lib/utils";
+import { formatRupiah, cn, getLocalISOString } from "../lib/utils";
 
 interface VoucherItem {
   id: number;
@@ -117,7 +117,7 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
 };
 
 const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalISOString().split('T')[0]);
   const [dataVoucher, setDataVoucher] = useState<Record<string, VoucherItem[]>>(JSON.parse(localStorage.getItem(`stok_voucher_${selectedDate}`) || JSON.stringify(initialDataVoucher)));
   const [dataQris, setDataQris] = useState<QrisItem[]>(JSON.parse(localStorage.getItem(`stok_qris_${selectedDate}`) || "[]"));
   

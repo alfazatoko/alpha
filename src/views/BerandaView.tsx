@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { formatRupiah, cn } from '../lib/utils'
+import { formatRupiah, cn, getLocalISOString } from '../lib/utils'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
@@ -69,6 +69,359 @@ const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({
   )
 }
 
+const GajiPanel: React.FC<{
+  kasirList: Record<string, KasirAccount>
+  absensiList?: any[]
+}> = ({ kasirList, absensiList }) => {
+  const [selectedKasir, setSelectedKasir] = useState<string>('')
+  const [month, setMonth] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [mode, setMode] = useState<'harian' | 'bulanan'>('harian')
+  const [gajiPerHari, setGajiPerHari] = useState(() => localStorage.getItem("alfaza_gaji_per_hari") || "50000")
+  const [gajiBulanan, setGajiBulanan] = useState(() => localStorage.getItem("alfaza_gaji_bulanan") || "0")
+  const [bonus, setBonus] = useState("0")
+  const [potonganLain, setPotonganLain] = useState("0")
+  const [ketPotongan, setKetPotongan] = useState("")
+  const [editHariKerja, setEditHariKerja] = useState(false)
+  const [hariKerjaManual, setHariKerjaManual] = useState("")
+  const [editIzin, setEditIzin] = useState(false)
+  const [izinManual, setIzinManual] = useState("")
+  const [catatan, setCatatan] = useState("")
+  const slipRef = React.useRef<HTMLDivElement>(null)
+
+  const [izinList, setIzinList] = useState<any[]>([])
+  
+  useEffect(() => {
+    const saved = localStorage.getItem('alphaPro_catatanIzin')
+    if (saved) {
+      setIzinList(JSON.parse(saved))
+    }
+  }, [month])
+
+  useEffect(() => {
+    localStorage.setItem("alfaza_gaji_per_hari", gajiPerHari.replace(/\D/g, ''))
+  }, [gajiPerHari])
+  useEffect(() => {
+    localStorage.setItem("alfaza_gaji_bulanan", gajiBulanan.replace(/\D/g, ''))
+  }, [gajiBulanan])
+
+  const kasirArr = Object.entries(kasirList).filter(([id]) => id !== 'owner')
+  useEffect(() => {
+    if (!selectedKasir && kasirArr.length > 0) {
+      setSelectedKasir(kasirArr[0][0])
+    }
+  }, [kasirArr, selectedKasir])
+
+  const selectedName = kasirList[selectedKasir]?.name || ''
+
+  const absenCount = (absensiList || []).filter(a => a.username === selectedKasir && a.tanggal.startsWith(month)).length
+  const izinCount = izinList.filter(iz => iz.nama === selectedName && iz.tanggal.startsWith(month)).length
+
+  const hariKerja = editHariKerja ? (parseInt(hariKerjaManual) || 0) : absenCount
+  const currentIzin = editIzin ? (parseInt(izinManual) || 0) : izinCount
+  const parseNum = (str: string) => parseInt(str.replace(/\D/g, '')) || 0
+  const formatNum = (str: string) => {
+    const num = parseInt(str.replace(/\D/g, '')) || 0
+    return num.toLocaleString('id-ID')
+  }
+
+  const ratePerHari = mode === "harian" ? parseNum(gajiPerHari) : Math.round(parseNum(gajiBulanan) / 30)
+  const gajiPokok = mode === "harian" ? hariKerja * ratePerHari : parseNum(gajiBulanan)
+  const potonganIzinVal = currentIzin * ratePerHari
+  const totalGaji = gajiPokok + parseNum(bonus) - potonganIzinVal - parseNum(potonganLain)
+
+  const [y, m] = month.split("-").map(Number)
+  const monthDate = new Date(y, m - 1)
+  const monthLabel = monthDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+
+  useEffect(() => {
+    setHariKerjaManual(String(absenCount))
+    setEditHariKerja(false)
+    setIzinManual(String(izinCount))
+    setEditIzin(false)
+  }, [selectedKasir, month, absenCount, izinCount])
+
+  const handleShareText = async () => {
+    const lines = [
+      `Slip Gaji - ${monthLabel.toUpperCase()}`,
+      `Nama: ${selectedName}`,
+      `Hari Kerja: ${hariKerja} hari`,
+      `Izin: ${currentIzin} hari ${potonganIzinVal > 0 ? `(-${formatRupiah(potonganIzinVal)})` : ""}`,
+      `Gaji Pokok: ${formatRupiah(gajiPokok)}`,
+      `Bonus: ${formatRupiah(parseNum(bonus))}`,
+      `Potongan Izin: -${formatRupiah(potonganIzinVal)}`,
+      ...(parseNum(potonganLain) > 0 ? [`Potongan Lain: -${formatRupiah(parseNum(potonganLain))}${ketPotongan ? ` (${ketPotongan})` : ""}`] : []),
+      `Total Gaji: ${formatRupiah(totalGaji)}`,
+    ]
+    if (catatan) lines.push(`Catatan: ${catatan}`)
+    const text = lines.join("\n")
+    try {
+      if (navigator.share) {
+        await navigator.share({ text })
+      } else {
+        await navigator.clipboard.writeText(text)
+        alert("Teks disalin ke clipboard")
+      }
+    } catch {}
+  }
+
+  const handleSharePDF = async () => {
+    if (!slipRef.current) return
+    try {
+      const html2canvasModule = await import('html2canvas')
+      const html2canvas = html2canvasModule.default
+      const canvas = await html2canvas(slipRef.current, { scale: 2, useCORS: true, backgroundColor: null })
+      const imgData = canvas.toDataURL("image/png")
+      const { default: jsPDF } = await import("jspdf")
+      
+      const pdf = new jsPDF("p", "mm", "a5")
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const imgWidth = pdfWidth - 20
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      
+      pdf.addImage(imgData, "PNG", 10, 15, imgWidth, imgHeight)
+      
+      pdf.setFontSize(8)
+      pdf.setFont("helvetica", "italic")
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(`Dicetak pada: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`, pdfWidth / 2, imgHeight + 25, { align: "center" })
+
+      const blob = pdf.output("blob")
+      const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.pdf`
+      const file = new File([blob], filename, { type: "application/pdf" })
+      
+      if (navigator.share) {
+        await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {})
+      } else {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (e) {
+      alert("Gagal share PDF")
+      console.error(e)
+    }
+  }
+
+  return (
+    <div className="space-y-4 pb-10">
+      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PILIH KASIR</label>
+            <select
+              value={selectedKasir}
+              onChange={e => setSelectedKasir(e.target.value)}
+              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+            >
+              {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PERIODE BULAN</label>
+            <input
+              type="month"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+            />
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">MODE PENGHITUNGAN</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMode("harian")}
+              className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", mode === "harian" ? "bg-green-600 text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200")}
+            >
+              {mode === "harian" && <i className="fa-solid fa-check mr-1"></i>} Gajih / Hari
+            </button>
+            <button
+              onClick={() => setMode("bulanan")}
+              className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", mode === "bulanan" ? "bg-green-600 text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200")}
+            >
+              {mode === "bulanan" && <i className="fa-solid fa-check mr-1"></i>} Gajih Full 1 Bulan
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+              {mode === "harian" ? "GAJI / HARI" : "GAJI FULL BULAN"}
+            </label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={mode === "harian" ? gajiPerHari : gajiBulanan}
+                onChange={e => mode === "harian" ? setGajiPerHari(formatNum(e.target.value)) : setGajiBulanan(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">BONUS</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={bonus}
+                onChange={e => setBonus(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">POTONGAN LAIN</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-red-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={potonganLain}
+                onChange={e => setPotonganLain(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-red-200 outline-none font-bold bg-red-50 text-red-700 focus:border-red-400"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">KET POTONGAN</label>
+            <input
+              type="text"
+              value={ketPotongan}
+              onChange={e => setKetPotongan(e.target.value)}
+              placeholder="Kasbon, dll"
+              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
+              HARI KERJA
+              <span className="flex items-center gap-1 cursor-pointer" onClick={() => { setEditHariKerja(!editHariKerja); setHariKerjaManual(String(absenCount)) }}>
+                <input type="checkbox" checked={editHariKerja} readOnly className="w-2.5 h-2.5" /> <span className="text-[8px] text-blue-600">EDIT</span>
+              </span>
+            </label>
+            {editHariKerja ? (
+              <input type="number" value={hariKerjaManual} onChange={e => setHariKerjaManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-blue-200 outline-none font-bold bg-blue-50 text-blue-700" />
+            ) : (
+              <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700">{absenCount} hari</div>
+            )}
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
+              IZIN / ALPHA
+              <span className="flex items-center gap-1 cursor-pointer" onClick={() => { setEditIzin(!editIzin); setIzinManual(String(izinCount)) }}>
+                <input type="checkbox" checked={editIzin} readOnly className="w-2.5 h-2.5" /> <span className="text-[8px] text-blue-600">EDIT</span>
+              </span>
+            </label>
+            {editIzin ? (
+              <input type="number" value={izinManual} onChange={e => setIzinManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-orange-200 outline-none font-bold bg-orange-50 text-orange-700" />
+            ) : (
+              <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700">{izinCount} hari</div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">CATATAN TAMBAHAN</label>
+          <textarea
+            value={catatan}
+            onChange={e => setCatatan(e.target.value)}
+            rows={2}
+            placeholder="Pesan untuk karyawan..."
+            className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white resize-none focus:border-green-400"
+          ></textarea>
+        </div>
+      </div>
+
+      <div ref={slipRef} className="bg-gradient-to-br from-green-700 to-emerald-500 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-xl -ml-5 -mb-5 pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <h2 className="text-center font-black text-lg tracking-widest uppercase mb-0.5 drop-shadow-sm">SLIP GAJI</h2>
+          <p className="text-center text-green-100 text-[10px] font-bold uppercase tracking-widest mb-4">PERIODE {monthLabel}</p>
+
+          <div className="space-y-2.5 bg-black/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
+            <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
+              <span className="text-[10px] font-bold text-green-100 uppercase tracking-widest">NAMA</span>
+              <span className="font-black uppercase tracking-widest">{selectedName}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Hari Kerja</span>
+              <span className="font-black">{hariKerja} hari</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Izin / Alpha</span>
+              <span className="font-black">{currentIzin} hari {potonganIzinVal > 0 && <span className="text-red-200">(-{formatRupiah(potonganIzinVal)})</span>}</span>
+            </div>
+            <div className="flex justify-between text-[11px] pt-1">
+              <span className="text-green-100 font-bold uppercase">Gaji Pokok</span>
+              <span className="font-black">{formatRupiah(gajiPokok)}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Bonus</span>
+              <span className="font-black text-green-200">{formatRupiah(parseNum(bonus))}</span>
+            </div>
+            {parseNum(potonganLain) > 0 && (
+              <div className="flex justify-between text-[11px]">
+                <span className="text-red-200 font-bold uppercase">Potongan {ketPotongan ? `(${ketPotongan})` : ""}</span>
+                <span className="font-black text-red-200">-{formatRupiah(parseNum(potonganLain))}</span>
+              </div>
+            )}
+            {catatan && (
+              <div className="flex justify-between text-[10px] pt-1 border-t border-white/10 mt-1">
+                <span className="text-green-100 font-bold uppercase w-1/3">Catatan</span>
+                <span className="font-black text-right opacity-90">{catatan}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex justify-between items-end">
+            <div>
+              <p className="text-[9px] font-bold text-green-200 uppercase tracking-widest mb-0.5">TOTAL DITERIMA</p>
+              <span className="font-black text-2xl tracking-tighter drop-shadow-md">{formatRupiah(totalGaji)}</span>
+            </div>
+            <div className="text-right">
+              <p className="text-[7px] font-bold text-green-200 uppercase tracking-widest">ALFAZA CELL</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={handleShareText}
+          className="flex-1 bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+        >
+          <i className="fa-solid fa-copy text-xs"></i> SALIN TEKS
+        </button>
+        <button
+          onClick={handleSharePDF}
+          className="flex-1 bg-green-600 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+        >
+          <i className="fa-solid fa-share-nodes text-xs"></i> BAGIKAN PDF
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
@@ -114,7 +467,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const simpanIzin = () => {
     if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return alert('Lengkapi semua data!')
-    const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: new Date().toISOString() }
+    const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: getLocalISOString() }
     const updated = [baru, ...catatanIzin]
     setCatatanIzin(updated)
     localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
@@ -887,12 +1240,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerModal === 'gaji' && (
-                <div className="text-center py-10 space-y-4">
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
-                    <i className="fa-solid fa-sack-dollar text-2xl"></i>
-                  </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Modul Penggajian Sedang Disiapkan</p>
-                </div>
+                <GajiPanel kasirList={props.kasirList} absensiList={props.absensiList} />
               )}
 
               {activeOwnerModal === 'izin' && (

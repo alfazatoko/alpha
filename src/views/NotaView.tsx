@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { ArrowLeft, Printer, Plus, Trash2 } from "lucide-react";
-import { formatRupiah, formatInputRupiah, parseNominal } from "../lib/utils";
+import { formatRupiah, formatInputRupiah, parseNominal, getLocalISOString } from "../lib/utils";
 
 interface NotaItem {
   nama: string;
@@ -14,7 +14,7 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }
   const [address] = useState("Jl. Merdeka No. 123, Indonesia");
   const [items, setItems] = useState<NotaItem[]>([]);
   const [currentItem, setCurrentItem] = useState<NotaItem>({ nama: "", harga: "", jumlah: "" });
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(getLocalISOString().split('T')[0]);
 
   const [isPreview, setIsPreview] = useState(false);
   
