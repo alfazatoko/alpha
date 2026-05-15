@@ -97,7 +97,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       <div className={`login-card ${isShaking ? 'shake' : ''}`}>
         {/* Logo / Title */}
         <div className="login-header">
-          <img src="/logo-alpha.png" alt="ALPHA Logo" className="w-20 h-20 object-contain mx-auto mb-4 drop-shadow-xl" />
+          <img src="/logo_A.png" alt="ALPHA Logo" className="w-20 h-20 object-contain mx-auto mb-4 drop-shadow-xl" />
           <h1 className="login-title">
             ALPHA <span className="login-title-accent">Pro</span>
           </h1>

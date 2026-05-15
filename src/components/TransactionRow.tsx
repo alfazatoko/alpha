@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { Transaction } from '../types'
-import { cn } from '../lib/utils'
+import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 
 interface TransactionRowProps {
   t: Transaction
@@ -12,7 +12,8 @@ interface TransactionRowProps {
 
 const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDelete, kasirRole }) => {
   const [isOpen, setIsOpen] = useState(false)
-  const jam = new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+  const dateObj = parseLocalISO(t.timestamp)
+  const jam = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 
   const handleEditClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -24,12 +25,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
     onDelete?.(t);
   }
 
-  const isToday = t.timestamp.startsWith(new Date().toLocaleDateString('en-CA'))
+  const isToday = t.timestamp.startsWith(getLocalDateString())
   const canEdit = isToday
   const canDelete = isToday && kasirRole === 'owner'
 
   return (
-    <div className="flex flex-col group">
+    <div className="flex flex-col group transaction-row-container">
       <div 
         className="flex justify-between items-start py-2 cursor-pointer active:bg-slate-50 transition-all px-1"
         onClick={() => setIsOpen(!isOpen)}
@@ -46,8 +47,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
             <div className="text-[14px] font-black text-slate-800 tracking-tight uppercase">
                {t.kategori}
             </div>
-            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-tighter">
-               {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.15em]">
+               {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
         </div>

@@ -419,3 +419,103 @@ select {
   10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
   20%, 40%, 60%, 80% { transform: translateX(4px); }
 }
+/* ═══════════════════════════════════════
+   RESPONSIVE LANDSCAPE AUTOMATIS
+   ═══════════════════════════════════════ */
+
+@media screen and (orientation: landscape) and (max-device-height: 500px) {
+  /* Khusus untuk HP saat dimiringkan (Landscape) */
+  
+  .app-container.hp, 
+  .app-container.tablet,
+  .app-container {
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Navigasi lebih ramping di landscape agar tidak makan tempat */
+  nav.fixed.bottom-0 {
+    padding-top: 4px !important;
+    padding-bottom: env(safe-area-inset-bottom, 4px) !important;
+  }
+  
+  nav ul li div {
+    flex-direction: row !important;
+    gap: 8px !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
+  
+  nav ul li div span {
+    font-size: 10px !important;
+  }
+
+  /* Perkecil padding halaman */
+  .page-view {
+    padding-bottom: 50px !important;
+  }
+
+  /* Tombol toggle navigasi disesuaikan */
+  button.fixed.right-10.z-\[60\] {
+    right: 20px !important;
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Optimasi Form Transaksi di Landscape */
+  .form-transaksi-container {
+    padding: 10px !important;
+  }
+  
+  .form-transaksi-container h3 {
+    margin-bottom: 6px !important;
+  }
+  
+  .form-transaksi-container .space-y-3 > * {
+    margin-top: 0.5rem !important;
+  }
+
+  /* Optimasi Summary Cards di Landscape */
+  .summary-cards-container {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  .summary-cards-container > div {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 8px 4px !important;
+    margin-top: 0 !important;
+  }
+  
+  .summary-cards-container > div .text-right {
+    text-align: center !important;
+    margin-top: 4px !important;
+  }
+
+  /* Optimasi List Transaksi di Landscape */
+  .transaction-row-container .max-w-\[180px\] {
+    max-width: 400px !important;
+  }
+
+  /* Scrollbar lebih tipis di landscape */
+  .hide-scrollbar::-webkit-scrollbar {
+    width: 3px;
+  }
+}
+
+/* Deteksi Tablet Otomatis (iPad/Tablet Android) */
+@media screen and (min-width: 769px) and (orientation: portrait) {
+  .app-container:not(.hp):not(.pc) {
+    width: 768px !important;
+    height: 90vh !important;
+    margin: 5vh auto !important;
+    border-radius: 2rem !important;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
+  }
+}

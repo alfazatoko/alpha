@@ -1,8 +1,13 @@
-with open(r'c:\Users\Administrator\Desktop\ALFAZA CELL\ALPHA\src\views\LaporanView.tsx', 'r', encoding='utf-8') as f:
-    lines = f.readlines()
+import re
 
-open_divs = 0
-for i, line in enumerate(lines):
-    open_divs += line.count('<div')
-    open_divs -= line.count('</div>')
-    print(f"{i+1}: {open_divs}")
+with open(r'c:\Users\Administrator\Desktop\ALFAZA CELL\ALPHA\src\views\AkunView.tsx', 'r') as f:
+    content = f.read()
+
+opens = len(re.findall(r'<div', content))
+closes = len(re.findall(r'</div', content))
+print(f"Opens: {opens}, Closes: {closes}")
+
+# Also check for curly braces
+c_opens = content.count('{')
+c_closes = content.count('}')
+print(f"Curly Opens: {c_opens}, Curly Closes: {c_closes}")

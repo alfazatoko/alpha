@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { App as CapApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
-import { parseNominal, formatInputRupiah, cn, getLocalISOString } from './lib/utils'
+import { parseNominal, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
 import type { Transaction } from './types'
 
 // Components
@@ -129,7 +129,7 @@ const App: React.FC = () => {
   }
 
   // ── Show Profile Selection (Kasir) if not selected ──
-  if (!isLoggedIn) {
+  if (!isLoggedIn || !currentAccount) {
     return (
       <div className="relative">
         <button 
@@ -147,7 +147,7 @@ const App: React.FC = () => {
   return (
     <MainApp 
       username={currentUsername} 
-      account={currentAccount!} 
+      account={currentAccount} 
       googleUid={googleSession.user.id} 
       onLogout={handleLogout}
       kasirList={kasirList}
@@ -243,12 +243,41 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
   // Running Text State
   const [runningTexts, setRunningTexts] = useState<string[]>(() => {
-    const saved = localStorage.getItem('alphaPro_runningTexts')
-    return saved ? JSON.parse(saved) : Array(15).fill('')
+    try {
+      const saved = localStorage.getItem('alphaPro_runningTexts')
+      const parsed = saved ? JSON.parse(saved) : null
+      return Array.isArray(parsed) ? parsed : Array(15).fill('')
+    } catch (e) {
+      return Array(15).fill('')
+    }
   })
   const [mainAnnouncement, setMainAnnouncement] = useState<string>(() => {
     return localStorage.getItem('alphaPro_mainAnnouncement') || 'Selamat Datang di ALFAZA CELL'
   })
+
+  // Store Profile State (with defensive fallbacks)
+  const [storeName, setStoreName] = useState<string>(() => {
+    return localStorage.getItem('alphaPro_storeName') || 'ALFAZA CELL'
+  })
+  const [storeSubtext, setStoreSubtext] = useState<string>(() => {
+    return localStorage.getItem('alphaPro_storeSubtext') || 'Agen BRILink & Ponsel'
+  })
+  const [storePhoto, setStorePhoto] = useState<string>(() => {
+    return localStorage.getItem('alphaPro_storePhoto') || ''
+  })
+
+  const saveStoreName = (name: string) => {
+    setStoreName(name)
+    localStorage.setItem('alphaPro_storeName', name)
+  }
+  const saveStoreSubtext = (sub: string) => {
+    setStoreSubtext(sub)
+    localStorage.setItem('alphaPro_storeSubtext', sub)
+  }
+  const saveStorePhoto = (photo: string) => {
+    setStorePhoto(photo)
+    localStorage.setItem('alphaPro_storePhoto', photo)
+  }
 
   const saveRunningTexts = (texts: string[]) => {
     setRunningTexts(texts)
@@ -315,7 +344,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   useEffect(() => {
     if (!googleUid || !isLoggedIn || !username) return
 
-    const today = new Date().toLocaleDateString('en-CA')
+    const today = getLocalDateString()
     
     const manageAbsensi = async () => {
       // 1. Check/Record today's attendance for current user
@@ -365,18 +394,18 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [googleUid, isLoggedIn, username, account.name])
+  }, [googleUid, isLoggedIn, username, account?.name])
 
   // Filter State
-  const [filterTanggalMulai, setFilterTanggalMulai] = useState(getLocalISOString().split('T')[0])
-  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(getLocalISOString().split('T')[0])
+  const [filterTanggalMulai, setFilterTanggalMulai] = useState(getLocalDateString())
+  const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(getLocalDateString())
   const [filterPencarian, setFilterPencarian] = useState('')
   const [filterKategori, setFilterKategori] = useState('Semua')
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
   const [filterKasir, setFilterKasir] = useState('Semua')
   
   // Laporan Date Filter
-  const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(new Date().toLocaleDateString('en-CA'))
+  const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(getLocalDateString())
   const [dailyReport, setDailyReport] = useState<any>(null)
 
   // Recalculate daily balances whenever transactions change
@@ -388,7 +417,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       relevantTxs = transactions.filter(t => t.kasir_id === filterKasir);
     }
 
-    const todayISO = new Date().toLocaleDateString('en-CA')
+    const todayISO = getLocalDateString()
     const todayTxs = relevantTxs.filter(t => t.timestamp.startsWith(todayISO))
     
     let calcSaldoBank = 0
@@ -410,23 +439,20 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setSaldoBank(calcSaldoBank)
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
-  }, [transactions, account.role, username, filterKasir])
+  }, [transactions, account?.role, username, filterKasir])
 
   // Fetch Aggregated Report for LaporanView
   useEffect(() => {
     const fetchDailyReport = async () => {
-      let targetKasir = filterKasir;
-      if (account.role !== 'owner') targetKasir = username;
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('daily_reports')
         .select('*')
         .eq('user_id', googleUid)
-        .eq('kasir_id', targetKasir)
-        .eq('report_date', filterTanggalLaporan)
-        .single()
-
-      if (!error && data) {
+        .eq('tanggal', filterTanggalLaporan)
+        .maybeSingle()
+      
+      if (data) {
         setDailyReport({
           saldoBank: Number(data.saldo_bank),
           kasModal: Number(data.modal_kasir),
@@ -438,18 +464,17 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) - Number(data.total_tarik)
         })
       } else {
-        // Fallback: Calculate manually from transactions state for the selected date
-        let relevantTxs = transactions;
-        if (account.role !== 'owner') {
-          relevantTxs = transactions.filter(t => t.kasir_id === username);
+        // Fallback: Calculate manually
+        const dateTxs = transactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))
+        let filteredTxs = dateTxs;
+        if (account?.role !== 'owner') {
+          filteredTxs = dateTxs.filter(t => t.kasir_id === username)
         } else if (filterKasir !== 'Semua') {
-          relevantTxs = transactions.filter(t => t.kasir_id === filterKasir);
+          filteredTxs = dateTxs.filter(t => t.kasir_id === filterKasir)
         }
 
-        const filtered = relevantTxs.filter(t => t.timestamp.startsWith(filterTanggalLaporan));
-        
         let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0;
-        filtered.forEach(tx => {
+        filteredTxs.forEach(tx => {
           if (tx.kategori === 'Isi Saldo Bank') sBank += tx.nominal;
           if (tx.kategori === 'Isi Modal Tunai Kasir') kMod += tx.nominal;
           if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
@@ -470,14 +495,14 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalTarik: tTar,
           saldoReal: 0,
           totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
-        });
+        })
       }
     }
 
-    if (activeView === 'view-laporan') {
+    if (googleUid && isLoggedIn) {
       fetchDailyReport()
     }
-  }, [filterTanggalLaporan, filterKasir, googleUid, activeView, account.role, username])
+  }, [googleUid, isLoggedIn, filterTanggalLaporan, filterKasir, username, account?.role, transactions])
   
   // Form State
   const [formKategori, setFormKategori] = useState('')
@@ -731,7 +756,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
       
       <BerandaView 
-        active={activeView === 'view-beranda'}
+        active={activeView === 'view-beranda'} 
         setIsSidePanelOpen={setIsSidePanelOpen}
         setActiveView={setActiveView}
         saldoBank={saldoBank}
@@ -766,6 +791,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         absensiList={absensi}
         runningTexts={runningTexts}
         mainAnnouncement={mainAnnouncement}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
       />
 
       <RiwayatView 
@@ -815,6 +843,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         }
         onEdit={handleStartEdit}
         onDelete={handleDeleteTx}
+        kasirList={kasirList}
       />
 
       <AkunView 
@@ -827,6 +856,12 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         mainAnnouncement={mainAnnouncement}
         onSaveRunningTexts={saveRunningTexts}
         onSaveMainAnnouncement={saveMainAnnouncement}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
+        onSaveStoreName={saveStoreName}
+        onSaveStoreSubtext={saveStoreSubtext}
+        onSaveStorePhoto={saveStorePhoto}
       />
 
       <IsiSaldoView 
@@ -859,6 +894,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         setScreenSize={setScreenSize}
         jamAbsen={todayAbsen}
         kasirName={account.name}
+        storeName={storeName}
       />
 
 

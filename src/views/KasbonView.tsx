@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Receipt, Plus, Trash2, Edit, Check, Search, Ban, X, Camera, ImageIcon, Loader2 } from "lucide-react";
-import { formatRupiah, formatInputRupiah, parseNominal, cn } from "../lib/utils";
+import { formatRupiah, formatInputRupiah, parseNominal, cn, compressImage } from "../lib/utils";
 
 interface HutangRecord {
   id: string;
@@ -98,17 +98,24 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
     setShowForm(true);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setIsCapturing(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setPhotoUrl(event.target?.result as string);
+    try {
+      const compressedBase64 = await compressImage(file);
+      setPhotoUrl(compressedBase64);
+    } catch (err) {
+      console.error("Compression failed", err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setPhotoUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } finally {
       setIsCapturing(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const filteredHutang = useMemo(() => {

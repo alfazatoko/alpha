@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { formatRupiah, cn, getLocalISOString } from '../lib/utils'
+import { formatRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
@@ -41,6 +42,9 @@ interface BerandaViewProps {
   absensiList?: any[]
   runningTexts?: string[]
   mainAnnouncement?: string
+  storeName?: string
+  storeSubtext?: string
+  storePhoto?: string
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -72,7 +76,8 @@ const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({
 const GajiPanel: React.FC<{
   kasirList: Record<string, KasirAccount>
   absensiList?: any[]
-}> = ({ kasirList, absensiList }) => {
+  storeName?: string
+}> = ({ kasirList, absensiList, storeName }) => {
   const [selectedKasir, setSelectedKasir] = useState<string>('')
   const [month, setMonth] = useState<string>(() => {
     const now = new Date()
@@ -145,7 +150,8 @@ const GajiPanel: React.FC<{
 
   const handleShareText = async () => {
     const lines = [
-      `Slip Gaji - ${monthLabel.toUpperCase()}`,
+      `Slip Gaji - ${storeName || 'ALFAZA CELL'}`,
+      `Periode: ${monthLabel.toUpperCase()}`,
       `Nama: ${selectedName}`,
       `Hari Kerja: ${hariKerja} hari`,
       `Izin: ${currentIzin} hari ${potonganIzinVal > 0 ? `(-${formatRupiah(potonganIzinVal)})` : ""}`,
@@ -186,7 +192,7 @@ const GajiPanel: React.FC<{
       pdf.setFontSize(8)
       pdf.setFont("helvetica", "italic")
       pdf.setTextColor(150, 150, 150)
-      pdf.text(`Dicetak pada: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`, pdfWidth / 2, imgHeight + 25, { align: "center" })
+      pdf.text(`Dicetak pada: ${new Date().toLocaleString("id-ID")}`, pdfWidth / 2, imgHeight + 25, { align: "center" })
 
       const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.pdf`
 
@@ -419,7 +425,7 @@ const GajiPanel: React.FC<{
               <span className="font-black text-2xl tracking-tighter drop-shadow-md">{formatRupiah(totalGaji)}</span>
             </div>
             <div className="text-right">
-              <p className="text-[7px] font-bold text-green-200 uppercase tracking-widest">ALFAZA CELL</p>
+              <p className="text-[7px] font-bold text-green-200 uppercase tracking-widest">{storeName || 'ALFAZA CELL'}</p>
             </div>
           </div>
         </div>
@@ -443,8 +449,168 @@ const GajiPanel: React.FC<{
   )
 }
 
+const BackupPanel: React.FC<{ 
+  transactions: Transaction[], 
+  absensiList?: any[],
+  refreshData?: () => void,
+  storeName?: string
+}> = ({ transactions, absensiList, storeName }) => {
+  const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
+
+  const handleBackup = async () => {
+    try {
+      const backupData = {
+        store: storeName || "ALFAZA CELL",
+        timestamp: getLocalISOString(),
+        data: {
+          transactions,
+          absensi: absensiList || [],
+          catatanIzin: JSON.parse(localStorage.getItem('alphaPro_catatanIzin') || '[]')
+        }
+      };
+
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const filename = `ALPHA_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+
+      const { Capacitor } = await import('@capacitor/core');
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+        
+        // Convert to base64 for sharing
+        const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
+        
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+        
+        await Share.share({
+          title: "Backup Data ALPHA",
+          url: result.uri
+        });
+      } else {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      alert("Gagal backup: " + e.message);
+    }
+  };
+
+  const handleReset = async () => {
+    if (resetStep === 0) {
+      setResetStep(1);
+      return;
+    }
+
+    setResetStep(2);
+    try {
+      // 1. Reset Transactions
+      const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
+      // 2. Reset Attendance
+      const { error: absError } = await supabase.from('absensi').delete().neq('id', 0);
+      // 3. Reset Local Data
+      localStorage.removeItem('alphaPro_catatanIzin');
+      
+      if (txError || absError) throw new Error("Beberapa data gagal dihapus");
+
+      alert("Sistem berhasil direset!");
+      window.location.reload(); 
+    } catch (e: any) {
+      alert("Reset gagal: " + e.message);
+      setResetStep(0);
+    }
+  };
+
+  return (
+    <div className="space-y-4 pb-10">
+      {/* Backup Card */}
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+        <div className="relative z-10 flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/30">
+            <i className="fa-solid fa-cloud-arrow-up text-2xl"></i>
+          </div>
+          <h3 className="font-black text-lg tracking-widest uppercase mb-1">BACKUP DATA</h3>
+          <p className="text-blue-100 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-6">Amankan seluruh transaksi & absensi</p>
+          
+          <button 
+            onClick={handleBackup}
+            className="w-full bg-white text-blue-700 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <i className="fa-solid fa-file-export"></i> Ekspor ke JSON
+          </button>
+        </div>
+      </div>
+
+      {/* Reset Card */}
+      <div className="bg-white border border-red-100 rounded-[2rem] p-6 shadow-sm">
+        <div className="flex flex-col items-center text-center">
+          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-3">
+            <i className="fa-solid fa-triangle-exclamation text-xl"></i>
+          </div>
+          <h3 className="font-black text-gray-800 text-[13px] tracking-widest uppercase mb-1">RESET SISTEM</h3>
+          <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-6">Hapus seluruh data untuk periode baru</p>
+
+          {resetStep === 1 ? (
+            <div className="w-full space-y-3">
+              <p className="text-red-600 text-[10px] font-black uppercase tracking-tight bg-red-50 py-2 rounded-xl border border-red-100">Apakah Anda yakin? Data tidak bisa kembali!</p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setResetStep(0)}
+                  className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleReset}
+                  className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200"
+                >
+                  Ya, Hapus!
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button 
+              onClick={() => setResetStep(1)}
+              disabled={resetStep === 2}
+              className={cn(
+                "w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2",
+                resetStep === 2 ? "bg-gray-50 text-gray-300 border-gray-100" : "bg-white text-red-600 border-red-600 active:bg-red-50"
+              )}
+            >
+              {resetStep === 2 ? "Memproses..." : "Mulai Reset Ulang"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
+        <div className="flex gap-3">
+          <i className="fa-solid fa-circle-info text-orange-400 mt-0.5"></i>
+          <div>
+            <p className="text-[10px] font-black text-orange-800 uppercase tracking-widest mb-1">Tips Keamanan</p>
+            <p className="text-[9px] font-bold text-orange-700/70 leading-relaxed uppercase">Selalu lakukan backup sebelum melakukan reset sistem untuk menghindari kehilangan data penting permanen.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Extra panels removed to resolve duplicate declaration error
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
+  const [showLainnya, setShowLainnya] = useState(false)
   const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -455,13 +621,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   // Izin State
   const [izinNamaKasir, setIzinNamaKasir] = useState('')
-  const [izinTanggal, setIzinTanggal] = useState(new Date().toLocaleDateString('en-CA'))
+  const [izinTanggal, setIzinTanggal] = useState(getLocalDateString())
   const [izinAlasan, setIzinAlasan] = useState('')
   const [catatanIzin, setCatatanIzin] = useState<any[]>([])
   const STORAGE_KEY_IZIN = 'alphaPro_catatanIzin'
 
   // Pantau State
-  const [pantauTanggal, setPantauTanggal] = useState(new Date().toLocaleDateString('en-CA'))
+  const [pantauTanggal, setPantauTanggal] = useState(getLocalDateString())
 
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
@@ -520,27 +686,31 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </button>
           <div className="flex-1 ml-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              {/* Metallic Gray/White Logo (Background removed via Invert+Screen trick) */}
-              <img 
-                src="/logo-alpha.png" 
-                alt="Logo" 
-                className="w-12 h-12 object-contain" 
-                style={{ 
-                  filter: 'invert(1) brightness(1.2)', 
-                  mixBlendMode: 'screen' 
-                }} 
-              />
+              {props.storePhoto ? (
+                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : (
+                <img 
+                  src="/logo-alpha.png" 
+                  alt="Logo" 
+                  className="w-12 h-12 object-contain" 
+                  style={{ 
+                    filter: 'invert(1) brightness(1.2)', 
+                    mixBlendMode: 'screen' 
+                  }} 
+                />
+              )}
               <div>
-                <p className="text-blue-100 text-[10px] font-bold uppercase tracking-tight">Selamat datang,</p>
-                <h1 className="text-lg font-black text-white leading-tight">
-                  {props.kasirName || 'ALPHA'}
+                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Agen BRILink & Ponsel'}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
                   <span className={cn(
-                    "text-[9px] px-2 py-0.5 rounded-full ml-1 font-black",
+                    "text-[7px] px-1.5 py-0.5 rounded-full font-black",
                     props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white"
                   )}>
                     {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
                   </span>
-                </h1>
+                </div>
               </div>
             </div>
 
@@ -760,22 +930,60 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         </div>
       )}
 
-      <div className="px-1.5 mb-4 grid grid-cols-5 gap-2 text-center">
+      <div className="px-1.5 mb-2 grid grid-cols-5 gap-2 text-center">
         {[
           { id: 'view-kasbon', label: 'KASBON', icon: 'fa-file-invoice', color: 'bg-blue-500' },
           { id: 'view-kontak', label: 'KONTAK', icon: 'fa-address-book', color: 'bg-emerald-500' },
           { id: 'view-stok-voucher', label: 'VOUCHER', icon: 'fa-ticket', color: 'bg-orange-500' },
           { id: 'view-kalender', label: 'KALENDER', icon: 'fa-calendar-days', color: 'bg-red-500' },
-          { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'bg-purple-500' },
+          { 
+            id: showLainnya ? 'tutup-lainnya' : 'buka-lainnya', 
+            label: showLainnya ? 'TUTUP' : 'LAINNYA', 
+            icon: showLainnya ? 'fa-chevron-up' : 'fa-ellipsis', 
+            color: showLainnya ? 'bg-gray-400' : 'bg-purple-600' 
+          },
         ].map((item) => (
-          <div key={item.id} onClick={() => props.setActiveView(item.id)} className="cursor-pointer group">
-            <div className={cn("w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-white shadow-md", item.color)}>
+          <div 
+            key={item.id} 
+            onClick={() => {
+              if (item.id === 'buka-lainnya') setShowLainnya(true);
+              else if (item.id === 'tutup-lainnya') setShowLainnya(false);
+              else props.setActiveView(item.id);
+            }} 
+            className="cursor-pointer group"
+          >
+            <div className={cn("w-11 h-11 mx-auto rounded-2xl flex items-center justify-center text-white shadow-md active:scale-90 transition-transform", item.color)}>
               <i className={cn("fa-solid text-lg", item.icon)}></i>
             </div>
-            <p className="text-[10px] font-semibold text-gray-500 mt-1.5">{item.label}</p>
+            <p className="text-[9px] font-bold text-gray-500 mt-1.5 tracking-tighter uppercase">{item.label}</p>
           </div>
         ))}
       </div>
+
+      {/* Expanded Menu - Flexible Wrap */}
+      {showLainnya && (
+        <div className="px-4 py-3 mb-6 bg-gray-50/50 rounded-3xl mx-1.5 border border-dashed border-gray-200 animate-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-wrap justify-start gap-4">
+            {[
+              { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'text-purple-600', bg: 'bg-purple-50' },
+              { id: 'view-laporan', label: 'CLOSING', icon: 'fa-door-closed', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+              { id: 'view-transaksi', label: 'NON TUNAI', icon: 'fa-credit-card', color: 'text-teal-600', bg: 'bg-teal-50' },
+              // More buttons can be added here easily
+            ].map((item) => (
+              <div 
+                key={item.id} 
+                onClick={() => props.setActiveView(item.id)}
+                className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+              >
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm", item.bg, item.color)}>
+                  <i className={cn("fa-solid text-lg", item.icon)}></i>
+                </div>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {props.kasirRole === 'owner' && (
         <div className="px-1.5 mb-8">
@@ -949,7 +1157,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 </div>
                                 <div>
                                   <p className="text-xs font-black text-gray-800">{account.name}</p>
-                                  <p className="text-[8px] text-gray-400 font-bold uppercase">{new Date(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                  <p className="text-[8px] text-gray-400 font-bold uppercase">{parseLocalISO(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                                 </div>
                               </div>
                               <span className={cn(
@@ -1261,7 +1469,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerModal === 'gaji' && (
-                <GajiPanel kasirList={props.kasirList} absensiList={props.absensiList} />
+                <GajiPanel kasirList={props.kasirList} absensiList={props.absensiList} storeName={props.storeName} />
+              )}
+
+              {activeOwnerModal === 'backup' && (
+                <BackupPanel transactions={props.transactions} absensiList={props.absensiList} storeName={props.storeName} />
               )}
 
               {activeOwnerModal === 'izin' && (
@@ -1328,7 +1540,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             <p className="text-xs font-black text-gray-800">{item.nama}</p>
                             <p className="text-[9px] text-orange-600 font-bold mt-0.5">
                               <i className="fa-regular fa-calendar-alt mr-1"></i>
-                              {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                             </p>
                             <p className="text-[10px] text-gray-600 mt-1 leading-snug">{item.alasan}</p>
                           </div>
@@ -1451,45 +1663,30 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volSemua/1000).toLocaleString('id-ID')}K</h2>
                       </div>
                     </div>
-
-                    {/* Chart Area */}
-                    <div className="bg-white rounded-[2rem] border border-gray-100 p-5 shadow-sm">
-                      <div className="flex justify-between items-end mb-6">
-                        <div>
-                          <h4 className="text-[12px] font-black text-gray-800 uppercase tracking-tighter">Tren Penjualan</h4>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-[14px] font-black text-gray-900 uppercase tracking-tighter">Performa Transaksi</h4>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                             {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
-                          </p>
-                        </div>
-                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
-                          <i className="fa-solid fa-chart-line text-sm"></i>
-                        </div>
+                        </p>
                       </div>
+                      <div className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[9px] font-black uppercase">Statistik</div>
+                    </div>
 
-                      {/* Bar Chart Representation */}
-                      <div className="h-40 flex items-end justify-between gap-1 pt-4 relative">
-                        {/* Horizontal Grid lines */}
-                        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
-                          <div className="w-full h-px bg-gray-100"></div>
-                          <div className="w-full h-px bg-gray-100"></div>
-                          <div className="w-full h-px bg-gray-100"></div>
-                          <div className="w-full h-px bg-gray-200"></div>
-                        </div>
-
+                    <div className="bg-white rounded-[2rem] p-5 shadow-xl shadow-blue-500/5 border border-blue-50 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
+                      <div className="h-40 flex items-end justify-between gap-1 pt-4 relative z-10">
                         {chartData.map((d, i) => {
-                          const heightPct = Math.max((d.value / maxVal) * 100, 4); // min height 4% for visibility
+                          const heightPct = Math.max((d.value / maxVal) * 100, 4);
                           return (
-                            <div key={i} className="relative flex flex-col items-center flex-1 group h-full justify-end z-10 pb-6">
-                              {/* Tooltip on hover/active */}
+                            <div key={i} className="relative flex flex-col items-center flex-1 group h-full justify-end pb-6">
                               <div className="absolute -top-8 bg-gray-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
                                 Rp {(d.value/1000).toLocaleString('id-ID')}K
                               </div>
-                              {/* Bar */}
                               <div 
                                 className="w-full max-w-[28px] bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t-[4px] transition-all duration-500 hover:from-emerald-400 hover:to-teal-300 shadow-sm"
                                 style={{ height: `${heightPct}%` }}
                               ></div>
-                              {/* Label */}
                               <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
                                 {d.label}
                               </span>
@@ -1499,104 +1696,60 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       </div>
                     </div>
                   </div>
-                )
+                );
               })()}
 
-                              {activeOwnerModal === 'performa' && (() => {
-  const now = new Date();
-  const startDay = new Date(now);
-  startDay.setHours(0,0,0,0);
-  const startWeek = new Date(startDay);
-  startWeek.setDate(startDay.getDate() - 6); // last 7 days inclusive
-  const startMonth = new Date(startDay);
-  startMonth.setMonth(startDay.getMonth() - 1); // approx one month back
+              {activeOwnerModal === 'performa' && (
+                <div className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-[2.5rem] border border-purple-100 animate-in fade-in zoom-in duration-500 shadow-xl shadow-purple-500/5">
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <h4 className="text-[14px] font-black text-purple-950 uppercase tracking-tighter">Ranking Kasir</h4>
+                        <p className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Bulan Ini</p>
+                      </div>
+                      <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
+                        <i className="fa-solid fa-trophy"></i>
+                      </div>
+                    </div>
+                    {(() => {
+                      const sum = (txs: any[]) => txs.reduce((s, t) => s + t.nominal, 0)
+                      const now = new Date()
+                      const monthAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toLocaleDateString('en-CA')
 
-  const performa = Object.keys(props.kasirList)
-    .filter(k => k !== 'owner')
-    .map(kId => {
-      const txs = props.transactions.filter(t => t.kasir_id === kId);
-      const filter = (arr: Transaction[], from: Date) => arr.filter(t => {
-        const d = new Date(t.timestamp);
-        return d >= from && d <= now;
-      });
-      const dayTx = filter(txs, startDay);
-      const weekTx = filter(txs, startWeek);
-      const monthTx = filter(txs, startMonth);
-      const sum = (arr: Transaction[]) => arr.reduce((s: number, t: Transaction) => s + t.nominal, 0);
-      const sumAdmin = (arr: Transaction[]) => arr.reduce((s: number, t: Transaction) => s + t.adminFee, 0);
-      return {
-        id: kId,
-        name: props.kasirList[kId]?.name || kId,
-        day: { count: dayTx.length, vol: sum(dayTx), admin: sumAdmin(dayTx) },
-        week: { count: weekTx.length, vol: sum(weekTx), admin: sumAdmin(weekTx) },
-        month: { count: monthTx.length, vol: sum(monthTx), admin: sumAdmin(monthTx) },
-        totalVol: sum(txs),
-      };
-    })
-    .sort((a, b) => b.totalVol - a.totalVol);
+                      const performaData = Object.keys(props.kasirList)
+                        .filter(id => id !== 'owner')
+                        .map(kId => {
+                          const txs = props.transactions.filter(t => t.kasir_id === kId)
+                          const monthTx = txs.filter(t => t.timestamp.startsWith(monthAgo.slice(0, 7)) || t.timestamp >= monthAgo)
+                          return {
+                            id: kId,
+                            name: props.kasirList[kId]?.name || kId,
+                            monthCount: monthTx.length,
+                            monthVol: sum(monthTx)
+                          }
+                        }).sort((a, b) => b.monthVol - a.monthVol)
 
-  return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-black text-purple-800 uppercase tracking-widest mb-2">Performa Kasir</h3>
-      {performa.map(p => (
-        <div key={p.id} className="p-4 border border-purple-200 rounded-xl bg-purple-50/30 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center font-black text-white",
-                p.id===performa[0].id ? "bg-amber-400 shadow-md" : "bg-purple-300"
-              )}>
-                {performa.indexOf(p)+1}
-              </div>
-              <div>
-                <p className="text-sm font-black text-gray-800">{p.name}</p>
-                <p className="text-[9px] text-purple-600 font-bold uppercase">{p.month.count} Transaksi (Bulan)</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-black text-purple-800">Rp {p.month.vol.toLocaleString('id-ID')}</p>
-              <p className="text-[9px] text-gray-500">Admin: Rp {p.month.admin.toLocaleString('id-ID')}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-[9px] text-gray-600">
-            <div>
-              <p className="font-bold">Hari Ini</p>
-              <p>{p.day.count} trx</p>
-              <p>Rp {p.day.vol.toLocaleString('id-ID')}</p>
-            </div>
-            <div>
-              <p className="font-bold">Minggu Ini</p>
-              <p>{p.week.count} trx</p>
-              <p>Rp {p.week.vol.toLocaleString('id-ID')}</p>
-            </div>
-            <div>
-              <p className="font-bold">Bulan Ini</p>
-              <p>{p.month.count} trx</p>
-              <p>Rp {p.month.vol.toLocaleString('id-ID')}</p>
-            </div>
-          </div>
-          {/* Mini bar visualising month volume proportion */}
-          <div className="w-full bg-purple-100 rounded h-2">
-            <div className="bg-purple-600 h-full rounded" style={{ width: `${(p.month.vol/props.totalVolume*100).toFixed(1)}%` }} />
-          </div>
-        </div>
-      ))}
-      {performa.length===0 && <p className="text-center text-xs font-bold text-gray-400">Belum ada data</p>}
-    </div>
-  );
-})()}
+                      if (performaData.length === 0) return <p className="text-center text-xs font-bold text-gray-400 py-6 italic">Belum ada data transaksi bulan ini</p>
 
-
-
-
-
-              {activeOwnerModal === 'backup' && (
-                <div className="text-center py-10 space-y-4">
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
-                    <i className="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                      return performaData.map((p, idx) => (
+                        <div key={p.id} className="p-4 bg-white rounded-2xl border border-purple-100 shadow-sm flex justify-between items-center group hover:border-purple-300 transition-all active:scale-[0.98]">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shadow-md", idx === 0 ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-purple-200")}>
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-gray-800 leading-none mb-1">{p.name}</p>
+                              <p className="text-[10px] text-purple-500 font-bold uppercase tracking-tight">{p.monthCount} Transaksi</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-purple-700">{p.monthVol.toLocaleString('id-ID')}</p>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Volume 30H</p>
+                          </div>
+                        </div>
+                      ))
+                    })()}
                   </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Data Anda Aman Di Cloud</p>
-                  <button className="bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Mulai Backup</button>
                 </div>
               )}
             </div>
@@ -1619,15 +1772,64 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           />
         </div>
       )}
-
       {props.kasirRole === 'owner' && !activeOwnerModal && (
-        <div className="px-1.5 mb-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-3xl p-6 text-center shadow-inner">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600 shadow-sm">
-              <i className="fa-solid fa-chart-line text-2xl"></i>
+        <div className="px-1.5 mb-8">
+          <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-700 to-blue-900 rounded-[2.5rem] p-8 shadow-2xl shadow-blue-900/20 group">
+            {/* Background Ornaments */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-400/20 rounded-full -ml-16 -mb-16 blur-2xl"></div>
+            
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-3xl flex items-center justify-center text-white border border-white/20 shadow-2xl shadow-black/20 group-hover:scale-105 transition-transform duration-500">
+                    <i className="fa-solid fa-crown text-2xl text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white tracking-tight">Owner Control</h3>
+                    <p className="text-[10px] text-blue-100/60 font-black uppercase tracking-[0.3em]">{props.storeName}</p>
+                  </div>
+                </div>
+
+                {/* Filter Kasir Selector - Conditional */}
+                {localStorage.getItem('alphaPro_showKasirFilter') !== 'false' && (
+                  <div className="relative">
+                    <select 
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      className="appearance-none bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer hover:bg-white/20 transition-all uppercase tracking-widest"
+                    >
+                      <option value="Semua" className="text-gray-900">Semua</option>
+                      {Object.entries(props.kasirList).map(([id, acc]) => (
+                        <option key={id} value={id} className="text-gray-900">{acc.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/50 text-[8px]">
+                      <i className="fa-solid fa-chevron-down"></i>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-5 rounded-[2rem] hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[10px] font-black text-blue-200/80 uppercase tracking-widest mb-2">Volume Hari Ini</p>
+                  <p className="text-lg font-black text-white tabular-nums">{formatRupiah(props.totalVolume)}</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-5 rounded-[2rem] hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-2">Estimasi Profit</p>
+                  <p className="text-lg font-black text-emerald-400 tabular-nums">{formatRupiah(props.totalAdmin)}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-[10px] font-black text-blue-100/60 uppercase tracking-widest">Sistem Online</span>
+                </div>
+                <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter">v1.2.5 Premium</span>
+              </div>
             </div>
-            <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest">Mode Pantau Aktif</h3>
-            <p className="text-[10px] text-blue-400 font-bold mt-1">Anda masuk sebagai Owner. Fitur transaksi dinonaktifkan untuk keamanan data.</p>
           </div>
         </div>
       )}
@@ -1636,7 +1838,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         <div className="bg-white border border-gray-300 rounded-xl p-2 shadow-sm mb-2">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white">
-              <i className="fa-solid fa-bolt text-[9px]"></i>
+              <i className="fa-solid fa-bolt text-[10px]"></i>
             </div>
             <div>
               <p className="text-[10px] text-black font-black uppercase tracking-tighter">TERAKHIR</p>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { formatRupiah, cn } from '../lib/utils'
+import { formatRupiah, cn, parseLocalISO } from '../lib/utils'
 import type { Transaction } from '../types'
 import TransactionRow from '../components/TransactionRow'
 import type { KasirAccount } from '../components/LoginScreen'
@@ -129,7 +129,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             <select 
               value={props.filterKategori}
               onChange={(e) => props.setFilterKategori(e.target.value)}
-              className="w-full h-full bg-white bg-none border border-slate-200 pl-2 pr-6 rounded-lg text-[10px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none"
+              className="w-full h-full bg-white bg-none border border-slate-200 pl-2 pr-6 rounded-lg text-[11px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none shadow-sm"
             >
               <option value="Semua">Semua Kategori</option>
               <option value="Transfer Bank">Transfer Bank</option>
@@ -139,47 +139,45 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               <option value="Tarik Tunai">Tarik Tunai</option>
               <option value="Aksesoris">Aksesoris</option>
             </select>
-            <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-slate-400 pointer-events-none"></i>
+            <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
         {/* TANGGAL + TAMPILKAN (1 baris, tanpa label) */}
         <div className="flex gap-1.5 mb-2 items-center">
           <div 
-            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-1.5 px-2 cursor-pointer"
+            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-2 px-3 cursor-pointer shadow-sm"
             onClick={(e) => {
               const input = (e.currentTarget as HTMLElement).querySelector('input');
               if (input) (input as any).showPicker?.();
             }}
           >
-            <span className="text-[8px] font-black text-slate-400 uppercase shrink-0 mr-1">Dari</span>
             <input 
               type="date"
-              className="w-full text-[10px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
+              className="w-full text-[11px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
               value={localDari}
               onChange={(e) => setLocalDari(e.target.value)}
             />
           </div>
           <div 
-            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-1.5 px-2 cursor-pointer"
+            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-2 px-3 cursor-pointer shadow-sm"
             onClick={(e) => {
               const input = (e.currentTarget as HTMLElement).querySelector('input');
               if (input) (input as any).showPicker?.();
             }}
           >
-            <span className="text-[8px] font-black text-slate-400 uppercase shrink-0 mr-1">Sampai</span>
             <input 
               type="date"
-              className="w-full text-[10px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
+              className="w-full text-[11px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
               value={localSampai}
               onChange={(e) => setLocalSampai(e.target.value)}
             />
           </div>
           <button 
             onClick={handleTampilkan}
-            className="bg-violet-600 text-white px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-violet-700 active:scale-95 transition-all shadow-sm whitespace-nowrap"
+            className="bg-gradient-to-br from-violet-600 to-indigo-700 text-white px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-md shadow-indigo-500/20 whitespace-nowrap"
           >
-            TAMPILKAN
+            CEK
           </button>
         </div>
 
@@ -223,17 +221,19 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
 
           {/* FOOTER TOTAL (Single Line with Dividers) */}
-          <div className="flex items-center justify-center gap-3 py-5 border-t border-slate-100">
-            <div className="text-[12px] font-black text-slate-400 uppercase tracking-tighter">
+          <div className="flex items-center justify-center gap-2 py-4 border-t border-slate-100 bg-white shadow-sm rounded-b-2xl">
+            <div className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">
               {filteredTransactions.length} Items
             </div>
-            <div className="w-px h-3 bg-slate-200"></div>
-            <div className="text-blue-600 font-black text-[13px]">
-              nom : {formatRupiah(totalNominal).replace(',00', '')}
+            <div className="w-px h-2.5 bg-slate-200"></div>
+            <div className="text-blue-600 font-black text-[10px] whitespace-nowrap uppercase flex items-center gap-1">
+              <span className="text-[8px] opacity-60">NOM:</span>
+              {formatRupiah(totalNominal).replace(',00', '')}
             </div>
-            <div className="w-px h-3 bg-slate-200"></div>
-            <div className="text-emerald-600 font-black text-[13px]">
-              adm : {formatRupiah(totalAdmin).replace(',00', '')}
+            <div className="w-px h-2.5 bg-slate-200"></div>
+            <div className="text-emerald-600 font-black text-[10px] whitespace-nowrap uppercase flex items-center gap-1">
+              <span className="text-[8px] opacity-60">ADM:</span>
+              {formatRupiah(totalAdmin).replace(',00', '')}
             </div>
           </div>
         </div>
@@ -300,7 +300,10 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                              {t.kategori.replace('Isi ', '')}
                            </div>
                            <div className="text-[10px] text-slate-400 font-bold">
-                              {new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • {new Date(t.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              {(() => {
+                                const d = parseLocalISO(t.timestamp);
+                                return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                              })()}
                            </div>
                         </div>
                      </div>
@@ -313,9 +316,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               )}
             </div>
             {filteredSaldoTransactions.length > 0 && (
-              <div className="bg-slate-50/50 px-6 py-5 flex justify-between items-center border-t border-slate-100">
-                <span className="text-[10px] font-black text-slate-400 uppercase">{filteredSaldoTransactions.length} Items</span>
-                <span className="text-emerald-600 font-black text-sm">TOTAL: {formatRupiah(totalSaldoNominal).replace(',00', '')}</span>
+              <div className="bg-white px-6 py-4 flex items-center justify-center gap-2 border-t border-slate-100 shadow-sm rounded-b-2xl">
+                <span className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">{filteredSaldoTransactions.length} Items</span>
+                <div className="w-px h-2.5 bg-slate-200"></div>
+                <span className="text-emerald-600 font-black text-[10px] whitespace-nowrap uppercase flex items-center gap-1">
+                  <span className="text-[8px] opacity-60">TOTAL:</span>
+                  {formatRupiah(totalSaldoNominal).replace(',00', '')}
+                </span>
               </div>
             )}
           </div>

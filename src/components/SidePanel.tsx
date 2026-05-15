@@ -15,9 +15,10 @@ interface SidePanelProps {
   setScreenSize: (size: string) => void
   jamAbsen?: string
   kasirName?: string
+  storeName?: string
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName, storeName }) => {
   return (
     <>
       <div className={cn("overlay", isOpen && "show")} onClick={() => setIsOpen(false)}></div>
@@ -26,7 +27,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="font-bold text-lg text-blue-600">ALPHA LINK</h3>
-              <p className="text-xs text-gray-500 uppercase tracking-widest">ALFAZA CELL</p>
+              <p className="text-xs text-gray-500 uppercase tracking-widest">{storeName || 'ALFAZA CELL'}</p>
             </div>
             <button onClick={() => setIsOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
               <i className="fa-solid fa-times"></i>

@@ -17,17 +17,17 @@ export default defineConfig({
         orientation: 'any',
         icons: [
           {
-            src: 'logo-alpha.png',
+            src: 'logo_A.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'logo-alpha.png',
+            src: 'logo_A.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: 'logo-alpha.png',
+            src: 'logo_A.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
