@@ -66,15 +66,31 @@ const App: React.FC = () => {
       setGoogleSession(session)
     })
 
-    // Tangani Deep Link untuk Capacitor
+    // Tangani Deep Link untuk Capacitor (Login Google/Email)
     const handleAppUrlOpen = async (event: any) => {
-      const url = new URL(event.url);
-      const code = url.searchParams.get('code');
-      if (code) {
-        await supabase.auth.exchangeCodeForSession(code);
+      try {
+        const url = new URL(event.url.replace('#', '?'));
+        const code = url.searchParams.get('code');
+        const accessToken = url.searchParams.get('access_token');
+        const refreshToken = url.searchParams.get('refresh_token');
+
+        if (code) {
+          // Flow PKCE
+          await supabase.auth.exchangeCodeForSession(code);
+        } else if (accessToken && refreshToken) {
+          // Flow Implicit (Token langsung di URL)
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+
+        // Tutup browser internal jika masih terbuka
         if (Capacitor.isNativePlatform()) {
           await Browser.close();
         }
+      } catch (err) {
+        console.error('Gagal memproses deep link:', err);
       }
     };
 
