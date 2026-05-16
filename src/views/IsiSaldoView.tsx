@@ -12,6 +12,7 @@ interface IsiSaldoViewProps {
   setIsiKeterangan: (v: string) => void
   handleSimpanIsiSaldo: () => void
   isSaving?: boolean
+  showToast: (m: string) => void
 }
 
 const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {

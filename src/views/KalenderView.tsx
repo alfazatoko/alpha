@@ -75,7 +75,7 @@ interface Holiday {
   type: "merah" | "cuti";
 }
 
-const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void }> = ({ active, setActiveView }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [yearHolidays, setYearHolidays] = useState<Holiday[]>([]);

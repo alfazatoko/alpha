@@ -8,7 +8,7 @@ interface NotaItem {
   jumlah: string;
 }
 
-const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void }> = ({ active, setActiveView }) => {
   
   const [shopName] = useState("ALPHA - Agen BRILink");
   const [address] = useState("Jl. Merdeka No. 123, Indonesia");

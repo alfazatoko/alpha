@@ -955,6 +955,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         totalKhusus={totalKhusus}
         totalNonTunai={totalNonTunai}
         username={username}
+        showToast={showToast}
+        onConfirm={handleConfirm}
       />
 
       <RiwayatView 
@@ -1045,9 +1047,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
       <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
       <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
-      <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} />
-      <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} />
-      <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} />
+      <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+      <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+      <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
 
       <Navigation activeView={activeView} setActiveView={setActiveView} />
 

@@ -116,7 +116,7 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
   ]
 };
 
-const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void }> = ({ active, setActiveView, showToast, onConfirm }) => {
   const [selectedDate, setSelectedDate] = useState(getLocalISOString().split('T')[0]);
   const [dataVoucher, setDataVoucher] = useState<Record<string, VoucherItem[]>>(JSON.parse(localStorage.getItem(`stok_voucher_${selectedDate}`) || JSON.stringify(initialDataVoucher)));
   const [dataQris, setDataQris] = useState<QrisItem[]>(JSON.parse(localStorage.getItem(`stok_qris_${selectedDate}`) || "[]"));
@@ -130,10 +130,11 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
   }, [dataVoucher, dataQris, selectedDate]);
 
   const resetToDefault = () => {
-    if (confirm("Reset semua stok ke pengaturan awal? Data hari ini akan hilang.")) {
+    onConfirm("RESET STOK", "Reset semua stok ke pengaturan awal? Data hari ini akan hilang.", () => {
       setDataVoucher(initialDataVoucher);
       localStorage.removeItem(`stok_voucher_${selectedDate}`);
-    }
+      showToast("Stok berhasil direset");
+    });
   };
 
   const handleEditItem = (provider: string, id: number, field: keyof VoucherItem, value: any) => {
@@ -204,7 +205,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
         }
       });
     } else {
-      alert("Stok habis!");
+      showToast("Stok habis!");
     }
   };
 

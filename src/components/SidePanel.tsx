@@ -27,9 +27,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
         {/* Header Section */}
         <div className="p-6 border-b border-gray-300 bg-gray-50/50">
           <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="font-black text-xl text-blue-700 tracking-tighter">ALFAZA CELL</h3>
-              <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em]">{storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+            <div className="flex items-center gap-3">
+              <img src="/logo_icon.png" className="w-10 h-10 rounded-xl shadow-md border border-white" alt="Logo" />
+              <div>
+                <h3 className="font-black text-xl text-blue-700 tracking-tighter leading-none">{storeName || 'ALFAZA CELL'}</h3>
+                <p className="text-[8px] text-gray-600 font-bold uppercase tracking-[0.2em] mt-1">{storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+              </div>
             </div>
             <button onClick={() => setIsOpen(false)} className="w-9 h-9 rounded-full bg-white shadow-sm border border-gray-300 flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
               <i className="fa-solid fa-xmark"></i>

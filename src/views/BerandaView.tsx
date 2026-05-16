@@ -5,7 +5,49 @@ import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
-
+interface BerandaViewProps {
+  active: boolean
+  activeView: string
+  setIsSidePanelOpen: (v: boolean) => void
+  setActiveView: (v: string) => void
+  saldoBank: number
+  totalPenjualan: number
+  lastTx?: Transaction
+  formKategori: string
+  setFormKategori: (v: string) => void
+  formNominal: string
+  setFormNominal: (v: string) => void
+  formAdmin: string
+  setFormAdmin: (v: string) => void
+  formKeterangan: string
+  setFormKeterangan: (v: string) => void
+  handleSimpanTransaksi: () => void
+  transactions: Transaction[]
+  isSaving: boolean
+  totalAdmin: number
+  totalVolume: number
+  totalAksesoris: number
+  totalTarik: number
+  totalSaldoKas: number
+  penjualanDigital: number
+  kasModal: number
+  kasirName: string
+  kasirRole: string
+  filterKasir: string
+  setFilterKasir: (v: string) => void
+  onLogout: () => void
+  kasirList: Record<string, KasirAccount>
+  refreshKasirList: () => void
+  jamAbsen?: string
+  absensiList: any[]
+  runningTexts: string[]
+  mainAnnouncement: string
+  storeName: string
+  storeSubtext: string
+  storePhoto?: string
+  handleOwnerTambahModal: (kId: string, nom: number) => void
+  kasLainnya: number
+  totalKhusus: number
   totalNonTunai: number
   username: string
   showToast: (m: string) => void
@@ -421,11 +463,10 @@ const GajiPanel: React.FC<{
 const BackupPanel: React.FC<{ 
   transactions: Transaction[], 
   absensiList?: any[],
-  refreshData?: () => void,
   storeName?: string,
   showToast: (m: string) => void,
   onConfirm: (t: string, m: string, c: () => void) => void
-}> = ({ transactions, absensiList, refreshData, storeName, showToast, onConfirm }) => {
+}> = ({ transactions, absensiList, storeName, showToast, onConfirm }) => {
   const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
 
   const handleBackup = async () => {
@@ -477,28 +518,25 @@ const BackupPanel: React.FC<{
   };
 
   const handleReset = async () => {
-    if (resetStep === 0) {
-      setResetStep(1);
-      return;
-    }
-
-    setResetStep(2);
-    try {
-      // 1. Reset Transactions
-      const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
-      // 2. Reset Attendance
-      const { error: absError } = await supabase.from('absensi').delete().neq('id', 0);
-      // 3. Reset Local Data
-      localStorage.removeItem('alphaPro_catatanIzin');
-      
-      if (txError || absError) throw new Error("Beberapa data gagal dihapus");
-      
-      showToast("Sistem berhasil direset!");
-      setTimeout(() => window.location.reload(), 2000); 
-    } catch (e: any) {
-      showToast("Reset gagal: " + e.message);
-      setResetStep(0);
-    }
+    onConfirm("RESET SISTEM", "Apakah Anda yakin? Seluruh data transaksi dan absensi akan dihapus permanen dan tidak bisa dikembalikan!", async () => {
+      setResetStep(2);
+      try {
+        // 1. Reset Transactions
+        const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
+        // 2. Reset Attendance
+        const { error: absError } = await supabase.from('absensi').delete().neq('id', 0);
+        // 3. Reset Local Data
+        localStorage.removeItem('alphaPro_catatanIzin');
+        
+        if (txError || absError) throw new Error("Beberapa data gagal dihapus");
+        
+        showToast("Sistem berhasil direset!");
+        setTimeout(() => window.location.reload(), 2000); 
+      } catch (e: any) {
+        showToast("Reset gagal: " + e.message);
+        setResetStep(0);
+      }
+    });
   };
 
   return (
@@ -530,37 +568,24 @@ const BackupPanel: React.FC<{
           </div>
           <h3 className="font-black text-gray-800 text-[13px] tracking-widest uppercase mb-1">RESET SISTEM</h3>
           <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-6">Hapus seluruh data untuk periode baru</p>
-
-          {resetStep === 1 ? (
-            <div className="w-full space-y-3">
-              <p className="text-red-600 text-[10px] font-black uppercase tracking-tight bg-red-50 py-2 rounded-xl border border-red-100">Apakah Anda yakin? Data tidak bisa kembali!</p>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setResetStep(0)}
-                  className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
-                >
-                  Batal
-                </button>
-                <button 
-                  onClick={handleReset}
-                  className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200"
-                >
-                  Ya, Hapus!
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setResetStep(1)}
-              disabled={resetStep === 2}
-              className={cn(
-                "w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2",
-                resetStep === 2 ? "bg-gray-50 text-gray-300 border-gray-100" : "bg-white text-red-600 border-red-600 active:bg-red-50"
-              )}
-            >
-              {resetStep === 2 ? "Memproses..." : "Mulai Reset Ulang"}
-            </button>
-          )}
+          <button 
+            onClick={handleReset}
+            disabled={resetStep === 2}
+            className={cn(
+              "w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2",
+              resetStep === 2 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-red-600 text-white shadow-red-100"
+            )}
+          >
+            {resetStep === 2 ? (
+              <>
+                <i className="fa-solid fa-circle-notch fa-spin"></i> Memproses...
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-trash-can"></i> Hapus Seluruh Data
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -2040,12 +2065,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <button 
                         onClick={() => {
                           const nominal = (ownerSaldoNominal.replace(/\./g, ''));
-                          if (!ownerSaldoKasirId || !nominal || parseInt(nominal) <= 0) return alert('Pilih kasir dan masukkan nominal yang valid');
-                          if (confirm(`Tambah modal ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`)) {
+                          if (!ownerSaldoKasirId || !nominal || parseInt(nominal) <= 0) return props.showToast('Pilih kasir dan masukkan nominal yang valid');
+                          props.onConfirm("TAMBAH MODAL", `Tambah modal ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`, () => {
                             props.handleOwnerTambahModal?.(ownerSaldoKasirId, parseInt(nominal));
                             setOwnerSaldoNominal('');
                             setOwnerSaldoKasirId('');
-                          }
+                            props.showToast("Modal berhasil ditambahkan");
+                          });
                         }}
                         className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 transition-all"
                       >
