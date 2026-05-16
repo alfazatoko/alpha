@@ -58,9 +58,14 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   })
 
   // Summary untuk Kartu Atas (Total Hari/Rentang yang dipilih)
+  // DISINKRONKAN: Mengeluarkan [KHUSUS] dan [NON_TUNAI] agar cocok dengan saldo laci di Dashboard
   const todayCount = dateFilteredTransactions.length
-  const todayVolume = dateFilteredTransactions.reduce((s, t) => s + t.nominal, 0)
-  const todayAdmin = dateFilteredTransactions.reduce((s, t) => s + t.adminFee, 0)
+  const todayVolume = dateFilteredTransactions
+    .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0)
+  const todayAdmin = dateFilteredTransactions
+    .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.adminFee, 0)
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
@@ -320,11 +325,11 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                         <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
                         <div className="flex flex-col gap-0">
                            <div className={cn(
-                             "text-[16px] font-black uppercase leading-tight",
+                             "text-[13px] font-black uppercase leading-tight",
                              t.kategori.includes('Bank') ? "text-blue-600" : 
                              t.kategori.includes('Real') ? "text-emerald-600" : "text-fuchsia-600"
                            )}>
-                             {t.kategori.replace('Isi ', '')}
+                             {t.kategori.replace('Isi ', 'TAMBAH ')}
                            </div>
                            <div className="text-[10px] text-slate-400 font-bold">
                               {(() => {
@@ -335,7 +340,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                         </div>
                      </div>
                       <div className="text-right flex flex-col items-end gap-0">
-                        <div className="text-[16px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
+                        <div className="text-[13px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
                         <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
                      </div>
                   </div>

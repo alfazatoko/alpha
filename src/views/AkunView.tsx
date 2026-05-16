@@ -117,7 +117,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           </div>
           <div>
             <h3 className="font-bold text-base text-gray-800">{props.storeName || 'Admin ALPHA'}</h3>
-            <p className="text-xs text-gray-500">{props.storeSubtext || 'Agen BRILink & Ponsel'}</p>
+            <p className="text-xs text-gray-500">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
             <div className="flex items-center gap-2 mt-1.5">
               <span className={cn("inline-block px-2 py-0.5 text-[9px] font-black rounded", roleColor)}>{roleBadge}</span>
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{props.kasirName}</span>
@@ -192,7 +192,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         type="text" 
                         value={props.storeSubtext || ''} 
                         onChange={(e) => props.onSaveStoreSubtext?.(e.target.value)}
-                        placeholder="Contoh: Agen BRILink & Ponsel"
+                        placeholder="Contoh: Pembukuan Agen brilink & Konter"
                         className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
                       />
                     </div>

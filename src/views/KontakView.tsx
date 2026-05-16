@@ -8,9 +8,16 @@ interface KontakRecord {
   nomor: string;
   keterangan: string;
   photoUrl?: string;
+  kasir?: string;
 }
 
-const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+const KontakView: React.FC<{ 
+  active: boolean; 
+  setActiveView: (v: string) => void; 
+  kasirName: string;
+  showToast: (m: string) => void;
+  onConfirm: (t: string, m: string, c: () => void) => void;
+}> = ({ active, setActiveView, kasirName, showToast, onConfirm }) => {
   const [kontakList, setKontakList] = useState<KontakRecord[]>(JSON.parse(localStorage.getItem("kontak_list") || "[]"));
   const [searchText, setSearchText] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -52,7 +59,7 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
   };
 
   const handleSave = () => {
-    if (!nama.trim()) return alert("Nama harus diisi");
+    if (!nama.trim()) return showToast("Nama harus diisi");
 
     if (editItem) {
       setKontakList(kontakList.map(k => k.id === editItem.id ? { ...k, nama, nomor, keterangan, photoUrl } : k));
@@ -62,17 +69,20 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
         nama,
         nomor,
         keterangan,
-        photoUrl
+        photoUrl,
+        kasir: kasirName
       };
       setKontakList([newKontak, ...kontakList]);
+      showToast("Kontak berhasil ditambah");
     }
     resetForm();
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Hapus kontak ini?")) {
+    onConfirm("HAPUS KONTAK", "Yakin ingin menghapus kontak ini?", () => {
       setKontakList(kontakList.filter(k => k.id !== id));
-    }
+      showToast("Kontak Berhasil Dihapus");
+    });
   };
 
   const openEdit = (k: KontakRecord) => {
@@ -177,27 +187,34 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-sm text-gray-800 truncate">{k.nama}</h4>
-                    {k.nomor && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-base font-black text-blue-600 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {k.nomor}</p>
-                        <button 
-                          onClick={() => { navigator.clipboard.writeText(k.nomor); alert("Nomor disalin!"); }} 
-                          className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 active:scale-95 transition-all"
-                        >
-                          <Copy className="w-2.5 h-2.5" /> Copy
+                    <div className="flex justify-between items-start gap-2">
+                      <h4 className="font-bold text-sm text-gray-800 truncate">{k.nama}</h4>
+                      <div className="flex items-center gap-1">
+                        {k.nomor && (
+                          <button 
+                            onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }} 
+                            className="p-1.5 rounded-lg bg-blue-50 text-blue-600 active:scale-95 transition-all"
+                            title="Copy Nomor"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => openEdit(k)} className="p-1.5 rounded-lg bg-blue-50 text-blue-600 active:scale-95 transition-all">
+                          <Edit className="w-3.5 h-3.5" />
                         </button>
+                        <button onClick={() => handleDelete(k.id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 active:scale-95 transition-all">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {k.nomor && (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-base font-black text-blue-600 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {k.nomor}</p>
                       </div>
                     )}
                     {k.keterangan && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{k.keterangan}</p>}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <button onClick={() => openEdit(k)} className="p-2 rounded-xl bg-blue-50 text-blue-600">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(k.id)} className="p-2 rounded-xl bg-red-50 text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {k.kasir && <span className="text-[8px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-black mt-2 inline-block uppercase tracking-widest">Penulis: {k.kasir}</span>}
                   </div>
                 </div>
               </div>
@@ -230,13 +247,13 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMOR HP / WHATSAPP</label>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">Nohp, No Rekening, PPOB, Token Listrik</label>
                 <input 
                   ref={nomorRef}
                   value={nomor} 
                   onChange={e => setNomor(e.target.value)} 
-                  inputMode="tel" 
-                  placeholder="0812..." 
+                  inputMode="text" 
+                  placeholder="Ketik nomor/keterangan di sini..." 
                   onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
                   className="form-input-modern w-full" 
                 />

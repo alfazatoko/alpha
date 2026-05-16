@@ -70,17 +70,20 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           
           <div>
             <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JENIS SALDO</label>
-            <select 
-              value={props.isiJenis}
-              onChange={(e) => props.setIsiJenis(e.target.value)}
-              onKeyDown={(e) => handleKeyDown(e, nominalRef)}
-              className="form-input-modern w-full"
-            >
-              <option value="" disabled>Pilih jenis saldo</option>
-              <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
-              <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
-              <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
-            </select>
+            <div className="relative">
+              <select 
+                value={props.isiJenis}
+                onChange={(e) => props.setIsiJenis(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, nominalRef)}
+                className="form-input-modern w-full appearance-none pr-8"
+              >
+                <option value="" disabled>Pilih jenis saldo</option>
+                <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
+                <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
+                <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+            </div>
           </div>
 
           <div>

@@ -30,9 +30,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const nominalRef = useRef<HTMLInputElement>(null)
   const adminRef = useRef<HTMLInputElement>(null)
   const keteranganRef = useRef<HTMLTextAreaElement>(null)
-  const optTunaiRef = useRef<HTMLButtonElement>(null)
-  const optKhususRef = useRef<HTMLButtonElement>(null)
-  const optNonTunaiRef = useRef<HTMLButtonElement>(null)
+  const optTunaiRef = useRef<HTMLSelectElement>(null)
   const btnSimpanRef = useRef<HTMLButtonElement>(null)
 
   const handleGlobalKeyDown = (e: React.KeyboardEvent) => {
@@ -42,57 +40,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (e.key === 'ArrowRight') {
       if (active === btnDigitalRef.current) btnTarikRef.current?.focus()
       else if (active === btnTarikRef.current) btnAksesorisRef.current?.focus()
-      else if (active === optTunaiRef.current) optKhususRef.current?.focus()
-      else if (active === optKhususRef.current) optNonTunaiRef.current?.focus()
       else if (active === nominalRef.current) adminRef.current?.focus()
       else {
         const catIdx = catRefs.current.indexOf(active as any)
         if (catIdx !== -1 && catIdx % 2 === 0) catRefs.current[catIdx + 1]?.focus()
       }
-    }
-    
-    if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft') {
       if (active === btnTarikRef.current) btnDigitalRef.current?.focus()
       else if (active === btnAksesorisRef.current) btnTarikRef.current?.focus()
-      else if (active === optKhususRef.current) optTunaiRef.current?.focus()
-      else if (active === optNonTunaiRef.current) optKhususRef.current?.focus()
       else if (active === adminRef.current) nominalRef.current?.focus()
       else {
         const catIdx = catRefs.current.indexOf(active as any)
         if (catIdx !== -1 && catIdx % 2 === 1) catRefs.current[catIdx - 1]?.focus()
       }
-    }
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (active === btnDigitalRef.current || active === btnTarikRef.current || active === btnAksesorisRef.current) {
-        if (activeMode === 'DIGITAL') catRefs.current[0]?.focus()
-        else nominalRef.current?.focus()
-      }
-      else if (catRefs.current.includes(active as any)) {
-        const catIdx = catRefs.current.indexOf(active as any)
-        if (catIdx < 2) catRefs.current[catIdx + 2]?.focus()
-        else nominalRef.current?.focus()
-      }
+    } else if (e.key === 'ArrowDown') {
+      if (active === btnDigitalRef.current || active === btnTarikRef.current || active === btnAksesorisRef.current) optTunaiRef.current?.focus()
+      else if (active === optTunaiRef.current) nominalRef.current?.focus()
       else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
-      else if (active === keteranganRef.current) optTunaiRef.current?.focus()
-      else if (active === optTunaiRef.current || active === optKhususRef.current || active === optNonTunaiRef.current) btnSimpanRef.current?.focus()
-    }
-
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (active === btnSimpanRef.current) optTunaiRef.current?.focus()
-      else if (active === optTunaiRef.current || active === optKhususRef.current || active === optNonTunaiRef.current) keteranganRef.current?.focus()
+      else if (active === keteranganRef.current) btnSimpanRef.current?.focus()
+    } else if (e.key === 'ArrowUp') {
+      if (active === optTunaiRef.current) btnDigitalRef.current?.focus()
+      else if (active === nominalRef.current) optTunaiRef.current?.focus()
+      else if (active === adminRef.current) optTunaiRef.current?.focus()
       else if (active === keteranganRef.current) nominalRef.current?.focus()
-      else if (active === nominalRef.current || active === adminRef.current) {
-        if (activeMode === 'DIGITAL') catRefs.current[2]?.focus() || catRefs.current[0]?.focus()
-        else btnDigitalRef.current?.focus()
-      }
-      else if (catRefs.current.includes(active as any)) {
-        const catIdx = catRefs.current.indexOf(active as any)
-        if (catIdx >= 2) catRefs.current[catIdx - 2]?.focus()
-        else btnDigitalRef.current?.focus()
-      }
+      else if (active === btnSimpanRef.current) keteranganRef.current?.focus()
     }
 
     // Enter Key Logic
@@ -186,7 +157,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].map((cat, idx) => (
                 <button 
                   key={cat}
-                  ref={el => catRefs.current[idx] = el}
+                  ref={el => { catRefs.current[idx] = el }}
                   onClick={() => { setKategori(cat); nominalRef.current?.focus(); }}
                   onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
                   className={cn(

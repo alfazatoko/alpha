@@ -265,16 +265,19 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
 
       <div className="bg-white border-b flex items-center p-3 gap-3 justify-between">
         <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Pilih Tahun</h1>
-        <select 
-          className="border border-slate-200 rounded-xl px-4 py-2 font-black text-xs focus:outline-none focus:ring-2 focus:ring-slate-500 bg-slate-50 text-slate-800 transition-all"
-          value={currentYear}
-          onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), currentMonth, 1))}
-        >
-          {Array.from({length: 10}).map((_, i) => {
-            const y = new Date().getFullYear() - 5 + i;
-            return <option key={y} value={y}>{y}</option>;
-          })}
-        </select>
+        <div className="relative">
+          <select 
+            className="border border-slate-200 rounded-xl px-4 py-2 pr-10 font-black text-xs focus:outline-none focus:ring-2 focus:ring-slate-500 bg-slate-50 text-slate-800 transition-all appearance-none cursor-pointer"
+            value={currentYear}
+            onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), currentMonth, 1))}
+          >
+            {Array.from({length: 10}).map((_, i) => {
+              const y = new Date().getFullYear() - 5 + i;
+              return <option key={y} value={y}>{y}</option>;
+            })}
+          </select>
+          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+        </div>
       </div>
 
       <div className="bg-white mx-auto max-w-2xl shadow-sm border-x border-gray-300">

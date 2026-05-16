@@ -284,7 +284,6 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [totalPenjualan, setTotalPenjualan] = useState<number>(0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [kasModal, setKasModal] = useState<number>(0)
-  const [kasLainnya, setKasLainnya] = useState<number>(0)
   const [absensi, setAbsensi] = useState<any[]>([])
   const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
 
@@ -307,7 +306,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     return localStorage.getItem('alphaPro_storeName') || 'ALFAZA CELL'
   })
   const [storeSubtext, setStoreSubtext] = useState<string>(() => {
-    return localStorage.getItem('alphaPro_storeSubtext') || 'Agen BRILink & Ponsel'
+    return localStorage.getItem('alphaPro_storeSubtext') || 'Pembukuan Agen brilink & Konter'
   })
   const [storePhoto, setStorePhoto] = useState<string>(() => {
     return localStorage.getItem('alphaPro_storePhoto') || ''
@@ -470,7 +469,6 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     let calcSaldoBank = 0
     let calcKasModal = 0
     let calcPenjualan = 0
-    let calcKasLainnya = 0
     let calcAdminFee = 0
     let calcTarikTunai = 0
 
@@ -486,9 +484,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
         calcSaldoBank -= tx.nominal
         // Jika KHUSUS atau NON_TUNAI, masuk ke Kas Lainnya, bukan Penjualan Digital
-        if (isKhusus || isNonTunai) {
-          calcKasLainnya += tx.nominal
-        } else {
+        if (!(isKhusus || isNonTunai)) {
           calcPenjualan += tx.nominal
         }
       }
@@ -502,13 +498,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       }
 
       if (tx.kategori === 'Kas Lainnya') {
-        calcKasLainnya += tx.nominal
+        // Obsolete
       }
 
       // Hitung Admin Fee
-      if (isAdminDalam || isNonTunai || isKhusus) {
-        calcKasLainnya += (tx.adminFee || 0)
-      } else {
+      if (!(isAdminDalam || isNonTunai || isKhusus)) {
         calcAdminFee += (tx.adminFee || 0)
       }
     })
@@ -516,7 +510,6 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setSaldoBank(calcSaldoBank)
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
-    setKasLainnya(calcKasLainnya)
   }, [transactions, account?.role, username, filterKasir])
 
   // Fetch Aggregated Report for LaporanView
@@ -552,20 +545,28 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           filteredTxs = dateTxs.filter(t => t.kasir_id === filterKasir)
         }
 
-        let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0;
+        let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0, kKhusus = 0, kNonTunai = 0;
         filteredTxs.forEach(tx => {
-          const isLain = (tx.keterangan || '').includes('[KHUSUS]') || (tx.keterangan || '').includes('[NON_TUNAI]');
+          const isKhusus = (tx.keterangan || '').includes('[KHUSUS]');
+          const isNonTunai = (tx.keterangan || '').includes('[NON_TUNAI]');
+          const isLain = isKhusus || isNonTunai;
           const isAksesoris = tx.kategori === 'Aksesoris';
           
           if (tx.kategori === 'Isi Saldo Bank') sBank += tx.nominal;
           if (tx.kategori === 'Isi Modal Tunai Kasir') kMod += tx.nominal;
+          
           if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
             sBank -= tx.nominal;
             if (!isLain) pDig += tx.nominal;
           }
-          if (isAksesoris) pAks += tx.nominal;
+          
+          if (isAksesoris && !isLain) pAks += tx.nominal;
           if (tx.kategori === 'Tarik Tunai' && !isLain) tTar += tx.nominal;
-          if (!(tx.keterangan || '').includes('[ADMIN_DALAM]') && !isLain) tAdm += tx.adminFee;
+          if (!isLain) tAdm += tx.adminFee;
+
+          // Hitung detail Kas Lainnya untuk laporan
+          if (isKhusus) kKhusus += (tx.nominal + tx.adminFee);
+          if (isNonTunai) kNonTunai += (tx.nominal + tx.adminFee);
         });
 
         setDailyReport({
@@ -575,7 +576,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalAksesoris: pAks,
           totalAdmin: tAdm,
           totalTarik: tTar,
-          kasLainnya: filteredTxs.filter(t => t.kategori === 'Kas Lainnya').reduce((s, t) => s + t.nominal, 0),
+          kasLainnya: kKhusus + kNonTunai,
+          totalKhusus: kKhusus,
+          totalNonTunai: kNonTunai,
           saldoReal: 0,
           totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
         })
@@ -610,6 +613,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState<{ show: boolean, message: string } | null>(null)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{ show: boolean, title: string, message: string, onConfirm: () => void } | null>(null)
 
   const editNominalRef = useRef<HTMLInputElement>(null)
   const editAdminRef = useRef<HTMLInputElement>(null)
@@ -633,7 +637,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       const lastReset = localStorage.getItem(`alphaPro_${googleUid}_${username}_last_reset_date`)
 
       if (lastReset && lastReset !== today) {
-        alert(`Selamat datang di hari baru (${today}). Dashboard menampilkan rekap harian baru.`)
+        showToast(`HARI BARU: ${today}`);
       }
       localStorage.setItem(`alphaPro_${googleUid}_${username}_last_reset_date`, today)
     }
@@ -649,13 +653,17 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setTimeout(() => setToast(null), 3000)
   }
 
+  const handleConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmDialog({ show: true, title, message, onConfirm })
+  }
+
   const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => {
     if (isSaving) return
     const nominal = parseNominal(formNominal)
     const admin = parseNominal(formAdmin)
     
-    if (!formKategori) return alert('Pilih kategori transaksi!')
-    if (nominal <= 0) return alert('Masukkan nominal yang valid!')
+    if (!formKategori) return showToast('Pilih kategori transaksi!')
+    if (nominal <= 0) return showToast('Masukkan nominal yang valid!')
 
     setIsSaving(true)
     
@@ -663,8 +671,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     if (options) {
       if (options.isAdminNonTunai) finalKeterangan += ' [ADMIN_DALAM]';
       if (options.activeTab === 'LAIN') {
-        if (options.subTab === 'khusus') finalKeterangan += ' [KHUSUS]';
-        if (options.subTab === 'non_tunai') finalKeterangan += ' [NON_TUNAI]';
+        if (options.subTab.toLowerCase() === 'khusus') finalKeterangan += ' [KHUSUS]';
+        if (options.subTab.toLowerCase() === 'non_tunai') finalKeterangan += ' [NON_TUNAI]';
       }
     }
 
@@ -684,7 +692,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     supabase.from('transactions').insert(newTx).then(({ error }) => {
       setIsSaving(false)
       if (error) {
-        alert('Gagal menyimpan ke server: ' + error.message)
+        showToast('Gagal simpan: ' + error.message)
       } else {
         // Optimistic UI Update
         const optimisticTx: Transaction = {
@@ -726,7 +734,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     supabase.from('transactions').insert(newTx).then(({ error }) => {
       setIsSaving(false)
       if (error) {
-        alert('Gagal tambah modal: ' + error.message)
+        showToast('Gagal tambah modal: ' + error.message)
       } else {
         const optimisticTx: Transaction = {
           id: newTx.id,
@@ -746,8 +754,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const handleSimpanIsiSaldo = () => {
     if (isSaving) return
     const nominal = parseNominal(isiNominal)
-    if (!isiJenis) return alert('Pilih jenis saldo!')
-    if (nominal <= 0) return alert('Nominal tidak valid!')
+    if (!isiJenis) return showToast('Pilih jenis saldo!')
+    if (nominal <= 0) return showToast('Nominal tidak valid!')
 
     setIsSaving(true)
 
@@ -766,7 +774,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     supabase.from('transactions').insert(newTx).then(({ error }) => {
       setIsSaving(false)
       if (error) {
-        alert('Gagal update saldo: ' + error.message)
+        showToast('Gagal update: ' + error.message)
       } else {
         // Optimistic UI Update
         const optimisticTx: Transaction = {
@@ -812,7 +820,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     }).eq('id', editingTx.id).then(({ error }) => {
       setIsSaving(false)
       if (error) {
-        alert('Gagal edit: ' + error.message)
+        showToast('Gagal edit: ' + error.message)
       } else {
         // Optimistic UI Update
         setTransactions(prev => prev.map(t => {
@@ -836,16 +844,16 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   }
 
   const handleDeleteTx = (tx: Transaction) => {
-    if (window.confirm('Yakin ingin menghapus transaksi ini permanen?')) {
+    handleConfirm('HAPUS TRANSAKSI', 'Hapus permanen transaksi ini?', () => {
       supabase.from('transactions').delete().eq('id', tx.id).then(({ error }) => {
         if (error) {
-          alert('Gagal menghapus: ' + error.message)
+          showToast('Gagal menghapus: ' + error.message)
         } else {
           setTransactions(prev => prev.filter(t => t.id !== tx.id))
-          showToast('Transaksi Berhasil Dihapus!')
+          showToast('Berhasil Dihapus!')
         }
       })
-    }
+    })
   }
 
   // Today's Date in Local Time (YYYY-MM-DD)
@@ -867,7 +875,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     .reduce((s, t) => s + t.nominal, 0)
 
   const totalAdmin = todayTransactions
-    .filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.adminFee, 0)
 
   const totalAksesoris = todayTransactions
@@ -886,9 +894,17 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     .filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
     .reduce((s, t) => s + t.nominal, 0)
 
-  // Saldo Laci Kasir (Cumulative Calculation - usually doesn't reset to 0 in reality)
-  // But if the user wants it to look like it resets, we could filter this too.
-  // However, Saldo Bank and Kas Modal are cumulative.
+  const totalKhusus = todayTransactions
+    .filter(t => (t.keterangan || '').includes('[KHUSUS]'))
+    .reduce((s, t) => s + (t.nominal + t.adminFee), 0)
+
+  const totalNonTunai = todayTransactions
+    .filter(t => (t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + (t.nominal + t.adminFee), 0)
+
+  const kasLainnya = totalKhusus + totalNonTunai
+
+  // Saldo Laci Kasir (Cumulative Calculation)
   const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
 
   return (
@@ -936,6 +952,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         storePhoto={storePhoto}
         handleOwnerTambahModal={handleOwnerTambahModal}
         kasLainnya={kasLainnya}
+        totalKhusus={totalKhusus}
+        totalNonTunai={totalNonTunai}
         username={username}
       />
 
@@ -1022,13 +1040,14 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         setIsiKeterangan={setIsiKeterangan}
         handleSimpanIsiSaldo={handleSimpanIsiSaldo}
         isSaving={isSaving}
+        showToast={showToast}
       />
 
-      <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} />
-      <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} />
-      <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} />
-      <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} />
-      <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} />
+      <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
+      <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
+      <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} />
+      <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} />
+      <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} />
 
       <Navigation activeView={activeView} setActiveView={setActiveView} />
 
@@ -1042,6 +1061,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         jamAbsen={todayAbsen}
         kasirName={account.name}
         storeName={storeName}
+        storeSubtext={storeSubtext}
       />
 
 
@@ -1061,11 +1081,12 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
             <div className="space-y-4 mb-6">
               <div>
                 <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Kategori</label>
+              <div className="relative">
                 <select 
                   value={editKategori} 
                   onChange={e => setEditKategori(e.target.value)}
                   onKeyDown={(e) => handleEditKeyDown(e, editNominalRef)}
-                  className="form-input-modern w-full"
+                  className="form-input-modern w-full appearance-none pr-8"
                 >
                   <option value="Transfer Bank">Transfer Bank</option>
                   <option value="DANA">DANA</option>
@@ -1074,6 +1095,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
                   <option value="Tarik Tunai">Tarik Tunai</option>
                   <option value="Aksesoris">Aksesoris</option>
                 </select>
+                <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+              </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1140,28 +1163,54 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         </div>
       )}
 
+      {/* Global Confirm Dialog */}
+      {confirmDialog && confirmDialog.show && (
+        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-xs shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
+              <i className="fa-solid fa-circle-question text-2xl"></i>
+            </div>
+            <h3 className="font-black text-xs uppercase tracking-widest text-gray-900 mb-2">{confirmDialog.title}</h3>
+            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">{confirmDialog.message}</p>
+            <div className="flex gap-2 w-full">
+              <button 
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 bg-gray-100 text-gray-500 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
+                className="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-200 active:scale-95 transition-all"
+              >
+                Ya, Lanjut
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Logout Confirmation Notif */}
       {showLogoutConfirm && (
-        <div className="fixed bottom-24 left-0 right-0 z-[210] flex justify-center p-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="bg-white border-2 border-red-500 text-red-600 px-5 py-4 rounded-[2rem] shadow-2xl flex flex-col items-center gap-3 backdrop-blur-md max-w-[300px]">
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center shadow-inner">
-                <i className="fa-solid fa-power-off text-[12px] font-black"></i>
-              </div>
-              <span className="font-black text-[11px] uppercase tracking-tight">Yakin ingin keluar?</span>
+        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-xs shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
+              <i className="fa-solid fa-power-off text-2xl"></i>
             </div>
-            <div className="flex gap-2 w-full mt-1">
+            <h3 className="font-black text-xs uppercase tracking-widest text-red-600 mb-2">KONFIRMASI KELUAR</h3>
+            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">Yakin ingin keluar dari sesi kasir ini?</p>
+            <div className="flex gap-2 w-full">
               <button 
                 onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                className="flex-1 bg-gray-100 text-gray-500 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
               >
-                BATAL
+                Batal
               </button>
               <button 
                 onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"
+                className="flex-1 bg-red-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"
               >
-                KELUAR
+                Keluar
               </button>
             </div>
           </div>

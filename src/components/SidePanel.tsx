@@ -16,9 +16,10 @@ interface SidePanelProps {
   jamAbsen?: string
   kasirName?: string
   storeName?: string
+  storeSubtext?: string
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName, storeName }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName, storeName, storeSubtext }) => {
   return (
     <>
       <div className={cn("overlay", isOpen && "show")} onClick={() => setIsOpen(false)}></div>
@@ -27,8 +28,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
         <div className="p-6 border-b border-gray-300 bg-gray-50/50">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="font-black text-xl text-blue-700 tracking-tighter">ALPHA LINK</h3>
-              <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em]">{storeName || 'ALFAZA CELL'}</p>
+              <h3 className="font-black text-xl text-blue-700 tracking-tighter">ALFAZA CELL</h3>
+              <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em]">{storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
             </div>
             <button onClick={() => setIsOpen(false)} className="w-9 h-9 rounded-full bg-white shadow-sm border border-gray-300 flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
               <i className="fa-solid fa-xmark"></i>

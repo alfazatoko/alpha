@@ -6,49 +6,10 @@ import SummaryCards from '../components/SummaryCards'
 import type { Transaction } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 
-interface BerandaViewProps {
-  active: boolean
-  activeView?: string
-  setIsSidePanelOpen: (v: boolean) => void
-  setActiveView: (v: string) => void
-  saldoBank: number
-  totalPenjualan: number
-  lastTx?: Transaction
-  formKategori: string
-  setFormKategori: (v: string) => void
-  formNominal: string
-  setFormNominal: (v: string) => void
-  formAdmin: string
-  setFormAdmin: (v: string) => void
-  formKeterangan: string
-  setFormKeterangan: (v: string) => void
-  handleSimpanTransaksi: (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
-  transactions: Transaction[]
-  totalAdmin: number
-  totalVolume: number
-  totalAksesoris: number
-  totalTarik: number
-  totalSaldoKas: number
-  penjualanDigital: number
-  kasModal: number
-  isSaving?: boolean
-  kasirName?: string
-  kasirRole?: string
-  filterKasir?: string
-  setFilterKasir?: (v: string) => void
-  onLogout?: () => void
-  kasirList: Record<string, KasirAccount>
-  refreshKasirList: () => void
-  handleOwnerTambahModal?: (kasirId: string, nominal: number) => void
-  jamAbsen?: string
-  absensiList?: any[]
-  runningTexts?: string[]
-  mainAnnouncement?: string
-  storeName?: string
-  storeSubtext?: string
-  storePhoto?: string
-  kasLainnya: number
+  totalNonTunai: number
   username: string
+  showToast: (m: string) => void
+  onConfirm: (t: string, m: string, c: () => void) => void
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -81,7 +42,8 @@ const GajiPanel: React.FC<{
   kasirList: Record<string, KasirAccount>
   absensiList?: any[]
   storeName?: string
-}> = ({ kasirList, absensiList, storeName }) => {
+  showToast: (m: string) => void
+}> = ({ kasirList, absensiList, storeName, showToast }) => {
   const [selectedKasir, setSelectedKasir] = useState<string>('')
   const [month, setMonth] = useState<string>(() => {
     const now = new Date()
@@ -172,7 +134,7 @@ const GajiPanel: React.FC<{
         await navigator.share({ text })
       } else {
         await navigator.clipboard.writeText(text)
-        alert("Teks disalin ke clipboard")
+        showToast("Teks disalin ke clipboard")
       }
     } catch {}
   }
@@ -234,7 +196,7 @@ const GajiPanel: React.FC<{
         }
       }
     } catch (e: any) {
-      alert("Gagal share PDF: " + (e?.message || "Error unknown"))
+      showToast("Gagal share PDF: " + (e?.message || "Error unknown"))
       console.error(e)
     }
   }
@@ -245,13 +207,16 @@ const GajiPanel: React.FC<{
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PILIH KASIR</label>
-            <select
-              value={selectedKasir}
-              onChange={e => setSelectedKasir(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
-            >
-              {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedKasir}
+                onChange={e => setSelectedKasir(e.target.value)}
+                className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400 appearance-none cursor-pointer"
+              >
+                {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+            </div>
           </div>
           <div>
             <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PERIODE BULAN</label>
@@ -457,8 +422,10 @@ const BackupPanel: React.FC<{
   transactions: Transaction[], 
   absensiList?: any[],
   refreshData?: () => void,
-  storeName?: string
-}> = ({ transactions, absensiList, storeName }) => {
+  storeName?: string,
+  showToast: (m: string) => void,
+  onConfirm: (t: string, m: string, c: () => void) => void
+}> = ({ transactions, absensiList, refreshData, storeName, showToast, onConfirm }) => {
   const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
 
   const handleBackup = async () => {
@@ -505,7 +472,7 @@ const BackupPanel: React.FC<{
         URL.revokeObjectURL(url);
       }
     } catch (e: any) {
-      alert("Gagal backup: " + e.message);
+      showToast("Gagal backup: " + e.message);
     }
   };
 
@@ -525,11 +492,11 @@ const BackupPanel: React.FC<{
       localStorage.removeItem('alphaPro_catatanIzin');
       
       if (txError || absError) throw new Error("Beberapa data gagal dihapus");
-
-      alert("Sistem berhasil direset!");
-      window.location.reload(); 
+      
+      showToast("Sistem berhasil direset!");
+      setTimeout(() => window.location.reload(), 2000); 
     } catch (e: any) {
-      alert("Reset gagal: " + e.message);
+      showToast("Reset gagal: " + e.message);
       setResetStep(0);
     }
   };
@@ -642,8 +609,57 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
 
+  // Audit State
+  const [auditFisik, setAuditFisik] = useState('')
+  const [auditHistory, setAuditHistory] = useState<any[]>([])
+  const STORAGE_KEY_AUDIT = 'alphaPro_auditHistory'
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_AUDIT)
+    if (saved) setAuditHistory(JSON.parse(saved))
+  }, [])
+
+  const handleSimpanAudit = () => {
+    const fisik = parseInt(auditFisik.replace(/[^0-9]/g, '')) || 0
+    if (fisik <= 0) return props.showToast('Masukkan uang fisik di laci!')
+    if (props.filterKasir === 'Semua') return props.showToast('Pilih salah satu kasir terlebih dahulu!')
+    
+    const kasirName = props.kasirList[props.filterKasir || '']?.name || props.filterKasir
+    const selisih = fisik - ownerTotalLaci
+    const baru = {
+      tanggal: getLocalDateString(),
+      jam: currentTime.toLocaleTimeString('id-ID'),
+      kasirId: props.filterKasir,
+      kasirName: kasirName,
+      sistem: ownerTotalLaci,
+      fisik: fisik,
+      selisih: selisih
+    }
+    
+    const updated = [baru, ...auditHistory].slice(0, 100) // Simpan 100 terakhir
+    setAuditHistory(updated)
+    localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(updated))
+    setAuditFisik('')
+    props.showToast(`Audit ${kasirName} disimpan!`)
+  }
+
+  const hapusAudit = (index: number) => {
+    props.onConfirm('HAPUS RIWAYAT', 'Hapus riwayat audit ini?', () => {
+      const updated = auditHistory.filter((_, i) => i !== index)
+      setAuditHistory(updated)
+      localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(updated))
+      props.showToast("Berhasil Dihapus")
+    })
+  }
+
   const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
   const isOwnerSubView = !!activeOwnerSubView
+
+  // Auto-close sub-panels when navigating away to any other view
+  useEffect(() => {
+    setShowRincian(false)
+    setShowLainnya(false)
+  }, [props.activeView])
 
   useEffect(() => {
     if (activeOwnerSubView === 'izin') {
@@ -662,7 +678,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   }, [])
 
   const simpanIzin = () => {
-    if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return alert('Lengkapi semua data!')
+    if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return props.showToast('Lengkapi semua data!')
     const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: getLocalISOString() }
     const updated = [baru, ...catatanIzin]
     setCatatanIzin(updated)
@@ -671,10 +687,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   }
 
   const hapusIzin = (index: number) => {
-    if (!confirm('Hapus catatan izin ini?')) return
-    const updated = catatanIzin.filter((_, i) => i !== index)
-    setCatatanIzin(updated)
-    localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+    props.onConfirm('HAPUS IZIN', 'Hapus catatan izin ini?', () => {
+      const updated = catatanIzin.filter((_, i) => i !== index)
+      setCatatanIzin(updated)
+      localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+      props.showToast("Berhasil Dihapus")
+    })
   }
 
   const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
@@ -731,8 +749,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin - ownerTotalTarik
   
   // ownerSaldoBank calculation (Contribution to bank balance/plafon)
+  const ownerTotalBankOut = ownerTodayTxs.filter(t => 
+    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)
+  ).reduce((s, t) => s + t.nominal, 0)
+  
   const ownerIsiBank = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
-  const ownerSaldoBank = ownerIsiBank - ownerPenjualanDigital
+  const ownerSaldoBank = ownerIsiBank - ownerTotalBankOut
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
@@ -743,11 +765,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               {props.storePhoto ? (
                 <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
               ) : (
-                <img src="/logo-alpha.png" alt="Logo" className="w-12 h-12 object-contain" style={{ filter: 'invert(1) brightness(1.2)', mixBlendMode: 'screen' }} />
+                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
               )}
               <div>
                 <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
-                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Agen BRILink & Ponsel'}</p>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <span className="text-white text-[10px] font-black">{props.kasirName}</span>
                   <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
@@ -923,10 +945,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
                 <div className="space-y-0">
                   {[
-                    { label: 'Admin Dalam/Non Tunai', val: ownerAdminDalam },
-                    { label: 'Transaksi Non Tunai', val: ownerNonTunai },
-                    { label: 'Transaksi Khusus', val: ownerKhusus },
-                    { label: 'Kas Lainnya (Manual)', val: props.kasLainnya }
+                    { label: 'Transaksi Khusus', val: props.totalKhusus || 0 },
+                    { label: 'Transaksi Non Tunai', val: props.totalNonTunai || 0 },
+                    { label: 'Total Kas Lainnya', val: props.kasLainnya }
                   ].map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center py-1 px-2 border-b border-gray-50 last:border-0">
                       <div>
@@ -1073,6 +1094,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
               { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
               { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
+              { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
               { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
               { id: 'view-akun', title: 'Setting', desc: 'Pengaturan app', icon: 'fa-gear', color: 'bg-slate-600' },
             ].map((item) => (
@@ -1125,6 +1147,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                  activeOwnerSubView === 'izin' ? 'IZIN KARYAWAN' :
                  activeOwnerSubView === 'gaji' ? 'DATA GAJI KASIR' :
                  activeOwnerSubView === 'saldo' ? 'PENGATURAN SALDO' :
+                 activeOwnerSubView === 'audit' ? 'AUDIT KASIR' :
                  'BACKUP & RESET'}
               </h3>
               <p className="text-[9px] text-white/70 mt-1 font-bold uppercase tracking-widest">Panel Kontrol Owner</p>
@@ -1150,7 +1173,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                       <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                       <button onClick={() => {
-                        if(!kasirFormId || !kasirFormName || !kasirFormPin) return alert('Lengkapi data kasir');
+                        if(!kasirFormId || !kasirFormName || !kasirFormPin) return props.showToast('Lengkapi data kasir');
                         const newKasirList = { ...props.kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
                         saveKasirAccounts(newKasirList);
                         props.refreshKasirList();
@@ -1172,10 +1195,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               <i className="fa-solid fa-pen text-[10px]"></i>
                             </button>
                             <button onClick={() => {
-                              if(confirm(`Hapus ${account.name}?`)) {
+                              props.onConfirm('HAPUS KASIR', `Hapus ${account.name}?`, () => {
                                 const n = {...props.kasirList}; delete n[id];
                                 saveKasirAccounts(n); props.refreshKasirList();
-                              }
+                                props.showToast("Berhasil Dihapus");
+                              })
                             }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
                               <i className="fa-solid fa-trash text-[10px]"></i>
                             </button>
@@ -1259,16 +1283,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
                     <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest pl-2">Filter Data Kasir</p>
-                    <select
-                      value={props.filterKasir || 'Semua'}
-                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                      className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 px-3 rounded-lg outline-none cursor-pointer"
-                    >
-                      <option value="Semua">Semua Kasir</option>
-                      {Object.entries(props.kasirList).map(([id, acc]) => (
-                        <option key={id} value={id}>{acc.name}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={props.filterKasir || 'Semua'}
+                        onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                        className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 pl-3 pr-8 rounded-lg outline-none cursor-pointer appearance-none"
+                      >
+                        <option value="Semua">Semua Kasir</option>
+                        {Object.entries(props.kasirList).map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-blue-400 pointer-events-none"></i>
+                    </div>
                   </div>
 
                   {/* SALDO BANK */}
@@ -1372,24 +1399,133 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
                   </button>
                 </div>
-              )}
-
-              {activeOwnerSubView === 'audit' && (
+              )}               {activeOwnerSubView === 'audit' && (
                 <div className="space-y-4">
-                  <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
-                    <p className="text-[10px] font-bold text-purple-800 text-center uppercase tracking-widest mb-3">Masukkan Uang Fisik Di Laci</p>
+                  {/* Kasir Selector for Audit */}
+                  <div className="flex justify-between items-center bg-purple-50 p-3 rounded-2xl border border-purple-100">
+                    <div>
+                      <p className="text-[10px] font-black text-purple-800 uppercase tracking-widest">Pilih Kasir / Shift</p>
+                      <p className="text-[8px] text-purple-400 font-bold uppercase">Audit Perorangan</p>
+                    </div>
                     <div className="relative">
-                      <span className="absolute left-4 top-3 text-sm font-black text-purple-400">Rp</span>
-                      <input type="text" placeholder="0" className="w-full py-3 pl-10 pr-4 bg-white border border-purple-200 rounded-xl font-black text-purple-700 outline-none" />
+                      <select
+                        value={props.filterKasir || 'Semua'}
+                        onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                        className="bg-white border border-purple-200 text-purple-800 text-xs font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none shadow-sm"
+                      >
+                        <option value="Semua">Semua Kasir</option>
+                        {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-purple-400 pointer-events-none"></i>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center px-2">
-                    <span className="text-[10px] font-bold text-gray-400">HITUNGAN SISTEM:</span>
-                    <span className="text-xs font-black text-gray-800">Rp {totalPendapatanBersih.toLocaleString('id-ID')}</span>
+
+                  <div className="p-5 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-[2rem] text-white shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                    <div className="relative z-10">
+                      <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest text-center mb-4">Input Uang Fisik Di Laci</p>
+                      <div className="relative mb-4">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-white/40">Rp</span>
+                        <input 
+                          type="text" 
+                          inputMode="numeric"
+                          placeholder="0" 
+                          value={auditFisik}
+                          onChange={e => setAuditFisik(formatInputRupiah(e.target.value))}
+                          className="w-full py-4 pl-12 pr-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl font-black text-xl text-white outline-none focus:ring-4 focus:ring-white/10 placeholder:text-white/20" 
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-black/10 p-3 rounded-2xl border border-white/5 text-center">
+                          <p className="text-[8px] font-black text-purple-200 uppercase tracking-widest mb-1">Hitungan Sistem</p>
+                          <p className="text-[11px] font-black text-white">{formatRupiah(ownerTotalLaci)}</p>
+                        </div>
+                        <div className="bg-black/10 p-3 rounded-2xl border border-white/5 text-center">
+                          <p className="text-[8px] font-black text-purple-200 uppercase tracking-widest mb-1">Selisih Audit</p>
+                          {(() => {
+                            const val = (parseInt(auditFisik.replace(/[^0-9]/g, '')) || 0) - ownerTotalLaci
+                            return <p className={cn("text-[11px] font-black", val >= 0 ? "text-green-300" : "text-red-300")}>{formatRupiah(val)}</p>
+                          })()}
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={handleSimpanAudit}
+                        className="w-full bg-white text-purple-700 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-save"></i> Simpan Hasil Audit
+                      </button>
+                    </div>
                   </div>
-                  <button className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-                    PROSES AUDIT
-                  </button>
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center px-1">
+                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Riwayat Audit Terakhir</h4>
+                      <div className="w-8 h-px bg-gray-100 flex-grow mx-3"></div>
+                    </div>
+                    
+                    {(() => {
+                      const filteredHistory = props.filterKasir === 'Semua' 
+                        ? auditHistory 
+                        : auditHistory.filter(h => h.kasirId === props.filterKasir)
+
+                      if (filteredHistory.length === 0) {
+                        return (
+                          <div className="text-center py-12 bg-gray-50 rounded-[2rem] border border-dashed border-gray-200">
+                            <i className="fa-solid fa-clipboard-check text-2xl text-gray-200 mb-2"></i>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                              {props.filterKasir === 'Semua' ? 'Belum ada riwayat audit' : `Belum ada audit untuk ${props.kasirList[props.filterKasir || '']?.name}`}
+                            </p>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {filteredHistory.map((item, index) => (
+                            <div key={index} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center group">
+                              <div className="flex items-center gap-3">
+                                <div className={cn(
+                                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center",
+                                  item.selisih >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+                                )}>
+                                  <span className="text-[8px] font-black leading-none">{item.selisih >= 0 ? 'OK' : 'MISS'}</span>
+                                  <i className={cn("fa-solid text-[10px] mt-0.5", item.selisih >= 0 ? "fa-check" : "fa-xmark")}></i>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <p className="text-[10px] font-black text-gray-800 uppercase leading-none">
+                                      {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {item.jam}
+                                    </p>
+                                    <span className="bg-purple-100 text-purple-600 text-[7px] font-black px-1.5 py-0.5 rounded uppercase">{item.kasirName}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase">Selisih:</span>
+                                    <span className={cn("text-[10px] font-black", item.selisih >= 0 ? "text-green-600" : "text-red-600")}>
+                                      {formatRupiah(item.selisih)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  // Hapus berdasarkan pencarian objek asli karena index sudah difilter
+                                  const originalIndex = auditHistory.findIndex(h => h === item)
+                                  if (originalIndex !== -1) hapusAudit(originalIndex)
+                                }}
+                                className="w-8 h-8 rounded-full bg-red-50 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <i className="fa-solid fa-trash text-[9px]"></i>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
               )}
 
@@ -1561,11 +1697,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerSubView === 'gaji' && (
-                <GajiPanel kasirList={props.kasirList} absensiList={props.absensiList} storeName={props.storeName} />
+                <GajiPanel 
+                  kasirList={props.kasirList} 
+                  absensiList={props.absensiList} 
+                  storeName={props.storeName} 
+                  showToast={props.showToast}
+                />
               )}
 
               {activeOwnerSubView === 'backup' && (
-                <BackupPanel transactions={props.transactions} absensiList={props.absensiList} storeName={props.storeName} />
+                <div className="animate-in slide-in-from-right duration-300">
+                  <BackupPanel 
+                    transactions={props.transactions} 
+                    absensiList={props.absensiList} 
+                    storeName={props.storeName} 
+                    showToast={props.showToast}
+                    onConfirm={props.onConfirm}
+                  />
+                </div>
               )}
 
               {activeOwnerSubView === 'izin' && (
@@ -1578,16 +1727,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="space-y-2.5">
                       <div>
                         <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NAMA KASIR</label>
-                        <select 
-                          value={izinNamaKasir} 
-                          onChange={e => setIzinNamaKasir(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400"
-                        >
-                          <option value="" disabled>Pilih kasir</option>
-                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                            <option key={id} value={acc.name}>{acc.name}</option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <select 
+                            value={izinNamaKasir} 
+                            onChange={e => setIzinNamaKasir(e.target.value)}
+                            className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400 appearance-none cursor-pointer"
+                          >
+                            <option value="" disabled>Pilih kasir</option>
+                            {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                              <option key={id} value={acc.name}>{acc.name}</option>
+                            ))}
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-orange-400 pointer-events-none"></i>
+                        </div>
                       </div>
                       <div>
                         <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL IZIN</label>
@@ -1715,16 +1867,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   <div className="space-y-5">
                     {/* Controls */}
                     <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
-                      <select
-                        value={grafikFilterKasir}
-                        onChange={(e) => setGrafikFilterKasir(e.target.value)}
-                        className="bg-white border border-gray-200 text-emerald-800 text-[10px] font-black py-1.5 px-2 rounded-lg outline-none cursor-pointer flex-1 mr-2"
-                      >
-                        <option value="Semua">Semua Kasir</option>
-                        {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                          <option key={id} value={id}>{acc.name}</option>
-                        ))}
-                      </select>
+                      <div className="relative flex-1 mr-2">
+                        <select
+                          value={grafikFilterKasir}
+                          onChange={(e) => setGrafikFilterKasir(e.target.value)}
+                          className="w-full bg-white border border-gray-200 text-emerald-800 text-[10px] font-black py-1.5 pl-2 pr-7 rounded-lg outline-none cursor-pointer appearance-none"
+                        >
+                          <option value="Semua">Semua Kasir</option>
+                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                            <option key={id} value={id}>{acc.name}</option>
+                          ))}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-emerald-400 pointer-events-none"></i>
+                      </div>
 
                       <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0">
                         {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
@@ -1855,16 +2010,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="space-y-4">
                       <div>
                         <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Pilih Kasir</label>
-                        <select 
-                          value={ownerSaldoKasirId}
-                          onChange={e => setOwnerSaldoKasirId(e.target.value)}
-                          className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 outline-none"
-                        >
-                          <option value="">-- Pilih Kasir --</option>
-                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                            <option key={id} value={id}>{acc.name} ({id})</option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <select 
+                            value={ownerSaldoKasirId}
+                            onChange={e => setOwnerSaldoKasirId(e.target.value)}
+                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 pr-10 text-xs font-black text-gray-900 outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">-- Pilih Kasir --</option>
+                            {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                              <option key={id} value={id}>{acc.name} ({id})</option>
+                            ))}
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 pointer-events-none"></i>
+                        </div>
                       </div>
 
                       <div>

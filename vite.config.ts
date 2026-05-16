@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['logo_icon.png', 'icons.svg'],
       manifest: {
         name: 'ALPHA',
         short_name: 'ALPHA',
@@ -17,17 +17,17 @@ export default defineConfig({
         orientation: 'any',
         icons: [
           {
-            src: 'logo_A.png',
+            src: 'logo_icon.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'logo_A.png',
+            src: 'logo_icon.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: 'logo_A.png',
+            src: 'logo_icon.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

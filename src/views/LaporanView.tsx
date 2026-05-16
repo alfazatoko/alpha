@@ -176,7 +176,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   return (
                     <tr key={cat} className="group hover:bg-gray-50/80 transition-all">
                       <td className="py-1 pr-2">
-                        <span className={cn("px-2 py-0.5 rounded-xl text-[10px] font-black whitespace-nowrap inline-block", catColor)}>
+                        <span className={cn("px-2 py-0.5 rounded-xl text-xs font-black whitespace-nowrap inline-block", catColor)}>
                           {cat}
                         </span>
                       </td>

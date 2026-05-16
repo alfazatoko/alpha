@@ -48,7 +48,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
           {/* INFO UTAMA */}
           <div className="flex flex-col gap-0">
-            <div className={cn("text-[16px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
+            <div className={cn("text-[13px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
                {t.kategori}
             </div>
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.15em]">
@@ -60,7 +60,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         {/* NOMINAL & ADMIN */}
         <div className="flex flex-col items-end gap-0">
           <div className={cn(
-            "text-[16px] font-black tracking-tight leading-tight",
+            "text-[13px] font-black tracking-tight leading-tight",
             isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black")
           )}>
             {t.nominal.toLocaleString('id-ID')}

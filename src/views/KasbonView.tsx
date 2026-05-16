@@ -11,9 +11,16 @@ interface HutangRecord {
   lunas: boolean;
   tglLunas?: string;
   photoUrl?: string;
+  kasir?: string;
 }
 
-const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void }> = ({ active, setActiveView }) => {
+const KasbonView: React.FC<{ 
+  active: boolean; 
+  setActiveView: (v: string) => void; 
+  kasirName: string;
+  showToast: (m: string) => void;
+  onConfirm: (t: string, m: string, c: () => void) => void;
+}> = ({ active, setActiveView, kasirName, showToast, onConfirm }) => {
   const [hutangList, setHutangList] = useState<HutangRecord[]>(JSON.parse(localStorage.getItem("hutang_list") || "[]"));
   const [searchText, setSearchText] = useState("");
   const [showLunas, setShowLunas] = useState(false);
@@ -56,9 +63,9 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
   };
 
   const handleSave = () => {
-    if (!nama.trim()) return alert("Nama harus diisi");
+    if (!nama.trim()) return showToast("Nama harus diisi");
     const n = parseNominal(nominalDisplay);
-    if (n <= 0) return alert("Nominal harus diisi");
+    if (n <= 0) return showToast("Nominal harus diisi");
 
     if (editItem) {
       setHutangList(hutangList.map(h => h.id === editItem.id ? { ...h, nama, nominal: n, keterangan, photoUrl } : h));
@@ -70,7 +77,8 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
         keterangan,
         tanggal: new Date().toLocaleDateString('id-ID'),
         lunas: false,
-        photoUrl
+        photoUrl,
+        kasir: kasirName
       };
       setHutangList([newHutang, ...hutangList]);
     }
@@ -78,9 +86,10 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Hapus kasbon ini?")) {
+    onConfirm("HAPUS KASBON", "Yakin ingin menghapus data kasbon ini?", () => {
       setHutangList(hutangList.filter(h => h.id !== id));
-    }
+      showToast("Data Berhasil Dihapus");
+    });
   };
 
   const handleLunas = (h: HutangRecord) => {
@@ -209,6 +218,7 @@ const KasbonView: React.FC<{ active: boolean; setActiveView: (v: string) => void
                       {formatRupiah(h.nominal)}
                     </p>
                     <span className="text-[9px] text-gray-400 font-medium block mt-1">{h.tanggal}</span>
+                    {h.kasir && <span className="text-[8px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-black mt-1 inline-block uppercase tracking-widest">{h.kasir}</span>}
                   </div>
                 </div>
 
