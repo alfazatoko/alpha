@@ -196,9 +196,23 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     const viewToHash: Record<string, string> = {
       'view-beranda': 'beranda',
       'view-transaksi': 'riwayat',
-      'view-saldo': 'saldo',
+      'view-isi-saldo': 'isi-saldo',
       'view-laporan': 'laporan',
-      'view-akun': 'akun'
+      'view-akun': 'akun',
+      'view-kasbon': 'kasbon',
+      'view-kontak': 'kontak',
+      'view-stok-voucher': 'voucher',
+      'view-kalender': 'kalender',
+      'view-nota': 'nota',
+      'view-owner-monitor': 'owner-monitor',
+      'view-owner-laporan': 'owner-laporan',
+      'view-owner-grafik': 'owner-grafik',
+      'view-owner-performa': 'owner-performa',
+      'view-owner-absen': 'owner-absen',
+      'view-owner-izin': 'owner-izin',
+      'view-owner-gaji': 'owner-gaji',
+      'view-owner-backup': 'owner-backup',
+      'view-owner-saldo': 'owner-saldo'
     }
     const hashToView: Record<string, string> = Object.fromEntries(
       Object.entries(viewToHash).map(([v, h]) => [h, v])
@@ -223,9 +237,23 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     const viewToHash: Record<string, string> = {
       'view-beranda': 'beranda',
       'view-transaksi': 'riwayat',
-      'view-saldo': 'saldo',
+      'view-isi-saldo': 'isi-saldo',
       'view-laporan': 'laporan',
-      'view-akun': 'akun'
+      'view-akun': 'akun',
+      'view-kasbon': 'kasbon',
+      'view-kontak': 'kontak',
+      'view-stok-voucher': 'voucher',
+      'view-kalender': 'kalender',
+      'view-nota': 'nota',
+      'view-owner-monitor': 'owner-monitor',
+      'view-owner-laporan': 'owner-laporan',
+      'view-owner-grafik': 'owner-grafik',
+      'view-owner-performa': 'owner-performa',
+      'view-owner-absen': 'owner-absen',
+      'view-owner-izin': 'owner-izin',
+      'view-owner-gaji': 'owner-gaji',
+      'view-owner-backup': 'owner-backup',
+      'view-owner-saldo': 'owner-saldo'
     }
     const hash = viewToHash[activeView] || activeView.replace('view-', '')
     if (window.location.hash !== `#/${hash}`) {
@@ -239,10 +267,12 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   // Apply theme class to <html> element and persist to localStorage
   useEffect(() => {
     const root = document.documentElement
-    root.classList.remove('theme-light', 'theme-gray', 'theme-neon')
+    root.classList.remove('theme-light', 'theme-blue', 'theme-neon')
     root.classList.add(`theme-${theme}`)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  const isOwnerView = activeView.startsWith('view-owner-')
 
   // Persist screen size to localStorage
   useEffect(() => {
@@ -443,13 +473,19 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     // Saldo Bank, Modal Tunai, dan Penjualan dihitung per hari (hanya transaksi hari ini).
     // Cocok untuk sistem per shift kasir yang 리set setiap hari.
     todayTxs.forEach(tx => {
+      const isLain = (tx.keterangan || '').includes('[KHUSUS]') || (tx.keterangan || '').includes('[NON_TUNAI]');
+      const isAksesoris = tx.kategori === 'Aksesoris';
+      
       if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
       if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
+      
       if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
         calcSaldoBank -= tx.nominal
+        if (!isLain) calcPenjualan += tx.nominal
+      }
+      if (isAksesoris) {
         calcPenjualan += tx.nominal
       }
-      if (tx.kategori === 'Aksesoris') calcPenjualan += tx.nominal
     })
 
     setSaldoBank(calcSaldoBank)
@@ -491,15 +527,18 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
         let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0;
         filteredTxs.forEach(tx => {
+          const isLain = (tx.keterangan || '').includes('[KHUSUS]') || (tx.keterangan || '').includes('[NON_TUNAI]');
+          const isAksesoris = tx.kategori === 'Aksesoris';
+          
           if (tx.kategori === 'Isi Saldo Bank') sBank += tx.nominal;
           if (tx.kategori === 'Isi Modal Tunai Kasir') kMod += tx.nominal;
           if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
             sBank -= tx.nominal;
-            pDig += tx.nominal;
+            if (!isLain) pDig += tx.nominal;
           }
-          if (tx.kategori === 'Aksesoris') pAks += tx.nominal;
-          if (tx.kategori === 'Tarik Tunai') tTar += tx.nominal;
-          tAdm += tx.adminFee;
+          if (isAksesoris) pAks += tx.nominal;
+          if (tx.kategori === 'Tarik Tunai' && !isLain) tTar += tx.nominal;
+          if (!(tx.keterangan || '').includes('[ADMIN_DALAM]') && !isLain) tAdm += tx.adminFee;
         });
 
         setDailyReport({
@@ -582,7 +621,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     setTimeout(() => setToast(null), 3000)
   }
 
-  const handleSimpanTransaksi = () => {
+  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => {
     if (isSaving) return
     const nominal = parseNominal(formNominal)
     const admin = parseNominal(formAdmin)
@@ -592,6 +631,15 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
     setIsSaving(true)
     
+    let finalKeterangan = formKeterangan || '-';
+    if (options) {
+      if (options.isAdminNonTunai) finalKeterangan += ' [ADMIN_DALAM]';
+      if (options.activeTab === 'LAIN') {
+        if (options.subTab === 'khusus') finalKeterangan += ' [KHUSUS]';
+        if (options.subTab === 'non_tunai') finalKeterangan += ' [NON_TUNAI]';
+      }
+    }
+
     // Proses simpan ke Supabase
     const id = Date.now().toString()
     const newTx = {
@@ -601,7 +649,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       kategori: formKategori,
       nominal,
       admin_fee: admin,
-      keterangan: formKeterangan || '-',
+      keterangan: finalKeterangan,
       timestamp: getLocalISOString()
     }
 
@@ -627,6 +675,42 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         setFormAdmin('')
         setFormKeterangan('')
         showToast('Transaksi Berhasil Disimpan!')
+      }
+    })
+  }
+
+  const handleOwnerTambahModal = (kasirId: string, nominal: number) => {
+    if (isSaving) return
+    setIsSaving(true)
+
+    const id = Date.now().toString()
+    const newTx = {
+      id,
+      user_id: googleUid,
+      kasir_id: kasirId,
+      kategori: 'Isi Modal Tunai Kasir',
+      nominal,
+      admin_fee: 0,
+      keterangan: 'Topup Modal by Owner',
+      timestamp: getLocalISOString()
+    }
+
+    supabase.from('transactions').insert(newTx).then(({ error }) => {
+      setIsSaving(false)
+      if (error) {
+        alert('Gagal tambah modal: ' + error.message)
+      } else {
+        const optimisticTx: Transaction = {
+          id: newTx.id,
+          kategori: newTx.kategori,
+          nominal: newTx.nominal,
+          adminFee: newTx.admin_fee,
+          keterangan: newTx.keterangan,
+          timestamp: newTx.timestamp,
+          kasir_id: newTx.kasir_id
+        }
+        setTransactions(prev => [optimisticTx, ...prev])
+        showToast(`Modal ${kasirId} berhasil ditambahkan!`)
       }
     })
   }
@@ -748,14 +832,25 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const todayTransactions = displayTransactions.filter(t => t.timestamp.startsWith(todayISO))
 
   // Derived Calculations (Dashboard - Today Only)
-  const totalTarik = todayTransactions.filter(t => t.kategori === 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)
-  const totalAdmin = todayTransactions.reduce((s, t) => s + t.adminFee, 0)
-  const totalAksesoris = todayTransactions.filter(t => t.kategori === 'Aksesoris').reduce((s, t) => s + t.nominal, 0)
+  // Exclude [KHUSUS] and [NON_TUNAI] from totals that affect Cashier Drawer, but ALWAYS include Aksesoris
+  
+  const totalTarik = todayTransactions
+    .filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0)
+
+  const totalAdmin = todayTransactions
+    .filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.adminFee, 0)
+
+  const totalAksesoris = todayTransactions
+    .filter(t => t.kategori === 'Aksesoris' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0)
+
   const totalVolume = todayTransactions.filter(t => !t.kategori.startsWith('Isi')).reduce((s, t) => s + t.nominal, 0)
   
-  // Penjualan Digital: Transfer + DANA + FLIP + Kuota (Today Only)
+  // Penjualan Digital: Transfer + DANA + FLIP + Kuota (Today Only, Cashier drawer only)
   const penjualanDigital = todayTransactions
-    .filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori))
+    .filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0)
 
   // Saldo Real Aplikasi: Akumulasi dari input manual di Isi Saldo (Today Only)
@@ -772,7 +867,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
       
       <BerandaView 
-        active={activeView === 'view-beranda'} 
+        active={activeView === 'view-beranda' || isOwnerView} 
+        activeView={activeView}
         setIsSidePanelOpen={setIsSidePanelOpen}
         setActiveView={setActiveView}
         saldoBank={saldoBank}
@@ -810,10 +906,12 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         storeName={storeName}
         storeSubtext={storeSubtext}
         storePhoto={storePhoto}
+        handleOwnerTambahModal={handleOwnerTambahModal}
       />
 
       <RiwayatView 
         active={activeView === 'view-transaksi'}
+        setActiveView={setActiveView}
         transactions={displayTransactions}
         filterTanggalMulai={filterTanggalMulai}
         setFilterTanggalMulai={setFilterTanggalMulai}
@@ -835,6 +933,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
       <LaporanView 
         active={activeView === 'view-laporan'}
+        setActiveView={setActiveView}
         saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
         totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
         transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
@@ -864,6 +963,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
       <AkunView 
         active={activeView === 'view-akun'} 
+        setActiveView={setActiveView}
         kasirName={account.name}
         kasirRole={account.role}
         onLogout={onLogout}

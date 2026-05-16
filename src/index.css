@@ -134,6 +134,13 @@ select {
   box-shadow: -10px 0 30px rgba(0,0,0,0.1);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.side-panel::-webkit-scrollbar {
+  display: none;
 }
 
 .side-panel.open { transform: translateX(0); }
@@ -165,12 +172,12 @@ select {
 
 /* Background for app-container (direct class on the element) */
 .app-container.theme-light { background-color: #f8fafc; }
-.app-container.theme-gray { background-color: #6b7280; }
+.app-container.theme-blue { background: linear-gradient(135deg, #bfdbfe 70%, #fed7aa 100%); }
 .app-container.theme-neon { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
 
 /* Also support parent selector pattern (class on <html>) */
 .theme-light .app-container { background-color: #f8fafc; }
-.theme-gray .app-container { background-color: #6b7280; }
+.theme-blue .app-container { background: linear-gradient(135deg, #bfdbfe 70%, #fed7aa 100%); }
 .theme-neon .app-container { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
 
 /* CSS Variables per theme */
@@ -180,10 +187,10 @@ select {
   --container-bg: #ffffff;
 }
 
-.theme-gray, .theme-gray .app-container {
-  --input-bg: #f3f4f6;
-  --input-border: #d1d5db;
-  --container-bg: #e5e7eb;
+.theme-blue, .theme-blue .app-container {
+  --input-bg: #eff6ff;
+  --input-border: #93c5fd;
+  --container-bg: #ffffff;
 }
 
 .theme-neon, .theme-neon .app-container {
@@ -194,7 +201,7 @@ select {
 
 /* Body background (class on <html>) */
 .theme-light body { background-color: #f3f4f6; }
-.theme-gray body { background-color: #4b5563; }
+.theme-blue body { background: linear-gradient(135deg, #dbeafe 60%, #ffedd5 100%); }
 .theme-neon body { background: #dcfce7; }
 
 .form-input-modern {
@@ -455,7 +462,9 @@ select {
 
   /* Perkecil padding halaman */
   .page-view {
-    padding-bottom: 50px !important;
+    padding-bottom: 100px !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Tombol toggle navigasi disesuaikan */

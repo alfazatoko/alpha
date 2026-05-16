@@ -114,12 +114,31 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
 
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
-      <div className="px-5 pt-7 pb-4 border-b bg-white flex items-center gap-3">
-        <button onClick={() => setActiveView('view-beranda')} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
-          <i className="fa-solid fa-arrow-left text-sm"></i>
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-500 text-white shadow-lg">
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
         </button>
-        <h2 className="font-bold flex-1">Kontak Pelanggan</h2>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md">
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">KONTAK PELANGGAN</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+        </div>
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="px-5 py-6 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-b-[2rem] shadow-lg mb-4 flex justify-between items-center">
+        <div>
+          <h2 className="font-bold text-sm tracking-wide">Buku Kontak</h2>
+          <p className="text-emerald-100 text-[10px] opacity-90">Simpan nomor pelanggan</p>
+        </div>
+        <button onClick={() => { resetForm(); setShowForm(true); }} className="w-10 h-10 rounded-2xl bg-white text-emerald-600 flex items-center justify-center shadow-lg active:scale-90 transition-all">
           <Plus className="w-5 h-5" />
         </button>
       </div>
@@ -188,7 +207,7 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={resetForm}>
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={resetForm}>
           <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
@@ -265,7 +284,7 @@ const KontakView: React.FC<{ active: boolean; setActiveView: (v: string) => void
       )}
 
       {previewImage && (
-        <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+        <div className="absolute inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
           <button className="absolute top-6 right-6 text-white bg-white/20 p-2 rounded-full backdrop-blur-md">
             <X className="w-6 h-6" />
           </button>

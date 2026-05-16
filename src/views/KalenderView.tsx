@@ -244,13 +244,29 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
 
   return (
     <div className="page-view active bg-gray-100 hide-scrollbar pb-24">
-      <div className="bg-white border-b flex items-center p-3 gap-3">
-        <button onClick={() => setActiveView('view-beranda')} className="border border-gray-300 rounded p-1 hover:bg-gray-50 transition">
-          <ArrowLeft className="w-6 h-6 text-gray-600" />
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-slate-900 text-white shadow-lg">
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
         </button>
-        <h1 className="text-xl font-black flex-1 text-center">Kalender</h1>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">KALENDER KERJA</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+        </div>
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="bg-white border-b flex items-center p-3 gap-3 justify-between">
+        <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Pilih Tahun</h1>
         <select 
-          className="border border-gray-400 rounded px-2 py-1 font-bold text-lg focus:outline-none"
+          className="border border-slate-200 rounded-xl px-4 py-2 font-black text-xs focus:outline-none focus:ring-2 focus:ring-slate-500 bg-slate-50 text-slate-800 transition-all"
           value={currentYear}
           onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), currentMonth, 1))}
         >

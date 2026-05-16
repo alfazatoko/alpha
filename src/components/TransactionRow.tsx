@@ -32,7 +32,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   return (
     <div className="flex flex-col group transaction-row-container">
       <div 
-        className="flex justify-between items-start py-2 cursor-pointer active:bg-slate-50 transition-all px-1"
+        className="flex justify-between items-start py-1 cursor-pointer active:bg-slate-50 transition-all px-1"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex gap-3">
@@ -43,8 +43,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
           </div>
 
           {/* INFO UTAMA */}
-          <div className="flex flex-col gap-0.5">
-            <div className="text-[14px] font-black text-slate-800 tracking-tight uppercase">
+          <div className="flex flex-col gap-0">
+            <div className="text-[16px] font-black text-slate-800 tracking-tight uppercase leading-tight">
                {t.kategori}
             </div>
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.15em]">
@@ -54,9 +54,9 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         </div>
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex flex-col items-end gap-0.5">
+        <div className="flex flex-col items-end gap-0">
           <div className={cn(
-            "text-[14px] font-black tracking-tight",
+            "text-[16px] font-black tracking-tight leading-tight",
             t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-800"
           )}>
             {t.nominal.toLocaleString('id-ID')}

@@ -16,7 +16,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
   const [isVisible, setIsVisible] = useState(true)
   
   const items = [
-    { id: 'view-beranda', label: 'Beranda', Icon: Home },
+    { id: 'view-beranda', label: 'Transaksi', Icon: Home },
     { id: 'view-transaksi', label: 'Riwayat', Icon: Clock },
     { id: 'view-isi-saldo', label: 'Isi Saldo', Icon: Wallet },
     { id: 'view-laporan', label: 'Laporan', Icon: BarChart2 },

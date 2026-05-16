@@ -23,6 +23,7 @@ interface LaporanViewProps {
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
   kasirList: Record<string, any>
+  setActiveView: (v: string) => void
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
@@ -31,24 +32,56 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const sumAdmin = (txs: Transaction[]) => txs.reduce((s, t) => s + t.adminFee, 0)
   
   const currentIsiBank = sum(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank'))
-  const currentPenjualanDigital = sum(props.transactions.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)))
-  const currentSaldoBank = currentIsiBank - currentPenjualanDigital
+  const currentPenjualanDigital = sum(props.transactions.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentSaldoBank = currentIsiBank - sum(props.transactions.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)))
   
-  const currentTotalAksesoris = sum(props.transactions.filter(t => t.kategori === 'Aksesoris'))
-  const currentTotalTarik = sum(props.transactions.filter(t => t.kategori === 'Tarik Tunai'))
-  const currentTotalAdmin = sumAdmin(props.transactions)
+  const currentTotalAksesoris = sum(props.transactions.filter(t => t.kategori === 'Aksesoris' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentTotalTarik = sum(props.transactions.filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  
+  // Kas Lain Nya Calculations
+  const txsAdminDalam = props.transactions.filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
+  const totalAdminDalam = sumAdmin(txsAdminDalam)
+
+  const txsNonTunai = props.transactions.filter(t => (t.keterangan || '').includes('[NON_TUNAI]'))
+  const totalNonTunai = txsNonTunai.reduce((s, t) => s + t.nominal + t.adminFee, 0)
+
+  const txsKhusus = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'))
+  const totalKhusus = txsKhusus.reduce((s, t) => s + t.nominal + t.adminFee, 0)
+
+  // Admin fee (exclude Admin Dalam and transactions from LAIN tab)
+  const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   const currentTotalSaldoKas = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
+      {/* HEADER BARU */}
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-600 text-white shadow-lg">
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">LAPORAN KEUANGAN</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+        </div>
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
       <div className="px-1.5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center px-2">
           <div>
-            <h2 className="font-bold text-lg tracking-wide">Laporan Keuangan</h2>
-            <p className="text-emerald-100 text-[11px] mt-1 opacity-90">Rekapitulasi transaksi & laba</p>
+            <h2 className="font-bold text-sm tracking-wide">Rekapitulasi</h2>
+            <p className="text-emerald-100 text-[10px] opacity-90">Arus kas & laba</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <i className="fa-solid fa-chart-line text-white"></i>
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+            <i className="fa-solid fa-chart-line text-white text-xs"></i>
           </div>
         </div>
         {props.kasirRole === 'owner' && props.setFilterKasir && (
@@ -115,8 +148,19 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-gray-700">
-                {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
-                  const filtered = props.transactions.filter(t => t.kategori === cat)
+                {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'].map(cat => {
+                  let filtered = [];
+                  if (cat === 'Transaksi Khusus') {
+                    // Group ALL khusus transactions as requested
+                    filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+                  } else {
+                    // Filter by category and exclude anything already grouped in Khusus or Non Tunai
+                    filtered = props.transactions.filter(t => 
+                      t.kategori === cat && 
+                      !(t.keterangan || '').includes('[KHUSUS]')
+                    );
+                  }
+                  
                   if (filtered.length === 0) return null
                   
                   let catColor = "bg-gray-100 text-gray-600";
@@ -126,12 +170,13 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   if (cat === 'Order Kuota') catColor = "bg-emerald-100 text-emerald-700";
                   if (cat === 'Tarik Tunai') catColor = "bg-rose-100 text-rose-700";
                   if (cat === 'Aksesoris') catColor = "bg-fuchsia-100 text-fuchsia-700";
+                  if (cat === 'Transaksi Khusus') catColor = "bg-purple-100 text-purple-700";
 
                   return (
                     <tr key={cat} className="group hover:bg-gray-50/80 transition-all">
                       <td className="py-1 pr-2">
                         <span className={cn("px-2 py-0.5 rounded-xl text-[10px] font-black whitespace-nowrap inline-block", catColor)}>
-                          {cat === 'Tarik Tunai' ? 'Tarik Tunai' : cat === 'Aksesoris' ? 'Aksesoris' : cat}
+                          {cat}
                         </span>
                       </td>
                       <td className="py-1 font-bold text-gray-500 text-center text-xs">{filtered.length}</td>
@@ -145,7 +190,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="p-4 space-y-5">
           <div>
             <h4 className="text-[13px] font-extrabold text-emerald-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
               <i className="fa-solid fa-arrow-down-long"></i> KAS MASUK
@@ -178,6 +223,26 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <div className="flex justify-between items-center bg-rose-50/50 px-3 py-1 rounded-xl border border-rose-100/50">
                 <span className="text-[13px] font-bold text-rose-700 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[12px]"></i> Tarik Tunai Nasabah</span>
                 <span className="font-black text-[14px] text-rose-600">-{formatRupiah(currentTotalTarik)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-[13px] font-extrabold text-purple-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
+              <i className="fa-solid fa-layer-group"></i> KAS LAIN NYA
+            </h4>
+            <div className="bg-white rounded-2xl p-2 shadow-sm border border-purple-100 space-y-1">
+              <div className="flex justify-between items-center bg-purple-50/50 px-3 py-1 rounded-xl border border-purple-100/50">
+                <span className="text-[13px] font-bold text-purple-700 flex items-center gap-2"><i className="fa-solid fa-tags text-[12px]"></i> Admin Dalam/Non Tunai</span>
+                <span className="font-black text-[14px] text-purple-600">{formatRupiah(totalAdminDalam)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-indigo-50/50 px-3 py-1 rounded-xl border border-indigo-100/50">
+                <span className="text-[13px] font-bold text-indigo-700 flex items-center gap-2"><i className="fa-solid fa-credit-card text-[12px]"></i> Transaksi Non Tunai</span>
+                <span className="font-black text-[14px] text-indigo-600">{formatRupiah(totalNonTunai)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-fuchsia-50/50 px-3 py-1 rounded-xl border border-fuchsia-100/50">
+                <span className="text-[13px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-star text-[12px]"></i> Transaksi Khusus</span>
+                <span className="font-black text-[14px] text-fuchsia-600">{formatRupiah(totalKhusus)}</span>
               </div>
             </div>
           </div>

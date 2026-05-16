@@ -224,16 +224,34 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
 
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24" onClick={() => setActiveEditingCell(null)}>
-      <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-5 shadow-lg sticky top-0 z-20">
-        <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => setActiveView('view-beranda')} className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-lg font-black tracking-tight leading-none">STOK VOUCHER</h2>
-            <p className="text-[10px] text-blue-100 font-medium mt-1">{selectedDate}</p>
-          </div>
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-blue-800 text-white shadow-lg">
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">STOK VOUCHER</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
         </div>
+        <button 
+          onClick={() => setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-5 shadow-lg flex justify-between items-center rounded-b-[2rem] mb-4">
+        <div>
+          <h2 className="text-sm font-black tracking-tight leading-none uppercase">Data Voucher</h2>
+          <p className="text-[9px] text-blue-100 font-medium mt-1">{selectedDate}</p>
+        </div>
+        <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+          <i className="fa-solid fa-ticket text-white text-xs"></i>
+        </div>
+      </div>
 
         <div className="flex gap-2 mb-4">
           <button 
@@ -270,7 +288,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
             </button>
           </div>
         </div>
-      </div>
+      
 
       <div className="p-4">
         <div className="grid grid-cols-3 gap-2 mb-4">

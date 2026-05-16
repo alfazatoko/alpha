@@ -27,7 +27,7 @@ export const GoogleAuthScreen: React.FC = () => {
 
       // Jika di native, buka browser secara manual agar state terjaga
       if (Capacitor.isNativePlatform() && data?.url) {
-        await Browser.open({ url: data.url, windowName: '_self' });
+        await Browser.open({ url: data.url });
       }
     } catch (err: any) {
       setError(err.message || 'Gagal login dengan Google')

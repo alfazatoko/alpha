@@ -23,6 +23,7 @@ interface RiwayatViewProps {
   kasirList?: Record<string, KasirAccount>
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
+  setActiveView: (v: string) => void
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
@@ -84,10 +85,36 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")} style={{ backgroundColor: 'var(--container-bg, #ffffff)' }}>
-      {/* HEADER */}
-      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-indigo-500/20">
-        <h2 className="font-bold text-lg tracking-wide text-white">Riwayat Transaksi</h2>
-        <p className="text-violet-100 text-[11px] mt-0.5 opacity-90">Pantau semua arus kas keluar masuk</p>
+      {/* HEADER BARU */}
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-indigo-700 text-white shadow-lg">
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">RIWAYAT TRANSAKSI</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+        </div>
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20">
+        <div className="px-2 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-sm tracking-wide">Data Transaksi</h2>
+            <p className="text-blue-100 text-[10px] opacity-90">Arus kas keluar masuk</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+            <i className="fa-solid fa-clock text-white text-xs"></i>
+          </div>
+        </div>
 
         {/* OWNER ONLY: FILTER KASIR DI DALAM HEADER */}
         {props.kasirRole === 'owner' && props.kasirList && (
@@ -288,12 +315,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                 <div className="py-6 text-center text-slate-300 text-[10px] font-bold">KOSONG</div>
               ) : (
                 filteredSaldoTransactions.map((t, i) => (
-                  <div key={t.id} className="p-5 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
+                  <div key={t.id} className="py-1.5 px-4 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
                      <div className="flex gap-4 items-center">
                         <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-0">
                            <div className={cn(
-                             "text-[9px] font-black uppercase",
+                             "text-[16px] font-black uppercase leading-tight",
                              t.kategori.includes('Bank') ? "text-blue-600" : 
                              t.kategori.includes('Real') ? "text-emerald-600" : "text-fuchsia-600"
                            )}>
@@ -307,9 +334,9 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                            </div>
                         </div>
                      </div>
-                     <div className="text-right flex flex-col items-end gap-0.5">
-                        <div className="text-sm font-black text-slate-800">{formatRupiah(t.nominal).replace(',00', '')}</div>
-                        <div className="text-[9px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
+                      <div className="text-right flex flex-col items-end gap-0">
+                        <div className="text-[16px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
+                        <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
                      </div>
                   </div>
                 ))

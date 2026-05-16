@@ -31,14 +31,35 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-1.5 pt-7 pb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => props.setActiveView('view-beranda')} className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center transition-all">
-            <i className="fa-solid fa-arrow-left text-sm text-white"></i>
-          </button>
-          <h2 className="font-bold text-lg tracking-wide text-white">Manajemen Saldo</h2>
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-indigo-600 text-white shadow-lg">
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">MANAJEMEN SALDO</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
         </div>
-        <p className="text-blue-100 text-[11px] mt-2 opacity-90">Atur modal bank & rekap penjualan tunai</p>
+        <button 
+          onClick={() => props.setActiveView('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div className="px-5 pt-6 pb-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-b-[2rem] shadow-lg mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-sm tracking-wide">Pengaturan Saldo</h2>
+            <p className="text-blue-100 text-[10px] opacity-90">Atur modal & rekap harian</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+            <i className="fa-solid fa-vault text-xs"></i>
+          </div>
+        </div>
       </div>
 
       <div className="px-1.5 pb-8 space-y-5">

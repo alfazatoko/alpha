@@ -17,6 +17,7 @@ interface AkunViewProps {
   onSaveStoreName?: (v: string) => void
   onSaveStoreSubtext?: (v: string) => void
   onSaveStorePhoto?: (v: string) => void
+  setActiveView?: (v: string) => void
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -84,9 +85,23 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-white", props.active && "active")}>
-      <div className="px-1.5 pt-7 pb-4 border-b flex justify-between items-center">
-        <h2 className="font-bold text-gray-800">Profil & Pengaturan</h2>
-        <i className="fa-solid fa-gear text-gray-400"></i>
+      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-slate-900 text-white shadow-lg">
+        <button 
+          onClick={() => props.setActiveView?.('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
+        <div className="text-center">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">PENGATURAN</h2>
+          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+        </div>
+        <button 
+          onClick={() => props.setActiveView?.('view-beranda')}
+          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
+        >
+          <i className="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div className="px-1.5 py-6">
         <div className="flex items-center gap-4 p-5 border border-blue-100 rounded-3xl mb-6 bg-blue-50/30">

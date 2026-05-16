@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { formatRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
@@ -8,6 +8,7 @@ import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 
 interface BerandaViewProps {
   active: boolean
+  activeView?: string
   setIsSidePanelOpen: (v: boolean) => void
   setActiveView: (v: string) => void
   saldoBank: number
@@ -21,7 +22,7 @@ interface BerandaViewProps {
   setFormAdmin: (v: string) => void
   formKeterangan: string
   setFormKeterangan: (v: string) => void
-  handleSimpanTransaksi: () => void
+  handleSimpanTransaksi: (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
   transactions: Transaction[]
   totalAdmin: number
   totalVolume: number
@@ -38,6 +39,7 @@ interface BerandaViewProps {
   onLogout?: () => void
   kasirList: Record<string, KasirAccount>
   refreshKasirList: () => void
+  handleOwnerTambahModal?: (kasirId: string, nominal: number) => void
   jamAbsen?: string
   absensiList?: any[]
   runningTexts?: string[]
@@ -611,7 +613,6 @@ const BackupPanel: React.FC<{
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
-  const [activeOwnerModal, setActiveOwnerModal] = useState<string | null>(null) // monitor, laporan, audit
   const [currentTime, setCurrentTime] = useState(new Date())
 
   // Kasir Management State (Form inputs remain local)
@@ -636,8 +637,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
   const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
 
+  const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
+  const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
+
+  const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
+  const isOwnerSubView = !!activeOwnerSubView
+
   useEffect(() => {
-    if (activeOwnerModal === 'izin') {
+    if (activeOwnerSubView === 'izin') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_IZIN)
         if (saved) setCatatanIzin(JSON.parse(saved))
@@ -645,7 +652,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         console.error('Failed to load izin', e)
       }
     }
-  }, [activeOwnerModal])
+  }, [activeOwnerSubView])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -676,38 +683,72 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const penjualanDigital = props.penjualanDigital
   const kasModal = props.kasModal
 
+
+  // Recalculate Owner Control stats to match RiwayatView behavior
+  const todayISO = getLocalDateString()
+  const ownerDisplayTxs = props.kasirRole === 'owner' 
+    ? (props.filterKasir && props.filterKasir !== 'Semua' ? props.transactions.filter(t => t.kasir_id === props.filterKasir) : props.transactions)
+    : props.transactions.filter(t => t.kasir_id === props.kasirName); // assuming kasirName is the username for filtering
+  
+  const ownerTodayTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && !t.kategori.startsWith('Isi'))
+  
+  const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
+  const ownerTotalAdmin = ownerTodayTxs.filter(t => 
+    !(t.keterangan || '').includes('[ADMIN_DALAM]') && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.adminFee, 0)
+  const ownerTotalTrx = ownerTodayTxs.length
+
+  // Recalculate other stats for the 'Ringkasan Harian' modal consistency
+  const ownerTotalAksesoris = ownerTodayTxs.filter(t => 
+    t.kategori === 'Aksesoris' && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerTotalTarik = ownerTodayTxs.filter(t => 
+    t.kategori === 'Tarik Tunai' && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerPenjualanDigital = ownerTodayTxs.filter(t => 
+    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerKasModal = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Modal Tunai Kasir').reduce((s, t) => s + t.nominal, 0)
+  
+  // Kas Lain Nya Calculations (Matching LaporanView logic)
+  const ownerAdminDalam = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[ADMIN_DALAM]')).reduce((s, t) => s + t.adminFee, 0)
+  const ownerNonTunai = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
+  const ownerKhusus = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[KHUSUS]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
+
+  const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin - ownerTotalTarik
+  
+  // ownerSaldoBank calculation (Contribution to bank balance/plafon)
+  const ownerIsiBank = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
+  const ownerSaldoBank = ownerIsiBank - ownerPenjualanDigital
+
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
-      {/* Header with blue gradient background — flat top, curved bottom */}
       <div className="relative" style={{ background: '#0000c6', borderRadius: '0 0 2.5rem 2.5rem', paddingBottom: '3.5rem' }}>
-        <div className="px-1.5 pt-6 pb-4 flex justify-between items-center">
-          <button onClick={() => props.setIsSidePanelOpen(true)} className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white">
-            <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
-          </button>
-          <div className="flex-1 ml-3 flex items-center justify-between gap-3">
+        <div className="px-4 pt-7 pb-4 flex items-center justify-between gap-3">
+          <div className="flex-1 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               {props.storePhoto ? (
                 <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
               ) : (
-                <img 
-                  src="/logo-alpha.png" 
-                  alt="Logo" 
-                  className="w-12 h-12 object-contain" 
-                  style={{ 
-                    filter: 'invert(1) brightness(1.2)', 
-                    mixBlendMode: 'screen' 
-                  }} 
-                />
+                <img src="/logo-alpha.png" alt="Logo" className="w-12 h-12 object-contain" style={{ filter: 'invert(1) brightness(1.2)', mixBlendMode: 'screen' }} />
               )}
               <div>
                 <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
                 <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Agen BRILink & Ponsel'}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <span className="text-white text-[10px] font-black">{props.kasirName}</span>
-                  <span className={cn(
-                    "text-[7px] px-1.5 py-0.5 rounded-full font-black",
-                    props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white"
-                  )}>
+                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
                     {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
                   </span>
                 </div>
@@ -715,22 +756,40 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             </div>
 
             <div className="text-right">
-              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">
-                {dayName}
-              </p>
-              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">
-                {fullDate}
-              </p>
-              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">
-                {clockStr}
-              </p>
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
             </div>
           </div>
+
+          <button onClick={() => props.setIsSidePanelOpen(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
         </div>
       </div>
 
-      {/* Saldo card — overlaps the blue header */}
       <div className="mx-1.5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
+        {props.kasirRole === 'owner' && props.kasirList && (
+          <div className="mb-3 bg-blue-50/50 px-3 py-2 rounded-xl border border-blue-100/50 flex items-center justify-between">
+            <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
+              <i className="fa-solid fa-user-tie text-blue-600"></i> Mode Pantau Kasir
+            </span>
+            <div className="relative">
+               <select 
+                 value={props.filterKasir || 'Semua'}
+                 onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                 className="bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6"
+               >
+                 <option value="Semua">Semua Kasir</option>
+                 {Object.entries(props.kasirList).map(([id, acc]) => (
+                   <option key={id} value={id}>{acc.name}</option>
+                 ))}
+               </select>
+               <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-start mb-2">
           <div>
             <p className="text-[11px] text-gray-600 font-black uppercase tracking-widest">SALDO BANK</p>
@@ -781,149 +840,123 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       )}
 
       {showRincian && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-1.5 py-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+        <div className="absolute inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowRincian(false)}>
+          <div 
+            className="bg-white w-full max-w-md rounded-t-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-500 pb-safe"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pull Bar */}
+            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto my-3"></div>
+
             {/* Header */}
-            <div className="bg-blue-600 px-3 py-5 text-white flex justify-between items-start">
+            <div className="bg-gradient-to-r from-blue-700 to-blue-600 px-6 py-6 text-white flex justify-between items-start rounded-t-[1.5rem] mx-2">
               <div>
-                <h3 className="font-black text-[19px] tracking-tight uppercase leading-none">RINCIAN KEUANGAN</h3>
-                <p className="text-[12px] text-blue-100 opacity-90 mt-1.5">Rekapitulasi Arus Kas Hari Ini</p>
+                <h3 className="font-black text-xl tracking-tight uppercase leading-none">RINCIAN KEUANGAN</h3>
+                <p className="text-[11px] text-blue-100 font-bold uppercase tracking-widest mt-2 opacity-80">Rekapitulasi Arus Kas Hari Ini</p>
               </div>
-              <button onClick={() => setShowRincian(false)} className="w-8 h-8 rounded-full bg-blue-700/50 flex items-center justify-center hover:bg-blue-800 transition-all shadow-inner">
-                <i className="fa-solid fa-xmark text-sm"></i>
+              <button onClick={() => setShowRincian(false)} className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center hover:bg-white/30 transition-all border border-white/20">
+                <i className="fa-solid fa-xmark text-base"></i>
               </button>
             </div>
             
-            <div className="px-2 py-5 space-y-5 max-h-[75vh] overflow-y-auto hide-scrollbar">
+            <div className="px-6 py-2 space-y-2 max-h-[75vh] overflow-y-auto hide-scrollbar">
               {/* SALDO BANK */}
-              <div className="space-y-3 pb-3 border-b border-gray-100">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-blue-700 flex items-center justify-center text-white text-[9px]">
+              <div className="space-y-2 pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 text-sm">
                     <i className="fa-solid fa-building-columns"></i>
                   </div>
                   <div>
-                    <h4 className="text-[13px] font-black text-blue-800 uppercase leading-none">SALDO BANK</h4>
-                    <p className="text-[11px] text-gray-400 font-medium mt-0.5 opacity-80">Total uang di rekening/digital</p>
+                    <h4 className="text-[14px] font-black text-blue-900 uppercase leading-none">SALDO BANK</h4>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Total aset di rekening & digital</p>
                   </div>
                 </div>
-                <div className="flex justify-between items-start pl-1.5">
-                  <div className="flex gap-2.5">
-                    <div className="w-1 h-1 rounded-full bg-blue-700 mt-1.5 opacity-60"></div>
-                    <div>
-                      <p className="text-xs font-black text-gray-800">Total Saldo Bank</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-black text-blue-700">{formatRupiah(props.saldoBank)}</span>
+                <div className="flex justify-between items-center bg-blue-600 p-3 rounded-2xl shadow-md border border-blue-500">
+                  <span className="text-xs font-black text-blue-50 uppercase tracking-wide">Total Saldo Bank</span>
+                  <span className="text-sm font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
                 </div>
               </div>
 
               {/* KAS MASUK */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-green-700 flex items-center justify-center text-white text-[9px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 text-sm">
                     <i className="fa-solid fa-arrow-down"></i>
                   </div>
                   <div>
-                    <h4 className="text-[13px] font-black text-green-800 uppercase leading-none">KAS MASUK</h4>
-                    <p className="text-[11px] text-gray-400 font-medium mt-0.5 opacity-80">Uang/cash masuk ke laci kasir</p>
+                    <h4 className="text-[14px] font-black text-emerald-900 uppercase leading-none">KAS MASUK</h4>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Total uang masuk ke laci kasir</p>
                   </div>
                 </div>
 
-                <div className="space-y-3 pl-1.5">
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-2.5">
-                      <div className="w-1 h-1 rounded-full bg-green-700 mt-1.5 opacity-60"></div>
+                <div className="grid grid-cols-1 gap-0.5">
+                  {[
+                    { label: 'Modal Tunai Kasir', sub: 'Uang awal di laci', val: kasModal, color: 'text-emerald-600' },
+                    { label: 'Penjualan Digital', sub: 'Transfer, E-Wallet, Pulsa', val: penjualanDigital, color: 'text-emerald-600' },
+                    { label: 'Penjualan Aksesoris', sub: 'Barang & Aksesoris', val: props.totalAksesoris, color: 'text-emerald-600' },
+                    { label: 'Total Admin Fee', sub: 'Komisi Transaksi', val: props.totalAdmin, color: 'text-emerald-600' },
+                    { label: 'Kas Lainnya', sub: 'Pemasukan Lain-lain', val: props.kasLainnya, color: 'text-emerald-600' }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-1 px-3 rounded-xl hover:bg-gray-50 transition-colors">
                       <div>
-                        <p className="text-xs font-black text-gray-800">Modal Tunai Kasir</p>
-                        <p className="text-[11px] text-gray-400">Uang modal yang dimasukkan</p>
+                        <p className="text-xs font-black text-gray-800 uppercase tracking-tight">{item.label}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{item.sub}</p>
                       </div>
+                      <span className={cn("text-xs font-black tabular-nums", item.color)}>Rp {Number(item.val).toLocaleString('id-ID')}</span>
                     </div>
-                    <span className="text-xs font-black text-green-700">Rp {Number(kasModal).toLocaleString('id-ID')}</span>
-                  </div>
-
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-2.5">
-                      <div className="w-1 h-1 rounded-full bg-green-700 mt-1.5 opacity-60"></div>
-                      <div>
-                        <p className="text-xs font-black text-gray-800">Penjualan Digital</p>
-                        <p className="text-[11px] text-gray-400">Transfer, ewallet, pulsa, token, dll</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black text-green-700">Rp {penjualanDigital.toLocaleString('id-ID')}</span>
-                  </div>
-
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-2.5">
-                      <div className="w-1 h-1 rounded-full bg-green-700 mt-1.5 opacity-60"></div>
-                      <div>
-                        <p className="text-xs font-black text-gray-800">Penjualan Aksesoris</p>
-                        <p className="text-[11px] text-gray-400">Aksesoris & barang</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black text-green-700">Rp {props.totalAksesoris.toLocaleString('id-ID')}</span>
-                  </div>
-
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-2.5">
-                      <div className="w-1 h-1 rounded-full bg-green-700 mt-1.5 opacity-60"></div>
-                      <div>
-                        <p className="text-xs font-black text-gray-800">Total Admin Fee</p>
-                        <p className="text-[11px] text-gray-400">Total fee/komisi transaksi</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black text-green-700">Rp {props.totalAdmin.toLocaleString('id-ID')}</span>
-                  </div>
+                  ))}
                 </div>
               </div>
 
               <div className="h-px bg-gray-50"></div>
 
               {/* KAS KELUAR */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-[9px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center text-red-600 text-sm">
                     <i className="fa-solid fa-arrow-up"></i>
                   </div>
                   <div>
-                    <h4 className="text-[13px] font-black text-red-700 uppercase leading-none">KAS KELUAR</h4>
-                    <p className="text-[11px] text-gray-400 font-medium mt-0.5 opacity-80">Uang/cash keluar dari laci kasir</p>
+                    <h4 className="text-[14px] font-black text-red-900 uppercase leading-none">KAS KELUAR</h4>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Uang keluar dari laci kasir</p>
                   </div>
                 </div>
 
-                <div className="space-y-3 pl-1.5">
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-2.5">
-                      <div className="w-1 h-1 rounded-full bg-red-600 mt-1.5 opacity-60"></div>
-                      <div>
-                        <p className="text-xs font-black text-gray-800">Tarik Tunai Nasabah</p>
-                        <p className="text-[11px] text-gray-400">Penarikan uang nasabah</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black text-red-600">-Rp {props.totalTarik.toLocaleString('id-ID')}</span>
+                <div className="flex justify-between items-center py-1.5 px-3 rounded-xl bg-red-50/30 border border-red-100/50">
+                  <div>
+                    <p className="text-xs font-black text-gray-800 uppercase tracking-tight">Tarik Tunai Nasabah</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Penarikan tunai</p>
                   </div>
+                  <span className="text-xs font-black text-red-600 tabular-nums">-Rp {props.totalTarik.toLocaleString('id-ID')}</span>
                 </div>
               </div>
 
-              {/* Total Saldo Laci Kasir Box - Updated Layout */}
-              <div className="bg-[#051c5f] p-4 rounded-3xl text-white mt-1 shadow-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[11px] font-black uppercase tracking-widest text-blue-100">TOTAL SALDO LACI KASIR</span>
-                  <h2 className="text-lg font-black text-green-400 tracking-tighter">
+              {/* Total Saldo Laci Kasir Box */}
+              <div className="bg-[#051c5f] p-3.5 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-10 -mt-10 blur-xl"></div>
+                <div className="relative z-10">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">TOTAL SALDO LACI KASIR</span>
+                    <i className="fa-solid fa-vault text-blue-300 opacity-50"></i>
+                  </div>
+                  <h2 className="text-3xl font-black text-green-400 tracking-tighter drop-shadow-sm">
                     {formatRupiah(totalPendapatanBersih)}
                   </h2>
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <p className="text-[8px] font-bold text-blue-200/60 uppercase tracking-[0.2em] leading-relaxed">
+                      FORMULA : (MODAL + DIGITAL + AKSESORIS + ADMIN) - TARIK TUNAI
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[7px] font-bold text-blue-200 uppercase tracking-widest opacity-60">
-                  RUMUS : Saldo laci kasir (kas masuk - kas keluar)
-                </p>
               </div>
             </div>
             
-            <div className="px-2 pb-5 pt-1">
+            <div className="px-6 pb-8 pt-2">
               <button 
                 onClick={() => { setShowRincian(false); props.setActiveView('view-laporan'); }}
-                className="w-full bg-[#0028b8] text-white py-3.5 rounded-2xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-wider shadow-lg active:scale-95 transition-all"
+                className="w-full bg-[#0028b8] text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200 active:scale-95 transition-all"
               >
-                <i className="fa-solid fa-chart-simple text-xs"></i> LIHAT DETAIL & LAPORAN
+                <i className="fa-solid fa-chart-line text-sm"></i> LIHAT LAPORAN LENGKAP
               </button>
             </div>
           </div>
@@ -955,7 +988,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             <div className={cn("w-11 h-11 mx-auto rounded-2xl flex items-center justify-center text-white shadow-md active:scale-90 transition-transform", item.color)}>
               <i className={cn("fa-solid text-lg", item.icon)}></i>
             </div>
-            <p className="text-[9px] font-bold text-gray-500 mt-1.5 tracking-tighter uppercase">{item.label}</p>
+            <p className="text-[9px] font-black text-black mt-1.5 tracking-tighter uppercase">{item.label}</p>
           </div>
         ))}
       </div>
@@ -963,22 +996,25 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       {/* Expanded Menu - Flexible Wrap */}
       {showLainnya && (
         <div className="px-4 py-3 mb-6 bg-gray-50/50 rounded-3xl mx-1.5 border border-dashed border-gray-200 animate-in slide-in-from-top-2 duration-300">
-          <div className="flex flex-wrap justify-start gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {[
               { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'text-purple-600', bg: 'bg-purple-50' },
               { id: 'view-laporan', label: 'CLOSING', icon: 'fa-door-closed', color: 'text-indigo-600', bg: 'bg-indigo-50' },
               { id: 'view-transaksi', label: 'NON TUNAI', icon: 'fa-credit-card', color: 'text-teal-600', bg: 'bg-teal-50' },
-              // More buttons can be added here easily
+              { id: 'tutup-lainnya', label: 'TUTUP', icon: 'fa-chevron-up', color: 'text-gray-600', bg: 'bg-gray-100' },
             ].map((item) => (
               <div 
                 key={item.id} 
-                onClick={() => props.setActiveView(item.id)}
+                onClick={() => {
+                  if (item.id === 'tutup-lainnya') setShowLainnya(false);
+                  else props.setActiveView(item.id);
+                }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
               >
                 <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm", item.bg, item.color)}>
                   <i className={cn("fa-solid text-lg", item.icon)}></i>
                 </div>
-                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{item.label}</p>
+                <p className="text-[8px] font-black text-black uppercase tracking-widest">{item.label}</p>
               </div>
             ))}
           </div>
@@ -987,7 +1023,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       {props.kasirRole === 'owner' && (
         <div className="px-1.5 mb-8">
-          {/* Header Panel Owner ala Image */}
           <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center gap-4 border-b-4 border-orange-600/20">
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/30 shadow-inner">
               <i className="fa-solid fa-shield-halved text-2xl"></i>
@@ -998,29 +1033,29 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             </div>
           </div>
 
-          {/* Grid Menu Owner ala Image */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
-              { id: 'laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
-              { id: 'grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
-              { id: 'performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
-              { id: 'absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
-              { id: 'izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
-              { id: 'gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
-              { id: 'backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+              { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
+              { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
+              { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
+              { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
+              { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
+              { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
+              { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
+              { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
+              { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
               { id: 'view-akun', title: 'Setting', desc: 'Pengaturan app', icon: 'fa-gear', color: 'bg-slate-600' },
             ].map((item) => (
               <button 
                 key={item.id}
-                onClick={() => item.id === 'view-akun' ? props.setActiveView('view-akun') : setActiveOwnerModal(item.id)}
+                onClick={() => props.setActiveView(item.id)}
                 className="bg-white border border-gray-100 rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 shadow-sm active:scale-95 transition-all hover:border-orange-200"
               >
                 <div className={cn("w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg", item.color)}>
                   <i className={`fa-solid ${item.icon} text-lg`}></i>
                 </div>
                 <div className="text-center">
-                  <p className="text-[11px] font-black text-gray-800 leading-none mb-1">{item.title}</p>
+                  <p className="text-[11px] font-black text-black leading-none mb-1">{item.title}</p>
                   <p className="text-[8px] font-bold text-gray-400 leading-tight">{item.desc}</p>
                 </div>
               </button>
@@ -1029,52 +1064,53 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         </div>
       )}
 
-      {/* Owner Modals Container */}
-      {activeOwnerModal && (
-        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-md flex items-end justify-center sm:items-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300">
-            {/* Modal Header */}
-            <div className={cn(
-              "p-5 text-white flex justify-between items-start",
-              activeOwnerModal === 'monitor' ? "bg-blue-600" : 
-              activeOwnerModal === 'laporan' ? "bg-indigo-600" :
-              activeOwnerModal === 'grafik' ? "bg-emerald-600" :
-              activeOwnerModal === 'performa' ? "bg-purple-600" :
-              activeOwnerModal === 'absen' ? "bg-teal-600" :
-              activeOwnerModal === 'izin' ? "bg-orange-600" :
-              activeOwnerModal === 'gaji' ? "bg-green-600" :
-              activeOwnerModal === 'backup' ? "bg-red-600" : "bg-purple-600"
-            )}>
-              <div>
-                <h3 className="font-black text-lg tracking-tight uppercase leading-none">
-                  {activeOwnerModal === 'monitor' ? 'KELOLA KASIR' : 
-                   activeOwnerModal === 'laporan' ? 'RINGKASAN HARIAN' : 
-                   activeOwnerModal === 'grafik' ? 'GRAFIK TRANSAKSI' :
-                   activeOwnerModal === 'performa' ? 'PERFORMA KASIR' :
-                   activeOwnerModal === 'absen' ? 'ABSENSI KASIR' :
-                   activeOwnerModal === 'izin' ? 'CATATAN IZIN KASIR' :
-                   activeOwnerModal === 'gaji' ? 'DATA GAJI' :
-                   activeOwnerModal === 'backup' ? 'BACKUP DATA' : 'AUDIT LACI KAS'}
-                </h3>
-                <p className="text-[10px] text-white/80 mt-1.5 font-bold uppercase tracking-widest">
-                  {activeOwnerModal === 'monitor' ? 'Tambah, edit, dan hapus kasir' : 
-                   activeOwnerModal === 'laporan' ? 'Rekapitulasi seluruh cabang' : 
-                   activeOwnerModal === 'audit' ? 'Verifikasi uang fisik vs sistem' :
-                   activeOwnerModal === 'absen' ? 'Data kehadiran seluruh kasir' :
-                   activeOwnerModal === 'gaji' ? 'Manajemen insentif & payroll' : 
-                   activeOwnerModal === 'grafik' ? 'Analitik penjualan toko' :
-                   activeOwnerModal === 'performa' ? 'Evaluasi kerja kasir' :
-                   activeOwnerModal === 'backup' ? 'Keamanan data & reset sistem' : 'Pengingat untuk penggajian'}
-                </p>
-              </div>
-              <button onClick={() => setActiveOwnerModal(null)} className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/40 transition-all shadow-inner">
-                <i className="fa-solid fa-xmark text-sm"></i>
-              </button>
+      {isOwnerSubView && (
+        <div className="absolute inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+          <div className={cn(
+            "p-4 text-white flex justify-between items-center shadow-lg",
+            activeOwnerSubView === 'monitor' ? "bg-blue-600" : 
+            activeOwnerSubView === 'laporan' ? "bg-indigo-600" :
+            activeOwnerSubView === 'grafik' ? "bg-emerald-500" :
+            activeOwnerSubView === 'performa' ? "bg-purple-600" :
+            activeOwnerSubView === 'absen' ? "bg-teal-500" :
+            activeOwnerSubView === 'izin' ? "bg-orange-500" :
+            activeOwnerSubView === 'gaji' ? "bg-green-600" :
+            activeOwnerSubView === 'saldo' ? "bg-emerald-600" :
+            "bg-red-600"
+          )}>
+            <button 
+              onClick={() => props.setActiveView('view-beranda')}
+              className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90"
+            >
+              <i className="fa-solid fa-arrow-left"></i>
+            </button>
+
+            <div className="text-center">
+              <h3 className="font-black text-sm tracking-widest uppercase leading-none">
+                {activeOwnerSubView === 'monitor' ? 'KELOLA KASIR' : 
+                 activeOwnerSubView === 'laporan' ? 'RINGKASAN HARIAN' : 
+                 activeOwnerSubView === 'grafik' ? 'GRAFIK TRANSAKSI' :
+                 activeOwnerSubView === 'performa' ? 'PERFORMA KASIR' :
+                 activeOwnerSubView === 'absen' ? 'ABSENSI KASIR' :
+                 activeOwnerSubView === 'izin' ? 'IZIN KARYAWAN' :
+                 activeOwnerSubView === 'gaji' ? 'DATA GAJI KASIR' :
+                 activeOwnerSubView === 'saldo' ? 'PENGATURAN SALDO' :
+                 'BACKUP & RESET'}
+              </h3>
+              <p className="text-[9px] text-white/70 mt-1 font-bold uppercase tracking-widest">Panel Kontrol Owner</p>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-5 max-h-[60vh] overflow-y-auto hide-scrollbar">
-              {activeOwnerModal === 'monitor' && (
+            <button 
+              onClick={() => props.setActiveView('view-beranda')}
+              className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          {/* Sub-View Content */}
+          <div className="flex-1 overflow-y-auto hide-scrollbar p-5 pb-24">
+            {activeOwnerSubView === 'monitor' && (
                 <div className="space-y-4">
                   {/* Add Kasir Form */}
                   <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
@@ -1189,7 +1225,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'laporan' && (
+              {activeOwnerSubView === 'laporan' && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
                     <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest pl-2">Filter Data Kasir</p>
@@ -1216,7 +1252,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Total Saldo Bank</p>
-                        <span className="text-xs font-black text-blue-700">{formatRupiah(props.saldoBank)}</span>
+                        <span className="text-xs font-black text-blue-700">{formatRupiah(ownerSaldoBank)}</span>
                       </div>
                     </div>
                   </div>
@@ -1232,19 +1268,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Modal Tunai Kasir</p>
-                        <span className="text-xs font-black text-gray-800">Rp {Number(kasModal).toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerKasModal)}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Penjualan Digital</p>
-                        <span className="text-xs font-black text-gray-800">Rp {penjualanDigital.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerPenjualanDigital)}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Penjualan Aksesoris</p>
-                        <span className="text-xs font-black text-gray-800">Rp {props.totalAksesoris.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerTotalAksesoris)}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Total Admin Fee</p>
-                        <span className="text-xs font-black text-gray-800">Rp {props.totalAdmin.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerTotalAdmin)}</span>
                       </div>
                     </div>
                   </div>
@@ -1262,7 +1298,33 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="space-y-2 pl-7">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-gray-500">Tarik Tunai Nasabah</p>
-                        <span className="text-xs font-black text-red-600">-Rp {props.totalTarik.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-black text-red-600">-{formatRupiah(ownerTotalTarik)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-gray-100"></div>
+
+                  {/* KAS LAIN NYA */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 text-[10px]">
+                        <i className="fa-solid fa-layer-group"></i>
+                      </div>
+                      <h4 className="text-[13px] font-black text-purple-600 uppercase tracking-widest">KAS LAIN NYA</h4>
+                    </div>
+                    <div className="space-y-2 pl-7">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Admin Dalam/Non Tunai</p>
+                        <span className="text-xs font-black text-purple-600">{formatRupiah(ownerAdminDalam)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Transaksi Non Tunai</p>
+                        <span className="text-xs font-black text-indigo-600">{formatRupiah(ownerNonTunai)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Transaksi Khusus</p>
+                        <span className="text-xs font-black text-fuchsia-600">{formatRupiah(ownerKhusus)}</span>
                       </div>
                     </div>
                   </div>
@@ -1273,7 +1335,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <p className="text-[12px] font-black text-blue-100 uppercase tracking-widest">SALDO LACI KASIR</p>
                       <p className="text-[8px] text-blue-200 mt-0.5">Total uang fisik hari ini</p>
                     </div>
-                    <span className="text-lg font-black text-green-300">Rp {totalPendapatanBersih.toLocaleString('id-ID')}</span>
+                    <span className="text-lg font-black text-green-300">{formatRupiah(ownerTotalLaci)}</span>
                   </div>
 
                   <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
@@ -1282,7 +1344,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'audit' && (
+              {activeOwnerSubView === 'audit' && (
                 <div className="space-y-4">
                   <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
                     <p className="text-[10px] font-bold text-purple-800 text-center uppercase tracking-widest mb-3">Masukkan Uang Fisik Di Laci</p>
@@ -1301,7 +1363,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'absen' && (
+              {activeOwnerSubView === 'absen' && (
                 <div className="space-y-6">
                   {/* TABS RINGKASAN vs FULL */}
                   <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
@@ -1468,15 +1530,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'gaji' && (
+              {activeOwnerSubView === 'gaji' && (
                 <GajiPanel kasirList={props.kasirList} absensiList={props.absensiList} storeName={props.storeName} />
               )}
 
-              {activeOwnerModal === 'backup' && (
+              {activeOwnerSubView === 'backup' && (
                 <BackupPanel transactions={props.transactions} absensiList={props.absensiList} storeName={props.storeName} />
               )}
 
-              {activeOwnerModal === 'izin' && (
+              {activeOwnerSubView === 'izin' && (
                 <div className="space-y-4">
                   {/* Form Input Izin */}
                   <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
@@ -1557,7 +1619,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
 
-              {activeOwnerModal === 'grafik' && (() => {
+              {activeOwnerSubView === 'grafik' && (() => {
                 const now = new Date()
                 now.setHours(0,0,0,0)
                 
@@ -1699,7 +1761,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 );
               })()}
 
-              {activeOwnerModal === 'performa' && (
+              {activeOwnerSubView === 'performa' && (
                 <div className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-[2.5rem] border border-purple-100 animate-in fade-in zoom-in duration-500 shadow-xl shadow-purple-500/5">
                   <div className="space-y-5">
                     <div className="flex items-center justify-between mb-2">
@@ -1752,10 +1814,86 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   </div>
                 </div>
               )}
+
+              {activeOwnerSubView === 'saldo' && (
+                <div className="space-y-6">
+                  {/* Form Tambah Modal */}
+                  <div className="bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 shadow-sm">
+                    <h4 className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <i className="fa-solid fa-plus-circle"></i> Tambah Modal Kasir
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Pilih Kasir</label>
+                        <select 
+                          value={ownerSaldoKasirId}
+                          onChange={e => setOwnerSaldoKasirId(e.target.value)}
+                          className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 outline-none"
+                        >
+                          <option value="">-- Pilih Kasir --</option>
+                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                            <option key={id} value={id}>{acc.name} ({id})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Nominal Modal</label>
+                        <input 
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Contoh: 500.000"
+                          value={ownerSaldoNominal}
+                          onChange={e => setOwnerSaldoNominal(formatInputRupiah(e.target.value))}
+                          className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 outline-none"
+                        />
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          const nominal = (ownerSaldoNominal.replace(/\./g, ''));
+                          if (!ownerSaldoKasirId || !nominal || parseInt(nominal) <= 0) return alert('Pilih kasir dan masukkan nominal yang valid');
+                          if (confirm(`Tambah modal ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`)) {
+                            props.handleOwnerTambahModal?.(ownerSaldoKasirId, parseInt(nominal));
+                            setOwnerSaldoNominal('');
+                            setOwnerSaldoKasirId('');
+                          }
+                        }}
+                        className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 transition-all"
+                      >
+                        Tambah Modal Sekarang
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ringkasan Modal Hari Ini */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Riwayat Modal Hari Ini</h4>
+                    {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => {
+                      const today = getLocalDateString();
+                      const modalHariIni = props.transactions
+                        .filter(t => t.kasir_id === id && t.kategori === 'Isi Modal Tunai Kasir' && t.timestamp.startsWith(today))
+                        .reduce((sum, t) => sum + t.nominal, 0);
+
+                      return (
+                        <div key={id} className="bg-white border border-gray-100 p-4 rounded-2xl flex justify-between items-center shadow-sm">
+                          <div>
+                            <p className="text-xs font-black text-gray-800">{acc.name}</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">ID: {id}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[13px] font-black text-emerald-600">{formatRupiah(modalHariIni)}</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter">Total Modal Hari Ini</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {props.kasirRole !== 'owner' && (
         <div className="px-1.5 mb-4">
@@ -1772,7 +1910,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           />
         </div>
       )}
-      {props.kasirRole === 'owner' && !activeOwnerModal && (
+      {props.kasirRole === 'owner' && !isOwnerSubView && (
         <div className="px-1.5 mb-8">
           <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-700 to-blue-900 rounded-[2.5rem] p-8 shadow-2xl shadow-blue-900/20 group">
             {/* Background Ornaments */}
@@ -1811,14 +1949,18 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-5 rounded-[2rem] hover:bg-white/15 transition-all cursor-default">
-                  <p className="text-[10px] font-black text-blue-200/80 uppercase tracking-widest mb-2">Volume Hari Ini</p>
-                  <p className="text-lg font-black text-white tabular-nums">{formatRupiah(props.totalVolume)}</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[8px] font-black text-blue-200/80 uppercase tracking-tighter mb-1">Volume</p>
+                  <p className="text-[13px] font-black text-white tabular-nums">{formatRupiah(ownerTotalVolume)}</p>
                 </div>
-                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-5 rounded-[2rem] hover:bg-white/15 transition-all cursor-default">
-                  <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-2">Estimasi Profit</p>
-                  <p className="text-lg font-black text-emerald-400 tabular-nums">{formatRupiah(props.totalAdmin)}</p>
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[8px] font-black text-emerald-300 uppercase tracking-tighter mb-1">Profit</p>
+                  <p className="text-[13px] font-black text-emerald-400 tabular-nums">{formatRupiah(ownerTotalAdmin)}</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[8px] font-black text-amber-300 uppercase tracking-tighter mb-1">Items</p>
+                  <p className="text-[13px] font-black text-amber-400 tabular-nums">{ownerTotalTrx}</p>
                 </div>
               </div>
 
@@ -1855,9 +1997,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         </div>
         
         <SummaryCards 
-          totalTransactions={props.transactions.filter(t => !t.kategori.startsWith('Isi')).length}
-          totalVolume={props.totalVolume}
-          totalAdmin={props.totalAdmin}
+          totalTransactions={ownerTotalTrx}
+          totalVolume={ownerTotalVolume}
+          totalAdmin={ownerTotalAdmin}
         />
       </div>
     </div>
