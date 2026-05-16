@@ -284,6 +284,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [totalPenjualan, setTotalPenjualan] = useState<number>(0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [kasModal, setKasModal] = useState<number>(0)
+  const [kasLainnya, setKasLainnya] = useState<number>(0)
   const [absensi, setAbsensi] = useState<any[]>([])
   const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
 
@@ -469,6 +470,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     let calcSaldoBank = 0
     let calcKasModal = 0
     let calcPenjualan = 0
+    let calcKasLainnya = 0
 
     // Saldo Bank, Modal Tunai, dan Penjualan dihitung per hari (hanya transaksi hari ini).
     // Cocok untuk sistem per shift kasir yang 리set setiap hari.
@@ -486,11 +488,15 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       if (isAksesoris) {
         calcPenjualan += tx.nominal
       }
+      if (tx.kategori === 'Kas Lainnya') {
+        calcKasLainnya += tx.nominal
+      }
     })
 
     setSaldoBank(calcSaldoBank)
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
+    setKasLainnya(calcKasLainnya)
   }, [transactions, account?.role, username, filterKasir])
 
   // Fetch Aggregated Report for LaporanView
@@ -512,8 +518,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalAksesoris: Number(data.penjualan_aksesoris),
           totalAdmin: Number(data.total_admin),
           totalTarik: Number(data.total_tarik),
+          kasLainnya: Number(data.kas_lainnya || 0),
           saldoReal: Number(data.saldo_real || 0),
-          totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) - Number(data.total_tarik)
+          totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) + Number(data.kas_lainnya || 0) - Number(data.total_tarik)
         })
       } else {
         // Fallback: Calculate manually
@@ -548,8 +555,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalAksesoris: pAks,
           totalAdmin: tAdm,
           totalTarik: tTar,
+          kasLainnya: filteredTxs.filter(t => t.kategori === 'Kas Lainnya').reduce((s, t) => s + t.nominal, 0),
           saldoReal: 0,
-          totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
+          totalSaldoKas: kMod + pDig + pAks + tAdm + (filteredTxs.filter(t => t.kategori === 'Kas Lainnya').reduce((s, t) => s + t.nominal, 0)) - tTar
         })
       }
     }
@@ -861,7 +869,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   // Saldo Laci Kasir (Cumulative Calculation - usually doesn't reset to 0 in reality)
   // But if the user wants it to look like it resets, we could filter this too.
   // However, Saldo Bank and Kas Modal are cumulative.
-  const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
+  const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin + kasLainnya - totalTarik
 
   return (
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
@@ -907,6 +915,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         storeSubtext={storeSubtext}
         storePhoto={storePhoto}
         handleOwnerTambahModal={handleOwnerTambahModal}
+        kasLainnya={kasLainnya}
       />
 
       <RiwayatView 
@@ -944,6 +953,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         totalSaldoKas={dailyReport ? dailyReport.totalSaldoKas : totalSaldoKas}
         penjualanDigital={dailyReport ? dailyReport.penjualanDigital : penjualanDigital}
         kasModal={dailyReport ? dailyReport.kasModal : kasModal}
+        kasLainnya={dailyReport ? dailyReport.kasLainnya : kasLainnya}
         kasirRole={account.role}
         filterKasir={filterKasir}
         setFilterKasir={setFilterKasir}
