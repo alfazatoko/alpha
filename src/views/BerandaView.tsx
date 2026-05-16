@@ -858,92 +858,120 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </div>
 
           {/* Scrollable Content Section */}
-          <div className="flex-1 overflow-y-auto bg-gray-50/50 pb-10">
-            <div className="p-5 space-y-6">
+          <div className="flex-1 overflow-y-auto bg-gray-50/50 pb-28">
+            <div className="p-2.5 space-y-2">
               
               {/* SALDO BANK CARD */}
-              <div className="bg-white p-5 rounded-[2.5rem] shadow-xl shadow-blue-500/5 border border-blue-50 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-                    <i className="fa-solid fa-building-columns text-base"></i>
+              <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-blue-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <i className="fa-solid fa-building-columns text-xs"></i>
                   </div>
                   <div>
-                    <h4 className="text-[14px] font-black text-blue-900 uppercase leading-none">SALDO BANK</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total aset digital</p>
+                    <h4 className="text-[12px] font-black text-blue-900 uppercase leading-none">SALDO BANK</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Aset Digital</p>
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-4 rounded-3xl shadow-lg border border-blue-400 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl"></div>
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2.5 rounded-xl border border-blue-400 relative overflow-hidden">
                   <div className="flex justify-between items-center relative z-10">
-                    <span className="text-[10px] font-black text-blue-50 uppercase tracking-widest">Total Saldo Bank</span>
-                    <span className="text-lg font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
+                    <span className="text-[9px] font-black text-blue-50 uppercase tracking-widest">Total Saldo Bank</span>
+                    <span className="text-base font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
                   </div>
                 </div>
               </div>
 
               {/* KAS MASUK SECTION */}
-              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-emerald-500/5 border border-emerald-50 space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                    <i className="fa-solid fa-arrow-down text-base"></i>
+              <div className="bg-white p-3 rounded-2xl shadow-sm border border-emerald-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <i className="fa-solid fa-arrow-down text-xs"></i>
                   </div>
                   <div>
-                    <h4 className="text-[14px] font-black text-emerald-900 uppercase leading-none">KAS MASUK</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Uang masuk ke laci</p>
+                    <h4 className="text-[12px] font-black text-emerald-900 uppercase leading-none">KAS MASUK</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Uang masuk laci</p>
                   </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-0">
                   {[
-                    { label: 'Modal Tunai Kasir', sub: 'Uang awal di laci', val: kasModal },
-                    { label: 'Penjualan Digital', sub: 'Transfer & E-Wallet', val: penjualanDigital },
-                    { label: 'Penjualan Aksesoris', sub: 'Barang & Aksesoris', val: props.totalAksesoris },
-                    { label: 'Total Admin Fee', sub: 'Komisi Transaksi', val: props.totalAdmin },
-                    { label: 'Kas Lainnya', sub: 'Pemasukan Lain-lain', val: props.kasLainnya }
+                    { label: 'Modal Tunai Kasir', val: kasModal },
+                    { label: 'Penjualan Digital', val: penjualanDigital },
+                    { label: 'Penjualan Aksesoris', val: props.totalAksesoris },
+                    { label: 'Total Admin Fee', val: props.totalAdmin }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 rounded-2xl hover:bg-emerald-50/50 transition-colors border border-transparent hover:border-emerald-100">
+                    <div key={idx} className="flex justify-between items-center py-1 px-2 border-b border-gray-50 last:border-0">
                       <div>
-                        <p className="text-[11px] font-black text-gray-800 uppercase tracking-tight">{item.label}</p>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{item.sub}</p>
+                        <p className="text-[10px] font-black text-gray-800 uppercase leading-none">{item.label}</p>
                       </div>
-                      <span className="text-xs font-black text-emerald-600 tabular-nums">{formatRupiah(item.val)}</span>
+                      <span className="text-[11px] font-black text-emerald-600 tabular-nums">{formatRupiah(item.val)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* KAS LAINNYA SECTION */}
+              <div className="bg-white p-3 rounded-2xl shadow-sm border border-orange-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+                    <i className="fa-solid fa-layer-group text-xs"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-[12px] font-black text-orange-900 uppercase leading-none">KAS LAIN NYA</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Pemasukan tambahan</p>
+                  </div>
+                </div>
+
+                <div className="space-y-0">
+                  {[
+                    { label: 'Admin Dalam/Non Tunai', val: ownerAdminDalam },
+                    { label: 'Transaksi Non Tunai', val: ownerNonTunai },
+                    { label: 'Transaksi Khusus', val: ownerKhusus },
+                    { label: 'Kas Lainnya (Manual)', val: props.kasLainnya }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-1 px-2 border-b border-gray-50 last:border-0">
+                      <div>
+                        <p className="text-[10px] font-black text-gray-800 uppercase leading-none">{item.label}</p>
+                      </div>
+                      <span className="text-[11px] font-black text-orange-600 tabular-nums">{formatRupiah(item.val)}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* KAS KELUAR SECTION */}
-              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-red-500/5 border border-red-50 space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center text-red-600">
-                    <i className="fa-solid fa-arrow-up text-base"></i>
+              <div className="bg-white p-3 rounded-2xl shadow-sm border border-red-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
+                    <i className="fa-solid fa-arrow-up text-xs"></i>
                   </div>
                   <div>
-                    <h4 className="text-[14px] font-black text-red-900 uppercase leading-none">KAS KELUAR</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Uang keluar laci</p>
+                    <h4 className="text-[12px] font-black text-red-900 uppercase leading-none">KAS KELUAR</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Uang keluar laci</p>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center p-4 rounded-3xl bg-red-50/50 border border-red-100">
+                <div className="flex justify-between items-center p-2 rounded-xl bg-red-50/30 border border-red-100">
                   <div>
-                    <p className="text-[11px] font-black text-gray-800 uppercase tracking-tight">Tarik Tunai Nasabah</p>
-                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Penarikan Tunai</p>
+                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight leading-none">Tarik Tunai Nasabah</p>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Penarikan Tunai</p>
                   </div>
-                  <span className="text-xs font-black text-red-600 tabular-nums">-{formatRupiah(props.totalTarik)}</span>
+                  <span className="text-[11px] font-black text-red-600 tabular-nums">-{formatRupiah(props.totalTarik)}</span>
                 </div>
               </div>
 
               {/* TOTAL FINAL CARD */}
-              <div className="bg-[#051c5f] p-7 rounded-[3rem] text-white shadow-2xl relative overflow-hidden ring-4 ring-blue-500/20">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/10 rounded-full -mr-10 -mt-10 blur-3xl"></div>
+              <div className="bg-[#051c5f] p-4 rounded-2xl text-white shadow-lg relative overflow-hidden border border-blue-400/20">
                 <div className="relative z-10 text-center">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-300">ESTIMASI SALDO LACI KASIR</span>
-                  <h2 className="text-4xl font-black text-green-400 tracking-tighter mt-2 mb-4 drop-shadow-md">
+                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-300">SALDO LACI KASIR</span>
+                  <h2 className="text-2xl font-black text-green-400 tracking-tighter mt-0.5 mb-2 drop-shadow-md">
                     {formatRupiah(totalPendapatanBersih)}
                   </h2>
-                  <div className="pt-4 border-t border-white/10">
-                    <p className="text-[8px] font-bold text-blue-200/60 uppercase tracking-[0.2em] leading-relaxed">
-                      RUMUS: (MODAL + DIGITAL + AKSESORIS + ADMIN + LAINNYA) - TARIK TUNAI
+                  <div className="pt-2 border-t border-white/10">
+                    <p className="text-[7px] font-bold text-blue-200/60 uppercase tracking-tighter leading-none italic">
+                      RUMUS: (MODAL + DIGITAL + AKSESORIS + ADMIN) - TARIK
+                    </p>
+                    <p className="text-[6px] text-blue-300/40 uppercase mt-1 tracking-widest font-bold">
+                      *KAS LAINNYA TIDAK MEMPENGARUHI SALDO LACI
                     </p>
                   </div>
                 </div>
@@ -955,10 +983,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   setShowRincian(false);
                   props.setActiveView('view-laporan');
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-[2.5rem] shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-[11px] mt-2"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px] mt-0"
               >
-                <i className="fa-solid fa-chart-simple text-sm"></i>
-                Lihat Laporan Lengkap
+                <i className="fa-solid fa-chart-simple text-xs"></i>
+                Laporan Lengkap
               </button>
             </div>
           </div>

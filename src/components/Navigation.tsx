@@ -28,7 +28,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
       <button 
         onClick={() => setIsVisible(!isVisible)}
         className={cn(
-          "fixed right-10 z-[60] w-8 h-8 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-100 flex items-center justify-center text-blue-600 transition-all duration-300 active:scale-90",
+          "fixed right-10 z-[160] w-8 h-8 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-100 flex items-center justify-center text-blue-600 transition-all duration-300 active:scale-90",
           isVisible ? "bottom-[48px]" : "bottom-6"
         )}
       >
@@ -36,7 +36,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
       </button>
 
       <nav className={cn(
-        "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-1.5 z-50 transition-all duration-500 transform shadow-[0_-4px_20px_rgba(0,0,0,0.03)]",
+        "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-1.5 z-[150] transition-all duration-500 transform shadow-[0_-4px_20px_rgba(0,0,0,0.03)]",
         isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
       )}>
         <ul className="flex justify-around items-center max-w-lg mx-auto">

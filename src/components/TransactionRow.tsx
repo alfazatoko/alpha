@@ -29,6 +29,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   const canEdit = isToday
   const canDelete = isToday && kasirRole === 'owner'
 
+  const isKhusus = (t.keterangan || '').includes('[KHUSUS]')
+  const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]')
+  const rowColorClass = isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : "text-black"
+
   return (
     <div className="flex flex-col group transaction-row-container">
       <div 
@@ -44,7 +48,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
           {/* INFO UTAMA */}
           <div className="flex flex-col gap-0">
-            <div className="text-[16px] font-black text-slate-800 tracking-tight uppercase leading-tight">
+            <div className={cn("text-[16px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
                {t.kategori}
             </div>
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.15em]">
@@ -57,11 +61,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         <div className="flex flex-col items-end gap-0">
           <div className={cn(
             "text-[16px] font-black tracking-tight leading-tight",
-            t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-800"
+            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black")
           )}>
             {t.nominal.toLocaleString('id-ID')}
           </div>
-          <div className="text-[11px] text-emerald-600 font-extrabold uppercase">
+          <div className={cn("text-[11px] font-extrabold uppercase", isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-400" : "text-emerald-600")}>
             Admin: {t.adminFee.toLocaleString('id-ID')}
           </div>
         </div>

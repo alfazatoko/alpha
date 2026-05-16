@@ -471,11 +471,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     let calcKasModal = 0
     let calcPenjualan = 0
     let calcKasLainnya = 0
+    let calcAdminFee = 0
+    let calcTarikTunai = 0
 
-    // Saldo Bank, Modal Tunai, dan Penjualan dihitung per hari (hanya transaksi hari ini).
-    // Cocok untuk sistem per shift kasir yang 리set setiap hari.
     todayTxs.forEach(tx => {
-      const isLain = (tx.keterangan || '').includes('[KHUSUS]') || (tx.keterangan || '').includes('[NON_TUNAI]');
+      const isKhusus = (tx.keterangan || '').includes('[KHUSUS]');
+      const isNonTunai = (tx.keterangan || '').includes('[NON_TUNAI]');
+      const isAdminDalam = (tx.keterangan || '').includes('[ADMIN_DALAM]');
       const isAksesoris = tx.kategori === 'Aksesoris';
       
       if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
@@ -483,13 +485,31 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       
       if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
         calcSaldoBank -= tx.nominal
-        if (!isLain) calcPenjualan += tx.nominal
+        // Jika KHUSUS atau NON_TUNAI, masuk ke Kas Lainnya, bukan Penjualan Digital
+        if (isKhusus || isNonTunai) {
+          calcKasLainnya += tx.nominal
+        } else {
+          calcPenjualan += tx.nominal
+        }
       }
+
       if (isAksesoris) {
         calcPenjualan += tx.nominal
       }
+
+      if (tx.kategori === 'Tarik Tunai') {
+        calcTarikTunai += tx.nominal
+      }
+
       if (tx.kategori === 'Kas Lainnya') {
         calcKasLainnya += tx.nominal
+      }
+
+      // Hitung Admin Fee
+      if (isAdminDalam || isNonTunai || isKhusus) {
+        calcKasLainnya += (tx.adminFee || 0)
+      } else {
+        calcAdminFee += (tx.adminFee || 0)
       }
     })
 
@@ -520,7 +540,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalTarik: Number(data.total_tarik),
           kasLainnya: Number(data.kas_lainnya || 0),
           saldoReal: Number(data.saldo_real || 0),
-          totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) + Number(data.kas_lainnya || 0) - Number(data.total_tarik)
+          totalSaldoKas: Number(data.modal_kasir) + Number(data.penjualan_digital) + Number(data.penjualan_aksesoris) + Number(data.total_admin) - Number(data.total_tarik)
         })
       } else {
         // Fallback: Calculate manually
@@ -557,7 +577,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           totalTarik: tTar,
           kasLainnya: filteredTxs.filter(t => t.kategori === 'Kas Lainnya').reduce((s, t) => s + t.nominal, 0),
           saldoReal: 0,
-          totalSaldoKas: kMod + pDig + pAks + tAdm + (filteredTxs.filter(t => t.kategori === 'Kas Lainnya').reduce((s, t) => s + t.nominal, 0)) - tTar
+          totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
         })
       }
     }
@@ -869,7 +889,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   // Saldo Laci Kasir (Cumulative Calculation - usually doesn't reset to 0 in reality)
   // But if the user wants it to look like it resets, we could filter this too.
   // However, Saldo Bank and Kas Modal are cumulative.
-  const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin + kasLainnya - totalTarik
+  const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
 
   return (
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>

@@ -150,6 +150,14 @@ select {
   transition: opacity 0.3s;
 }
 
+.navigation {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 150; /* Sangat tinggi agar selalu di atas rincian */
+}
+
 .overlay.show { opacity: 1; pointer-events: auto; }
 
 .form-transaksi-container {
@@ -517,10 +525,10 @@ select {
 @media screen and (min-width: 769px) {
   .app-container:not(.hp) {
     width: 768px !important;
-    height: 92vh !important;
-    margin: 4vh auto !important;
-    border-radius: 2.5rem !important;
-    box-shadow: 0 40px 100px rgba(0,0,0,0.15) !important;
-    border: 8px solid #1e293b; /* Frame tebal ala Tablet premium */
+    height: 100vh !important; /* Kembali ke 100vh agar navigasi tidak tertutup */
+    margin: 0 auto !important;
+    border-radius: 0 !important;
+    box-shadow: 0 0 100px rgba(0,0,0,0.1) !important;
+    border: none !important; /* Hapus garis hitam */
   }
 }
