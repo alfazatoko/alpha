@@ -47,6 +47,7 @@ interface BerandaViewProps {
   storeName?: string
   storeSubtext?: string
   storePhoto?: string
+  kasLainnya: number
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {

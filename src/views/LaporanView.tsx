@@ -24,6 +24,7 @@ interface LaporanViewProps {
   onDelete?: (tx: Transaction) => void
   kasirList: Record<string, any>
   setActiveView: (v: string) => void
+  kasLainnya: number
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {

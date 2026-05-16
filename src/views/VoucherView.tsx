@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, CreditCard, Plus, Minus, Calendar } from "lucide-react";
+import { CreditCard, Plus, Minus, Calendar } from "lucide-react";
 import { formatRupiah, cn, getLocalISOString } from "../lib/utils";
 
 interface VoucherItem {
