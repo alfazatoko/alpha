@@ -840,7 +840,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </div>
         </div>
       )}      {showRincian && (
-        <div className="fixed inset-0 z-[110] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-0 z-[110] bg-white flex flex-col animate-in slide-in-from-right duration-300">
           {/* Header Section */}
           <div className="bg-gradient-to-r from-blue-700 to-indigo-800 pt-6 pb-6 px-6 text-white shadow-lg relative shrink-0">
             <div className="flex items-center gap-4">

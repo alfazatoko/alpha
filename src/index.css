@@ -30,7 +30,7 @@ body {
 .app-container {
   width: 100vw;
   height: 100vh;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   background-color: #f8fafc;
   position: relative;
@@ -40,11 +40,13 @@ body {
   box-shadow: none;
   border-radius: 0;
   transition: all 0.3s ease;
+  max-width: 100%;
 }
 
 /* Override Sizing - Only when forced */
 .app-container.hp {
   width: 420px !important;
+  max-width: 100vw !important;
   height: 90vh !important;
   margin: 5vh auto !important;
   border-radius: 2rem !important;
@@ -53,17 +55,10 @@ body {
 
 .app-container.tablet {
   width: 768px !important;
+  max-width: 100vw !important;
   height: 90vh !important;
   margin: 5vh auto !important;
   border-radius: 2rem !important;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
-}
-
-.app-container.pc {
-  width: 1200px !important;
-  height: 90vh !important;
-  margin: 5vh auto !important;
-  border-radius: 1rem !important;
   box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
 }
 
@@ -519,12 +514,13 @@ select {
 }
 
 /* Deteksi Tablet Otomatis (iPad/Tablet Android) */
-@media screen and (min-width: 769px) and (orientation: portrait) {
-  .app-container:not(.hp):not(.pc) {
+@media screen and (min-width: 769px) {
+  .app-container:not(.hp) {
     width: 768px !important;
-    height: 90vh !important;
-    margin: 5vh auto !important;
-    border-radius: 2rem !important;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.2) !important;
+    height: 92vh !important;
+    margin: 4vh auto !important;
+    border-radius: 2.5rem !important;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.15) !important;
+    border: 8px solid #1e293b; /* Frame tebal ala Tablet premium */
   }
 }

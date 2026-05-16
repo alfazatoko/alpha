@@ -261,7 +261,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     }
   }, [activeView])
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light')
-  const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'auto')
+  const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
 
   // Apply theme class to <html> element and persist to localStorage
