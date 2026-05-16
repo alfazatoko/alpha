@@ -48,6 +48,7 @@ interface BerandaViewProps {
   storeSubtext?: string
   storePhoto?: string
   kasLainnya: number
+  username: string
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -689,7 +690,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const todayISO = getLocalDateString()
   const ownerDisplayTxs = props.kasirRole === 'owner' 
     ? (props.filterKasir && props.filterKasir !== 'Semua' ? props.transactions.filter(t => t.kasir_id === props.filterKasir) : props.transactions)
-    : props.transactions.filter(t => t.kasir_id === props.kasirName); // assuming kasirName is the username for filtering
+    : props.transactions.filter(t => t.kasir_id === props.username);
   
   const ownerTodayTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && !t.kategori.startsWith('Isi'))
   

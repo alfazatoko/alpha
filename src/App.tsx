@@ -916,6 +916,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         storePhoto={storePhoto}
         handleOwnerTambahModal={handleOwnerTambahModal}
         kasLainnya={kasLainnya}
+        username={username}
       />
 
       <RiwayatView 
