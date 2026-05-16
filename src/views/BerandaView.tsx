@@ -1971,7 +1971,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span className="text-[10px] font-black text-blue-100/60 uppercase tracking-widest">Sistem Online</span>
                 </div>
-                <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter">v1.2.5 Premium</span>
+                <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter">v1.1.0 Premium</span>
               </div>
             </div>
           </div>
