@@ -839,126 +839,126 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             })()}
           </div>
         </div>
-      )}
-
-      {showRincian && (
-        <div className="absolute inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowRincian(false)}>
-          <div 
-            className="bg-white w-full max-w-md rounded-t-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-500 pb-safe"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Pull Bar */}
-            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto my-3"></div>
-
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-700 to-blue-600 px-6 py-6 text-white flex justify-between items-start rounded-t-[1.5rem] mx-2">
+      )}      {showRincian && (
+        <div className="fixed inset-0 z-[110] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+          {/* Header Section */}
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-800 pt-6 pb-6 px-6 text-white shadow-lg relative shrink-0">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setShowRincian(false)} 
+                className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all border border-white/10"
+              >
+                <i className="fa-solid fa-arrow-left text-base"></i>
+              </button>
               <div>
                 <h3 className="font-black text-xl tracking-tight uppercase leading-none">RINCIAN KEUANGAN</h3>
-                <p className="text-[11px] text-blue-100 font-bold uppercase tracking-widest mt-2 opacity-80">Rekapitulasi Arus Kas Hari Ini</p>
+                <p className="text-[10px] text-blue-100 font-bold uppercase tracking-widest mt-1 opacity-70">Arus Kas Hari Ini</p>
               </div>
-              <button onClick={() => setShowRincian(false)} className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center hover:bg-white/30 transition-all border border-white/20">
-                <i className="fa-solid fa-xmark text-base"></i>
-              </button>
             </div>
-            
-            <div className="px-6 py-2 space-y-2 max-h-[75vh] overflow-y-auto hide-scrollbar">
-              {/* SALDO BANK */}
-              <div className="space-y-2 pb-2 border-b border-gray-100">
+          </div>
+
+          {/* Scrollable Content Section */}
+          <div className="flex-1 overflow-y-auto bg-gray-50/50 pb-10">
+            <div className="p-5 space-y-6">
+              
+              {/* SALDO BANK CARD */}
+              <div className="bg-white p-5 rounded-[2.5rem] shadow-xl shadow-blue-500/5 border border-blue-50 space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 text-sm">
-                    <i className="fa-solid fa-building-columns"></i>
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <i className="fa-solid fa-building-columns text-base"></i>
                   </div>
                   <div>
                     <h4 className="text-[14px] font-black text-blue-900 uppercase leading-none">SALDO BANK</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Total aset di rekening & digital</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total aset digital</p>
                   </div>
                 </div>
-                <div className="flex justify-between items-center bg-blue-600 p-3 rounded-2xl shadow-md border border-blue-500">
-                  <span className="text-xs font-black text-blue-50 uppercase tracking-wide">Total Saldo Bank</span>
-                  <span className="text-sm font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
+                <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-4 rounded-3xl shadow-lg border border-blue-400 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl"></div>
+                  <div className="flex justify-between items-center relative z-10">
+                    <span className="text-[10px] font-black text-blue-50 uppercase tracking-widest">Total Saldo Bank</span>
+                    <span className="text-lg font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* KAS MASUK */}
-              <div className="space-y-2">
+              {/* KAS MASUK SECTION */}
+              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-emerald-500/5 border border-emerald-50 space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 text-sm">
-                    <i className="fa-solid fa-arrow-down"></i>
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <i className="fa-solid fa-arrow-down text-base"></i>
                   </div>
                   <div>
                     <h4 className="text-[14px] font-black text-emerald-900 uppercase leading-none">KAS MASUK</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Total uang masuk ke laci kasir</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Uang masuk ke laci</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-0.5">
+                <div className="space-y-1">
                   {[
-                    { label: 'Modal Tunai Kasir', sub: 'Uang awal di laci', val: kasModal, color: 'text-emerald-600' },
-                    { label: 'Penjualan Digital', sub: 'Transfer, E-Wallet, Pulsa', val: penjualanDigital, color: 'text-emerald-600' },
-                    { label: 'Penjualan Aksesoris', sub: 'Barang & Aksesoris', val: props.totalAksesoris, color: 'text-emerald-600' },
-                    { label: 'Total Admin Fee', sub: 'Komisi Transaksi', val: props.totalAdmin, color: 'text-emerald-600' },
-                    { label: 'Kas Lainnya', sub: 'Pemasukan Lain-lain', val: props.kasLainnya, color: 'text-emerald-600' }
+                    { label: 'Modal Tunai Kasir', sub: 'Uang awal di laci', val: kasModal },
+                    { label: 'Penjualan Digital', sub: 'Transfer & E-Wallet', val: penjualanDigital },
+                    { label: 'Penjualan Aksesoris', sub: 'Barang & Aksesoris', val: props.totalAksesoris },
+                    { label: 'Total Admin Fee', sub: 'Komisi Transaksi', val: props.totalAdmin },
+                    { label: 'Kas Lainnya', sub: 'Pemasukan Lain-lain', val: props.kasLainnya }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-1 px-3 rounded-xl hover:bg-gray-50 transition-colors">
+                    <div key={idx} className="flex justify-between items-center p-3 rounded-2xl hover:bg-emerald-50/50 transition-colors border border-transparent hover:border-emerald-100">
                       <div>
-                        <p className="text-xs font-black text-gray-800 uppercase tracking-tight">{item.label}</p>
+                        <p className="text-[11px] font-black text-gray-800 uppercase tracking-tight">{item.label}</p>
                         <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{item.sub}</p>
                       </div>
-                      <span className={cn("text-xs font-black tabular-nums", item.color)}>Rp {Number(item.val).toLocaleString('id-ID')}</span>
+                      <span className="text-xs font-black text-emerald-600 tabular-nums">{formatRupiah(item.val)}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="h-px bg-gray-50"></div>
-
-              {/* KAS KELUAR */}
-              <div className="space-y-2">
+              {/* KAS KELUAR SECTION */}
+              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-red-500/5 border border-red-50 space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center text-red-600 text-sm">
-                    <i className="fa-solid fa-arrow-up"></i>
+                  <div className="w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center text-red-600">
+                    <i className="fa-solid fa-arrow-up text-base"></i>
                   </div>
                   <div>
                     <h4 className="text-[14px] font-black text-red-900 uppercase leading-none">KAS KELUAR</h4>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest opacity-80">Uang keluar dari laci kasir</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Uang keluar laci</p>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center py-1.5 px-3 rounded-xl bg-red-50/30 border border-red-100/50">
+                <div className="flex justify-between items-center p-4 rounded-3xl bg-red-50/50 border border-red-100">
                   <div>
-                    <p className="text-xs font-black text-gray-800 uppercase tracking-tight">Tarik Tunai Nasabah</p>
-                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Penarikan tunai</p>
+                    <p className="text-[11px] font-black text-gray-800 uppercase tracking-tight">Tarik Tunai Nasabah</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Penarikan Tunai</p>
                   </div>
-                  <span className="text-xs font-black text-red-600 tabular-nums">-Rp {props.totalTarik.toLocaleString('id-ID')}</span>
+                  <span className="text-xs font-black text-red-600 tabular-nums">-{formatRupiah(props.totalTarik)}</span>
                 </div>
               </div>
 
-              {/* Total Saldo Laci Kasir Box */}
-              <div className="bg-[#051c5f] p-3.5 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-10 -mt-10 blur-xl"></div>
-                <div className="relative z-10">
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">TOTAL SALDO LACI KASIR</span>
-                    <i className="fa-solid fa-vault text-blue-300 opacity-50"></i>
-                  </div>
-                  <h2 className="text-3xl font-black text-green-400 tracking-tighter drop-shadow-sm">
+              {/* TOTAL FINAL CARD */}
+              <div className="bg-[#051c5f] p-7 rounded-[3rem] text-white shadow-2xl relative overflow-hidden ring-4 ring-blue-500/20">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/10 rounded-full -mr-10 -mt-10 blur-3xl"></div>
+                <div className="relative z-10 text-center">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-300">ESTIMASI SALDO LACI KASIR</span>
+                  <h2 className="text-4xl font-black text-green-400 tracking-tighter mt-2 mb-4 drop-shadow-md">
                     {formatRupiah(totalPendapatanBersih)}
                   </h2>
-                  <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="pt-4 border-t border-white/10">
                     <p className="text-[8px] font-bold text-blue-200/60 uppercase tracking-[0.2em] leading-relaxed">
-                      FORMULA : (MODAL + DIGITAL + AKSESORIS + ADMIN) - TARIK TUNAI
+                      RUMUS: (MODAL + DIGITAL + AKSESORIS + ADMIN + LAINNYA) - TARIK TUNAI
                     </p>
                   </div>
                 </div>
               </div>
-            </div>
-            
-            <div className="px-6 pb-8 pt-2">
+
+              {/* ACTION BUTTON */}
               <button 
-                onClick={() => { setShowRincian(false); props.setActiveView('view-laporan'); }}
-                className="w-full bg-[#0028b8] text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200 active:scale-95 transition-all"
+                onClick={() => {
+                  setShowRincian(false);
+                  props.setActiveView('view-laporan');
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-[2.5rem] shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-[11px] mt-2"
               >
-                <i className="fa-solid fa-chart-line text-sm"></i> LIHAT LAPORAN LENGKAP
+                <i className="fa-solid fa-chart-simple text-sm"></i>
+                Lihat Laporan Lengkap
               </button>
             </div>
           </div>
