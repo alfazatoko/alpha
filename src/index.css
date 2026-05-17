@@ -80,7 +80,7 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 100vw !important;
   height: 90vh !important;
   margin: 5vh auto !important;
-  border-radius: 1.5rem !important;
+  border-radius: 0 !important;
   box-shadow: var(--shadow-xl) !important;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -100,7 +100,7 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 100vw !important;
   height: 90vh !important;
   margin: 5vh auto !important;
-  border-radius: 1.5rem !important;
+  border-radius: 0 !important;
   box-shadow: var(--shadow-xl) !important;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
