@@ -32,7 +32,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center theme-header text-white shadow-lg">
+      <div className="px-4 pt-12 pb-4 border-b flex justify-between items-center theme-header text-white shadow-lg">
         <button 
           onClick={() => props.setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
