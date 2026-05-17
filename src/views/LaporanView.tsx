@@ -183,7 +183,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   return (
     <div id="laporan-content" className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
       {/* HEADER BARU */}
-      <div id="laporan-header-actions" className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-600 text-white shadow-lg">
+      <div id="laporan-header-actions" className="px-4 pt-7 pb-4 border-b flex justify-between items-center theme-header text-white shadow-lg">
         <button 
           onClick={() => props.setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
@@ -202,7 +202,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         </button>
       </div>
 
-      <div className="px-1.5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
+      <div className="px-1.5 pt-5 pb-4 theme-header text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
         <div className="flex justify-between items-center px-2 relative">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Rekapitulasi</h2>

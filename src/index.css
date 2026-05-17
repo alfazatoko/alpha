@@ -85,6 +85,15 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
 }
+@media (max-width: 480px) {
+  .app-container.hp {
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+}
 
 .app-container.tablet {
   width: 768px !important;
@@ -226,31 +235,24 @@ select {
 /* Tema — applied via class on <html> AND on .app-container */
 
 /* Background for app-container (direct class on the element) */
-.app-container.theme-light { 
+.app-container.theme-light, .theme-light .app-container,
+.app-container.theme-blue, .theme-blue .app-container,
+.app-container.theme-neon, .theme-neon .app-container { 
   background-color: var(--bg-primary);
-  color: var(--text-primary);
-}
-.app-container.theme-blue { 
-  background: linear-gradient(135deg, #bfdbfe 70%, #fed7aa 100%);
-  color: var(--text-primary);
-}
-.app-container.theme-neon { 
-  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  background-image: none;
   color: var(--text-primary);
 }
 
-/* Also support parent selector pattern (class on <html>) */
-.theme-light .app-container { 
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+/* Theme Header Utility - applies to the header frame inside pages */
+.theme-header {
+  background: #0000c6; /* default light */
+  transition: background 0.3s ease;
 }
-.theme-blue .app-container { 
-  background: linear-gradient(135deg, #bfdbfe 70%, #fed7aa 100%);
-  color: var(--text-primary);
+.theme-blue .theme-header {
+  background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);
 }
-.theme-neon .app-container { 
-  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
-  color: var(--text-primary);
+.theme-neon .theme-header {
+  background: linear-gradient(135deg, #059669 0%, #064e3b 100%);
 }
 
 /* CSS Variables per theme */
@@ -264,32 +266,27 @@ select {
 }
 
 .theme-blue, .theme-blue .app-container {
-  --input-bg: #eff6ff;
-  --input-border: #93c5fd;
+  --input-bg: #f3f4f6;
+  --input-border: #d1d5db;
   --container-bg: #ffffff;
-  --primary-color: #3b82f6;
-  --text-primary: #1e40af;
+  --primary-color: #4b5563;
+  --text-primary: #1f2937;
   --text-secondary: #4b5563;
 }
 
 .theme-neon, .theme-neon .app-container {
-  --input-bg: #f0fdf4;
-  --input-border: #bbf7d0;
+  --input-bg: #dcfce7;
+  --input-border: #86efac;
   --container-bg: #ffffff;
-  --primary-color: #10b981;
-  --text-primary: #065f46;
-  --text-secondary: #047857;
+  --primary-color: #059669;
+  --text-primary: #064e3b;
+  --text-secondary: #065f46;
 }
 
 /* Body background (class on <html>) */
-.theme-light body { 
+.theme-light body, .theme-blue body, .theme-neon body { 
   background-color: var(--bg-tertiary);
-}
-.theme-blue body { 
-  background: linear-gradient(135deg, #dbeafe 60%, #ffedd5 100%);
-}
-.theme-neon body { 
-  background: #dcfce7;
+  background-image: none;
 }
 
 .form-input-modern {

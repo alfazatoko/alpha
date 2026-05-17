@@ -87,8 +87,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
           <div className="flex items-center gap-4">
             {[
               { id: 'light', color: 'bg-white', ring: 'border-gray-200' },
-              { id: 'blue', color: 'bg-gradient-to-br from-blue-200 to-orange-200', ring: 'border-blue-300' },
-              { id: 'neon', color: 'bg-green-400', ring: 'border-green-600' }
+              { id: 'blue', color: 'bg-gradient-to-br from-gray-500 to-gray-800', ring: 'border-gray-500' },
+              { id: 'neon', color: 'bg-gradient-to-br from-green-300 to-green-500', ring: 'border-green-600' }
             ].map(t => (
               <button 
                 key={t.id}
