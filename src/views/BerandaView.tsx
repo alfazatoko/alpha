@@ -783,8 +783,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
-      <div className="relative theme-header" style={{ paddingBottom: '3.5rem' }}>
-        <div className="px-4 pt-12 pb-4 flex items-center justify-between gap-3">
+      <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
           <div className="flex-1 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               {props.storePhoto ? (
