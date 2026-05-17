@@ -51,7 +51,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         </button>
       </div>
 
-      <div className="px-5 pt-6 pb-6 theme-header text-white rounded-b-[2rem] shadow-lg mb-6">
+      <div className="px-5 pt-6 pb-6 theme-header text-white shadow-lg mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Pengaturan Saldo</h2>
