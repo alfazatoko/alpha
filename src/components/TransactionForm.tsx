@@ -112,8 +112,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
              activeStyles = "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 focus:ring-blue-100 focus:border-blue-400";
              hoverStyles = "hover:border-blue-300 hover:text-blue-600 focus:ring-blue-100";
           } else if (mode.id === 'TARIK') {
-             activeStyles = "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-200 focus:ring-amber-100 focus:border-amber-400";
-             hoverStyles = "hover:border-amber-300 hover:text-amber-600 focus:ring-amber-100";
+             activeStyles = "bg-red-500 border-red-500 text-white shadow-lg shadow-red-200 focus:ring-red-100 focus:border-red-400";
+             hoverStyles = "hover:border-red-300 hover:text-red-600 focus:ring-red-100";
           } else {
              activeStyles = "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-200 focus:ring-emerald-100 focus:border-emerald-400";
              hoverStyles = "hover:border-emerald-300 hover:text-emerald-600 focus:ring-emerald-100";
