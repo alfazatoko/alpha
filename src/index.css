@@ -78,8 +78,8 @@ h1, h2, h3, h4, h5, h6 {
 .app-container.hp {
   width: 420px !important;
   max-width: 100vw !important;
-  height: 90vh !important;
-  margin: 5vh auto !important;
+  height: 100vh !important;
+  margin: 0 auto !important;
   border-radius: 0 !important;
   box-shadow: var(--shadow-xl) !important;
   background: var(--bg-primary);
@@ -98,8 +98,8 @@ h1, h2, h3, h4, h5, h6 {
 .app-container.tablet {
   width: 768px !important;
   max-width: 100vw !important;
-  height: 90vh !important;
-  margin: 5vh auto !important;
+  height: 100vh !important;
+  margin: 0 auto !important;
   border-radius: 0 !important;
   box-shadow: var(--shadow-xl) !important;
   background: var(--bg-primary);
