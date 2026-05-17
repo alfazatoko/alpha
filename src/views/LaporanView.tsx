@@ -28,6 +28,9 @@ interface LaporanViewProps {
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
+  const [showShareMenu, setShowShareMenu] = React.useState(false);
+  const [isSharing, setIsSharing] = React.useState(false);
+
   // Hitung ulang total berdasarkan transaksi yang difilter agar laporan akurat sesuai tanggal terpilih
   const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.nominal, 0)
   const sumAdmin = (txs: Transaction[]) => txs.reduce((s, t) => s + t.adminFee, 0)
@@ -53,10 +56,134 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   const currentTotalSaldoKas = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
 
+  const handleShare = async (type: 'download-pdf' | 'share-pdf' | 'share-excel') => {
+    setShowShareMenu(false);
+    setIsSharing(true);
+    try {
+      if (type === 'download-pdf' || type === 'share-pdf') {
+        const html2canvas = (await import('html2canvas')).default;
+        const jsPDF = (await import('jspdf')).default;
+        
+        const el = document.getElementById('laporan-content');
+        if (!el) {
+          setIsSharing(false);
+          return;
+        }
+        
+        const headerAction = document.getElementById('laporan-header-actions');
+        const shareBtn = document.getElementById('laporan-share-action');
+        if (headerAction) headerAction.style.display = 'none';
+        if (shareBtn) shareBtn.style.display = 'none';
+
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#f9fafb' });
+        
+        if (headerAction) headerAction.style.display = 'flex';
+        if (shareBtn) shareBtn.style.display = 'flex';
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdfWidth = 210; // A4 width in mm
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: [pdfWidth, pdfHeight]
+        });
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        
+        const fileName = `Laporan_Alfaza_${props.filterTanggal}.pdf`;
+        
+        if (type === 'download-pdf') {
+          pdf.save(fileName);
+        } else {
+          try {
+            const { Share } = await import('@capacitor/share');
+            const { Filesystem, Directory } = await import('@capacitor/filesystem');
+            const pdfBase64 = pdf.output('datauristring').split(',')[1];
+            
+            const result = await Filesystem.writeFile({
+              path: fileName,
+              data: pdfBase64,
+              directory: Directory.Cache
+            });
+            await Share.share({
+              title: 'Laporan Alfaza Cell',
+              text: `Laporan keuangan tanggal ${props.filterTanggal}`,
+              files: [result.uri],
+              dialogTitle: 'Bagikan Laporan PDF'
+            });
+          } catch (e) {
+            console.error('Share failed, fallback to download', e);
+            pdf.save(fileName);
+          }
+        }
+      } else if (type === 'share-excel') {
+        let csvContent = "Kategori,Jumlah Transaksi,Nominal,Laba/Admin\n";
+        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
+        
+        categories.forEach(cat => {
+          let filtered = [];
+          if (cat === 'Transaksi Khusus') {
+            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+          } else {
+            filtered = props.transactions.filter(t => t.kategori === cat && !(t.keterangan || '').includes('[KHUSUS]'));
+          }
+          if (filtered.length > 0) {
+            const qty = filtered.length;
+            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
+            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
+            csvContent += `"${cat}",${qty},${nom},${laba}\n`;
+          }
+        });
+        
+        csvContent += `\nRingkasan Kas\n`;
+        csvContent += `"Modal Tunai Kasir",${props.kasModal}\n`;
+        csvContent += `"Penjualan Digital",${currentPenjualanDigital}\n`;
+        csvContent += `"Penjualan Aksesoris",${currentTotalAksesoris}\n`;
+        csvContent += `"Total Admin Fee",${currentTotalAdmin}\n`;
+        csvContent += `"Tarik Tunai Nasabah",-${currentTotalTarik}\n`;
+        csvContent += `"Total KAS LAINNYA",${totalAdminDalam + totalNonTunai + totalKhusus}\n`;
+        csvContent += `"TOTAL SALDO LACI KASIR",${currentTotalSaldoKas}\n`;
+        
+        const fileName = `Laporan_Alfaza_${props.filterTanggal}.csv`;
+        try {
+          const { Share } = await import('@capacitor/share');
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          
+          const result = await Filesystem.writeFile({
+            path: fileName,
+            data: btoa(unescape(encodeURIComponent(csvContent))),
+            directory: Directory.Cache
+          });
+          await Share.share({
+            title: 'Laporan Alfaza Cell',
+            text: `Data Laporan Excel (CSV) tanggal ${props.filterTanggal}`,
+            files: [result.uri],
+            dialogTitle: 'Bagikan Laporan Excel'
+          });
+        } catch (e) {
+          console.error('Share failed, fallback to download', e);
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          link.click();
+        }
+      }
+    } catch (e) {
+      console.error("Error generating share file:", e);
+      alert("Terjadi kesalahan saat memproses file bagikan.");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   return (
-    <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
+    <div id="laporan-content" className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
       {/* HEADER BARU */}
-      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-600 text-white shadow-lg">
+      <div id="laporan-header-actions" className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-600 text-white shadow-lg">
         <button 
           onClick={() => props.setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
@@ -76,14 +203,41 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       </div>
 
       <div className="px-1.5 pt-5 pb-4 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-b-[2rem] shadow-lg shadow-emerald-500/20 mb-4">
-        <div className="flex justify-between items-center px-2">
+        <div className="flex justify-between items-center px-2 relative">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Rekapitulasi</h2>
             <p className="text-emerald-100 text-[10px] opacity-90">Arus kas & laba</p>
           </div>
-          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <i className="fa-solid fa-chart-line text-white text-xs"></i>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              id="laporan-share-action"
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              disabled={isSharing}
+              className="px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-md flex items-center gap-1.5 hover:bg-white/30 transition-all active:scale-95"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white">Bagikan</span>
+              {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-white text-[10px]"></i> : <i className="fa-solid fa-share-nodes text-white text-[10px]"></i>}
+            </button>
+            <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+              <i className="fa-solid fa-chart-line text-white text-xs"></i>
+            </div>
           </div>
+
+          {/* Share Menu Dropdown */}
+          {showShareMenu && (
+            <div className="absolute right-2 top-10 w-[180px] bg-white rounded-2xl shadow-xl border border-emerald-100/50 overflow-hidden z-50">
+              <button onClick={() => handleShare('download-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
+                <i className="fa-solid fa-download text-emerald-500 w-4 text-center text-sm"></i> Download PDF
+              </button>
+              <button onClick={() => handleShare('share-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
+                <i className="fa-brands fa-whatsapp text-green-500 w-4 text-center text-sm"></i> Share PDF
+              </button>
+              <button onClick={() => handleShare('share-excel')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 transition-colors">
+                <i className="fa-solid fa-file-excel text-green-600 w-4 text-center text-sm"></i> Share Excel
+              </button>
+            </div>
+          )}
         </div>
         {props.kasirRole === 'owner' && props.setFilterKasir && (
           <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
@@ -228,10 +382,23 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
           </div>
 
+          <div className="pt-1 -mx-3">
+            <div className="bg-[#051c5f] px-4 py-4 rounded-[1.8rem] flex justify-between items-center shadow-xl shadow-blue-900/20 border border-blue-800">
+              <div className="border border-blue-700 bg-blue-900/30 rounded-xl px-3 py-1.5 flex flex-col">
+                <span className="font-black text-[10px] text-blue-200 tracking-[0.2em] uppercase leading-[1.2]">Total Saldo</span>
+                <span className="font-black text-[10px] text-blue-200 tracking-[0.2em] uppercase leading-[1.2]">Laci Kasir</span>
+              </div>
+              <span className="font-black text-2xl text-green-400 drop-shadow-[0_2px_10px_rgba(74,222,128,0.3)]">{formatRupiah(currentTotalSaldoKas)}</span>
+            </div>
+          </div>
+
           <div>
-            <h4 className="text-[13px] font-extrabold text-purple-600 mb-1.5 tracking-widest uppercase flex items-center gap-1.5">
-              <i className="fa-solid fa-layer-group"></i> KAS LAIN NYA
-            </h4>
+            <div className="mb-2">
+              <h4 className="text-[13px] font-extrabold text-purple-600 tracking-widest uppercase flex items-center gap-1.5">
+                <i className="fa-solid fa-layer-group"></i> KAS LAIN NYA
+              </h4>
+              <p className="text-[10px] font-bold text-purple-400/80 italic ml-5 -mt-0.5">Pemasukan Tambahan</p>
+            </div>
             <div className="bg-white rounded-2xl p-2 shadow-sm border border-purple-100 space-y-1">
               <div className="flex justify-between items-center bg-purple-50/50 px-3 py-1 rounded-xl border border-purple-100/50">
                 <span className="text-[13px] font-bold text-purple-700 flex items-center gap-2"><i className="fa-solid fa-tags text-[12px]"></i> Admin Dalam/Non Tunai</span>
@@ -245,22 +412,19 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="text-[13px] font-bold text-fuchsia-700 flex items-center gap-2"><i className="fa-solid fa-star text-[12px]"></i> Transaksi Khusus</span>
                 <span className="font-black text-[14px] text-fuchsia-600">{formatRupiah(totalKhusus)}</span>
               </div>
+              <div className="mt-2 pt-2 border-t-2 border-purple-100/50 flex justify-between items-center px-3 py-1.5 bg-purple-100/30 rounded-xl">
+                <span className="text-[13px] font-black text-purple-800 flex items-center gap-2">TOTAL KAS LAIN NYA</span>
+                <span className="font-black text-[15px] text-purple-700">{formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}</span>
+              </div>
             </div>
           </div>
 
-          <div className="pt-1">
-            <div className="bg-[#051c5f] px-5 py-4 rounded-[1.8rem] flex justify-between items-center shadow-xl shadow-blue-900/20 border border-blue-800">
-              <span className="font-black text-[11px] text-blue-200 tracking-[0.2em] uppercase">Total Saldo Laci Kasir</span>
-              <span className="font-black text-2xl text-green-400 drop-shadow-[0_2px_10px_rgba(74,222,128,0.3)]">{formatRupiah(currentTotalSaldoKas)}</span>
-            </div>
-          </div>
-
-          <div className="bg-white border-2 border-indigo-100 rounded-3xl p-4 shadow-xl shadow-indigo-500/10">
-            <div className="flex justify-between items-center mb-3">
-              <h4 className="text-[14px] font-black text-indigo-800 tracking-widest uppercase flex items-center gap-2">
+          <div className="bg-white border-2 border-indigo-100 rounded-[1.8rem] p-3.5 -mx-3 shadow-xl shadow-indigo-500/10">
+            <div className="flex justify-between items-center mb-3 px-1">
+              <h4 className="text-[13px] font-black text-indigo-800 tracking-widest uppercase flex items-center gap-1.5">
                 <i className="fa-solid fa-scale-balanced text-indigo-500"></i> JURNAL PENYESUAIAN SALDO
               </h4>
-              <span className="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
+              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
             </div>
             
             <div className="space-y-1.5">
@@ -303,24 +467,24 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 
                 return (
                   <div className={cn(
-                    "mt-3 p-4 rounded-2xl flex justify-between items-center border-2",
+                    "mt-3 p-3.5 -mx-1.5 rounded-2xl flex justify-between items-center border-2",
                     selisih === 0 ? "bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/30" : 
                     selisih > 0 ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/30" : "bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-500/30"
                   )}>
                     <div>
-                      <p className="text-[13px] font-black uppercase tracking-widest flex items-center gap-2">
+                      <p className="text-[12px] font-black uppercase tracking-widest flex items-center gap-1.5">
                         {selisih === 0 ? <><i className="fa-solid fa-circle-check"></i> STATUS: KLOP</> : 
                          selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> STATUS: SURPLUS</> : 
                          <><i className="fa-solid fa-circle-xmark"></i> STATUS: SELISIH</>}
                       </p>
-                      <p className="text-[11px] opacity-90 font-bold italic mt-0.5">
+                      <p className="text-[10px] opacity-90 font-bold italic mt-0.5">
                         {selisih === 0 ? 'Sisa saldo di HP cocok dengan catatan buku' : 
                          selisih > 0 ? 'Saldo di HP lebih besar dari catatan' : 'Saldo di HP lebih kecil (Uang kurang)'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-[17px] block">{selisih === 0 ? '✓ MATCH' : formatRupiah(selisih)}</span>
-                      {selisih !== 0 && <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">Periksa Kembali</span>}
+                      <span className="font-black text-[16px] block">{selisih === 0 ? '✓ MATCH' : formatRupiah(selisih)}</span>
+                      {selisih !== 0 && <span className="text-[9px] font-black opacity-80 uppercase tracking-widest">Periksa Kembali</span>}
                     </div>
                   </div>
                 );
