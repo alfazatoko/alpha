@@ -105,28 +105,43 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           { id: 'DIGITAL', label: 'TRANSFER', icon: 'fa-paper-plane', ref: btnDigitalRef },
           { id: 'TARIK', label: 'TARIK TUNAI', icon: 'fa-money-bill-transfer', ref: btnTarikRef },
           { id: 'AKSESORIS', label: 'AKSESORIS', icon: 'fa-headset', ref: btnAksesorisRef }
-        ].map((mode) => (
-          <button 
-            key={mode.id}
-            ref={mode.ref}
-            onClick={() => {
-              setActiveMode(mode.id as any)
-              if (mode.id === 'TARIK') setKategori('Tarik Tunai')
-              else if (mode.id === 'AKSESORIS') setKategori('Aksesoris')
-              else setKategori('')
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-            className={cn(
-              "flex-1 flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-1.5 focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none",
-              activeMode === mode.id 
-                ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" 
-                : "bg-gray-50 border-gray-100 text-gray-900 hover:border-blue-200 hover:text-blue-500"
-            )}
-          >
-            <i className={cn("fa-solid", mode.icon, "text-sm")}></i>
-            <span className="text-[9px] font-black uppercase tracking-tighter text-center leading-none">{mode.label}</span>
-          </button>
-        ))}
+        ].map((mode) => {
+          let activeStyles = "";
+          let hoverStyles = "";
+          if (mode.id === 'DIGITAL') {
+             activeStyles = "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 focus:ring-blue-100 focus:border-blue-400";
+             hoverStyles = "hover:border-blue-300 hover:text-blue-600 focus:ring-blue-100";
+          } else if (mode.id === 'TARIK') {
+             activeStyles = "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-200 focus:ring-amber-100 focus:border-amber-400";
+             hoverStyles = "hover:border-amber-300 hover:text-amber-600 focus:ring-amber-100";
+          } else {
+             activeStyles = "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-200 focus:ring-emerald-100 focus:border-emerald-400";
+             hoverStyles = "hover:border-emerald-300 hover:text-emerald-600 focus:ring-emerald-100";
+          }
+
+          return (
+            <button 
+              key={mode.id}
+              ref={mode.ref}
+              onClick={() => {
+                setActiveMode(mode.id as any)
+                if (mode.id === 'TARIK') setKategori('Tarik Tunai')
+                else if (mode.id === 'AKSESORIS') setKategori('Aksesoris')
+                else setKategori('')
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-1.5 focus:ring-4 outline-none",
+                activeMode === mode.id 
+                  ? activeStyles
+                  : cn("bg-gray-50 border-gray-100 text-gray-900", hoverStyles)
+              )}
+            >
+              <i className={cn("fa-solid", mode.icon, "text-sm")}></i>
+              <span className="text-[9px] font-black uppercase tracking-tighter text-center leading-none">{mode.label}</span>
+            </button>
+          )
+        })}
       </div>
 
       <div className="space-y-3">
