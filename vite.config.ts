@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: 'ALFAZA CELL',
         short_name: 'ALFAZA CELL',
-        description: 'ALFAZA CELL - Pembukuan Agen Link',
+        description: 'ALFAZA CELL',
         theme_color: '#005daa',
         orientation: 'any',
         icons: [

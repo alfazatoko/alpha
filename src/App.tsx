@@ -346,9 +346,9 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
 
   const [storeName, setStoreName] = useState<string>(() => {
     const saved = localStorage.getItem('alphaPro_storeName')
-    if (!saved || saved === 'ALFAZA CELL') {
-      localStorage.setItem('alphaPro_storeName', 'ALFAZA CELL - Pembukuan Agen Link')
-      return 'ALFAZA CELL - Pembukuan Agen Link'
+    if (!saved || saved === 'ALFAZA CELL - Pembukuan Agen Link') {
+      localStorage.setItem('alphaPro_storeName', 'ALFAZA CELL')
+      return 'ALFAZA CELL'
     }
     return saved
   })
