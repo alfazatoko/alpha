@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['logo_icon.png', 'icons.svg'],
       manifest: {
-        name: 'ALPHA',
-        short_name: 'ALPHA',
-        description: 'Aplikasi Agen BRILink ALPHA',
+        name: 'ALFAZA CELL',
+        short_name: 'ALFAZA CELL',
+        description: 'ALFAZA CELL - Pembukuan Agen Link',
         theme_color: '#005daa',
         orientation: 'any',
         icons: [

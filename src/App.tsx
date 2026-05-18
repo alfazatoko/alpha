@@ -344,9 +344,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     }
   }
 
-  // Store Profile State (with defensive fallbacks)
   const [storeName, setStoreName] = useState<string>(() => {
-    return localStorage.getItem('alphaPro_storeName') || 'ALFAZA CELL'
+    const saved = localStorage.getItem('alphaPro_storeName')
+    if (!saved || saved === 'ALFAZA CELL') {
+      localStorage.setItem('alphaPro_storeName', 'ALFAZA CELL - Pembukuan Agen Link')
+      return 'ALFAZA CELL - Pembukuan Agen Link'
+    }
+    return saved
   })
   const [storeSubtext, setStoreSubtext] = useState<string>(() => {
     return localStorage.getItem('alphaPro_storeSubtext') || 'Pembukuan Agen brilink & Konter'
