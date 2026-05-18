@@ -12,21 +12,23 @@
   font-family: 'Inter', 'Poppins', sans-serif;
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
-  --input-bg: #ffffff;
-  --input-border: #d1d5db;
+  
+  /* LIGHT THEME (DEFAULT) */
+  --input-bg: #f8fafc;
+  --input-border: #e2e8f0;
   --container-bg: #ffffff;
-  --primary-color: #2563eb;
-  --secondary-color: #7c3aed;
+  --primary-color: #3b82f6;
+  --secondary-color: #8b5cf6;
   --success-color: #10b981;
   --warning-color: #f59e0b;
   --danger-color: #ef4444;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-light: #9ca3af;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-light: #94a3b8;
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f4f6;
-  --border-color: #e5e7eb;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --border-color: #e2e8f0;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -257,21 +259,30 @@ select {
 
 /* CSS Variables per theme */
 .theme-light, .theme-light .app-container {
-  --input-bg: #ffffff;
-  --input-border: #dbeafe;
+  --input-bg: #f8fafc;
+  --input-border: #e2e8f0;
   --container-bg: #ffffff;
-  --primary-color: #2563eb;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
+  --primary-color: #3b82f6;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
 }
 
 .theme-blue, .theme-blue .app-container {
-  --input-bg: #f3f4f6;
-  --input-border: #d1d5db;
-  --container-bg: #ffffff;
-  --primary-color: #4b5563;
-  --text-primary: #1f2937;
-  --text-secondary: #4b5563;
+  /* DARK MODE HEMAT BATERAI */
+  --input-bg: #0f172a;
+  --input-border: #334155;
+  --container-bg: #0f172a;
+  --primary-color: #3b82f6;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #020617;
+  --border-color: #334155;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
 }
 
 .theme-neon, .theme-neon .app-container {
@@ -291,7 +302,7 @@ select {
 
 .form-input-modern {
   background-color: var(--input-bg);
-  border: 1px solid var(--input-border);
+  border: 1px solid #64748b;
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
@@ -303,9 +314,15 @@ select {
 }
 
 .form-input-modern:focus {
-  border-color: var(--primary-color);
-  background-color: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #ea580c;
+  background-color: #ffedd5;
+  box-shadow: 0 0 0 2px #f97316;
+}
+
+.theme-blue .form-input-modern:focus {
+  background-color: var(--input-bg);
+  border-color: #ea580c;
+  box-shadow: 0 0 0 2px #f97316;
 }
 
 .detail-row {
@@ -895,4 +912,81 @@ select {
     box-shadow: 0 0 100px rgba(0,0,0,0.1) !important;
     border: none !important; /* Hapus garis hitam */
   }
+}
+
+/* =========================================
+   GLOBAL DARK MODE OVERRIDES (HEMAT BATERAI)
+   ========================================= */
+
+/* Overriding Backgrounds */
+.theme-blue .bg-white, .theme-blue .bg-slate-50, .theme-blue .bg-slate-100, .theme-blue .bg-gray-50, .theme-blue .bg-gray-100, .theme-blue .bg-zinc-50, .theme-blue .bg-purple-50, .theme-blue .bg-blue-50, .theme-blue .bg-teal-50, .theme-blue .bg-blue-50\/50, .theme-blue .bg-gray-50\/50 {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Overriding Specific Background Light Blue/Greys to Dark */
+.theme-blue .bg-blue-50, .theme-blue .bg-blue-100, .theme-blue .bg-indigo-50, .theme-blue .bg-indigo-100 {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Overriding The Gradient Header */
+.theme-blue .bg-gradient-to-r.from-indigo-700.to-blue-600 {
+  background: var(--bg-primary) !important;
+  box-shadow: none !important;
+}
+.theme-blue .theme-header {
+  background: var(--bg-primary) !important;
+  box-shadow: none !important;
+}
+
+/* Overriding Texts */
+.theme-blue .text-black, .theme-blue .text-slate-800, .theme-blue .text-slate-900, .theme-blue .text-gray-800, .theme-blue .text-gray-900, .theme-blue .text-zinc-800, .theme-blue .text-blue-900, .theme-blue .text-indigo-900, .theme-blue .text-slate-700, .theme-blue .text-gray-700 {
+  color: var(--text-primary) !important;
+}
+.theme-blue .text-slate-600, .theme-blue .text-gray-600, .theme-blue .text-slate-500, .theme-blue .text-gray-500 {
+  color: var(--text-secondary) !important;
+}
+.theme-blue .text-slate-400, .theme-blue .text-gray-400, .theme-blue .text-slate-300, .theme-blue .text-gray-300 {
+  color: var(--text-light) !important;
+}
+
+/* Explicit Text Fixes for colored background highlights */
+.theme-blue .text-emerald-700, .theme-blue .text-emerald-800 { color: #34d399 !important; }
+.theme-blue .text-blue-700, .theme-blue .text-blue-800 { color: #60a5fa !important; }
+.theme-blue .text-red-600, .theme-blue .text-red-700, .theme-blue .text-red-800 { color: #f87171 !important; }
+.theme-blue .text-orange-700, .theme-blue .text-orange-800 { color: #fb923c !important; }
+.theme-blue .text-amber-700, .theme-blue .text-amber-800, .theme-blue .text-amber-900 { color: #fcd34d !important; }
+
+/* Specific text overrides that might be blue/purple on light mode */
+.theme-blue .text-blue-800, .theme-blue .text-purple-800, .theme-blue .text-teal-800 {
+  color: var(--text-primary) !important;
+}
+
+/* Overriding Borders */
+.theme-blue .border-slate-100, .theme-blue .border-slate-200, .theme-blue .border-slate-300, .theme-blue .border-gray-100, .theme-blue .border-gray-200, .theme-blue .border-white {
+  border-color: var(--border-color) !important;
+}
+
+/* Cards that specifically need transparent dark */
+.theme-blue .bg-emerald-50, .theme-blue .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.1) !important; }
+.theme-blue .bg-blue-50, .theme-blue .bg-blue-100 { background-color: rgba(59, 130, 246, 0.1) !important; }
+.theme-blue .bg-red-50, .theme-blue .bg-red-100 { background-color: rgba(239, 68, 68, 0.1) !important; }
+.theme-blue .bg-orange-50, .theme-blue .bg-orange-100 { background-color: rgba(249, 115, 22, 0.1) !important; }
+.theme-blue .bg-amber-50, .theme-blue .bg-amber-100 { background-color: rgba(245, 158, 11, 0.1) !important; }
+
+/* Component Overrides */
+.app-container.theme-blue, .theme-blue .app-container {
+  background-color: var(--bg-primary) !important;
+}
+.theme-blue body {
+  background-color: var(--bg-tertiary) !important;
+}
+.theme-blue .navigation {
+  background-color: var(--bg-primary) !important;
+  border-top-color: var(--border-color) !important;
+}
+.theme-blue .navigation ul li.active a .text {
+  color: var(--text-primary) !important;
+}
+.theme-blue .page-view {
+  background-color: var(--bg-primary) !important;
 }

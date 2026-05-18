@@ -45,13 +45,14 @@ interface BerandaViewProps {
   storeName: string
   storeSubtext: string
   storePhoto?: string
-  handleOwnerTambahModal: (kId: string, nom: number) => void
+  handleOwnerTambahModal: (kId: string, nom: number, kategori: string) => void
   kasLainnya: number
   totalKhusus: number
   totalNonTunai: number
   username: string
   showToast: (m: string) => void
   onConfirm: (t: string, m: string, c: () => void) => void
+  presets?: any[]
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -633,6 +634,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
+  const [ownerSaldoKategori, setOwnerSaldoKategori] = useState('Isi Saldo Bank')
 
   // Audit State
   const [auditFisik, setAuditFisik] = useState('')
@@ -2030,9 +2032,25 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   {/* Form Tambah Modal */}
                   <div className="bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 shadow-sm">
                     <h4 className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <i className="fa-solid fa-plus-circle"></i> Tambah Modal Kasir
+                      <i className="fa-solid fa-plus-circle"></i> Tambah Saldo Kasir
                     </h4>
                     <div className="space-y-4">
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Kategori Saldo</label>
+                        <div className="relative">
+                          <select 
+                            value={ownerSaldoKategori}
+                            onChange={e => setOwnerSaldoKategori(e.target.value)}
+                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 pr-10 text-xs font-black text-gray-900 outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="Isi Saldo Bank">🏦 Saldo Bank (Plafon)</option>
+                            <option value="Isi Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
+                            <option value="Isi Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 pointer-events-none"></i>
+                        </div>
+                      </div>
+
                       <div>
                         <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Pilih Kasir</label>
                         <div className="relative">
@@ -2051,7 +2069,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       </div>
 
                       <div>
-                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Nominal Modal</label>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Nominal Saldo</label>
                         <input 
                           type="text"
                           inputMode="numeric"
@@ -2066,27 +2084,27 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         onClick={() => {
                           const nominal = (ownerSaldoNominal.replace(/\./g, ''));
                           if (!ownerSaldoKasirId || !nominal || parseInt(nominal) <= 0) return props.showToast('Pilih kasir dan masukkan nominal yang valid');
-                          props.onConfirm("TAMBAH MODAL", `Tambah modal ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`, () => {
-                            props.handleOwnerTambahModal?.(ownerSaldoKasirId, parseInt(nominal));
+                          props.onConfirm("TAMBAH SALDO", `Tambah ${ownerSaldoKategori} ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`, () => {
+                            props.handleOwnerTambahModal?.(ownerSaldoKasirId, parseInt(nominal), ownerSaldoKategori);
                             setOwnerSaldoNominal('');
                             setOwnerSaldoKasirId('');
-                            props.showToast("Modal berhasil ditambahkan");
+                            props.showToast("Saldo berhasil ditambahkan");
                           });
                         }}
                         className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 transition-all"
                       >
-                        Tambah Modal Sekarang
+                        Tambah Saldo Sekarang
                       </button>
                     </div>
                   </div>
 
                   {/* Ringkasan Modal Hari Ini */}
-                  <div className="space-y-3">
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Riwayat Modal Hari Ini</h4>
+                  <div className="space-y-3 mt-8">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Riwayat Penambahan Saldo Hari Ini</h4>
                     {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => {
                       const today = getLocalDateString();
                       const modalHariIni = props.transactions
-                        .filter(t => t.kasir_id === id && t.kategori === 'Isi Modal Tunai Kasir' && t.timestamp.startsWith(today))
+                        .filter(t => t.kasir_id === id && t.kategori.startsWith('Isi ') && t.timestamp.startsWith(today))
                         .reduce((sum, t) => sum + t.nominal, 0);
 
                       return (
@@ -2097,7 +2115,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           </div>
                           <div className="text-right">
                             <p className="text-[13px] font-black text-emerald-600">{formatRupiah(modalHariIni)}</p>
-                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter">Total Modal Hari Ini</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter">Total Saldo Ditambahkan</p>
                           </div>
                         </div>
                       );
@@ -2121,6 +2139,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             keterangan={props.formKeterangan}
             setKeterangan={props.setFormKeterangan}
             onSave={props.handleSimpanTransaksi}
+            presets={props.presets}
           />
         </div>
       )}

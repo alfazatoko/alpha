@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
 
@@ -25,9 +25,24 @@ interface LaporanViewProps {
   kasirList: Record<string, any>
   setActiveView: (v: string) => void
   kasLainnya: number
+  storeName?: string
+  storeSubtext?: string
+  storePhoto?: string
+  kasirName?: string
+  setIsSidePanelOpen?: (v: boolean) => void
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const [showShareMenu, setShowShareMenu] = React.useState(false);
   const [isSharing, setIsSharing] = React.useState(false);
 
@@ -182,27 +197,42 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
   return (
     <div id="laporan-content" className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      {/* HEADER BARU */}
-      <div id="laporan-header-actions" className="px-4 pt-12 pb-4 border-b flex justify-between items-center theme-header text-white shadow-lg">
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-        </button>
-        <div className="text-center">
-          <h2 className="font-black text-xs uppercase tracking-widest leading-none">LAPORAN KEUANGAN</h2>
-          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+      {/* HEADER TOKO IDENTIK BERANDA */}
+      <div id="laporan-header-actions" className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
+          <div className="flex-1 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {props.storePhoto ? (
+                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : (
+                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
+              )}
+              <div>
+                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
+                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
+                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
+            </div>
+          </div>
+
+          <button onClick={() => props.setIsSidePanelOpen?.(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
         </div>
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-xmark"></i>
-        </button>
       </div>
 
-      <div className="px-1.5 pt-5 pb-4 theme-header text-white shadow-lg shadow-emerald-500/20 mb-4">
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-4" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
         <div className="flex justify-between items-center px-2 relative">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Rekapitulasi</h2>

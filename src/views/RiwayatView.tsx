@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { formatRupiah, cn, parseLocalISO } from '../lib/utils'
+import React, { useState, useEffect } from 'react'
+import { formatRupiah, cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { Transaction } from '../types'
 import TransactionRow from '../components/TransactionRow'
 import type { KasirAccount } from '../components/LoginScreen'
@@ -13,8 +13,8 @@ interface RiwayatViewProps {
   setFilterTanggalAkhir: (v: string) => void
   filterPencarian: string
   setFilterPencarian: (v: string) => void
-  filterKategori: string
-  setFilterKategori: (v: string) => void
+  filterKategori: string[]
+  setFilterKategori: (v: string[]) => void
   activeSaldoFilter: string
   setActiveSaldoFilter: (v: string) => void
   kasirRole?: string
@@ -24,21 +24,63 @@ interface RiwayatViewProps {
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
   setActiveView: (v: string) => void
+  storeName?: string
+  storeSubtext?: string
+  storePhoto?: string
+  kasirName?: string
+  setIsSidePanelOpen?: (v: boolean) => void
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
 
-  // Local date state (hanya diterapkan saat klik TAMPILKAN)
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  // Local filter states for bottom sheet
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [localKategori, setLocalKategori] = useState<string[]>(props.filterKategori)
+  const [localPencarian, setLocalPencarian] = useState(props.filterPencarian)
   const [localDari, setLocalDari] = useState(props.filterTanggalMulai)
   const [localSampai, setLocalSampai] = useState(props.filterTanggalAkhir)
 
-  const handleTampilkan = () => {
+  // Synchronize local states when sheet opens or outer props change
+  useEffect(() => {
+    if (isFilterOpen) {
+      setLocalKategori(props.filterKategori)
+      setLocalPencarian(props.filterPencarian)
+      setLocalDari(props.filterTanggalMulai)
+      setLocalSampai(props.filterTanggalAkhir)
+    }
+  }, [isFilterOpen, props.filterKategori, props.filterPencarian, props.filterTanggalMulai, props.filterTanggalAkhir])
+
+  const handleCari = () => {
+    props.setFilterKategori(localKategori)
+    props.setFilterPencarian(localPencarian)
     props.setFilterTanggalMulai(localDari)
     props.setFilterTanggalAkhir(localSampai)
     setCurrentPage(1)
+    setIsFilterOpen(false)
   }
+
+  const handleResetFilters = () => {
+    const today = getLocalDateString()
+    setLocalKategori(['Semua'])
+    setLocalPencarian('')
+    setLocalDari(today)
+    setLocalSampai(today)
+  }
+
+
 
   // 1. Filter berdasarkan Rentang Tanggal (Untuk Kartu Dashboard Atas)
   const dateFilteredTransactions = props.transactions.filter(t => {
@@ -49,7 +91,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
   // 2. Filter berdasarkan Kategori, Pencarian, & Kasir (Untuk List & Footer Bawah)
   const filteredTransactions = dateFilteredTransactions.filter(t => {
-    const matchKategori = props.filterKategori === 'Semua' || t.kategori === props.filterKategori
+    const matchKategori = props.filterKategori.includes('Semua') || props.filterKategori.includes(t.kategori)
     const matchSearch = !props.filterPencarian || 
                       t.keterangan.toLowerCase().includes(props.filterPencarian.toLowerCase()) ||
                       t.nominal.toString().includes(props.filterPencarian)
@@ -90,27 +132,42 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")} style={{ backgroundColor: 'var(--container-bg, #ffffff)' }}>
-      {/* HEADER BARU */}
-      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-indigo-700 text-white shadow-lg">
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-        </button>
-        <div className="text-center">
-          <h2 className="font-black text-xs uppercase tracking-widest leading-none">RIWAYAT TRANSAKSI</h2>
-          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+      {/* HEADER TOKO IDENTIK BERANDA */}
+      <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
+          <div className="flex-1 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {props.storePhoto ? (
+                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : (
+                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
+              )}
+              <div>
+                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
+                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
+                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
+            </div>
+          </div>
+
+          <button onClick={() => props.setIsSidePanelOpen?.(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
         </div>
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-xmark"></i>
-        </button>
       </div>
 
-      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20">
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
         <div className="px-2 flex justify-between items-center">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Data Transaksi</h2>
@@ -145,71 +202,24 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       </div>
 
       <div className="px-1.5 pb-20 pt-3">
-        {/* CARI + KATEGORI (1 baris, tanpa label) */}
-        <div className="flex gap-1.5 mb-2">
-          <div className="relative flex-[2]">
-            <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
-            <input 
-              type="text" 
-              placeholder="Cari..." 
-              value={props.filterPencarian}
-              onChange={(e) => props.setFilterPencarian(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-[11px] focus:outline-none focus:border-violet-500 font-bold text-slate-700" 
-            />
-          </div>
-          <div className="relative flex-1">
-            <select 
-              value={props.filterKategori}
-              onChange={(e) => props.setFilterKategori(e.target.value)}
-              className="w-full h-full bg-white bg-none border border-slate-200 pl-2 pr-6 rounded-lg text-[11px] font-black text-slate-700 focus:outline-none focus:border-violet-500 appearance-none shadow-sm"
-            >
-              <option value="Semua">Semua Kategori</option>
-              <option value="Transfer Bank">Transfer Bank</option>
-              <option value="DANA">DANA</option>
-              <option value="FLIP">FLIP</option>
-              <option value="Order Kuota">Order Kuota</option>
-              <option value="Tarik Tunai">Tarik Tunai</option>
-              <option value="Aksesoris">Aksesoris</option>
-            </select>
-            <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
-          </div>
-        </div>
-
-        {/* TANGGAL + TAMPILKAN (1 baris, tanpa label) */}
-        <div className="flex gap-1.5 mb-2 items-center">
-          <div 
-            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-2 px-3 cursor-pointer shadow-sm"
-            onClick={(e) => {
-              const input = (e.currentTarget as HTMLElement).querySelector('input');
-              if (input) (input as any).showPicker?.();
-            }}
-          >
-            <input 
-              type="date"
-              className="w-full text-[11px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
-              value={localDari}
-              onChange={(e) => setLocalDari(e.target.value)}
-            />
-          </div>
-          <div 
-            className="flex-1 flex items-center bg-white border border-slate-200 rounded-lg py-2 px-3 cursor-pointer shadow-sm"
-            onClick={(e) => {
-              const input = (e.currentTarget as HTMLElement).querySelector('input');
-              if (input) (input as any).showPicker?.();
-            }}
-          >
-            <input 
-              type="date"
-              className="w-full text-[11px] font-bold text-slate-700 focus:outline-none bg-transparent pointer-events-none"
-              value={localSampai}
-              onChange={(e) => setLocalSampai(e.target.value)}
-            />
-          </div>
+        {/* FILTER BARU (Filter Transaksi) - COMPACT MOBILE */}
+        <div className="mb-3">
           <button 
-            onClick={handleTampilkan}
-            className="bg-gradient-to-br from-violet-600 to-indigo-700 text-white px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-md shadow-indigo-500/20 whitespace-nowrap"
+            onClick={() => setIsFilterOpen(true)}
+            className="w-full bg-slate-50 border border-slate-200 hover:border-violet-500 rounded-lg px-2.5 py-1.5 flex justify-between items-center shadow-sm active:scale-[0.99] transition-all"
           >
-            CEK
+            <div className="flex items-center gap-2 text-left w-full overflow-hidden">
+              <i className="fa-solid fa-sliders text-[9px] text-violet-600 shrink-0"></i>
+              <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-slate-800 uppercase tracking-wider shrink-0">Filter:</span>
+                <span className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter truncate">
+                  {props.filterKategori.includes('Semua') ? 'Semua Kategori' : props.filterKategori.join(', ')}
+                  {props.filterPencarian ? ` • "${props.filterPencarian}"` : ''}
+                  {` • ${props.filterTanggalMulai === props.filterTanggalAkhir ? props.filterTanggalMulai : `${props.filterTanggalMulai} - ${props.filterTanggalAkhir}`}`}
+                </span>
+              </div>
+            </div>
+            <i className="fa-solid fa-chevron-down text-[8px] text-slate-400 ml-1 shrink-0"></i>
           </button>
         </div>
 
@@ -360,6 +370,129 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         </div>
       </div>
+      {/* FILTER BOTTOM SHEET (PHOTO 3 STYLE) */}
+      {isFilterOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/60 z-[200] backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setIsFilterOpen(false)}
+          />
+          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white rounded-t-[2rem] z-[210] px-4 pt-4 pb-6 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto">
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4"></div>
+            
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-extrabold text-[11px] text-slate-800 uppercase tracking-widest">Pencarian</h3>
+              <button onClick={() => setIsFilterOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 active:scale-95 transition-all">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+            
+            <div className="space-y-3 mb-5 text-left">
+              {/* Jenis Kategori -> Multiple Checkboxes */}
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Jenis Kategori</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => (
+                    <label key={cat} className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                        checked={localKategori.includes(cat)}
+                        onChange={(e) => {
+                          if (cat === 'Semua') {
+                            setLocalKategori(['Semua'])
+                          } else {
+                            let next = [...localKategori]
+                            if (next.includes('Semua')) next = []
+                            
+                            if (e.target.checked) {
+                              next.push(cat)
+                            } else {
+                              next = next.filter(c => c !== cat)
+                            }
+                            
+                            if (next.length === 0) next = ['Semua']
+                            setLocalKategori(next)
+                          }
+                        }}
+                      />
+                      <span className="text-xs font-bold text-slate-700">{cat === 'Semua' ? 'Semua Kategori' : cat}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* No. HP / ID Trx / ID Plgn (Pencarian) */}
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">No. HP / ID Trx / ID Plgn</label>
+                <input 
+                  type="text" 
+                  placeholder="Masukkan nomor HP atau ID..." 
+                  value={localPencarian}
+                  onChange={(e) => setLocalPencarian(e.target.value)}
+                  className="w-full bg-transparent border-b-2 border-slate-100 py-1.5 text-[11px] font-bold text-slate-800 placeholder:text-slate-300 outline-none focus:border-teal-600" 
+                />
+              </div>
+
+              {/* Dari Tanggal */}
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Dari Tanggal</label>
+                <div 
+                  className="relative border-b-2 border-slate-100 py-1.5 cursor-pointer flex justify-between items-center"
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input) (input as any).showPicker?.();
+                  }}
+                >
+                  <input 
+                    type="date"
+                    className="w-full text-[11px] font-bold text-slate-800 outline-none bg-transparent pointer-events-none"
+                    value={localDari}
+                    onChange={(e) => setLocalDari(e.target.value)}
+                  />
+                  <i className="fa-regular fa-calendar text-slate-400 text-[11px] absolute right-1 pointer-events-none"></i>
+                </div>
+              </div>
+
+              {/* Ke Tanggal */}
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Ke Tanggal</label>
+                <div 
+                  className="relative border-b-2 border-slate-100 py-1.5 cursor-pointer flex justify-between items-center"
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input) (input as any).showPicker?.();
+                  }}
+                >
+                  <input 
+                    type="date"
+                    className="w-full text-[11px] font-bold text-slate-800 outline-none bg-transparent pointer-events-none"
+                    value={localSampai}
+                    onChange={(e) => setLocalSampai(e.target.value)}
+                  />
+                  <i className="fa-regular fa-calendar text-slate-400 text-[11px] absolute right-1 pointer-events-none"></i>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button 
+                onClick={handleResetFilters}
+                className="flex-1 bg-teal-50 hover:bg-teal-100 text-teal-800 font-black py-2.5 rounded-full text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+              >
+                Reset
+              </button>
+              <button 
+                onClick={handleCari}
+                className="flex-grow-[1.5] bg-teal-700 hover:bg-teal-800 text-white font-black py-2.5 rounded-full text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-teal-700/20"
+              >
+                Cari
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

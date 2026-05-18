@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
 
 interface IsiSaldoViewProps {
@@ -13,11 +13,28 @@ interface IsiSaldoViewProps {
   handleSimpanIsiSaldo: () => void
   isSaving?: boolean
   showToast: (m: string) => void
+  storeName?: string
+  storeSubtext?: string
+  storePhoto?: string
+  kasirName?: string
+  kasirRole?: string
+  setIsSidePanelOpen?: (v: boolean) => void
 }
 
 const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
   const nominalRef = useRef<HTMLInputElement>(null)
   const keteranganRef = useRef<HTMLTextAreaElement>(null)
+
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
     if (e.key === 'Enter') {
@@ -32,27 +49,43 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
-      <div className="px-4 pt-12 pb-4 border-b flex justify-between items-center theme-header text-white shadow-lg">
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-        </button>
-        <div className="text-center">
-          <h2 className="font-black text-xs uppercase tracking-widest leading-none">MANAJEMEN SALDO</h2>
-          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+      {/* HEADER TOKO IDENTIK BERANDA */}
+      <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
+          <div className="flex-1 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {props.storePhoto ? (
+                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : (
+                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
+              )}
+              <div>
+                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
+                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
+                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
+            </div>
+          </div>
+
+          <button onClick={() => props.setIsSidePanelOpen?.(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
         </div>
-        <button 
-          onClick={() => props.setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-xmark"></i>
-        </button>
       </div>
 
-      <div className="px-5 pt-6 pb-6 theme-header text-white shadow-lg mb-6">
-        <div className="flex items-center justify-between">
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
+        <div className="px-2 flex justify-between items-center">
           <div>
             <h2 className="font-bold text-sm tracking-wide">Pengaturan Saldo</h2>
             <p className="text-blue-100 text-[10px] opacity-90">Atur modal & rekap harian</p>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
 
 interface AkunViewProps {
@@ -18,9 +18,21 @@ interface AkunViewProps {
   onSaveStoreSubtext?: (v: string) => void
   onSaveStorePhoto?: (v: string) => void
   setActiveView?: (v: string) => void
+  setIsSidePanelOpen?: (v: boolean) => void
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
   const safeName = String(props.kasirName || 'User')
   const initial = (safeName.charAt(0) || 'U').toUpperCase()
   const roleBadge = props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'
@@ -85,46 +97,55 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-white", props.active && "active")}>
-      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-slate-900 text-white shadow-lg">
-        <button 
-          onClick={() => props.setActiveView?.('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-        </button>
-        <div className="text-center">
-          <h2 className="font-black text-xs uppercase tracking-widest leading-none">PENGATURAN</h2>
-          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+      {/* HEADER TOKO IDENTIK BERANDA */}
+      <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
+          <div className="flex-1 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {props.storePhoto ? (
+                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : (
+                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
+              )}
+              <div>
+                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
+                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
+                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
+                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
+              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
+              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
+            </div>
+          </div>
+
+          <button onClick={() => props.setIsSidePanelOpen?.(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
+          </button>
         </div>
-        <button 
-          onClick={() => props.setActiveView?.('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-xmark"></i>
-        </button>
       </div>
-      <div className="px-1.5 py-6">
-        <div className="flex items-center gap-4 p-5 border border-blue-100 rounded-3xl mb-6 bg-blue-50/30">
-          <div className="relative group">
-            {props.storePhoto ? (
-              <img src={props.storePhoto} alt="Logo" className="w-16 h-16 rounded-full object-cover shadow-lg border-4 border-white" />
-            ) : (
-              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg border-4 border-white">{initial}</div>
-            )}
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px]">
-              <i className="fa-solid fa-check"></i>
-            </div>
-          </div>
+
+      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
+        <div className="px-2 flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-base text-gray-800">{props.storeName || 'Admin ALPHA'}</h3>
-            <p className="text-xs text-gray-500">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className={cn("inline-block px-2 py-0.5 text-[9px] font-black rounded", roleColor)}>{roleBadge}</span>
-              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{props.kasirName}</span>
-            </div>
+            <h2 className="font-bold text-sm tracking-wide">Pengaturan Akun</h2>
+            <p className="text-blue-100 text-[10px] opacity-90">Kelola profil dan keamanan</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+            <i className="fa-solid fa-user-gear text-white text-xs"></i>
           </div>
         </div>
-        
+      </div>
+
+      <div className="px-1.5 pb-6">
+
         <div className="space-y-3">
           {/* Owner Only Settings */}
           {props.kasirRole === 'owner' && (
@@ -198,6 +219,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Kategori: Otomatis (Setting Keterangan) */}
+              <div className="group">
+                <button 
+                  onClick={() => props.setActiveView('view-otomatis')}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl transition-all border bg-white text-gray-800 border-gray-100 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-purple-50 text-purple-600">
+                      <i className="fa-solid fa-bolt text-xs"></i>
+                    </div>
+                    <div className="text-left">
+                      <span className="text-[11px] font-black uppercase tracking-widest block">OTOMATIS</span>
+                      <span className="text-[8px] font-bold text-gray-400">Setting keterangan otomatis</span>
+                    </div>
+                  </div>
+                  <i className="fa-solid fa-chevron-right text-[10px] text-gray-400"></i>
+                </button>
               </div>
 
               {/* Kategori: Keamanan & Akses */}

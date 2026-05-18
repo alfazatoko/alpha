@@ -37,3 +37,10 @@ export interface Absensi {
   jam_masuk: string; // HH:mm:ss
   status: 'Hadir' | 'Libur';
 }
+
+export interface PresetOtomatis {
+  id: string;
+  keterangan: string;
+  modal: number;
+  jual: number;
+}

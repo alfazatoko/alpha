@@ -12,15 +12,28 @@ interface TransactionFormProps {
   setKeterangan: (v: string) => void
   onSave: (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
   isSaving?: boolean
+  presets?: any[]
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving
+  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = []
 }) => {
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS'>('DIGITAL')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
   const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
+  const [isKetAuto, setIsKetAuto] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  
+  // Auto Keterangan Logic
+  React.useEffect(() => {
+    if (isKetAuto) {
+      let autoText = `${kategori} = `;
+      if (nominal && nominal !== '0' && kategori !== 'Order Kuota') {
+        autoText += `${nominal}`;
+      }
+      setKeterangan(autoText.toUpperCase());
+    }
+  }, [isKetAuto, kategori, nominal, setKeterangan]);
   
   // Refs for navigation
   const btnDigitalRef = useRef<HTMLButtonElement>(null)
@@ -74,6 +87,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }
 
+  const handleInputFocus = (e: React.FocusEvent<HTMLElement>) => {
+    const target = e.target;
+    setTimeout(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  };
+
   const onSaveInternal = () => {
     setErrorMsg(null)
     
@@ -91,6 +111,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
     const subTab = subMode === 'NORMAL' ? 'KHUSUS' : subMode
     onSave({ activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+    setIsKetAuto(true)
   }
 
   return (
@@ -147,7 +168,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <div className="space-y-3">
         {/* Category Label + Mode Dropdown Row */}
         <div className="flex justify-between items-center px-1">
-          <label className="text-[10px] font-black text-gray-900 uppercase tracking-widest">
+          <label className="text-[10px] font-black text-black uppercase tracking-widest">
             {activeMode === 'DIGITAL' ? 'Pilih Kategori' : activeMode === 'TARIK' ? 'Tarik Tunai' : 'Aksesoris'}
           </label>
           <div className="relative">
@@ -155,11 +176,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={optTunaiRef}
               value={subMode}
               onChange={(e) => setSubMode(e.target.value as any)}
-              className="bg-gray-100 text-[10px] font-black text-gray-900 px-3 py-1 rounded-lg border-none outline-none appearance-none pr-7 cursor-pointer hover:bg-gray-200 transition-colors"
+              className="bg-gray-100 text-[10px] font-black text-black px-3 py-1 rounded-lg border-none outline-none appearance-none pr-7 cursor-pointer hover:bg-gray-200 transition-colors"
             >
-              <option value="NORMAL">TUNAI</option>
-              <option value="KHUSUS">KHUSUS</option>
-              <option value="NON_TUNAI">NON-TUNAI</option>
+              <option value="" disabled>-Tujuan Dana Masuk-</option>
+              <option value="NORMAL">TUNAI (Laci kasir)</option>
+              <option value="NON_TUNAI">NON TUNAI</option>
+              <option value="KHUSUS">KHUSUS (Hitungan terpisah)</option>
             </select>
             <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 pointer-events-none"></i>
           </div>
@@ -173,11 +195,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <button 
                   key={cat}
                   ref={el => { catRefs.current[idx] = el }}
-                  onClick={() => { setKategori(cat); nominalRef.current?.focus(); }}
+                  onClick={() => { setKategori(cat); setIsKetAuto(true); nominalRef.current?.focus(); }}
                   onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
                   className={cn(
-                    "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all focus:ring-2 focus:ring-emerald-200 outline-none",
-                    kategori === cat ? "bg-emerald-500 border-emerald-500 text-white shadow-md" : "bg-white border-gray-200 text-gray-900"
+                    "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all focus:ring-2 focus:ring-orange-200 outline-none",
+                    kategori === cat ? "bg-orange-500 border-orange-500 text-white shadow-md" : "bg-white border-gray-200 text-black"
                   )}
                 >
                   {cat}
@@ -187,22 +209,85 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-0.5">
+            <label className="block text-[9px] font-black text-black uppercase tracking-tighter ml-1">Keterangan Opsional</label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={isKetAuto}
+                onChange={(e) => setIsKetAuto(e.target.checked)}
+                className="w-3 h-3 accent-blue-600"
+              />
+              <span className="text-[7px] font-black text-black uppercase tracking-tighter">KETERANGAN OTOMATIS</span>
+            </label>
+          </div>
+          <textarea 
+            ref={keteranganRef}
+            rows={1} 
+            placeholder="..." 
+            value={keterangan}
+            onFocus={handleInputFocus}
+            onChange={(e) => {
+              setKeterangan(e.target.value);
+              if (isKetAuto) setIsKetAuto(false);
+            }}
+            className="form-input-modern w-full resize-none text-[13px] font-black py-2 h-9 px-3 outline-none"
+          ></textarea>
+
+          {/* Autocomplete Suggestions */}
+          {presets && presets.length > 0 && activeMode === 'DIGITAL' && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {(() => {
+                const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+                
+                // Only show if user has typed something and there's a match
+                if (searchQuery.length === 0) return null;
+                
+                const filtered = presets.filter(p => p.keterangan.toLowerCase().includes(searchQuery));
+                if (filtered.length === 0) return null;
+                
+                return filtered.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                      setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
+                      setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                      setIsKetAuto(false);
+                      adminRef.current?.focus();
+                    }}
+                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left"
+                  >
+                    {p.keterangan} (M:{p.modal / 1000}k J:{p.jual / 1000}k)
+                  </button>
+                ))
+              })()}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">NOMINAL</label>
+            <label className="block text-[9px] font-black text-black mb-0.5 uppercase tracking-tighter ml-1">
+              {kategori === 'Order Kuota' ? 'HARGA MODAL' : 'NOMINAL'}
+            </label>
             <input 
               ref={nominalRef}
               type="text" 
               inputMode="numeric" 
               placeholder="0" 
               value={nominal}
+              onFocus={handleInputFocus}
               onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
               className="form-input-modern w-full text-[13px] font-black h-9 px-3"
             />
           </div>
           <div>
             <div className="flex justify-between items-center mb-0.5">
-              <label className="block text-[9px] font-black text-gray-900 uppercase tracking-tighter ml-1">ADMIN</label>
+              <label className="block text-[9px] font-black text-black uppercase tracking-tighter ml-1">
+                {kategori === 'Order Kuota' ? 'HARGA JUAL' : 'ADMIN'}
+              </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -210,7 +295,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   onChange={(e) => setIsAdminNonTunai(e.target.checked)}
                   className="w-3 h-3 accent-purple-600"
                 />
-                <span className="text-[7px] font-black text-gray-900 uppercase tracking-tighter">DALAM</span>
+                <span className="text-[7px] font-black text-black uppercase tracking-tighter">DALAM</span>
               </label>
             </div>
             <input 
@@ -219,6 +304,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               inputMode="numeric" 
               placeholder="0" 
               value={admin}
+              onFocus={handleInputFocus}
               onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
               className={cn(
                 "form-input-modern w-full text-[13px] font-black h-9 px-3 transition-all outline-none",
@@ -226,18 +312,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               )}
             />
           </div>
-        </div>
-
-        <div>
-          <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">Keterangan Opsional</label>
-          <textarea 
-            ref={keteranganRef}
-            rows={1} 
-            placeholder="..." 
-            value={keterangan}
-            onChange={(e) => setKeterangan(e.target.value)}
-            className="form-input-modern w-full resize-none text-[13px] font-black py-2 h-9 px-3 outline-none"
-          ></textarea>
         </div>
 
         {errorMsg && (

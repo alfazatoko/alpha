@@ -58,7 +58,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         </div>
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex flex-col items-end gap-0">
+        <div className="flex flex-col items-end gap-0 mr-4 mt-0.5">
           <div className={cn(
             "text-[13px] font-black tracking-tight leading-tight",
             isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black")

@@ -23,6 +23,7 @@ import KontakView from './views/KontakView'
 import VoucherView from './views/VoucherView'
 import KalenderView from './views/KalenderView'
 import NotaView from './views/NotaView'
+import OtomatisView from './views/OtomatisView'
 
 declare global {
   namespace JSX {
@@ -35,19 +36,31 @@ declare global {
 // Constants and helpers
 
 const App: React.FC = () => {
+  const hasBypass = typeof window !== 'undefined' && window.location.search.includes('bypass=true')
+
   // ── Google Auth State ──
-  const [googleSession, setGoogleSession] = useState<any>(null)
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [googleSession, setGoogleSession] = useState<any>(hasBypass ? { user: { id: 'bypass-google-uid', email: 'demo@alfaza.com' } } : null)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(hasBypass ? false : true)
 
   // ── Kasir Profile State ──
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [currentUsername, setCurrentUsername] = useState('')
-  const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(null)
-  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  const [isLoggedIn, setIsLoggedIn] = useState(hasBypass ? true : false)
+  const [currentUsername, setCurrentUsername] = useState(hasBypass ? 'demo_owner' : '')
+  const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(hasBypass ? { name: 'Demo Owner', role: 'owner', pin: '1234' } : null)
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>(() => {
+    const list = getKasirAccounts()
+    if (hasBypass && Object.keys(list).length === 0) {
+      list['demo_owner'] = { name: 'Demo Owner', role: 'owner', pin: '1234' }
+    }
+    return list
+  })
 
   const refreshKasirList = useCallback(() => {
-    setKasirList(getKasirAccounts())
-  }, [])
+    const list = getKasirAccounts()
+    if (hasBypass && Object.keys(list).length === 0) {
+      list['demo_owner'] = { name: 'Demo Owner', role: 'owner', pin: '1234' }
+    }
+    setKasirList(list)
+  }, [hasBypass])
 
   useEffect(() => {
     refreshKasirList()
@@ -55,6 +68,7 @@ const App: React.FC = () => {
 
   // Check Supabase Auth
   useEffect(() => {
+    if (hasBypass) return
     supabase.auth.getSession().then(({ data: { session } }) => {
       setGoogleSession(session)
       setIsCheckingAuth(false)
@@ -301,6 +315,35 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     return localStorage.getItem('alphaPro_mainAnnouncement') || 'Selamat Datang di ALFAZA CELL'
   })
 
+  // Presets Otomatis State
+  const [presets, setPresets] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem(`alphaPro_${googleUid}_presets`)
+      const parsed = saved ? JSON.parse(saved) : null
+      return Array.isArray(parsed) ? parsed : []
+    } catch (e) {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    if (googleUid) {
+      const saved = localStorage.getItem(`alphaPro_${googleUid}_presets`)
+      if (saved) {
+        try {
+          setPresets(JSON.parse(saved))
+        } catch(e){}
+      }
+    }
+  }, [googleUid])
+
+  const savePresets = (newPresets: any[]) => {
+    setPresets(newPresets)
+    if (googleUid) {
+      localStorage.setItem(`alphaPro_${googleUid}_presets`, JSON.stringify(newPresets))
+    }
+  }
+
   // Store Profile State (with defensive fallbacks)
   const [storeName, setStoreName] = useState<string>(() => {
     return localStorage.getItem('alphaPro_storeName') || 'ALFAZA CELL'
@@ -446,7 +489,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
   const [filterTanggalMulai, setFilterTanggalMulai] = useState(getLocalDateString())
   const [filterTanggalAkhir, setFilterTanggalAkhir] = useState(getLocalDateString())
   const [filterPencarian, setFilterPencarian] = useState('')
-  const [filterKategori, setFilterKategori] = useState('Semua')
+  const [filterKategori, setFilterKategori] = useState<string[]>(['Semua'])
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
   const [filterKasir, setFilterKasir] = useState('Semua')
   
@@ -676,6 +719,14 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       }
     }
 
+    let finalNominal = nominal;
+    let finalAdmin = admin;
+
+    if (formKategori === 'Order Kuota') {
+      finalAdmin = admin - nominal;
+      finalNominal = nominal;
+    }
+
     // Proses simpan ke Supabase
     const id = Date.now().toString()
     const newTx = {
@@ -683,8 +734,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       user_id: googleUid,
       kasir_id: username,
       kategori: formKategori,
-      nominal,
-      admin_fee: admin,
+      nominal: finalNominal,
+      admin_fee: finalAdmin,
       keterangan: finalKeterangan,
       timestamp: getLocalISOString()
     }
@@ -715,7 +766,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
     })
   }
 
-  const handleOwnerTambahModal = (kasirId: string, nominal: number) => {
+  const handleOwnerTambahModal = (kasirId: string, nominal: number, kategori: string) => {
     if (isSaving) return
     setIsSaving(true)
 
@@ -724,7 +775,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       id,
       user_id: googleUid,
       kasir_id: kasirId,
-      kategori: 'Isi Modal Tunai Kasir',
+      kategori: kategori,
       nominal,
       admin_fee: 0,
       keterangan: 'Topup Modal by Owner',
@@ -957,6 +1008,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         username={username}
         showToast={showToast}
         onConfirm={handleConfirm}
+        presets={presets}
       />
 
       <RiwayatView 
@@ -979,6 +1031,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         kasirList={kasirList}
         onEdit={handleStartEdit}
         onDelete={handleDeleteTx}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
+        kasirName={account.name}
+        setIsSidePanelOpen={setIsSidePanelOpen}
       />
 
       <LaporanView 
@@ -1010,6 +1067,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         onEdit={handleStartEdit}
         onDelete={handleDeleteTx}
         kasirList={kasirList}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
+        kasirName={account.name}
+        setIsSidePanelOpen={setIsSidePanelOpen}
       />
 
       <AkunView 
@@ -1029,6 +1091,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         onSaveStoreName={saveStoreName}
         onSaveStoreSubtext={saveStoreSubtext}
         onSaveStorePhoto={saveStorePhoto}
+        setIsSidePanelOpen={setIsSidePanelOpen}
       />
 
       <IsiSaldoView 
@@ -1043,6 +1106,12 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         handleSimpanIsiSaldo={handleSimpanIsiSaldo}
         isSaving={isSaving}
         showToast={showToast}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
+        kasirName={account.name}
+        kasirRole={account.role}
+        setIsSidePanelOpen={setIsSidePanelOpen}
       />
 
       <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
@@ -1050,6 +1119,19 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
       <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
       <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
       <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+      <OtomatisView 
+        active={activeView === 'view-otomatis'} 
+        setActiveView={setActiveView} 
+        showToast={showToast} 
+        presets={presets}
+        setPresets={savePresets}
+        storeName={storeName}
+        storeSubtext={storeSubtext}
+        storePhoto={storePhoto}
+        kasirName={account.name}
+        kasirRole={account.role}
+        setIsSidePanelOpen={setIsSidePanelOpen}
+      />
 
       <Navigation activeView={activeView} setActiveView={setActiveView} />
 
