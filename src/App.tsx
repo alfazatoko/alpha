@@ -180,6 +180,7 @@ const App: React.FC = () => {
       username={currentUsername} 
       account={currentAccount} 
       googleUid={googleSession.user.id} 
+      googleEmail={googleSession.user.email}
       onLogout={handleLogout}
       kasirList={kasirList}
       refreshKasirList={refreshKasirList}
@@ -195,13 +196,14 @@ interface MainAppProps {
   username: string
   account: KasirAccount
   googleUid: string
+  googleEmail?: string
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
   refreshKasirList: () => void
   isLoggedIn: boolean
 }
 
-const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout, kasirList, refreshKasirList, isLoggedIn }) => {
+const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleEmail, onLogout, kasirList, refreshKasirList, isLoggedIn }) => {
   // PWA Update State
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -1100,6 +1102,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         setActiveView={setActiveView}
         kasirName={account.name}
         kasirRole={account.role}
+        googleEmail={googleEmail}
         onLogout={onLogout}
         onRequestLogout={() => setShowLogoutConfirm(true)}
         runningTexts={runningTexts}

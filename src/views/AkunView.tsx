@@ -19,6 +19,7 @@ interface AkunViewProps {
   onSaveStorePhoto?: (v: string) => void
   setActiveView?: (v: string) => void
   setIsSidePanelOpen?: (v: boolean) => void
+  googleEmail?: string
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -147,6 +148,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           {props.kasirRole === 'owner' && (
             <div className="mb-6 space-y-3">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Pengaturan Owner</p>
+              
+              <div className="bg-white border border-gray-100 p-3.5 rounded-2xl shadow-sm mb-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                  <i className="fa-brands fa-google text-xs"></i>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">AKUN GOOGLE TERTAUT</p>
+                  <p className="text-[11px] font-black text-gray-800 truncate">{props.googleEmail || 'Tidak diketahui'}</p>
+                </div>
+              </div>
               
               {/* Kategori: Edit Profil Toko */}
               <div className="group">
