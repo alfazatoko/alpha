@@ -14,14 +14,14 @@ const supabaseAnonKey = envConfig['VITE_SUPABASE_ANON_KEY']
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 async function checkTable() {
-  console.log('Mengecek koneksi ke Supabase dan tabel transactions...')
-  const { data, error } = await supabase.from('transactions').select('*').limit(1)
+  console.log('Mengecek koneksi ke Supabase dan tabel absensi...')
+  const { data, error } = await supabase.from('absensi').select('*').limit(1)
   
   if (error) {
-    console.error('Error:', error.message)
+    console.error('Error:', error)
     process.exit(1)
   } else {
-    console.log('Tabel transactions DITEMUKAN dan siap digunakan!')
+    console.log('Tabel absensi DITEMUKAN! Data:', data)
     process.exit(0)
   }
 }

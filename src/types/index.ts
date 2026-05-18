@@ -40,6 +40,7 @@ export interface Absensi {
 
 export interface PresetOtomatis {
   id: string;
+  kategori?: string;
   keterangan: string;
   modal: number;
   jual: number;

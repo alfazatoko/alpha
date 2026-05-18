@@ -18,6 +18,7 @@ interface OtomatisViewProps {
 
 const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [formKategori, setFormKategori] = useState('Order Kuota')
   const [formKeterangan, setFormKeterangan] = useState('')
   const [formModal, setFormModal] = useState('')
   const [formJual, setFormJual] = useState('')
@@ -34,15 +35,22 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
   const handleSimpan = () => {
     if (!formKeterangan) return props.showToast('Keterangan tidak boleh kosong!')
-    const modalNum = parseNominal(formModal)
-    const jualNum = parseNominal(formJual)
-    if (modalNum <= 0) return props.showToast('Harga Modal tidak valid!')
-    if (jualNum <= 0) return props.showToast('Harga Jual tidak valid!')
+    
+    let modalNum = 0;
+    let jualNum = 0;
+
+    if (formKategori === 'Order Kuota') {
+      modalNum = parseNominal(formModal)
+      jualNum = parseNominal(formJual)
+      if (modalNum <= 0) return props.showToast('Harga Modal tidak valid!')
+      if (jualNum <= 0) return props.showToast('Harga Jual tidak valid!')
+    }
 
     let newPresets = [...props.presets]
     if (editingId) {
       newPresets = newPresets.map(p => p.id === editingId ? {
         id: editingId,
+        kategori: formKategori,
         keterangan: formKeterangan,
         modal: modalNum,
         jual: jualNum
@@ -51,6 +59,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
     } else {
       newPresets.push({
         id: Date.now().toString(),
+        kategori: formKategori,
         keterangan: formKeterangan,
         modal: modalNum,
         jual: jualNum
@@ -63,6 +72,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
   const handleEdit = (p: PresetOtomatis) => {
     setEditingId(p.id)
+    setFormKategori(p.kategori || 'Order Kuota')
     setFormKeterangan(p.keterangan)
     setFormModal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'))
     setFormJual(p.jual.toLocaleString('id-ID').replace(/,/g, '.'))
@@ -77,6 +87,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
   const resetForm = () => {
     setEditingId(null)
+    setFormKategori('Order Kuota')
     setFormKeterangan('')
     setFormModal('')
     setFormJual('')
@@ -136,11 +147,29 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
           </h3>
           
+          <div className="mb-2">
+            <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>
+            <div className="flex flex-wrap gap-1">
+              {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai'].map((kat) => (
+                <button 
+                  key={kat}
+                  onClick={() => setFormKategori(kat)}
+                  className={cn(
+                    "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
+                    formKategori === kat ? "bg-purple-600 border-purple-600 text-white shadow-md" : "bg-white border-gray-200 text-black"
+                  )}
+                >
+                  {kat}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-widest ml-1">Keterangan / Nama Produk</label>
             <input 
               type="text" 
-              placeholder="Contoh: Token Listrik" 
+              placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"} 
               value={formKeterangan}
               onChange={(e) => setFormKeterangan(e.target.value)}
               className="form-input-modern w-full text-[13px] font-black px-3 h-10"
@@ -148,30 +177,32 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             <p className="text-[8px] font-bold text-gray-400 mt-1 ml-1 leading-tight">Saat Kasir mengetik ini di "Keterangan Opsional", pilihan otomatis akan muncul.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={formModal}
-                onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
-                className="form-input-modern w-full text-[13px] font-black h-10 px-3"
-              />
+          {formKategori === 'Order Kuota' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
+                <input 
+                  type="text" 
+                  inputMode="numeric" 
+                  placeholder="0" 
+                  value={formModal}
+                  onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
+                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
+                <input 
+                  type="text" 
+                  inputMode="numeric" 
+                  placeholder="0" 
+                  value={formJual}
+                  onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
+                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
-              <input 
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={formJual}
-                onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
-                className="form-input-modern w-full text-[13px] font-black h-10 px-3"
-              />
-            </div>
-          </div>
+          )}
 
           <div className="flex gap-2 mt-2 pt-2">
             {editingId && (
@@ -202,27 +233,41 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada preset.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {props.presets.map(p => (
-                <div key={p.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-                  <div className="flex-1 overflow-hidden pr-2">
-                    <h4 className="text-[12px] font-black text-gray-800 truncate mb-1">{p.keterangan}</h4>
-                    <div className="flex items-center gap-2 text-[9px] font-bold tracking-widest uppercase">
-                      <span className="text-blue-600">MODAL: {formatRupiah(p.modal).replace(',00', '')}</span>
-                      <span className="text-gray-300">|</span>
-                      <span className="text-emerald-600">JUAL: {formatRupiah(p.jual).replace(',00', '')}</span>
+            <div className="space-y-3">
+              {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
+                const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
+                if (filtered.length === 0) return null;
+                
+                return (
+                  <div key={kat} className="space-y-1.5">
+                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">{kat}</h4>
+                    <div className={kat === 'Order Kuota' ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5"}>
+                      {filtered.map(p => (
+                        <div key={p.id} className="bg-white p-2 rounded-lg border border-gray-200 flex items-center justify-between gap-1 shadow-sm">
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <h4 className="text-[10px] font-black text-gray-800 truncate leading-tight">{p.keterangan}</h4>
+                            {kat === 'Order Kuota' && (
+                              <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
+                                <span className="text-blue-600">M:{p.modal/1000}k</span>
+                                <span className="text-gray-300">|</span>
+                                <span className="text-emerald-600">J:{p.jual/1000}k</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-0.5 shrink-0">
+                            <button onClick={() => handleEdit(p)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all">
+                              <i className="fa-solid fa-pen text-[9px]"></i>
+                            </button>
+                            <button onClick={() => handleDelete(p.id)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
+                              <i className="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleEdit(p)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-all active:scale-95">
-                      <i className="fa-solid fa-pen-to-square text-[10px]"></i>
-                    </button>
-                    <button onClick={() => handleDelete(p.id)} className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-100 transition-all active:scale-95">
-                      <i className="fa-solid fa-trash text-[10px]"></i>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

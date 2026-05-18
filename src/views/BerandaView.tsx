@@ -606,6 +606,21 @@ const BackupPanel: React.FC<{
 // Extra panels removed to resolve duplicate declaration error
 
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -797,10 +812,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               <div>
                 <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
                 <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex items-center gap-1.5 mt-1">
                   <span className="text-white text-[10px] font-black">{props.kasirName}</span>
                   <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
                     {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
+                  </span>
+                  <span className={cn(
+                    "text-[7px] px-1.5 py-0.5 rounded-full font-black flex items-center gap-1",
+                    isOnline 
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
+                      : "bg-red-500 text-white animate-pulse"
+                  )}>
+                    <span className={cn("w-1 h-1 rounded-full", isOnline ? "bg-emerald-400" : "bg-white")}></span>
+                    {isOnline ? 'ONLINE' : 'OFFLINE'}
                   </span>
                 </div>
               </div>

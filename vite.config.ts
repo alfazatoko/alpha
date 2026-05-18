@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['logo_icon.png', 'icons.svg'],
       manifest: {
         name: 'ALFAZA CELL',

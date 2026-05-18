@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { App as CapApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import { parseNominal, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
 import type { Transaction } from './types'
 
@@ -201,6 +202,11 @@ interface MainAppProps {
 }
 
 const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogout, kasirList, refreshKasirList, isLoggedIn }) => {
+  // PWA Update State
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW()
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
@@ -449,11 +455,18 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
         .eq('tanggal', today)
         .maybeSingle()
 
-      if (!checkError && !current) {
-        // Record new attendance
+      if (checkError) {
+        console.error("Absensi Fetch Error:", checkError.message || checkError)
+      }
+
+      if (current) {
+        setTodayAbsen(current.jam_masuk)
+      } else {
+        // Record new attendance (or fallback local if error)
         const now = new Date()
         const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-        await supabase.from('absensi').insert({
+        
+        const { error: insertError } = await supabase.from('absensi').insert({
           user_id: googleUid,
           username,
           nama: account.name,
@@ -461,9 +474,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
           jam_masuk: jam,
           status: 'Hadir'
         })
+
+        if (insertError) {
+          console.error("Absensi Insert Error:", insertError.message || insertError)
+        }
+
+        // Tetap set state lokal agar UI kasir tidak menampilkan --:--:--
         setTodayAbsen(jam)
-      } else if (current) {
-        setTodayAbsen(current.jam_masuk)
       }
 
       // 2. Fetch all attendance for owner view
@@ -1301,6 +1318,35 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, onLogou
                 Keluar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PWA Update Toast */}
+      {needRefresh && (
+        <div className="fixed bottom-28 left-4 right-4 z-[400] md:left-auto md:right-4 md:w-96 bg-gray-900/95 backdrop-blur-md text-white p-4 rounded-3xl shadow-2xl border border-white/10 flex flex-col gap-3 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
+          <div className="flex gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+              <i className="fa-solid fa-cloud-arrow-down text-lg"></i>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-0.5">Versi Baru Tersedia</p>
+              <p className="text-[9px] font-bold text-gray-300 uppercase leading-relaxed">Pembaruan sistem terdeteksi. Perbarui sekarang untuk menggunakan versi terbaru.</p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button 
+              onClick={() => setNeedRefresh(false)}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all border border-white/5"
+            >
+              Nanti saja
+            </button>
+            <button 
+              onClick={() => updateServiceWorker(true)}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-600/20 flex items-center gap-1.5"
+            >
+              <i className="fa-solid fa-rotate-right"></i> PERBARUI SEKARANG
+            </button>
           </div>
         </div>
       )}

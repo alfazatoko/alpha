@@ -68,22 +68,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     } else if (e.key === 'ArrowDown') {
       if (active === btnDigitalRef.current || active === btnTarikRef.current || active === btnAksesorisRef.current) optTunaiRef.current?.focus()
-      else if (active === optTunaiRef.current) nominalRef.current?.focus()
-      else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
-      else if (active === keteranganRef.current) btnSimpanRef.current?.focus()
+      else if (active === optTunaiRef.current) {
+        if (activeMode === 'DIGITAL' && catRefs.current[0]) catRefs.current[0]?.focus()
+        else keteranganRef.current?.focus()
+      }
+      else if (catRefs.current.includes(active as any)) keteranganRef.current?.focus()
+      else if (active === keteranganRef.current) nominalRef.current?.focus()
+      else if (active === nominalRef.current || active === adminRef.current) btnSimpanRef.current?.focus()
     } else if (e.key === 'ArrowUp') {
       if (active === optTunaiRef.current) btnDigitalRef.current?.focus()
-      else if (active === nominalRef.current) optTunaiRef.current?.focus()
-      else if (active === adminRef.current) optTunaiRef.current?.focus()
-      else if (active === keteranganRef.current) nominalRef.current?.focus()
-      else if (active === btnSimpanRef.current) keteranganRef.current?.focus()
+      else if (catRefs.current.includes(active as any)) optTunaiRef.current?.focus()
+      else if (active === keteranganRef.current) {
+        if (activeMode === 'DIGITAL' && catRefs.current[0]) catRefs.current[0]?.focus()
+        else optTunaiRef.current?.focus()
+      }
+      else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
+      else if (active === btnSimpanRef.current) nominalRef.current?.focus()
     }
 
     // Enter Key Logic
     if (e.key === 'Enter') {
-      if (active === nominalRef.current) { e.preventDefault(); adminRef.current?.focus(); }
-      else if (active === adminRef.current) { e.preventDefault(); keteranganRef.current?.focus(); }
-      else if (active === keteranganRef.current) { e.preventDefault(); btnSimpanRef.current?.focus(); }
+      if (active === keteranganRef.current) { e.preventDefault(); nominalRef.current?.focus(); }
+      else if (active === nominalRef.current) { e.preventDefault(); adminRef.current?.focus(); }
+      else if (active === adminRef.current) { e.preventDefault(); btnSimpanRef.current?.focus(); }
     }
   }
 
@@ -236,7 +243,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           ></textarea>
 
           {/* Autocomplete Suggestions */}
-          {presets && presets.length > 0 && activeMode === 'DIGITAL' && (
+          {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
             <div className="mt-1 flex flex-wrap gap-1">
               {(() => {
                 const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
@@ -244,24 +251,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 // Only show if user has typed something and there's a match
                 if (searchQuery.length === 0) return null;
                 
-                const filtered = presets.filter(p => p.keterangan.toLowerCase().includes(searchQuery));
+                const filtered = presets.filter(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+                });
+                
                 if (filtered.length === 0) return null;
                 
-                return filtered.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
-                      setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
-                      setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
-                      setIsKetAuto(false);
-                      adminRef.current?.focus();
-                    }}
-                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left"
-                  >
-                    {p.keterangan} (M:{p.modal / 1000}k J:{p.jual / 1000}k)
-                  </button>
-                ))
+                return filtered.map(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                        if (pCat === 'Order Kuota') {
+                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                          adminRef.current?.focus();
+                        } else {
+                          nominalRef.current?.focus();
+                        }
+                        setIsKetAuto(false);
+                      }}
+                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left"
+                    >
+                      {pCat === 'Order Kuota' 
+                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
+                        : p.keterangan}
+                    </button>
+                  );
+                })
               })()}
             </div>
           )}

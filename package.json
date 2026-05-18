@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:android": "npm run build && npx cap sync",
+    "build:all": "npm run build && firebase deploy --only hosting && npx cap sync",
     "lint": "eslint .",
     "preview": "vite preview"
   },
