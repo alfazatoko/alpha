@@ -33,7 +33,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const safeName = String(props.kasirName || 'User')
   
   const safeRunningTexts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
   const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem('alphaPro_isPinEnabled') !== 'false')
