@@ -217,24 +217,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 )}
               </div>
 
-              {/* Kategori: Otomatis (Setting Keterangan) */}
-              <div className="group">
-                <button 
-                  onClick={() => props.setActiveView?.('view-otomatis')}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl transition-all border bg-white text-gray-800 border-gray-100 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-purple-50 text-purple-600">
-                      <i className="fa-solid fa-bolt text-xs"></i>
-                    </div>
-                    <div className="text-left">
-                      <span className="text-[11px] font-black uppercase tracking-widest block">OTOMATIS</span>
-                      <span className="text-[8px] font-bold text-gray-400">Setting keterangan otomatis</span>
-                    </div>
-                  </div>
-                  <i className="fa-solid fa-chevron-right text-[10px] text-gray-400"></i>
-                </button>
-              </div>
 
               {/* Kategori: Keamanan & Akses */}
               <div className="group">
@@ -478,6 +460,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             </div>
           )}
+
+          {/* Kategori: Teks Otomatis (Setting Keterangan) */}
+          <div className="group">
+            <button 
+              onClick={() => props.setActiveView?.('view-otomatis')}
+              className="w-full flex items-center justify-between p-4 rounded-2xl transition-all border bg-white text-gray-800 border-gray-100 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-purple-50 text-purple-600">
+                  <i className="fa-solid fa-bolt text-xs"></i>
+                </div>
+                <div className="text-left">
+                  <span className="text-[11px] font-black uppercase tracking-widest block text-black">TEKS OTOMATIS</span>
+                  <span className="text-[8px] font-bold text-gray-400">Setting keterangan otomatis</span>
+                </div>
+              </div>
+              <i className="fa-solid fa-chevron-right text-[10px] text-gray-400"></i>
+            </button>
+          </div>
 
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Menu Akun</p>
           
