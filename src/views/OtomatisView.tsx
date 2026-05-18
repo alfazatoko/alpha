@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { cn, formatInputRupiah, formatRupiah, parseNominal } from '../lib/utils'
+import { cn, formatInputRupiah, parseNominal } from '../lib/utils'
 import type { PresetOtomatis } from '../types'
 
 interface OtomatisViewProps {
