@@ -34,9 +34,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   const safeName = String(props.kasirName || 'User')
-  const initial = (safeName.charAt(0) || 'U').toUpperCase()
-  const roleBadge = props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'
-  const roleColor = props.kasirRole === 'owner' ? 'bg-amber-500 text-white shadow-sm' : 'bg-emerald-100 text-emerald-600'
   
   const safeRunningTexts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
   const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem('alphaPro_isPinEnabled') !== 'false')
@@ -224,7 +221,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               {/* Kategori: Otomatis (Setting Keterangan) */}
               <div className="group">
                 <button 
-                  onClick={() => props.setActiveView('view-otomatis')}
+                  onClick={() => props.setActiveView?.('view-otomatis')}
                   className="w-full flex items-center justify-between p-4 rounded-2xl transition-all border bg-white text-gray-800 border-gray-100 shadow-sm"
                 >
                   <div className="flex items-center gap-3">
