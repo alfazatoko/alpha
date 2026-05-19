@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
-import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
   active: boolean

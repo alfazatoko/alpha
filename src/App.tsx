@@ -345,8 +345,6 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     }
   }, [googleUid])
 
-  const [isCloudSyncing, setIsCloudSyncing] = useState(false)
-
   const handleUploadToCloud = async () => {
     if (!googleUid) return
     const settings = {
