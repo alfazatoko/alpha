@@ -22,6 +22,8 @@ interface AkunViewProps {
   setIsSidePanelOpen?: (v: boolean) => void
   googleEmail?: string
   googleUid?: string
+  onUploadToCloud?: () => Promise<void>
+  onDownloadFromCloud?: (silent?: boolean) => Promise<void>
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -44,64 +46,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [isCloudLoading, setIsCloudLoading] = useState(false)
 
   const handleUploadToCloud = async () => {
-    if (!props.googleUid) return
+    if (!props.onUploadToCloud) return
     setIsCloudLoading(true)
-    const settings = {
-      kasir_list: localStorage.getItem('alphaPro_kasir_list'),
-      presets: localStorage.getItem(`alphaPro_${props.googleUid}_presets`),
-      storeName: localStorage.getItem('alphaPro_storeName'),
-      storeSubtext: localStorage.getItem('alphaPro_storeSubtext'),
-      storePhoto: localStorage.getItem('alphaPro_storePhoto'),
-      runningTexts: localStorage.getItem('alphaPro_runningTexts'),
-      mainAnnouncement: localStorage.getItem('alphaPro_mainAnnouncement'),
-      isPinEnabled: localStorage.getItem('alphaPro_isPinEnabled')
-    }
-
-    const { error } = await supabase.from('app_settings').upsert({
-      user_id: props.googleUid,
-      settings: settings,
-      updated_at: new Date().toISOString()
-    })
-    
+    await props.onUploadToCloud()
     setIsCloudLoading(false)
-    if (error) {
-      alert("Gagal upload: " + error.message)
-    } else {
-      alert("BERHASIL UPLOAD KE CLOUD!\n\nSekarang Anda bisa menekan tombol Download di HP lain.")
-    }
+    alert("BERHASIL UPLOAD KE CLOUD!\n\nSekarang Anda bisa menekan tombol Download di HP lain.")
   }
 
   const handleDownloadFromCloud = async () => {
-    if (!props.googleUid) return
+    if (!props.onDownloadFromCloud) return
     if (!confirm('PERINGATAN!\nPengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?')) return
 
     setIsCloudLoading(true)
-    const { data, error } = await supabase.from('app_settings').select('settings').eq('user_id', props.googleUid).maybeSingle()
-    
-    if (error) {
-      setIsCloudLoading(false)
-      alert("Gagal download: " + error.message)
-      return
-    }
-    if (!data || !data.settings) {
-      setIsCloudLoading(false)
-      alert("Belum ada data pengaturan di Cloud. Silakan Upload dari HP utama dulu.")
-      return
-    }
-
-    const s = data.settings
-    if (s.kasir_list) localStorage.setItem('alphaPro_kasir_list', s.kasir_list)
-    if (s.presets) localStorage.setItem(`alphaPro_${props.googleUid}_presets`, s.presets)
-    if (s.storeName) localStorage.setItem('alphaPro_storeName', s.storeName)
-    if (s.storeSubtext) localStorage.setItem('alphaPro_storeSubtext', s.storeSubtext)
-    if (s.storePhoto) localStorage.setItem('alphaPro_storePhoto', s.storePhoto)
-    if (s.runningTexts) localStorage.setItem('alphaPro_runningTexts', s.runningTexts)
-    if (s.mainAnnouncement) localStorage.setItem('alphaPro_mainAnnouncement', s.mainAnnouncement)
-    if (s.isPinEnabled) localStorage.setItem('alphaPro_isPinEnabled', s.isPinEnabled)
-
+    await props.onDownloadFromCloud(false)
     setIsCloudLoading(false)
-    alert("BERHASIL DOWNLOAD!\nAplikasi akan dimuat ulang untuk menerapkan pengaturan baru.")
-    window.location.reload()
   }
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

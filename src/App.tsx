@@ -345,6 +345,102 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     }
   }, [googleUid])
 
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false)
+
+  const handleUploadToCloud = async () => {
+    if (!googleUid) return
+    const settings = {
+      kasir_list: localStorage.getItem('alphaPro_kasir_list'),
+      presets: localStorage.getItem(`alphaPro_${googleUid}_presets`),
+      storeName: localStorage.getItem('alphaPro_storeName'),
+      storeSubtext: localStorage.getItem('alphaPro_storeSubtext'),
+      storePhoto: localStorage.getItem('alphaPro_storePhoto'),
+      runningTexts: localStorage.getItem('alphaPro_runningTexts'),
+      mainAnnouncement: localStorage.getItem('alphaPro_mainAnnouncement'),
+      isPinEnabled: localStorage.getItem('alphaPro_isPinEnabled')
+    }
+
+    const { error } = await supabase.from('app_settings').upsert({
+      user_id: googleUid,
+      settings: settings,
+      updated_at: new Date().toISOString()
+    })
+    
+    if (error) {
+      console.error("Gagal sync upload ke cloud:", error.message)
+    }
+  }
+
+  const handleDownloadFromCloud = async (silent: boolean = false) => {
+    if (!googleUid) return
+    if (!silent) setIsCloudSyncing(true)
+    
+    const { data, error } = await supabase.from('app_settings').select('settings').eq('user_id', googleUid).maybeSingle()
+    
+    if (error) {
+      console.error("Gagal sync download dari cloud:", error.message)
+      if (!silent) setIsCloudSyncing(false)
+      return
+    }
+
+    if (data && data.settings) {
+      const s = data.settings
+      let changed = false
+
+      if (s.kasir_list && localStorage.getItem('alphaPro_kasir_list') !== s.kasir_list) {
+        localStorage.setItem('alphaPro_kasir_list', s.kasir_list)
+        changed = true
+        refreshKasirList()
+      }
+      if (s.presets && localStorage.getItem(`alphaPro_${googleUid}_presets`) !== s.presets) {
+        localStorage.setItem(`alphaPro_${googleUid}_presets`, s.presets)
+        changed = true
+        try { setPresets(JSON.parse(s.presets)) } catch(e){}
+      }
+      if (s.storeName && localStorage.getItem('alphaPro_storeName') !== s.storeName) {
+        localStorage.setItem('alphaPro_storeName', s.storeName)
+        changed = true
+        setStoreName(s.storeName)
+      }
+      if (s.storeSubtext && localStorage.getItem('alphaPro_storeSubtext') !== s.storeSubtext) {
+        localStorage.setItem('alphaPro_storeSubtext', s.storeSubtext)
+        changed = true
+        setStoreSubtext(s.storeSubtext)
+      }
+      if (s.storePhoto && localStorage.getItem('alphaPro_storePhoto') !== s.storePhoto) {
+        localStorage.setItem('alphaPro_storePhoto', s.storePhoto)
+        changed = true
+        setStorePhoto(s.storePhoto)
+      }
+      if (s.runningTexts && localStorage.getItem('alphaPro_runningTexts') !== s.runningTexts) {
+        localStorage.setItem('alphaPro_runningTexts', s.runningTexts)
+        changed = true
+        try { setRunningTexts(JSON.parse(s.runningTexts)) } catch(e){}
+      }
+      if (s.mainAnnouncement && localStorage.getItem('alphaPro_mainAnnouncement') !== s.mainAnnouncement) {
+        localStorage.setItem('alphaPro_mainAnnouncement', s.mainAnnouncement)
+        changed = true
+        setMainAnnouncement(s.mainAnnouncement)
+      }
+      if (s.isPinEnabled && localStorage.getItem('alphaPro_isPinEnabled') !== s.isPinEnabled) {
+        localStorage.setItem('alphaPro_isPinEnabled', s.isPinEnabled)
+        changed = true
+      }
+
+      if (changed && !silent) {
+        showToast("PENGATURAN DISINKRONKAN DARI CLOUD!")
+      }
+    }
+    if (!silent) setIsCloudSyncing(false)
+  }
+
+  // Auto-download settings on boot when googleUid is available
+  useEffect(() => {
+    if (googleUid) {
+      handleDownloadFromCloud(true)
+    }
+  }, [googleUid])
+
   const savePresets = (newPresets: any[]) => {
     setPresets(newPresets)
     if (googleUid) {
@@ -1105,6 +1201,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         googleEmail={googleEmail}
         googleUid={googleUid}
         onLogout={onLogout}
+        onUploadToCloud={handleUploadToCloud}
+        onDownloadFromCloud={handleDownloadFromCloud}
         onRequestLogout={() => setShowLogoutConfirm(true)}
         runningTexts={runningTexts}
         mainAnnouncement={mainAnnouncement}
@@ -1304,22 +1402,35 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-xs shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
             <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
-              <i className="fa-solid fa-power-off text-2xl"></i>
+              <i className="fa-solid fa-power-off text-2xl animate-pulse"></i>
             </div>
-            <h3 className="font-black text-xs uppercase tracking-widest text-red-600 mb-2">KONFIRMASI KELUAR</h3>
-            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">Yakin ingin keluar dari sesi kasir ini?</p>
+            <h3 className="font-black text-xs uppercase tracking-widest text-red-600 mb-2">KELUAR & SYNC</h3>
+            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">Yakin ingin keluar? Pengaturan (kasir & preset) lokal Anda akan otomatis di-upload sebagai backup online di Cloud.</p>
             <div className="flex gap-2 w-full">
               <button 
                 onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 bg-gray-100 text-gray-500 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                disabled={isSaving}
+                className="flex-1 bg-gray-100 text-gray-500 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50"
               >
                 Batal
               </button>
               <button 
-                onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
-                className="flex-1 bg-red-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"
+                onClick={async () => {
+                  setIsSaving(true)
+                  await handleUploadToCloud()
+                  setIsSaving(false)
+                  setShowLogoutConfirm(false)
+                  onLogout()
+                }}
+                disabled={isSaving}
+                className="flex-1 bg-red-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
-                Keluar
+                {isSaving ? (
+                  <i className="fa-solid fa-circle-notch fa-spin"></i>
+                ) : (
+                  <i className="fa-solid fa-cloud-arrow-up"></i>
+                )}
+                {isSaving ? "Sync & Keluar..." : "Keluar & Sync"}
               </button>
             </div>
           </div>
