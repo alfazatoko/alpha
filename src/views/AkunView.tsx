@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
   active: boolean
@@ -20,6 +21,7 @@ interface AkunViewProps {
   setActiveView?: (v: string) => void
   setIsSidePanelOpen?: (v: boolean) => void
   googleEmail?: string
+  googleUid?: string
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -39,6 +41,68 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem('alphaPro_isPinEnabled') !== 'false')
   const [openCategory, setOpenCategory] = useState<string | null>('profil')
   const [savedStatus, setSavedStatus] = useState(false)
+  const [isCloudLoading, setIsCloudLoading] = useState(false)
+
+  const handleUploadToCloud = async () => {
+    if (!props.googleUid) return
+    setIsCloudLoading(true)
+    const settings = {
+      kasir_list: localStorage.getItem('alphaPro_kasir_list'),
+      presets: localStorage.getItem(`alphaPro_${props.googleUid}_presets`),
+      storeName: localStorage.getItem('alphaPro_storeName'),
+      storeSubtext: localStorage.getItem('alphaPro_storeSubtext'),
+      storePhoto: localStorage.getItem('alphaPro_storePhoto'),
+      runningTexts: localStorage.getItem('alphaPro_runningTexts'),
+      mainAnnouncement: localStorage.getItem('alphaPro_mainAnnouncement'),
+      isPinEnabled: localStorage.getItem('alphaPro_isPinEnabled')
+    }
+
+    const { error } = await supabase.from('app_settings').upsert({
+      user_id: props.googleUid,
+      settings: settings,
+      updated_at: new Date().toISOString()
+    })
+    
+    setIsCloudLoading(false)
+    if (error) {
+      alert("Gagal upload: " + error.message)
+    } else {
+      alert("BERHASIL UPLOAD KE CLOUD!\n\nSekarang Anda bisa menekan tombol Download di HP lain.")
+    }
+  }
+
+  const handleDownloadFromCloud = async () => {
+    if (!props.googleUid) return
+    if (!confirm('PERINGATAN!\nPengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?')) return
+
+    setIsCloudLoading(true)
+    const { data, error } = await supabase.from('app_settings').select('settings').eq('user_id', props.googleUid).maybeSingle()
+    
+    if (error) {
+      setIsCloudLoading(false)
+      alert("Gagal download: " + error.message)
+      return
+    }
+    if (!data || !data.settings) {
+      setIsCloudLoading(false)
+      alert("Belum ada data pengaturan di Cloud. Silakan Upload dari HP utama dulu.")
+      return
+    }
+
+    const s = data.settings
+    if (s.kasir_list) localStorage.setItem('alphaPro_kasir_list', s.kasir_list)
+    if (s.presets) localStorage.setItem(`alphaPro_${props.googleUid}_presets`, s.presets)
+    if (s.storeName) localStorage.setItem('alphaPro_storeName', s.storeName)
+    if (s.storeSubtext) localStorage.setItem('alphaPro_storeSubtext', s.storeSubtext)
+    if (s.storePhoto) localStorage.setItem('alphaPro_storePhoto', s.storePhoto)
+    if (s.runningTexts) localStorage.setItem('alphaPro_runningTexts', s.runningTexts)
+    if (s.mainAnnouncement) localStorage.setItem('alphaPro_mainAnnouncement', s.mainAnnouncement)
+    if (s.isPinEnabled) localStorage.setItem('alphaPro_isPinEnabled', s.isPinEnabled)
+
+    setIsCloudLoading(false)
+    alert("BERHASIL DOWNLOAD!\nAplikasi akan dimuat ulang untuk menerapkan pengaturan baru.")
+    window.location.reload()
+  }
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -466,6 +530,44 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     <p className="text-[8px] text-gray-400 font-bold text-center uppercase tracking-tighter px-4">
                       Selalu lakukan backup sebelum melakukan update besar atau pindah perangkat.
                     </p>
+                  </div>
+                )}
+              </div>
+              {/* Kategori: Sinkronisasi Cloud */}
+              <div className="group">
+                <button 
+                  onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
+                  className={cn(
+                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                    openCategory === 'cloud' ? "bg-purple-600 text-white border-purple-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                      openCategory === 'cloud' ? "bg-white/20 text-white" : "bg-purple-50 text-purple-600"
+                    )}>
+                      <i className="fa-solid fa-cloud text-xs"></i>
+                    </div>
+                    <span className="text-[11px] font-black uppercase tracking-widest">Sinkronisasi Cloud</span>
+                  </div>
+                  <i className={cn(
+                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                    openCategory === 'cloud' && "rotate-180"
+                  )}></i>
+                </button>
+
+                {openCategory === 'cloud' && (
+                  <div className="mt-2 p-5 bg-purple-50/50 border border-purple-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                    <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="w-full bg-white border border-purple-200 text-purple-700 py-3 rounded-xl font-black text-[10px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
+                      <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
+                      Upload Pengaturan Ke Cloud
+                    </button>
+                    <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="w-full bg-purple-600 border border-purple-600 text-white py-3 rounded-xl font-black text-[10px] shadow-md uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50">
+                      <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
+                      Download Dari Cloud
+                    </button>
+                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-2">Gunakan fitur ini untuk menyamakan Data Kasir, Logo Toko, dan Daftar Preset Teks Otomatis antar perangkat.</p>
                   </div>
                 )}
               </div>

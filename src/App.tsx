@@ -1103,6 +1103,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         kasirName={account.name}
         kasirRole={account.role}
         googleEmail={googleEmail}
+        googleUid={googleUid}
         onLogout={onLogout}
         onRequestLogout={() => setShowLogoutConfirm(true)}
         runningTexts={runningTexts}
