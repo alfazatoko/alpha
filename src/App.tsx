@@ -371,13 +371,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
 
   const handleDownloadFromCloud = async (silent: boolean = false) => {
     if (!googleUid) return
-    if (!silent) setIsCloudSyncing(true)
     
     const { data, error } = await supabase.from('app_settings').select('settings').eq('user_id', googleUid).maybeSingle()
     
     if (error) {
       console.error("Gagal sync download dari cloud:", error.message)
-      if (!silent) setIsCloudSyncing(false)
       return
     }
 
@@ -429,7 +427,6 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         showToast("PENGATURAN DISINKRONKAN DARI CLOUD!")
       }
     }
-    if (!silent) setIsCloudSyncing(false)
   }
 
   // Auto-download settings on boot when googleUid is available
