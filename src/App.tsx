@@ -1229,6 +1229,10 @@ const MainApp: React.FC<MainAppProps> = ({
     // Proses simpan ke Supabase
     const id = Date.now().toString()
     const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
+    if (!finalStoreId) {
+      setIsSaving(false)
+      return showToast('Pilih cabang (toko) terlebih dahulu!')
+    }
     const newTx = {
       id,
       user_id: googleUid,
@@ -1274,6 +1278,10 @@ const MainApp: React.FC<MainAppProps> = ({
 
     const id = Date.now().toString()
     const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
+    if (!finalStoreId) {
+      setIsSaving(false)
+      return showToast('Pilih cabang (toko) terlebih dahulu!')
+    }
     const newTx = {
       id,
       user_id: googleUid,
@@ -1317,6 +1325,10 @@ const MainApp: React.FC<MainAppProps> = ({
 
     const id = Date.now().toString()
     const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
+    if (!finalStoreId) {
+      setIsSaving(false)
+      return showToast('Pilih cabang (toko) terlebih dahulu!')
+    }
     const newTx = {
       id,
       user_id: googleUid,

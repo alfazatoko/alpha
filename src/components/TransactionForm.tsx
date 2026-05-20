@@ -122,11 +122,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }
 
   return (
-    <div 
-      className="relative p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 rounded-[2.5rem] bg-white/80 backdrop-blur-2xl outline-none"
-      onKeyDown={handleGlobalKeyDown}
-      tabIndex={0}
-    >
+    <div className="relative p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 rounded-[2.5rem] bg-white/80 backdrop-blur-2xl outline-none" onKeyDown={handleGlobalKeyDown} tabIndex={0}>
       <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/20 rounded-full blur-3xl -z-10 pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
       <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl -z-10 pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
       {/* Main Categories */}
@@ -314,13 +310,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="relative group">
+        <div className="flex gap-3 flex-nowrap">
+          <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i>
-                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
-              </label>
+                <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                  <i className="fa-solid fa-coins text-yellow-500"></i>
+                  {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
+                </label>
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -336,21 +332,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
-          <div className="relative group">
-            <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="relative group flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 px-1">
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5">
                 <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i>
                 {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer bg-purple-50 px-2 py-1 rounded-md border border-purple-100 hover:bg-purple-100 transition-colors">
-                <input 
-                  type="checkbox" 
-                  checked={isAdminNonTunai}
-                  onChange={(e) => setIsAdminNonTunai(e.target.checked)}
-                  className="w-3 h-3 accent-purple-600 rounded-sm"
-                />
-                <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest">DALAM</span>
-              </label>
+                <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={isAdminNonTunai}
+                    onChange={(e) => setIsAdminNonTunai(e.target.checked)}
+                    className="w-3 h-3 accent-purple-600 align-middle"
+                  />
+                  <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest">DALAM</span>
+                </label>
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -400,6 +396,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </button>
       </div>
     </div>
+
   )
 }
 
