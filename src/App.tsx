@@ -3,13 +3,16 @@ import { App as CapApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 import { useRegisterSW } from 'virtual:pwa-register/react'
-import { parseNominal, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
+import { parseNominal, formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
 import type { Transaction } from './types'
 
 // Components
 import Navigation from './components/Navigation'
 import SidePanel from './components/SidePanel'
-import LoginScreen, { type KasirAccount } from './components/LoginScreen'
+import SidebarPC from './components/SidebarPC'
+import TransactionForm from './components/TransactionForm'
+import SummaryCards from './components/SummaryCards'
+import LoginScreen, { type KasirAccount, getKasirAccounts } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
@@ -127,16 +130,25 @@ const App: React.FC = () => {
         setCurrentAccount({ name: 'Owner', role: 'owner', pin: '' })
       } else if (storedLoggedIn === 'true' && storedUsername) {
         const storeKasirs = localStorage.getItem(`alphaPro_${storedStoreId}_kasir_list`)
+        let kList: Record<string, KasirAccount> = {}
+        
         if (storeKasirs) {
           try {
-            const kList = JSON.parse(storeKasirs)
-            if (kList[storedUsername]) {
-              setIsLoggedIn(true)
-              setCurrentUsername(storedUsername)
-              setCurrentAccount(kList[storedUsername])
-              setKasirList(kList)
-            }
+            kList = JSON.parse(storeKasirs)
           } catch(e){}
+        }
+        
+        // Fallback to default/global kasir list if store-specific list is empty
+        // This prevents users from getting logged out on refresh if Supabase hasn't synced cashiers yet
+        if (Object.keys(kList).length === 0) {
+          kList = getKasirAccounts()
+        }
+        
+        if (kList[storedUsername]) {
+          setIsLoggedIn(true)
+          setCurrentUsername(storedUsername)
+          setCurrentAccount(kList[storedUsername])
+          setKasirList(kList)
         }
       }
     }
@@ -631,6 +643,44 @@ const MainApp: React.FC<MainAppProps> = ({
           localStorage.setItem(`alphaPro_${targetStoreId}_isPinEnabled`, remoteStr)
           changed = true
         }
+      }
+
+      // Sync Kasbon
+      if (data.kasbon_data) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasbon_list`)
+        const remoteStr = JSON.stringify(data.kasbon_data)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_kasbon_list`, remoteStr)
+          changed = true
+        }
+      }
+
+      // Sync Kontak
+      if (data.kontak_data) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_kontak_list`)
+        const remoteStr = JSON.stringify(data.kontak_data)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_kontak_list`, remoteStr)
+          changed = true
+        }
+      }
+
+      // Sync Voucher
+      if (data.voucher_data) {
+        for (const date in data.voucher_data) {
+          if (data.voucher_data[date].voucher) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_stok_voucher_${date}`, JSON.stringify(data.voucher_data[date].voucher))
+          }
+          if (data.voucher_data[date].qris) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_stok_qris_${date}`, JSON.stringify(data.voucher_data[date].qris))
+          }
+        }
+        // Always trigger update for voucher just in case
+        changed = true;
+      }
+
+      if (changed) {
+        window.dispatchEvent(new Event('alphaSyncUpdate'))
       }
 
       if (changed && !silent) {
@@ -1421,195 +1471,575 @@ const MainApp: React.FC<MainAppProps> = ({
   // Saldo Laci Kasir (Cumulative Calculation)
   const totalSaldoKas = kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik
 
+  const totalSaldoBank = todayTransactions
+    .filter(t => t.kategori === 'Isi Saldo Bank')
+    .reduce((s, t) => s + t.nominal, 0)
+
   return (
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
+      {screenSize === 'pc' && (
+        <SidebarPC 
+          activeView={activeView} 
+          setActiveView={setActiveView} 
+          storeName={storeName}
+          storeSubtext={storeSubtext}
+          storePhoto={storePhoto}
+          kasirName={account?.name}
+          kasirRole={account?.role}
+          setIsSidePanelOpen={setIsSidePanelOpen}
+          onLogout={() => setShowLogoutConfirm(true)}
+        />
+      )}
       
-      <BerandaView 
-        active={activeView === 'view-beranda' || isOwnerView} 
-        activeView={activeView}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-        setActiveView={setActiveView}
-        saldoBank={saldoBank}
-        totalPenjualan={totalPenjualan}
-        lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
-        formKategori={formKategori}
-        setFormKategori={setFormKategori}
-        formNominal={formNominal}
-        setFormNominal={setFormNominal}
-        formAdmin={formAdmin}
-        setFormAdmin={setFormAdmin}
-        formKeterangan={formKeterangan}
-        setFormKeterangan={setFormKeterangan}
-        handleSimpanTransaksi={handleSimpanTransaksi}
-        transactions={todayTransactions}
-        isSaving={isSaving}
-        totalAdmin={totalAdmin}
-        totalVolume={totalVolume}
-        totalAksesoris={totalAksesoris}
-        totalTarik={totalTarik}
-        totalSaldoKas={totalSaldoKas}
-        penjualanDigital={penjualanDigital}
-        kasModal={kasModal}
-        kasirName={account.name}
-        kasirRole={account.role}
-        filterKasir={filterKasir}
-        setFilterKasir={setFilterKasir}
-        onLogout={onLogout}
-        kasirList={kasirList}
-        refreshKasirList={refreshKasirList}
-        jamAbsen={todayAbsen}
-        absensiList={absensi}
-        runningTexts={runningTexts}
-        mainAnnouncement={mainAnnouncement}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        handleOwnerTambahModal={handleOwnerTambahModal}
-        kasLainnya={kasLainnya}
-        totalKhusus={totalKhusus}
-        totalNonTunai={totalNonTunai}
-        username={username}
-        showToast={showToast}
-        onConfirm={handleConfirm}
-        presets={presets}
-        activeStoreId={activeStoreId}
-        pantauStoreId={pantauStoreId}
-        setPantauStoreId={setPantauStoreId}
-        stores={stores}
-      />
+      {screenSize === 'pc' ? (
+        <div className="flex-1 flex gap-4 p-4 h-full bg-slate-50 dark:bg-slate-900 overflow-hidden fade-in modular-pc">
+          
 
-      <RiwayatView 
-        active={activeView === 'view-transaksi'}
-        setActiveView={setActiveView}
-        transactions={displayTransactions}
-        filterTanggalMulai={filterTanggalMulai}
-        setFilterTanggalMulai={setFilterTanggalMulai}
-        filterTanggalAkhir={filterTanggalAkhir}
-        setFilterTanggalAkhir={setFilterTanggalAkhir}
-        filterPencarian={filterPencarian}
-        setFilterPencarian={setFilterPencarian}
-        filterKategori={filterKategori}
-        setFilterKategori={setFilterKategori}
-        activeSaldoFilter={activeSaldoFilter}
-        setActiveSaldoFilter={setActiveSaldoFilter}
-        kasirRole={account.role}
-        filterKasir={filterKasir}
-        setFilterKasir={setFilterKasir}
-        kasirList={kasirList}
-        onEdit={handleStartEdit}
-        onDelete={handleDeleteTx}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        kasirName={account.name}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-      />
 
-      <LaporanView 
-        active={activeView === 'view-laporan'}
-        setActiveView={setActiveView}
-        saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
-        totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
-        transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
-        totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
-        totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
-        totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
-        totalVolume={totalVolume}
-        totalSaldoKas={dailyReport ? dailyReport.totalSaldoKas : totalSaldoKas}
-        penjualanDigital={dailyReport ? dailyReport.penjualanDigital : penjualanDigital}
-        kasModal={dailyReport ? dailyReport.kasModal : kasModal}
-        kasLainnya={dailyReport ? dailyReport.kasLainnya : kasLainnya}
-        kasirRole={account.role}
-        filterKasir={filterKasir}
-        setFilterKasir={setFilterKasir}
-        filterTanggal={filterTanggalLaporan}
-        setFilterTanggal={setFilterTanggalLaporan}
-        saldoReal={
-          filterTanggalLaporan === todayISO 
-            ? totalSaldoReal 
-            : displayTransactions
-                .filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi')
-                .reduce((s, t) => s + t.nominal, 0)
-        }
-        onEdit={handleStartEdit}
-        onDelete={handleDeleteTx}
-        kasirList={kasirList}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        kasirName={account.name}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-      />
+          {/* Right Column: Dynamic View Container */}
+          <div className="flex-1 h-full relative rounded-[2rem] overflow-hidden shadow-xl ring-1 ring-slate-100 bg-white dark:bg-slate-800 dark:ring-slate-600 flex flex-col">
+            {activeView !== 'view-akun' && activeView !== 'view-laporan' && activeView !== 'view-transaksi' && activeView !== 'view-beranda' && (
+              <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-slate-800 rounded-t-[2rem] shadow-md">
+                <h2 className="text-lg font-black text-slate-800 dark:text-slate-200 capitalize">{(() => {
+                  const titles: Record<string, string> = {
+                    'view-beranda': 'Beranda',
+                    'view-transaksi': 'Riwayat',
+                    'view-laporan': 'Laporan',
+                    'view-akun': 'Akun',
+                    'view-isi-saldo': 'Isi Saldo',
+                    'view-kasbon': 'Kasbon',
+                    'view-kontak': 'Kontak',
+                    'view-stok-voucher': 'Voucher',
+                    'view-kalender': 'Kalender',
+                    'view-nota': 'Nota',
+                    'view-otomatis': 'Otomatis',
+                    'view-owner-monitor': 'Monitor Toko',
+                    'view-owner-laporan': 'Laporan Owner',
+                    'view-owner-grafik': 'Grafik Penjualan',
+                    'view-owner-performa': 'Performa Kasir',
+                    'view-owner-absen': 'Absensi Karyawan',
+                    'view-owner-izin': 'Izin Karyawan',
+                    'view-owner-gaji': 'Penggajian',
+                    'view-owner-backup': 'Backup & Restore',
+                    'view-owner-saldo': 'Manajemen Saldo'
+                  };
+                  return titles[activeView] || 'Dashboard';
+                })()}</h2>
+              </div>
+            )}
+            {(() => {
+              switch (activeView) {
+                case 'view-beranda':
+                  return (
+                    <div className="h-full flex flex-col p-6 gap-6 bg-slate-50 dark:bg-slate-900 overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-5 gap-4 shrink-0">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-building-columns"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Bank</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate mt-0.5" title={formatRupiah(totalSaldoBank)}>{formatRupiah(totalSaldoBank).replace(',00', '')}</p>
+                          </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-cash-register"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Laci Kasir</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate mt-0.5" title={formatRupiah(totalSaldoKas)}>{formatRupiah(totalSaldoKas).replace(',00', '')}</p>
+                          </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-mobile-screen"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Digital</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate mt-0.5" title={formatRupiah(penjualanDigital)}>{formatRupiah(penjualanDigital).replace(',00', '')}</p>
+                          </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-money-bill-wave"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Tarik Tunai</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate mt-0.5" title={formatRupiah(totalTarik)}>{formatRupiah(totalTarik).replace(',00', '')}</p>
+                          </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-headphones"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aksesoris</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate mt-0.5" title={formatRupiah(totalAksesoris)}>{formatRupiah(totalAksesoris).replace(',00', '')}</p>
+                          </div>
+                        </div>
+                      </div>
 
-      <AkunView 
-        active={activeView === 'view-akun'} 
-        setActiveView={setActiveView}
-        kasirName={account.name}
-        kasirRole={account.role}
-        googleEmail={googleEmail}
-        googleUid={googleUid}
-        onLogout={onLogout}
-        onUploadToCloud={handleUploadToCloud}
-        onDownloadFromCloud={handleDownloadFromCloud}
-        onRequestLogout={() => setShowLogoutConfirm(true)}
-        runningTexts={runningTexts}
-        mainAnnouncement={mainAnnouncement}
-        onSaveRunningTexts={saveRunningTexts}
-        onSaveMainAnnouncement={saveMainAnnouncement}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        onSaveStoreName={saveStoreName}
-        onSaveStoreSubtext={saveStoreSubtext}
-        onSaveStorePhoto={saveStorePhoto}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-        onConfirm={handleConfirm}
-        currentUsername={username}
-        kasirList={kasirList}
-        onSaveCashierSelf={handleSaveCashierSelf}
-      />
+                      <div className="flex gap-6 flex-1 min-h-0">
+                        {/* Transaction Form (Left/Main side) */}
+                        <div className="flex-[2] min-h-0 bg-white dark:bg-slate-800 rounded-[2rem] p-8 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 flex flex-col relative overflow-hidden">
+                          <div className="flex items-center gap-3 mb-6 shrink-0">
+                            <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                            <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Input Transaksi</h3>
+                          </div>
+                          <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
+                            <TransactionForm 
+                              kategori={formKategori} setKategori={setFormKategori}
+                              nominal={formNominal} setNominal={setFormNominal}
+                              admin={formAdmin} setAdmin={setFormAdmin}
+                              keterangan={formKeterangan} setKeterangan={setFormKeterangan}
+                              onSave={handleSimpanTransaksi} isSaving={isSaving} presets={presets}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Right Side: Summary Cards & Akses Cepat */}
+                        <div className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 pb-6">
+                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
+                            <SummaryCards totalAdmin={totalAdmin} totalVolume={totalVolume} totalTransactions={todayTransactions.length} />
+                          </div>
+                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
+                              <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Akses Cepat</h3>
+                            </div>
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-center">
+                              {[
+                                { id: 'view-kasbon', label: 'KASBON', icon: 'fa-file-invoice', color: 'bg-blue-500 hover:bg-blue-600' },
+                                { id: 'view-kontak', label: 'KONTAK', icon: 'fa-address-book', color: 'bg-emerald-500 hover:bg-emerald-600' },
+                                { id: 'view-stok-voucher', label: 'VOUCHER', icon: 'fa-ticket', color: 'bg-orange-500 hover:bg-orange-600' },
+                                { id: 'view-kalender', label: 'KALENDER', icon: 'fa-calendar-days', color: 'bg-red-500 hover:bg-red-600' },
+                                { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'bg-purple-500 hover:bg-purple-600' },
+                              ].map((item) => (
+                                <button 
+                                  key={item.id} 
+                                  onClick={() => setActiveView(item.id)} 
+                                  className={"flex flex-col items-center justify-center p-3 group active:scale-95 transition-transform bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700/50 hover:border-slate-300 dark:hover:border-slate-600 " + (activeView === item.id ? "ring-2 ring-violet-500" : "")}
+                                >
+                                  <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md transition-colors", item.color)}>
+                                    <i className={cn("fa-solid text-sm", item.icon)}></i>
+                                  </div>
+                                  <p className="text-[8px] font-black text-slate-700 dark:text-slate-300 mt-2 tracking-tighter uppercase">{item.label}</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                case 'view-transaksi':
+                  return (
+                    <RiwayatView
+                      active={true}
+                      activeView={activeView}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      transactions={displayTransactions}
+                      filterTanggalMulai={filterTanggalMulai}
+                      setFilterTanggalMulai={setFilterTanggalMulai}
+                      filterTanggalAkhir={filterTanggalAkhir}
+                      setFilterTanggalAkhir={setFilterTanggalAkhir}
+                      filterPencarian={filterPencarian}
+                      setFilterPencarian={setFilterPencarian}
+                      filterKategori={filterKategori}
+                      setFilterKategori={setFilterKategori}
+                      activeSaldoFilter={activeSaldoFilter}
+                      setActiveSaldoFilter={setActiveSaldoFilter}
+                      kasirRole={account.role}
+                      filterKasir={filterKasir}
+                      setFilterKasir={setFilterKasir}
+                      kasirList={kasirList}
+                      onEdit={handleStartEdit}
+                      onDelete={handleDeleteTx}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      kasirName={account.name}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                    />
+                  );
+                case 'view-laporan':
+                  return (
+                    <LaporanView
+                      active={true}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
+                      totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
+                      transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
+                      totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
+                      totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
+                      totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
+                      totalVolume={totalVolume}
+                      totalSaldoKas={dailyReport ? dailyReport.totalSaldoKas : totalSaldoKas}
+                      penjualanDigital={dailyReport ? dailyReport.penjualanDigital : penjualanDigital}
+                      kasModal={dailyReport ? dailyReport.kasModal : kasModal}
+                      kasLainnya={dailyReport ? dailyReport.kasLainnya : kasLainnya}
+                      kasirRole={account.role}
+                      filterKasir={filterKasir}
+                      setFilterKasir={setFilterKasir}
+                      filterTanggal={filterTanggalLaporan}
+                      setFilterTanggal={setFilterTanggalLaporan}
+                      saldoReal={filterTanggalLaporan === todayISO ? totalSaldoReal : displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi').reduce((s, t) => s + t.nominal, 0)}
+                      onEdit={handleStartEdit}
+                      onDelete={handleDeleteTx}
+                      kasirList={kasirList}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      kasirName={account.name}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                    />
+                  );
+                case 'view-akun':
+                  return (
+                    <AkunView
+                      active={true}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      kasirName={account.name}
+                      kasirRole={account.role}
+                      googleEmail={googleEmail}
+                      googleUid={googleUid}
+                      onLogout={onLogout}
+                      onUploadToCloud={handleUploadToCloud}
+                      onDownloadFromCloud={handleDownloadFromCloud}
+                      onRequestLogout={() => setShowLogoutConfirm(true)}
+                      runningTexts={runningTexts}
+                      mainAnnouncement={mainAnnouncement}
+                      onSaveRunningTexts={saveRunningTexts}
+                      onSaveMainAnnouncement={saveMainAnnouncement}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      onSaveStoreName={saveStoreName}
+                      onSaveStoreSubtext={saveStoreSubtext}
+                      onSaveStorePhoto={saveStorePhoto}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                      onConfirm={handleConfirm}
+                      currentUsername={username}
+                      kasirList={kasirList}
+                      onSaveCashierSelf={handleSaveCashierSelf}
+                    />
+                  );
+                case 'view-isi-saldo':
+                  return (
+                    <IsiSaldoView
+                      active={true}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      isiJenis={isiJenis}
+                      setIsiJenis={setIsiJenis}
+                      isiNominal={isiNominal}
+                      setIsiNominal={setIsiNominal}
+                      isiKeterangan={isiKeterangan}
+                      setIsiKeterangan={setIsiKeterangan}
+                      handleSimpanIsiSaldo={handleSimpanIsiSaldo}
+                      isSaving={isSaving}
+                      showToast={showToast}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      kasirName={account.name}
+                      kasirRole={account.role}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                    />
+                  );
+                case 'view-kasbon':
+                  return <KasbonView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />;
+                case 'view-kontak':
+                  return <KontakView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />;
+                case 'view-stok-voucher':
+                  return <VoucherView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} />;
+                case 'view-kalender':
+                  return <KalenderView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
+                case 'view-nota':
+                  return <NotaView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
+                case 'view-otomatis':
+                  return (
+                    <OtomatisView
+                      active={true}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      showToast={showToast}
+                      presets={presets}
+                      setPresets={savePresets}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      kasirName={account.name}
+                      kasirRole={account.role}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                      onConfirm={handleConfirm}
+                    />
+                  );
+                case 'view-owner-monitor':
+                case 'view-owner-laporan':
+                case 'view-owner-grafik':
+                case 'view-owner-performa':
+                case 'view-owner-absen':
+                case 'view-owner-izin':
+                case 'view-owner-gaji':
+                case 'view-owner-backup':
+                case 'view-owner-saldo':
+                  return (
+                    <BerandaView
+                      active={true}
+                      activeView={activeView}
+                      setIsSidePanelOpen={setIsSidePanelOpen}
+                      setActiveView={setActiveView}
+                      saldoBank={saldoBank}
+                      totalPenjualan={totalPenjualan}
+                      lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
+                      formKategori={formKategori}
+                      setFormKategori={setFormKategori}
+                      formNominal={formNominal}
+                      setFormNominal={setFormNominal}
+                      formAdmin={formAdmin}
+                      setFormAdmin={setFormAdmin}
+                      formKeterangan={formKeterangan}
+                      setFormKeterangan={setFormKeterangan}
+                      handleSimpanTransaksi={handleSimpanTransaksi}
+                      transactions={todayTransactions}
+                      isSaving={isSaving}
+                      totalAdmin={totalAdmin}
+                      totalVolume={totalVolume}
+                      totalAksesoris={totalAksesoris}
+                      totalTarik={totalTarik}
+                      totalSaldoKas={totalSaldoKas}
+                      penjualanDigital={penjualanDigital}
+                      kasModal={kasModal}
+                      kasirName={account.name}
+                      kasirRole={account.role}
+                      filterKasir={filterKasir}
+                      setFilterKasir={setFilterKasir}
+                      onLogout={onLogout}
+                      kasirList={kasirList}
+                      refreshKasirList={refreshKasirList}
+                      jamAbsen={todayAbsen}
+                      absensiList={absensi}
+                      runningTexts={runningTexts}
+                      mainAnnouncement={mainAnnouncement}
+                      storeName={storeName}
+                      storeSubtext={storeSubtext}
+                      storePhoto={storePhoto}
+                      handleOwnerTambahModal={handleOwnerTambahModal}
+                      kasLainnya={kasLainnya}
+                      totalKhusus={totalKhusus}
+                      totalNonTunai={totalNonTunai}
+                      username={username}
+                      showToast={showToast}
+                      onConfirm={handleConfirm}
+                      presets={presets}
+                      activeStoreId={activeStoreId}
+                      pantauStoreId={pantauStoreId}
+                      setPantauStoreId={setPantauStoreId}
+                      stores={stores}
+                      isPc={screenSize === 'pc'}
+                    />
+                  );
+                default:
+                  return null;
+              }
+            })()}
+          </div>
+        </div>
+      ) : (
+        <>
+          <BerandaView 
+            active={activeView === 'view-beranda' || isOwnerView} 
+            activeView={activeView}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+            setActiveView={setActiveView}
+            saldoBank={saldoBank}
+            totalPenjualan={totalPenjualan}
+            lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
+            formKategori={formKategori}
+            setFormKategori={setFormKategori}
+            formNominal={formNominal}
+            setFormNominal={setFormNominal}
+            formAdmin={formAdmin}
+            setFormAdmin={setFormAdmin}
+            formKeterangan={formKeterangan}
+            setFormKeterangan={setFormKeterangan}
+            handleSimpanTransaksi={handleSimpanTransaksi}
+            transactions={todayTransactions}
+            isSaving={isSaving}
+            totalAdmin={totalAdmin}
+            totalVolume={totalVolume}
+            totalAksesoris={totalAksesoris}
+            totalTarik={totalTarik}
+            totalSaldoKas={totalSaldoKas}
+            penjualanDigital={penjualanDigital}
+            kasModal={kasModal}
+            kasirName={account.name}
+            kasirRole={account.role}
+            filterKasir={filterKasir}
+            setFilterKasir={setFilterKasir}
+            onLogout={onLogout}
+            kasirList={kasirList}
+            refreshKasirList={refreshKasirList}
+            jamAbsen={todayAbsen}
+            absensiList={absensi}
+            runningTexts={runningTexts}
+            mainAnnouncement={mainAnnouncement}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            handleOwnerTambahModal={handleOwnerTambahModal}
+            kasLainnya={kasLainnya}
+            totalKhusus={totalKhusus}
+            totalNonTunai={totalNonTunai}
+            username={username}
+            showToast={showToast}
+            onConfirm={handleConfirm}
+            presets={presets}
+            activeStoreId={activeStoreId}
+            pantauStoreId={pantauStoreId}
+            setPantauStoreId={setPantauStoreId}
+            stores={stores}
+          />
 
-      <IsiSaldoView 
-        active={activeView === 'view-isi-saldo'}
-        setActiveView={setActiveView}
-        isiJenis={isiJenis}
-        setIsiJenis={setIsiJenis}
-        isiNominal={isiNominal}
-        setIsiNominal={setIsiNominal}
-        isiKeterangan={isiKeterangan}
-        setIsiKeterangan={setIsiKeterangan}
-        handleSimpanIsiSaldo={handleSimpanIsiSaldo}
-        isSaving={isSaving}
-        showToast={showToast}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        kasirName={account.name}
-        kasirRole={account.role}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-      />
+          <RiwayatView 
+            active={activeView === 'view-transaksi'}
+            setActiveView={setActiveView}
+            transactions={displayTransactions}
+            filterTanggalMulai={filterTanggalMulai}
+            setFilterTanggalMulai={setFilterTanggalMulai}
+            filterTanggalAkhir={filterTanggalAkhir}
+            setFilterTanggalAkhir={setFilterTanggalAkhir}
+            filterPencarian={filterPencarian}
+            setFilterPencarian={setFilterPencarian}
+            filterKategori={filterKategori}
+            setFilterKategori={setFilterKategori}
+            activeSaldoFilter={activeSaldoFilter}
+            setActiveSaldoFilter={setActiveSaldoFilter}
+            kasirRole={account.role}
+            filterKasir={filterKasir}
+            setFilterKasir={setFilterKasir}
+            kasirList={kasirList}
+            onEdit={handleStartEdit}
+            onDelete={handleDeleteTx}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            kasirName={account.name}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+          />
 
-      <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
-      <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} />
-      <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
-      <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
-      <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
-      <OtomatisView 
-        active={activeView === 'view-otomatis'} 
-        setActiveView={setActiveView} 
-        showToast={showToast} 
-        presets={presets}
-        setPresets={savePresets}
-        storeName={storeName}
-        storeSubtext={storeSubtext}
-        storePhoto={storePhoto}
-        kasirName={account.name}
-        kasirRole={account.role}
-        setIsSidePanelOpen={setIsSidePanelOpen}
-        onConfirm={handleConfirm}
-      />
+          <LaporanView 
+            active={activeView === 'view-laporan'}
+            setActiveView={setActiveView}
+            saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
+            totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
+            transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
+            totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
+            totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
+            totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
+            totalVolume={totalVolume}
+            totalSaldoKas={dailyReport ? dailyReport.totalSaldoKas : totalSaldoKas}
+            penjualanDigital={dailyReport ? dailyReport.penjualanDigital : penjualanDigital}
+            kasModal={dailyReport ? dailyReport.kasModal : kasModal}
+            kasLainnya={dailyReport ? dailyReport.kasLainnya : kasLainnya}
+            kasirRole={account.role}
+            filterKasir={filterKasir}
+            setFilterKasir={setFilterKasir}
+            filterTanggal={filterTanggalLaporan}
+            setFilterTanggal={setFilterTanggalLaporan}
+            saldoReal={
+              filterTanggalLaporan === todayISO 
+                ? totalSaldoReal 
+                : displayTransactions
+                    .filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi')
+                    .reduce((s, t) => s + t.nominal, 0)
+            }
+            onEdit={handleStartEdit}
+            onDelete={handleDeleteTx}
+            kasirList={kasirList}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            kasirName={account.name}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+          />
 
-      <Navigation activeView={activeView} setActiveView={setActiveView} />
+          <AkunView 
+            active={activeView === 'view-akun'} 
+            setActiveView={setActiveView}
+            kasirName={account.name}
+            kasirRole={account.role}
+            googleEmail={googleEmail}
+            googleUid={googleUid}
+            onLogout={onLogout}
+            onUploadToCloud={handleUploadToCloud}
+            onDownloadFromCloud={handleDownloadFromCloud}
+            onRequestLogout={() => setShowLogoutConfirm(true)}
+            runningTexts={runningTexts}
+            mainAnnouncement={mainAnnouncement}
+            onSaveRunningTexts={saveRunningTexts}
+            onSaveMainAnnouncement={saveMainAnnouncement}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            onSaveStoreName={saveStoreName}
+            onSaveStoreSubtext={saveStoreSubtext}
+            onSaveStorePhoto={saveStorePhoto}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+            onConfirm={handleConfirm}
+            currentUsername={username}
+            kasirList={kasirList}
+            onSaveCashierSelf={handleSaveCashierSelf}
+          />
+
+          <IsiSaldoView 
+            active={activeView === 'view-isi-saldo'}
+            setActiveView={setActiveView}
+            isiJenis={isiJenis}
+            setIsiJenis={setIsiJenis}
+            isiNominal={isiNominal}
+            setIsiNominal={setIsiNominal}
+            isiKeterangan={isiKeterangan}
+            setIsiKeterangan={setIsiKeterangan}
+            handleSimpanIsiSaldo={handleSimpanIsiSaldo}
+            isSaving={isSaving}
+            showToast={showToast}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            kasirName={account.name}
+            kasirRole={account.role}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+          />
+
+          <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
+          <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
+          <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} />
+          <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+          <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+          <OtomatisView 
+            active={activeView === 'view-otomatis'} 
+            setActiveView={setActiveView} 
+            showToast={showToast} 
+            presets={presets}
+            setPresets={savePresets}
+            storeName={storeName}
+            storeSubtext={storeSubtext}
+            storePhoto={storePhoto}
+            kasirName={account.name}
+            kasirRole={account.role}
+            setIsSidePanelOpen={setIsSidePanelOpen}
+            onConfirm={handleConfirm}
+          />
+
+          <Navigation activeView={activeView} setActiveView={setActiveView} />
+        </>
+      )}
 
       <SidePanel 
         isOpen={isSidePanelOpen}

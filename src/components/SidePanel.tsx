@@ -107,21 +107,22 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
         {/* Layout Settings */}
         <div className="p-6 pb-12">
           <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em]">Mode Tampilan</h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {[
               { id: 'hp', label: 'Smartphone', icon: 'fa-mobile-screen' },
-              { id: 'tablet', label: 'Tablet', icon: 'fa-tablet-screen-button' }
+              { id: 'tablet', label: 'Tablet', icon: 'fa-tablet-screen-button' },
+              { id: 'pc', label: 'Mode PC', icon: 'fa-desktop' }
             ].map(size => (
               <button 
                 key={size.id}
                 onClick={() => setScreenSize(size.id)}
                 className={cn(
-                  "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all gap-2",
+                  "flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-1.5",
                   screenSize === size.id ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" : "bg-white border-gray-200 text-gray-600 hover:border-blue-200 hover:text-blue-400"
                 )}
               >
-                <i className={cn("fa-solid text-lg", size.icon)}></i>
-                <span className="text-[10px] font-black uppercase tracking-tighter">{size.label}</span>
+                <i className={cn("fa-solid text-base", size.icon)}></i>
+                <span className="text-[8px] font-black uppercase tracking-tighter text-center leading-tight">{size.label}</span>
               </button>
             ))}
           </div>

@@ -990,3 +990,120 @@ select {
 .theme-blue .page-view {
   background-color: var(--bg-primary) !important;
 }
+
+/* =========================================
+   DESKTOP PC MODE & SIDEBAR STYLING
+   ========================================= */
+
+.app-container.pc {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  flex-direction: row !important;
+  display: flex !important;
+}
+
+.app-container.pc .page-view {
+  flex: 1 !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  overflow-y: auto !important;
+  padding-bottom: 24px !important;
+}
+
+.app-container.pc .page-view.active {
+  display: block !important;
+}
+
+/* Sidebar PC Specific Styles & Themes */
+.sidebar-pc {
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.theme-blue .sidebar-pc {
+  background-color: #020617 !important;
+  border-right-color: #1e293b !important;
+}
+
+.theme-blue .sidebar-pc .border-slate-800\/80 {
+  border-color: #1e293b !important;
+}
+
+.theme-blue .sidebar-pc .bg-slate-950\/40 {
+  background-color: rgba(2, 6, 23, 0.6) !important;
+}
+
+.theme-blue .sidebar-pc .bg-slate-800\/30 {
+  background-color: rgba(30, 41, 59, 0.2) !important;
+}
+
+.theme-blue .sidebar-pc .border-slate-800\/50 {
+  border-color: rgba(30, 41, 59, 0.4) !important;
+}
+
+.theme-blue .sidebar-pc .hover\:bg-slate-800\/50:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+.theme-neon .sidebar-pc {
+  background-color: #064e3b !important;
+  border-right-color: #065f46 !important;
+}
+
+.theme-neon .sidebar-pc .border-slate-800\/80 {
+  border-color: #065f46 !important;
+}
+
+.theme-neon .sidebar-pc .bg-slate-950\/40 {
+  background-color: rgba(4, 30, 23, 0.6) !important;
+}
+
+.theme-neon .sidebar-pc .bg-slate-800\/30 {
+  background-color: rgba(6, 95, 70, 0.2) !important;
+}
+
+.theme-neon .sidebar-pc .border-slate-800\/50 {
+  border-color: rgba(6, 95, 70, 0.4) !important;
+}
+
+.theme-neon .sidebar-pc .hover\:bg-slate-800\/50:hover {
+  background-color: rgba(6, 95, 70, 0.5) !important;
+}
+
+.theme-neon .sidebar-pc .text-blue-400 {
+  color: #a7f3d0 !important;
+}
+
+.theme-neon .sidebar-pc .bg-blue-600 {
+  background-color: #059669 !important;
+}
+
+.theme-neon .sidebar-pc .shadow-blue-500\/20 {
+  box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.2), 0 4px 6px -2px rgba(5, 150, 105, 0.1) !important;
+}
+
+/* PC Modular Dashboard Enhancements */
+.modular-pc .page-view {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.modular-pc .page-view .theme-header {
+  display: none !important; /* Hide mobile top header with logo */
+}
+
+.modular-pc .page-view > .bg-gradient-to-r {
+  margin-top: 0 !important;
+  border-radius: 0 !important;
+  padding-top: 1.25rem !important;
+}
+
+.modular-pc .page-view > .px-1\.5.pb-20.pt-3 {
+  padding-bottom: 2rem !important;
+}

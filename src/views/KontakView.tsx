@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { BookUser, Plus, Trash2, Edit, Search, X, Camera, ImageIcon, Loader2, Phone, Copy } from "lucide-react";
-import { compressImage } from "../lib/utils";
+import { compressImage, cn } from "../lib/utils";
+import { supabase } from "../lib/supabase";
 
 interface KontakRecord {
   id: string;
@@ -17,8 +18,13 @@ const KontakView: React.FC<{
   kasirName: string;
   showToast: (m: string) => void;
   onConfirm: (t: string, m: string, c: () => void) => void;
-}> = ({ active, setActiveView, kasirName, showToast, onConfirm }) => {
-  const [kontakList, setKontakList] = useState<KontakRecord[]>(JSON.parse(localStorage.getItem("kontak_list") || "[]"));
+  isPc?: boolean;
+  activeStoreId: string;
+}> = ({ active, setActiveView, kasirName, showToast, onConfirm, isPc, activeStoreId }) => {
+  const [kontakList, setKontakList] = useState<KontakRecord[]>(() => {
+    const saved = localStorage.getItem(`alphaPro_${activeStoreId}_kontak_list`);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [searchText, setSearchText] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<KontakRecord | null>(null);
@@ -46,8 +52,42 @@ const KontakView: React.FC<{
   };
 
   useEffect(() => {
-    localStorage.setItem("kontak_list", JSON.stringify(kontakList));
-  }, [kontakList]);
+    const loadData = () => {
+      if (activeStoreId && activeStoreId !== 'all') {
+        const saved = localStorage.getItem(`alphaPro_${activeStoreId}_kontak_list`);
+        if (saved) {
+          setKontakList(JSON.parse(saved));
+        } else {
+          setKontakList([]);
+        }
+      }
+    };
+    
+    loadData();
+    window.addEventListener('alphaSyncUpdate', loadData);
+    return () => window.removeEventListener('alphaSyncUpdate', loadData);
+  }, [activeStoreId]);
+
+  useEffect(() => {
+    if (activeStoreId && activeStoreId !== 'all') {
+      localStorage.setItem(`alphaPro_${activeStoreId}_kontak_list`, JSON.stringify(kontakList));
+      
+      const syncToCloud = async () => {
+        try {
+          await supabase.from('store_settings').upsert({
+            store_id: activeStoreId,
+            kontak_data: kontakList,
+            updated_at: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error("Gagal sync Kontak", e);
+        }
+      };
+      
+      const timer = setTimeout(syncToCloud, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [kontakList, activeStoreId]);
 
   const resetForm = () => {
     setNama("");
@@ -62,7 +102,7 @@ const KontakView: React.FC<{
     if (!nama.trim()) return showToast("Nama harus diisi");
 
     if (editItem) {
-      setKontakList(kontakList.map(k => k.id === editItem.id ? { ...k, nama, nomor, keterangan, photoUrl } : k));
+      setHutangList(kontakList.map(k => k.id === editItem.id ? { ...k, nama, nomor, keterangan, photoUrl } : k));
     } else {
       const newKontak: KontakRecord = {
         id: Date.now().toString(),
@@ -78,6 +118,10 @@ const KontakView: React.FC<{
     resetForm();
   };
 
+  const setHutangList = (val: KontakRecord[]) => {
+    setKontakList(val);
+  };
+
   const handleDelete = (id: string) => {
     onConfirm("HAPUS KONTAK", "Yakin ingin menghapus kontak ini?", () => {
       setKontakList(kontakList.filter(k => k.id !== id));
@@ -91,7 +135,9 @@ const KontakView: React.FC<{
     setNomor(k.nomor || "");
     setKeterangan(k.keterangan || "");
     setPhotoUrl(k.photoUrl || "");
-    setShowForm(true);
+    if (!isPc) {
+      setShowForm(true);
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,6 +167,195 @@ const KontakView: React.FC<{
   }, [kontakList, searchText]);
 
   if (!active) return null;
+
+  if (isPc) {
+    return (
+      <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+        <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
+          <div>
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Kontak Pelanggan</h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Kelola data kontak nohp, rekening bank, token listrik, dll</p>
+          </div>
+        </div>
+
+        <div className="flex-grow flex overflow-hidden p-8 gap-8">
+          
+          <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-700">
+                <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
+                  {editItem ? "Edit Kontak Pelanggan" : "Tambah Kontak Baru"}
+                </h4>
+                {editItem && (
+                  <button onClick={resetForm} className="text-[9px] font-black text-rose-500 hover:underline uppercase tracking-wider">
+                    Batal Edit
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Pelanggan</label>
+                  <input 
+                    ref={namaRef}
+                    value={nama} 
+                    onChange={e => setNama(e.target.value)} 
+                    placeholder="Masukkan nama..." 
+                    onKeyDown={(e) => handleKeyDown(e, nomorRef)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">NoHP / No Rekening / Token</label>
+                  <input 
+                    ref={nomorRef}
+                    value={nomor} 
+                    onChange={e => setNomor(e.target.value)} 
+                    placeholder="Ketik nomor/detail di sini..." 
+                    onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Keterangan</label>
+                  <textarea 
+                    ref={keteranganRef}
+                    value={keterangan} 
+                    onChange={e => setKeterangan(e.target.value)} 
+                    placeholder="Contoh: Rekening BRI Utama..." 
+                    rows={2} 
+                    onKeyDown={(e) => handleKeyDown(e, undefined, true)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none" 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col items-center justify-center gap-1.5 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 transition-all group">
+                    {isCapturing ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Camera className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />}
+                    <span className="text-[9px] font-black text-slate-400 group-hover:text-blue-700 uppercase tracking-widest">Kamera</span>
+                    <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
+                  <label className="flex flex-col items-center justify-center gap-1.5 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 transition-all group">
+                    <ImageIcon className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                    <span className="text-[9px] font-black text-slate-400 group-hover:text-slate-700 uppercase tracking-widest">Galeri</span>
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
+                </div>
+
+                {photoUrl && (
+                  <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner bg-slate-50 dark:bg-slate-900">
+                    <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <button onClick={() => setPhotoUrl("")} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg active:scale-90 transition-all">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleSave} 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest"
+                  style={{ color: '#ffffff' }}
+                >
+                  {editItem ? "Simpan Perubahan Kontak" : "Simpan Kontak"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-grow h-full flex flex-col gap-6 overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm shrink-0">
+              <div className="relative w-full">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  value={searchText} 
+                  onChange={e => setSearchText(e.target.value)} 
+                  placeholder="Cari nama pelanggan atau nomor..." 
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all" 
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 pb-6">
+              {filteredKontak.length === 0 ? (
+                <div className="text-center py-24 text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-3xl">
+                  <BookUser className="w-16 h-16 mx-auto mb-4 text-slate-200 dark:text-slate-700" />
+                  <p className="text-xs font-black uppercase tracking-wider">Belum ada kontak terdaftar</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {filteredKontak.map(k => (
+                    <div key={k.id} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all">
+                      <div className="flex gap-4">
+                        <div 
+                          className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950 flex-shrink-0 flex items-center justify-center overflow-hidden border border-emerald-100 dark:border-emerald-900 cursor-pointer group/photo relative"
+                          onClick={() => k.photoUrl && setPreviewImage(k.photoUrl)}
+                        >
+                          {k.photoUrl ? (
+                            <img src={k.photoUrl} alt={k.nama} className="w-full h-full object-cover transition-transform group-hover/photo:scale-105" />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-emerald-200 dark:text-emerald-800" />
+                          )}
+                          {k.photoUrl && (
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-white text-[8px]">
+                              <i className="fa-solid fa-magnifying-glass-plus"></i>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <h4 className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{k.nama}</h4>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {k.nomor && (
+                                <button 
+                                  onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }} 
+                                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors"
+                                  title="Salin Nomor"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button onClick={() => openEdit(k)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors">
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleDelete(k.id)} className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {k.nomor && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-base font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                <Phone className="w-4 h-4" /> {k.nomor}
+                              </p>
+                            </div>
+                          )}
+                          {k.keterangan && <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">{k.keterangan}</p>}
+                          {k.kasir && <span className="text-[8px] bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded font-black mt-2 inline-block uppercase tracking-widest">Kasir: {k.kasir}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {previewImage && (
+          <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+            <button className="absolute top-6 right-6 text-white bg-white/10 p-3 rounded-full hover:bg-white/20 transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+            <img src={previewImage} alt="Large preview" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24">

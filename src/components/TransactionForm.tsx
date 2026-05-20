@@ -123,10 +123,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   return (
     <div 
-      className="form-transaksi-container p-4 shadow-sm border border-gray-200 rounded-[2rem] bg-white outline-none"
+      className="relative p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 rounded-[2.5rem] bg-white/80 backdrop-blur-2xl outline-none"
       onKeyDown={handleGlobalKeyDown}
       tabIndex={0}
     >
+      <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/20 rounded-full blur-3xl -z-10 pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
+      <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl -z-10 pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
       {/* Main Categories */}
       <div className="flex gap-1 mb-3">
         {[
@@ -136,15 +138,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         ].map((mode) => {
           let activeStyles = "";
           let hoverStyles = "";
+          let iconColor = "";
           if (mode.id === 'DIGITAL') {
-             activeStyles = "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 focus:ring-blue-100 focus:border-blue-400";
-             hoverStyles = "hover:border-blue-300 hover:text-blue-600 focus:ring-blue-100";
+             activeStyles = "bg-gradient-to-br from-blue-500 to-blue-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(59,130,246,0.6)] scale-[1.02] z-10";
+             hoverStyles = "hover:bg-blue-50 hover:border-blue-200 text-gray-600";
+             iconColor = activeMode === mode.id ? "text-white" : "text-blue-500";
           } else if (mode.id === 'TARIK') {
-             activeStyles = "bg-red-500 border-red-500 text-white shadow-lg shadow-red-200 focus:ring-red-100 focus:border-red-400";
-             hoverStyles = "hover:border-red-300 hover:text-red-600 focus:ring-red-100";
+             activeStyles = "bg-gradient-to-br from-red-500 to-red-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(239,68,68,0.6)] scale-[1.02] z-10";
+             hoverStyles = "hover:bg-red-50 hover:border-red-200 text-gray-600";
+             iconColor = activeMode === mode.id ? "text-white" : "text-red-500";
           } else {
-             activeStyles = "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-200 focus:ring-emerald-100 focus:border-emerald-400";
-             hoverStyles = "hover:border-emerald-300 hover:text-emerald-600 focus:ring-emerald-100";
+             activeStyles = "bg-gradient-to-br from-emerald-500 to-emerald-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.6)] scale-[1.02] z-10";
+             hoverStyles = "hover:bg-emerald-50 hover:border-emerald-200 text-gray-600";
+             iconColor = activeMode === mode.id ? "text-white" : "text-emerald-500";
           }
 
           return (
@@ -159,14 +165,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               }}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-1.5 focus:ring-4 outline-none",
+                "relative flex-1 flex flex-col items-center justify-center p-3 rounded-[1.25rem] border-2 transition-all duration-300 gap-2 outline-none overflow-hidden",
                 activeMode === mode.id 
                   ? activeStyles
-                  : cn("bg-gray-50 border-gray-100 text-gray-900", hoverStyles)
+                  : cn("bg-white border-gray-100", hoverStyles)
               )}
             >
-              <i className={cn("fa-solid", mode.icon, "text-sm")}></i>
-              <span className="text-[9px] font-black uppercase tracking-tighter text-center leading-none">{mode.label}</span>
+              {activeMode === mode.id && <div className="absolute inset-0 bg-white/20 backdrop-blur-[1px] opacity-0 hover:opacity-100 transition-opacity"></div>}
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300", activeMode === mode.id ? "bg-white/20 shadow-inner" : "bg-gray-50")}>
+                <i className={cn("fa-solid", mode.icon, iconColor, "text-sm transition-transform duration-300", activeMode === mode.id && "scale-110")}></i>
+              </div>
+              <span className={cn("text-[10px] font-black uppercase tracking-widest text-center leading-none transition-all", activeMode === mode.id ? "text-white" : "text-gray-700")}>{mode.label}</span>
             </button>
           )
         })}
@@ -174,73 +183,91 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
       <div className="space-y-3">
         {/* Category Label + Mode Dropdown Row */}
-        <div className="flex justify-between items-center px-1">
-          <label className="text-[10px] font-black text-black uppercase tracking-widest">
-            {activeMode === 'DIGITAL' ? 'Pilih Kategori' : activeMode === 'TARIK' ? 'Tarik Tunai' : 'Aksesoris'}
+        <div className="flex justify-between items-center px-2 py-1 bg-gray-50/50 rounded-xl border border-gray-100 backdrop-blur-sm">
+          <label className="text-[10px] font-black text-gray-700 uppercase tracking-widest">
+            {activeMode === 'DIGITAL' ? 'Kategori' : activeMode === 'TARIK' ? 'Tarik Tunai' : 'Aksesoris'}
           </label>
           <div className="relative">
             <select 
               ref={optTunaiRef}
               value={subMode}
               onChange={(e) => setSubMode(e.target.value as any)}
-              className="bg-gray-100 text-[10px] font-black text-black px-3 py-1 rounded-lg border-none outline-none appearance-none pr-7 cursor-pointer hover:bg-gray-200 transition-colors"
+              className="bg-white text-[10px] font-black text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 shadow-sm outline-none appearance-none pr-7 cursor-pointer hover:bg-blue-50 transition-colors focus:ring-2 focus:ring-blue-200"
             >
               <option value="" disabled>-Tujuan Dana Masuk-</option>
               <option value="NORMAL">TUNAI (Laci kasir)</option>
               <option value="NON_TUNAI">NON TUNAI</option>
-              <option value="KHUSUS">KHUSUS (Hitungan terpisah)</option>
+              <option value="KHUSUS">KHUSUS (Terpisah)</option>
             </select>
-            <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 pointer-events-none"></i>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-100 rounded-full flex items-center justify-center pointer-events-none">
+              <i className="fa-solid fa-chevron-down text-[7px] text-blue-600"></i>
+            </div>
           </div>
         </div>
 
         {/* Category Select for DIGITAL only */}
         {activeMode === 'DIGITAL' && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-300">
-            <div className="grid grid-cols-2 gap-1">
-              {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].map((cat, idx) => (
-                <button 
-                  key={cat}
-                  ref={el => { catRefs.current[idx] = el }}
-                  onClick={() => { setKategori(cat); setIsKetAuto(true); nominalRef.current?.focus(); }}
-                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-                  className={cn(
-                    "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all focus:ring-2 focus:ring-orange-200 outline-none",
-                    kategori === cat ? "bg-orange-500 border-orange-500 text-white shadow-md" : "bg-white border-gray-200 text-black"
-                  )}
-                >
-                  {cat}
-                </button>
-              ))}
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 mb-5">
+            <div className="grid grid-cols-4 gap-1.5">
+              {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].map((cat, idx) => {
+                const isActive = kategori === cat;
+                return (
+                  <button 
+                    key={cat}
+                    ref={el => { catRefs.current[idx] = el }}
+                    onClick={() => { setKategori(cat); setIsKetAuto(true); nominalRef.current?.focus(); }}
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+                    className={cn(
+                      "group relative py-2 px-1 rounded-xl border text-[9px] font-black uppercase tracking-tighter transition-all duration-300 outline-none overflow-hidden",
+                      isActive 
+                        ? "bg-gradient-to-br from-orange-400 to-orange-500 border-transparent text-white shadow-[0_4px_12px_-4px_rgba(249,115,22,0.6)] scale-[1.05] z-10" 
+                        : "bg-white border-gray-200 text-gray-600 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50/50"
+                    )}
+                  >
+                    {isActive && <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>}
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      {cat === 'Transfer Bank' && <i className="fa-solid fa-building-columns text-[13px]"></i>}
+                      {cat === 'DANA' && <i className="fa-solid fa-wallet text-[13px]"></i>}
+                      {cat === 'FLIP' && <i className="fa-solid fa-bolt text-[13px]"></i>}
+                      {cat === 'Order Kuota' && <i className="fa-solid fa-wifi text-[13px]"></i>}
+                      <span className="text-center leading-tight text-[8px] px-0.5">{cat}</span>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        <div className="mb-3">
-          <div className="flex justify-between items-center mb-0.5">
-            <label className="block text-[9px] font-black text-black uppercase tracking-tighter ml-1">Keterangan Opsional</label>
-            <label className="flex items-center gap-1 cursor-pointer">
+        <div className="mb-3 relative group">
+          <div className="flex justify-between items-center mb-1.5 px-1">
+            <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+              <i className="fa-solid fa-align-left text-gray-400"></i> Keterangan
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-100 hover:bg-gray-100 transition-colors">
               <input 
                 type="checkbox" 
                 checked={isKetAuto}
                 onChange={(e) => setIsKetAuto(e.target.checked)}
-                className="w-3 h-3 accent-blue-600"
+                className="w-3 h-3 accent-blue-600 rounded-sm"
               />
-              <span className="text-[7px] font-black text-black uppercase tracking-tighter">KETERANGAN OTOMATIS</span>
+              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
-          <textarea 
-            ref={keteranganRef}
-            rows={1} 
-            placeholder="..." 
-            value={keterangan}
-            onFocus={handleInputFocus}
-            onChange={(e) => {
-              setKeterangan(e.target.value);
-              if (isKetAuto) setIsKetAuto(false);
-            }}
-            className="form-input-modern w-full resize-none text-[13px] font-black py-2 h-9 px-3 outline-none"
-          ></textarea>
+          <div className="relative">
+            <textarea 
+              ref={keteranganRef}
+              rows={1} 
+              placeholder="Tulis keterangan..." 
+              value={keterangan}
+              onFocus={handleInputFocus}
+              onChange={(e) => {
+                setKeterangan(e.target.value);
+                if (isKetAuto) setIsKetAuto(false);
+              }}
+              className="w-full resize-none text-[13px] font-black py-2.5 min-h-[44px] px-4 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
+            ></textarea>
+          </div>
 
           {/* Autocomplete Suggestions */}
           {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
@@ -287,57 +314,67 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-[9px] font-black text-black mb-0.5 uppercase tracking-tighter ml-1">
-              {kategori === 'Order Kuota' ? 'HARGA MODAL' : 'NOMINAL'}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative group">
+            <label className="block text-[10px] font-black text-gray-700 mb-1.5 uppercase tracking-widest flex items-center gap-1.5 ml-1">
+              <i className="fa-solid fa-coins text-yellow-500"></i>
+              {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
             </label>
-            <input 
-              ref={nominalRef}
-              type="text" 
-              inputMode="numeric" 
-              placeholder="0" 
-              value={nominal}
-              onFocus={handleInputFocus}
-              onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
-              className="form-input-modern w-full text-[13px] font-black h-9 px-3"
-            />
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={nominalRef}
+                type="text" 
+                inputMode="numeric" 
+                placeholder="0" 
+                value={nominal}
+                onFocus={handleInputFocus}
+                onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
+                className="w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
+              />
+            </div>
           </div>
-          <div>
-            <div className="flex justify-between items-center mb-0.5">
-              <label className="block text-[9px] font-black text-black uppercase tracking-tighter ml-1">
-                {kategori === 'Order Kuota' ? 'HARGA JUAL' : 'ADMIN'}
+          <div className="relative group">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i>
+                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1 cursor-pointer">
+              <label className="flex items-center gap-1.5 cursor-pointer bg-purple-50 px-2 py-1 rounded-md border border-purple-100 hover:bg-purple-100 transition-colors">
                 <input 
                   type="checkbox" 
                   checked={isAdminNonTunai}
                   onChange={(e) => setIsAdminNonTunai(e.target.checked)}
-                  className="w-3 h-3 accent-purple-600"
+                  className="w-3 h-3 accent-purple-600 rounded-sm"
                 />
-                <span className="text-[7px] font-black text-black uppercase tracking-tighter">DALAM</span>
+                <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest">DALAM</span>
               </label>
             </div>
-            <input 
-              ref={adminRef}
-              type="text" 
-              inputMode="numeric" 
-              placeholder="0" 
-              value={admin}
-              onFocus={handleInputFocus}
-              onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
-              className={cn(
-                "form-input-modern w-full text-[13px] font-black h-9 px-3 transition-all outline-none",
-                isAdminNonTunai ? "bg-purple-50 text-purple-700 border-purple-200" : ""
-              )}
-            />
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={adminRef}
+                type="text" 
+                inputMode="numeric" 
+                placeholder="0" 
+                value={admin}
+                onFocus={handleInputFocus}
+                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
+                className={cn(
+                  "w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
+                  isAdminNonTunai 
+                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50"
+                )}
+              />
+            </div>
           </div>
         </div>
 
         {errorMsg && (
-          <div className="bg-red-50 border border-red-100 p-2 rounded-xl animate-bounce">
+          <div className="bg-red-50/80 border border-red-200 p-2.5 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-300 backdrop-blur-sm shadow-sm">
             <p className="text-[10px] font-black text-red-600 uppercase text-center tracking-widest flex items-center justify-center gap-2">
-              <i className="fa-solid fa-circle-exclamation"></i> {errorMsg}
+              <i className="fa-solid fa-triangle-exclamation text-red-500 text-lg"></i> {errorMsg}
             </p>
           </div>
         )}
@@ -347,12 +384,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           onClick={onSaveInternal} 
           disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-          className="w-full bg-blue-700 text-white text-[12px] font-black py-4 rounded-2xl hover:bg-blue-800 shadow-xl shadow-blue-200 transition-all active:scale-95 focus:ring-4 focus:ring-blue-300 outline-none uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50"
+          className="group relative w-full overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-[13px] font-black py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(79,70,229,0.5)] transition-all duration-300 hover:shadow-[0_12px_25px_-6px_rgba(79,70,229,0.6)] active:scale-[0.98] focus:ring-4 focus:ring-indigo-300 outline-none uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
+          <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-700 ease-in-out"></div>
           {isSaving ? (
-            <i className="fa-solid fa-circle-notch fa-spin"></i>
+            <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
           ) : (
-            <i className="fa-solid fa-cloud-arrow-up"></i>
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+              <i className="fa-solid fa-paper-plane text-sm"></i>
+            </div>
           )}
           {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
         </button>

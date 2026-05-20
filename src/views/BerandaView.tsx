@@ -57,6 +57,7 @@ interface BerandaViewProps {
   pantauStoreId?: string | 'all'
   setPantauStoreId?: (id: string | 'all') => void
   stores?: Store[]
+  isPc?: boolean
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -804,7 +805,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
-      <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
+      {!(props.isPc && isOwnerSubView) && (
+        <>
+          <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
         <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
           <div className="flex-1 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -1152,7 +1155,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         </div>
       )}
 
-      {props.kasirRole === 'owner' && (
+      {props.kasirRole === 'owner' && !props.isPc && (
         <div className="px-1.5 mb-8">
           <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center gap-4 border-b-4 border-orange-600/20">
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/30 shadow-inner">
@@ -1195,54 +1198,74 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </div>
         </div>
       )}
+        </>
+      )}
 
-      {isOwnerSubView && (
-        <div className="absolute inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+      {isOwnerSubView && (() => {
+        const getSubViewDetails = () => {
+          switch(activeOwnerSubView) {
+            case 'monitor': return { title: 'KELOLA KASIR', color: 'from-blue-600 to-blue-800', icon: 'fa-users', desc: 'Pantau aktivitas dan kelola akun kasir Anda.' }
+            case 'laporan': return { title: 'RINGKASAN HARIAN', color: 'from-indigo-600 to-indigo-800', icon: 'fa-file-lines', desc: 'Lihat ringkasan transaksi dan pergerakan saldo.' }
+            case 'grafik': return { title: 'GRAFIK TRANSAKSI', color: 'from-emerald-500 to-emerald-700', icon: 'fa-chart-simple', desc: 'Visualisasi data transaksi harian dan bulanan.' }
+            case 'performa': return { title: 'PERFORMA KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-chart-line', desc: 'Analisis kecepatan dan volume transaksi per kasir.' }
+            case 'absen': return { title: 'ABSENSI KASIR', color: 'from-teal-500 to-teal-700', icon: 'fa-fingerprint', desc: 'Rekapitulasi kehadiran dan jam kerja kasir.' }
+            case 'izin': return { title: 'IZIN KARYAWAN', color: 'from-orange-500 to-orange-700', icon: 'fa-calendar-day', desc: 'Kelola permohonan izin dan cuti karyawan.' }
+            case 'gaji': return { title: 'DATA GAJI KASIR', color: 'from-green-600 to-green-800', icon: 'fa-dollar-sign', desc: 'Perhitungan dan riwayat penggajian kasir.' }
+            case 'saldo': return { title: 'PENGATURAN SALDO', color: 'from-emerald-600 to-emerald-800', icon: 'fa-wallet', desc: 'Alokasi dan penambahan modal harian kasir.' }
+            case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
+            default: return { title: 'BACKUP & RESET', color: 'from-red-600 to-red-800', icon: 'fa-database', desc: 'Cadangkan data dan kembalikan ke pengaturan awal.' }
+          }
+        };
+        const { title, color, icon, desc } = getSubViewDetails();
+
+        return (
           <div className={cn(
-            "p-4 text-white flex justify-between items-center shadow-lg",
-            activeOwnerSubView === 'monitor' ? "bg-blue-600" : 
-            activeOwnerSubView === 'laporan' ? "bg-indigo-600" :
-            activeOwnerSubView === 'grafik' ? "bg-emerald-500" :
-            activeOwnerSubView === 'performa' ? "bg-purple-600" :
-            activeOwnerSubView === 'absen' ? "bg-teal-500" :
-            activeOwnerSubView === 'izin' ? "bg-orange-500" :
-            activeOwnerSubView === 'gaji' ? "bg-green-600" :
-            activeOwnerSubView === 'saldo' ? "bg-emerald-600" :
-            "bg-red-600"
+            "bg-white flex flex-col animate-in fade-in duration-300",
+            props.isPc ? "h-full rounded-[2rem] overflow-hidden" : "absolute inset-0 z-[100] slide-in-from-right"
           )}>
-            <button 
-              onClick={() => props.setActiveView('view-beranda')}
-              className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90"
-            >
-              <i className="fa-solid fa-arrow-left"></i>
-            </button>
-
-            <div className="text-center">
-              <h3 className="font-black text-sm tracking-widest uppercase leading-none">
-                {activeOwnerSubView === 'monitor' ? 'KELOLA KASIR' : 
-                 activeOwnerSubView === 'laporan' ? 'RINGKASAN HARIAN' : 
-                 activeOwnerSubView === 'grafik' ? 'GRAFIK TRANSAKSI' :
-                 activeOwnerSubView === 'performa' ? 'PERFORMA KASIR' :
-                 activeOwnerSubView === 'absen' ? 'ABSENSI KASIR' :
-                 activeOwnerSubView === 'izin' ? 'IZIN KARYAWAN' :
-                 activeOwnerSubView === 'gaji' ? 'DATA GAJI KASIR' :
-                 activeOwnerSubView === 'saldo' ? 'PENGATURAN SALDO' :
-                 activeOwnerSubView === 'audit' ? 'AUDIT KASIR' :
-                 'BACKUP & RESET'}
-              </h3>
-              <p className="text-[9px] text-white/70 mt-1 font-bold uppercase tracking-widest">Panel Kontrol Owner</p>
+            {/* Header */}
+            <div className={cn(
+              "text-white flex justify-between items-center relative overflow-hidden",
+              props.isPc ? "p-8 shadow-md" : "p-4 shadow-lg",
+              `bg-gradient-to-r ${color}`
+            )}>
+               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+               
+               {props.isPc ? (
+                 <div className="flex items-center gap-5 relative z-10">
+                   <div className="w-14 h-14 rounded-[1.25rem] bg-white/20 flex items-center justify-center backdrop-blur-md border border-white/30 shadow-inner">
+                     <i className={`fa-solid ${icon} text-2xl drop-shadow-md`}></i>
+                   </div>
+                   <div>
+                      <h3 className="font-black text-2xl tracking-tight uppercase leading-none drop-shadow-md">{title}</h3>
+                      <p className="text-[11px] text-white/90 mt-1.5 font-bold tracking-widest flex items-center gap-2">
+                        <i className="fa-solid fa-circle-info text-white/60"></i> {desc}
+                      </p>
+                   </div>
+                 </div>
+               ) : (
+                 <>
+                   <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90 relative z-10">
+                     <i className="fa-solid fa-arrow-left"></i>
+                   </button>
+                   <div className="text-center relative z-10">
+                     <h3 className="font-black text-sm tracking-widest uppercase leading-none">{title}</h3>
+                     <p className="text-[9px] text-white/70 mt-1 font-bold uppercase tracking-widest">Panel Kontrol Owner</p>
+                   </div>
+                 </>
+               )}
+               
+               <button onClick={() => props.setActiveView('view-beranda')} className={cn(
+                 "rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90 relative z-10",
+                 props.isPc ? "w-12 h-12" : "w-10 h-10"
+               )}>
+                 <i className="fa-solid fa-xmark text-lg"></i>
+               </button>
             </div>
 
-            <button 
-              onClick={() => props.setActiveView('view-beranda')}
-              className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90"
-            >
-              <i className="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-
-          {/* Sub-View Content */}
-          <div className="flex-1 overflow-y-auto hide-scrollbar p-5 pb-24">
+            {/* Sub-View Content */}
+            <div className={cn("flex-1 overflow-y-auto custom-scrollbar bg-slate-50", props.isPc ? "p-8 flex flex-col items-center" : "p-5 pb-24")}>
+              <div className={cn("w-full", props.isPc && "max-w-4xl")}>
             {activeOwnerSubView === 'monitor' && (
               <div className="space-y-4">
                 {(!props.pantauStoreId || props.pantauStoreId === 'all') ? (
@@ -2213,8 +2236,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
             </div>
+            </div>
           </div>
-        )}
+        );
+      })()}
 
       {props.kasirRole !== 'owner' && (
         <div className="px-1.5 mb-4">

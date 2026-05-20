@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Receipt, Plus, Trash2, Edit, Check, Search, Ban, X, Camera, ImageIcon, Loader2 } from "lucide-react";
 import { formatRupiah, formatInputRupiah, parseNominal, cn, compressImage } from "../lib/utils";
+import { supabase } from "../lib/supabase";
 
 interface HutangRecord {
   id: string;
@@ -20,8 +21,13 @@ const KasbonView: React.FC<{
   kasirName: string;
   showToast: (m: string) => void;
   onConfirm: (t: string, m: string, c: () => void) => void;
-}> = ({ active, setActiveView, kasirName, showToast, onConfirm }) => {
-  const [hutangList, setHutangList] = useState<HutangRecord[]>(JSON.parse(localStorage.getItem("hutang_list") || "[]"));
+  isPc?: boolean;
+  activeStoreId: string;
+}> = ({ active, setActiveView, kasirName, showToast, onConfirm, isPc, activeStoreId }) => {
+  const [hutangList, setHutangList] = useState<HutangRecord[]>(() => {
+    const saved = localStorage.getItem(`alphaPro_${activeStoreId}_kasbon_list`);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [searchText, setSearchText] = useState("");
   const [showLunas, setShowLunas] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -50,8 +56,44 @@ const KasbonView: React.FC<{
   };
 
   useEffect(() => {
-    localStorage.setItem("hutang_list", JSON.stringify(hutangList));
-  }, [hutangList]);
+    const loadData = () => {
+      if (activeStoreId && activeStoreId !== 'all') {
+        const saved = localStorage.getItem(`alphaPro_${activeStoreId}_kasbon_list`);
+        if (saved) {
+          setHutangList(JSON.parse(saved));
+        } else {
+          setHutangList([]);
+        }
+      }
+    };
+    
+    loadData();
+    window.addEventListener('alphaSyncUpdate', loadData);
+    return () => window.removeEventListener('alphaSyncUpdate', loadData);
+  }, [activeStoreId]);
+
+  useEffect(() => {
+    if (activeStoreId && activeStoreId !== 'all') {
+      localStorage.setItem(`alphaPro_${activeStoreId}_kasbon_list`, JSON.stringify(hutangList));
+      
+      // Auto sync to supabase
+      const syncToCloud = async () => {
+        try {
+          await supabase.from('store_settings').upsert({
+            store_id: activeStoreId,
+            kasbon_data: hutangList,
+            updated_at: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error("Gagal sync Kasbon", e);
+        }
+      };
+      
+      // Debounce sync slightly
+      const timer = setTimeout(syncToCloud, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [hutangList, activeStoreId]);
 
   const resetForm = () => {
     setNama("");
@@ -104,7 +146,9 @@ const KasbonView: React.FC<{
     setNominalDisplay(formatInputRupiah(h.nominal.toString()));
     setKeterangan(h.keterangan || "");
     setPhotoUrl(h.photoUrl || "");
-    setShowForm(true);
+    if (!isPc) {
+      setShowForm(true);
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,6 +184,231 @@ const KasbonView: React.FC<{
   const totalHutang = hutangList.filter(h => !h.lunas).reduce((sum, h) => sum + h.nominal, 0);
 
   if (!active) return null;
+
+  if (isPc) {
+    return (
+      <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+        {/* Header Breadcrumb */}
+        <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
+          <div>
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Kasbon Pelanggan</h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Kelola catatan hutang-piutang pelanggan konter Anda</p>
+          </div>
+        </div>
+
+        {/* Content Pane */}
+        <div className="flex-grow flex overflow-hidden p-8 gap-8">
+          
+          {/* Left Column: Form & Summary */}
+          <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
+            {/* Total Piutang Card */}
+            <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 rounded-3xl p-6 shadow-sm shrink-0">
+              <span className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest block mb-1">Total Piutang Belum Lunas</span>
+              <h3 className="text-2xl font-black text-red-600 dark:text-red-400">{formatRupiah(totalHutang)}</h3>
+            </div>
+
+            {/* Embedded Form */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-700">
+                <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
+                  {editItem ? "Edit Kasbon Pelanggan" : "Tambah Kasbon Baru"}
+                </h4>
+                {editItem && (
+                  <button onClick={resetForm} className="text-[9px] font-black text-rose-500 hover:underline uppercase tracking-wider">
+                    Batal Edit
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Pelanggan</label>
+                  <input 
+                    ref={namaRef}
+                    value={nama} 
+                    onChange={e => setNama(e.target.value)} 
+                    placeholder="Masukkan nama..." 
+                    onKeyDown={(e) => handleKeyDown(e, nominalRef)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nominal Hutang (RP)</label>
+                  <input 
+                    ref={nominalRef}
+                    type="text" 
+                    inputMode="numeric" 
+                    placeholder="0" 
+                    value={nominalDisplay}
+                    onChange={(e) => setNominalDisplay(formatInputRupiah(e.target.value))}
+                    onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Keterangan</label>
+                  <textarea 
+                    ref={keteranganRef}
+                    value={keterangan} 
+                    onChange={e => setKeterangan(e.target.value)} 
+                    placeholder="Masukkan keterangan..." 
+                    rows={2} 
+                    onKeyDown={(e) => handleKeyDown(e, undefined, true)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none" 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col items-center justify-center gap-1.5 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 transition-all group">
+                    {isCapturing ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Camera className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />}
+                    <span className="text-[9px] font-black text-slate-400 group-hover:text-blue-700 uppercase tracking-widest">Kamera</span>
+                    <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
+                  <label className="flex flex-col items-center justify-center gap-1.5 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 transition-all group">
+                    <ImageIcon className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                    <span className="text-[9px] font-black text-slate-400 group-hover:text-slate-700 uppercase tracking-widest">Galeri</span>
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
+                </div>
+
+                {photoUrl && (
+                  <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner bg-slate-50 dark:bg-slate-900">
+                    <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <button onClick={() => setPhotoUrl("")} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg active:scale-90 transition-all">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleSave} 
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest"
+                  style={{ color: '#ffffff' }}
+                >
+                  {editItem ? "Simpan Perubahan Kasbon" : "Simpan Data Kasbon"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Grid and List */}
+          <div className="flex-grow h-full flex flex-col gap-6 overflow-hidden">
+            {/* Search & Filter Bar */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center shrink-0">
+              <div className="relative flex-1 w-full">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  value={searchText} 
+                  onChange={e => setSearchText(e.target.value)} 
+                  placeholder="Cari nama pelanggan atau keterangan..." 
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all" 
+                />
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tampilkan Lunas:</span>
+                <button 
+                  onClick={() => setShowLunas(!showLunas)} 
+                  className={cn(
+                    "px-4 py-3 rounded-2xl border font-black text-[10px] tracking-wider transition-all",
+                    showLunas 
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100 dark:shadow-none" 
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                  )}
+                  style={showLunas ? { color: '#ffffff' } : undefined}
+                >
+                  {showLunas ? "LUNAS: ON" : "LUNAS: OFF"}
+                </button>
+              </div>
+            </div>
+
+            {/* Grid Container */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 pb-6">
+              {filteredHutang.length === 0 ? (
+                <div className="text-center py-24 text-slate-400 dark:text-slate-600 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-3xl">
+                  <Receipt className="w-16 h-16 mx-auto mb-4 text-slate-200 dark:text-slate-700" />
+                  <p className="text-xs font-black uppercase tracking-wider">Belum ada catatan kasbon</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {filteredHutang.map(h => (
+                    <div key={h.id} className={cn("bg-white dark:bg-slate-800 rounded-3xl p-5 border shadow-sm transition-all flex flex-col justify-between", h.lunas ? 'border-emerald-100 dark:border-emerald-950 bg-emerald-50/10' : 'border-slate-100 dark:border-slate-700')}>
+                      <div>
+                        <div className="flex justify-between items-start mb-3 gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{h.nama}</h4>
+                            {h.keterangan && <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{h.keterangan}</p>}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className={cn("font-black text-sm tracking-wide", h.lunas ? 'text-emerald-600 line-through dark:text-emerald-500' : 'text-rose-600')}>
+                              {formatRupiah(h.nominal)}
+                            </p>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter mt-1 block">{h.tanggal}</span>
+                            {h.kasir && <span className="text-[8px] bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded font-black mt-1 inline-block uppercase tracking-widest">{h.kasir}</span>}
+                          </div>
+                        </div>
+
+                        {h.photoUrl && (
+                          <div 
+                            className="w-full aspect-video rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 mb-4 overflow-hidden cursor-pointer group/photo relative"
+                            onClick={() => setPreviewImage(h.photoUrl!)}
+                          >
+                            <img src={h.photoUrl} alt="Struk" className="w-full h-full object-cover transition-transform group-hover/photo:scale-105" />
+                            <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-black uppercase tracking-widest">
+                              <i className="fa-solid fa-magnifying-glass-plus mr-2"></i> Perbesar Foto
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-700/50 mt-4">
+                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                          {h.lunas ? `LUNAS: ${h.tglLunas}` : "STATUS: BELUM LUNAS"}
+                        </span>
+                        
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleLunas(h)} 
+                            className={cn(
+                              "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors border",
+                              h.lunas 
+                                ? 'bg-orange-50 border-orange-100 text-orange-600 dark:bg-orange-950/20 dark:border-orange-900/30 dark:text-orange-400' 
+                                : 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400'
+                            )}
+                          >
+                            {h.lunas ? <Ban className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {h.lunas ? "Batal Lunas" : "Set Lunas"}
+                          </button>
+                          
+                          <button onClick={() => openEdit(h)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors">
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(h.id)} className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Large Preview Modal */}
+        {previewImage && (
+          <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+            <button className="absolute top-6 right-6 text-white bg-white/10 p-3 rounded-full hover:bg-white/20 transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+            <img src={previewImage} alt="Large preview" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24">

@@ -3,6 +3,7 @@ import { formatInputRupiah, cn } from '../lib/utils'
 
 interface IsiSaldoViewProps {
   active: boolean
+  isPc?: boolean
   setActiveView: (v: string) => void
   isiJenis: string
   setIsiJenis: (v: string) => void
@@ -45,6 +46,118 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         nextRef?.current?.focus()
       }
     }
+  }
+
+  if (props.isPc) {
+    return (
+      <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", props.active ? "flex" : "hidden")}>
+        {/* Header Breadcrumb */}
+        <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
+          <div>
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Pengaturan Saldo & Modal</h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Top-up saldo plafon bank, saldo aplikasi HP, atau setoran modal kasir</p>
+          </div>
+        </div>
+
+        {/* Content Pane */}
+        <div className="flex-grow p-8 overflow-y-auto scrollbar-thin flex items-start justify-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full max-w-5xl items-start">
+            {/* Description/Explanation Cards */}
+            <div className="lg:col-span-5 space-y-4">
+              <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm">
+                <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <i className="fa-solid fa-circle-info text-blue-600"></i> Informasi Jenis Saldo
+                </h3>
+                
+                <div className="space-y-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">🏦 Saldo Bank (Plafon)</p>
+                    <p className="text-[11px] leading-relaxed">Uang digital yang mengendap di rekening bank terdaftar (misal: BRI, Mandiri, BCA) sebagai plafon transaksi Brilink.</p>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">📱 Saldo Real Aplikasi (HP)</p>
+                    <p className="text-[11px] leading-relaxed">Saldo modal di dalam aplikasi keagenan HP (misal: Brilink Mobile, Kioser, dll) yang langsung berkurang saat melakukan transfer.</p>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">💵 Modal Tunai Kasir</p>
+                    <p className="text-[11px] leading-relaxed">Uang tunai cash di laci kasir (fisik) yang disiapkan sebagai modal kembalian atau penarikan tunai.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <div className="lg:col-span-7 bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
+              <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Form Manajemen Saldo</h3>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">Lakukan input penyesuaian/top-up saldo di bawah ini</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">JENIS SALDO</label>
+                  <div className="relative">
+                    <select 
+                      value={props.isiJenis}
+                      onChange={(e) => props.setIsiJenis(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, nominalRef)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 appearance-none pr-10"
+                    >
+                      <option value="" disabled>Pilih jenis saldo</option>
+                      <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
+                      <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
+                      <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">NOMINAL TOP-UP (RP)</label>
+                  <input 
+                    ref={nominalRef}
+                    type="text" 
+                    inputMode="numeric" 
+                    placeholder="0" 
+                    value={props.isiNominal}
+                    onChange={(e) => props.setIsiNominal(formatInputRupiah(e.target.value))}
+                    onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">KETERANGAN</label>
+                  <textarea 
+                    ref={keteranganRef}
+                    rows={3} 
+                    placeholder="Contoh: Setoran tunai sore hari..." 
+                    value={props.isiKeterangan}
+                    onChange={(e) => props.setIsiKeterangan(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, undefined, true)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none"
+                  ></textarea>
+                </div>
+
+                <button 
+                  onClick={props.handleSimpanIsiSaldo} 
+                  disabled={props.isSaving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest mt-2 flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
+                  style={{ color: '#ffffff' }}
+                >
+                  {props.isSaving ? (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  ) : (
+                    <i className="fa-solid fa-cloud-arrow-up"></i>
+                  )}
+                  {props.isSaving ? 'MEMPROSES...' : 'SIMPAN SALDO'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

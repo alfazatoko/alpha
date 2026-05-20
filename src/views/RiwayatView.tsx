@@ -6,6 +6,7 @@ import type { KasirAccount } from '../components/LoginScreen'
 
 interface RiwayatViewProps {
   active: boolean
+  activeView?: string
   transactions: Transaction[]
   filterTanggalMulai: string
   setFilterTanggalMulai: (v: string) => void
@@ -29,6 +30,7 @@ interface RiwayatViewProps {
   storePhoto?: string
   kasirName?: string
   setIsSidePanelOpen?: (v: boolean) => void
+  isPc?: boolean
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
@@ -36,6 +38,8 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const itemsPerPage = 50
 
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [activePcTab, setActivePcTab] = useState<'transaksi' | 'tambah-saldo'>('transaksi')
+  const [isPcKategoriOpen, setIsPcKategoriOpen] = useState(false)
   
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -129,6 +133,576 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   })
 
   const totalSaldoNominal = filteredSaldoTransactions.reduce((s, t) => s + t.nominal, 0)
+
+  if (props.isPc) {
+    if (!props.active) return null;
+
+    // Calculate stats for the second tab (Tambah Saldo)
+    const saldoBankTotal = filteredSaldoTransactions.filter(t => t.kategori.includes('Saldo Bank')).reduce((s, t) => s + t.nominal, 0)
+    const saldoRealTotal = filteredSaldoTransactions.filter(t => t.kategori.includes('Real Aplikasi')).reduce((s, t) => s + t.nominal, 0)
+    const modalTunaiTotal = filteredSaldoTransactions.filter(t => t.kategori.includes('Modal Tunai')).reduce((s, t) => s + t.nominal, 0)
+
+    const isFullPage = props.activeView === 'view-transaksi';
+
+    return (
+      <div className="flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 p-6 overflow-y-auto hide-scrollbar">
+        {/* HEADER SECTION */}
+        {isFullPage ? (
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 shrink-0">
+            <div>
+              <h1 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase">Jurnal & Riwayat Transaksi</h1>
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-1">Pemantauan menyeluruh seluruh transaksi masuk, keluar, dan mutasi saldo modal</p>
+            </div>
+            <div className="flex bg-slate-100 dark:bg-slate-955 p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/80">
+              <button
+                onClick={() => setActivePcTab('transaksi')}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  activePcTab === 'transaksi'
+                    ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm"
+                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
+                )}
+              >
+                Transaksi Utama ({filteredTransactions.length})
+              </button>
+              <button
+                onClick={() => setActivePcTab('tambah-saldo')}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  activePcTab === 'tambah-saldo'
+                    ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm"
+                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
+                )}
+              >
+                Mutasi Tambah Saldo ({filteredSaldoTransactions.length})
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between mb-4 shrink-0">
+            <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-wider uppercase">Jurnal Transaksi</h3>
+            <div className="flex bg-slate-100 dark:bg-slate-955 p-1 rounded-xl border border-slate-200/50 dark:border-slate-800/80 scale-90 origin-right">
+              <button
+                onClick={() => setActivePcTab('transaksi')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                  activePcTab === 'transaksi'
+                    ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm"
+                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600"
+                )}
+              >
+                Transaksi ({filteredTransactions.length})
+              </button>
+              <button
+                onClick={() => setActivePcTab('tambah-saldo')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                  activePcTab === 'tambah-saldo'
+                    ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm"
+                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600"
+                )}
+              >
+                Saldo ({filteredSaldoTransactions.length})
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* KPI DASHBOARD CARDS (Rendered only on dedicated full page) */}
+        {isFullPage && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            {activePcTab === 'transaksi' ? (
+              <>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <i className="fa-solid fa-file-invoice-dollar text-lg"></i>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Transaksi</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5">{filteredTransactions.length}</p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center text-violet-600 dark:text-violet-400 shrink-0">
+                    <i className="fa-solid fa-calculator text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Volume</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(totalNominal)}>
+                      {formatRupiah(totalNominal).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <i className="fa-solid fa-percent text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Admin</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(totalAdmin)}>
+                      {formatRupiah(totalAdmin).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                    <i className="fa-solid fa-money-bill-wave text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Grand Total</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(totalNominal + totalAdmin)}>
+                      {formatRupiah(totalNominal + totalAdmin).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-fuchsia-50 dark:bg-fuchsia-950/40 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400 shrink-0">
+                    <i className="fa-solid fa-wallet text-lg"></i>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Mutasi</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5">{filteredSaldoTransactions.length}</p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <i className="fa-solid fa-building-columns text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mutasi Bank</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(saldoBankTotal)}>
+                      {formatRupiah(saldoBankTotal).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <i className="fa-solid fa-mobile-screen text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mutasi Real App</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(saldoRealTotal)}>
+                      {formatRupiah(saldoRealTotal).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/50 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                    <i className="fa-solid fa-vault text-lg"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mutasi Modal Tunai</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-white leading-none mt-1.5 truncate" title={formatRupiah(modalTunaiTotal)}>
+                      {formatRupiah(modalTunaiTotal).replace(',00', '')}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* HORIZONTAL FILTER BAR */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-wrap gap-4 items-end mb-6">
+          {/* Dari Tanggal */}
+          <div className="flex-1 min-w-[140px] relative">
+            <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Dari Tanggal</label>
+            <div className="relative">
+              <input 
+                type="date"
+                value={props.filterTanggalMulai}
+                onChange={(e) => {
+                  props.setFilterTanggalMulai(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+              <i className="fa-solid fa-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs"></i>
+            </div>
+          </div>
+          {/* Ke Tanggal */}
+          <div className="flex-1 min-w-[140px] relative">
+            <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Ke Tanggal</label>
+            <div className="relative">
+              <input 
+                type="date"
+                value={props.filterTanggalAkhir}
+                onChange={(e) => {
+                  props.setFilterTanggalAkhir(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+              <i className="fa-solid fa-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs"></i>
+            </div>
+          </div>
+
+          {activePcTab === 'transaksi' ? (
+            <>
+              {/* Kategori Checklist Dropdown */}
+              <div className="flex-1 min-w-[200px] relative">
+                <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Kategori</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsPcKategoriOpen(!isPcKategoriOpen)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 text-left flex justify-between items-center cursor-pointer min-h-[38px]"
+                  >
+                    <span className="truncate max-w-[150px]">
+                      {props.filterKategori.includes('Semua') 
+                        ? 'Semua Kategori' 
+                        : props.filterKategori.join(', ')}
+                    </span>
+                    <i className="fa-solid fa-chevron-down text-[9px] text-slate-400 pointer-events-none"></i>
+                  </button>
+                  
+                  {isPcKategoriOpen && (
+                    <>
+                      {/* Click outside backdrop */}
+                      <div className="fixed inset-0 z-30" onClick={() => setIsPcKategoriOpen(false)} />
+                      
+                      <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-3.5 z-40 space-y-2 max-h-[250px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                        {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+                          const isChecked = props.filterKategori.includes(cat);
+                          return (
+                            <label key={cat} className="flex items-center gap-2.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 rounded-lg transition-colors text-left">
+                              <input 
+                                type="checkbox" 
+                                className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-slate-300 dark:border-slate-600 dark:bg-slate-900 cursor-pointer"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (cat === 'Semua') {
+                                    props.setFilterKategori(['Semua'])
+                                  } else {
+                                    let next = [...props.filterKategori]
+                                    if (next.includes('Semua')) next = []
+                                    
+                                    if (e.target.checked) {
+                                      next.push(cat)
+                                    } else {
+                                      next = next.filter(c => c !== cat)
+                                    }
+                                    
+                                    if (next.length === 0) next = ['Semua']
+                                    props.setFilterKategori(next)
+                                  }
+                                  setCurrentPage(1);
+                                }}
+                              />
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                {cat === 'Semua' ? 'Semua Kategori' : cat}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              {/* Pencarian (No. HP / ID) */}
+              <div className="flex-[1.5] min-w-[200px]">
+                <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Cari (HP / ID / Keterangan)</label>
+                <div className="relative">
+                  <input 
+                    type="text"
+                    placeholder="Masukkan kata kunci pencarian..."
+                    value={props.filterPencarian}
+                    onChange={(e) => {
+                      props.setFilterPencarian(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
+                  />
+                  <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                </div>
+              </div>
+              {/* Owner Kasir Filter */}
+              {props.kasirRole === 'owner' && props.kasirList && (
+                <div className="flex-1 min-w-[150px]">
+                  <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Pantau Kasir</label>
+                  <div className="relative">
+                    <select 
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => {
+                        props.setFilterKasir && props.setFilterKasir(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer appearance-none"
+                    >
+                      <option value="Semua">Semua Kasir</option>
+                      {Object.entries(props.kasirList).map(([id, acc]) => (
+                        <option key={id} value={id}>{acc.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Saldo Mutasi Specific Type Filters */
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Jenis Penambahan</label>
+              <div className="flex gap-1.5">
+                {['Semua', 'Saldo Bank', 'Saldo Real', 'Modal Tunai'].map(f => (
+                  <button 
+                    key={f}
+                    onClick={() => props.setActiveSaldoFilter(f)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-[9px] font-black transition-all border uppercase tracking-wider",
+                      props.activeSaldoFilter === f 
+                        ? "bg-violet-600 border-violet-600 text-white dark:bg-violet-500 dark:border-violet-500" 
+                        : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    {f.replace('Saldo ', '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reset Button */}
+          <button 
+            onClick={() => {
+              const today = getLocalDateString()
+              props.setFilterKategori(['Semua'])
+              props.setFilterPencarian('')
+              props.setFilterTanggalMulai(today)
+              props.setFilterTanggalAkhir(today)
+              if (props.setFilterKasir) props.setFilterKasir('Semua')
+              props.setActiveSaldoFilter('Semua')
+              setCurrentPage(1);
+            }}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition-all"
+          >
+            Reset
+          </button>
+        </div>
+
+        {activePcTab === 'transaksi' ? (
+          <>
+            {/* WIDESCREEN TABLE TRANSAKSI */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[900px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-12 text-center">No</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-48">Waktu</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-24">Kasir</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-48">Kategori</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Keterangan</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right w-36">Nominal</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right w-32">Admin Fee</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right w-36">Total</th>
+                      <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center w-36">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                    {paginatedTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-16 text-center text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest bg-slate-50/10">
+                          Tidak ada transaksi dalam filter ini
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedTransactions.map((t, i) => {
+                        const dateObj = parseLocalISO(t.timestamp)
+                        const jam = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                        const tgl = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                        
+                        const isToday = t.timestamp.startsWith(getLocalDateString())
+                        const canEdit = isToday
+                        const canDelete = isToday && props.kasirRole === 'owner'
+                        
+                        const isKhusus = (t.keterangan || '').includes('[KHUSUS]')
+                        const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]')
+
+                        const kasirNameStr = (t.kasir_id && props.kasirList?.[t.kasir_id]?.name) || t.kasir_id || 'Kasir';
+
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                            <td className="py-3.5 px-5 text-xs text-slate-400 dark:text-slate-500 font-bold text-center">{startIndex + i + 1}</td>
+                            <td className="py-3.5 px-5 text-xs text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{tgl} • {jam}</td>
+                            <td className="py-3.5 px-5 text-xs font-bold text-slate-700 dark:text-slate-300">{kasirNameStr}</td>
+                            <td className="py-3.5 px-5">
+                              {(() => {
+                                let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+                                if (t.kategori === 'Transfer Bank') badgeStyle = "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30";
+                                else if (t.kategori === 'DANA') badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30";
+                                else if (t.kategori === 'FLIP') badgeStyle = "bg-cyan-50 text-cyan-700 border-cyan-100 dark:bg-cyan-950/30 dark:text-cyan-400 dark:border-cyan-900/30";
+                                else if (t.kategori === 'Order Kuota') badgeStyle = "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30";
+                                else if (t.kategori === 'Tarik Tunai') badgeStyle = "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30";
+                                else if (t.kategori === 'Aksesoris') badgeStyle = "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100 dark:bg-fuchsia-950/30 dark:text-fuchsia-400 dark:border-fuchsia-900/30";
+                                
+                                return (
+                                  <span className={cn("text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border whitespace-nowrap", badgeStyle)}>
+                                    {t.kategori}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="py-3.5 px-5">
+                              <div className="flex flex-wrap items-center gap-1.5 max-w-[350px]">
+                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={t.keterangan}>
+                                  {t.keterangan || '-'}
+                                </span>
+                                {isKhusus && (
+                                  <span className="text-[7px] bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400 px-1.5 py-0.5 rounded font-black border border-orange-200 dark:border-orange-900/30">KHUSUS</span>
+                                )}
+                                {isNonTunai && (
+                                  <span className="text-[7px] bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400 px-1.5 py-0.5 rounded font-black border border-purple-200 dark:border-purple-900/30">NON TUNAI</span>
+                                )}
+                                {t.isEdited && (
+                                  <span className="text-[7px] bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 px-1.5 py-0.5 rounded font-black border border-amber-200 dark:border-amber-900/30">EDIT</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-5 text-xs font-bold text-right text-slate-700 dark:text-slate-300">{t.nominal.toLocaleString('id-ID')}</td>
+                            <td className="py-3.5 px-5 text-xs font-bold text-right text-emerald-600">{t.adminFee.toLocaleString('id-ID')}</td>
+                            <td className="py-3.5 px-5 text-xs font-black text-right text-slate-900 dark:text-white">{(t.nominal + t.adminFee).toLocaleString('id-ID')}</td>
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center justify-center gap-2">
+                                {canEdit ? (
+                                  <button 
+                                    onClick={() => props.onEdit(t)}
+                                    className="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-600 dark:hover:text-white px-2.5 py-1 rounded-xl text-[9px] font-black flex items-center gap-1.5 transition-all border border-blue-100 dark:border-blue-900/30"
+                                  >
+                                    <i className="fa-solid fa-pen text-[7px]"></i> EDIT
+                                  </button>
+                                ) : (
+                                  <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold italic py-1 px-2.5 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl">LOCKED</span>
+                                )}
+                                {canDelete && (
+                                  <button 
+                                    onClick={() => props.onDelete?.(t)}
+                                    className="bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-600 dark:hover:text-white w-7 h-7 rounded-xl flex items-center justify-center transition-all border border-rose-100 dark:border-rose-900/30"
+                                  >
+                                    <i className="fa-solid fa-trash-can text-[9px]"></i>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* TABEL FOOTER */}
+              <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 bg-slate-50/50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700">
+                 <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{filteredTransactions.length} Items</span>
+                 <div className="flex items-center gap-6 mt-2 sm:mt-0">
+                   <div className="text-blue-600 dark:text-blue-400 font-black text-xs whitespace-nowrap uppercase flex items-center gap-1.5">
+                     <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold">TOTAL NOMINAL:</span>
+                     {formatRupiah(totalNominal).replace(',00', '')}
+                   </div>
+                   <div className="w-px h-4 bg-slate-200 dark:bg-slate-700"></div>
+                   <div className="text-emerald-600 dark:text-emerald-400 font-black text-xs whitespace-nowrap uppercase flex items-center gap-1.5">
+                     <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold">TOTAL ADMIN:</span>
+                     {formatRupiah(totalAdmin).replace(',00', '')}
+                   </div>
+                   <div className="w-px h-4 bg-slate-200 dark:bg-slate-700"></div>
+                   <div className="text-slate-900 dark:text-white font-black text-xs whitespace-nowrap uppercase flex items-center gap-1.5">
+                     <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold">GRAND TOTAL:</span>
+                     {formatRupiah(totalNominal + totalAdmin).replace(',00', '')}
+                   </div>
+                 </div>
+              </div>
+            </div>
+
+            {/* PAGINATION CONTROL */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mb-6">
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={cn(
+                      "w-8 h-8 rounded-xl font-black text-xs transition-all",
+                      currentPage === i + 1 
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" 
+                        : "bg-white text-slate-400 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                    )}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          /* MUTASI TAMBAH SALDO WIDESCREEN TABLE */
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col mb-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-12 text-center">No</th>
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-48">Waktu</th>
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-56">Jenis Mutasi</th>
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Keterangan</th>
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right w-48">Nominal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {filteredSaldoTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-16 text-center text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest bg-slate-50/10">
+                        Tidak ada mutasi saldo dalam filter ini
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSaldoTransactions.map((t, i) => {
+                      const dateObj = parseLocalISO(t.timestamp)
+                      const jam = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                      const tgl = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                      
+                      let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+                      if (t.kategori.includes('Bank')) badgeStyle = "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30";
+                      else if (t.kategori.includes('Real')) badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30";
+                      else if (t.kategori.includes('Modal')) badgeStyle = "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100 dark:bg-fuchsia-950/30 dark:text-fuchsia-400 dark:border-fuchsia-900/30";
+
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                          <td className="py-3.5 px-5 text-xs text-slate-400 dark:text-slate-500 font-bold text-center">{i + 1}</td>
+                          <td className="py-3.5 px-5 text-xs text-slate-500 dark:text-slate-400 font-medium">{tgl} • {jam}</td>
+                          <td className="py-3.5 px-5">
+                            <span className={cn("text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border", badgeStyle)}>
+                              {t.kategori.replace('Isi ', 'TAMBAH ')}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-xs text-slate-600 dark:text-slate-400 font-bold">{t.keterangan || '-'}</td>
+                          <td className="py-3.5 px-5 text-xs font-black text-right text-slate-900 dark:text-white">{t.nominal.toLocaleString('id-ID')}</td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredSaldoTransactions.length > 0 && (
+              <div className="bg-slate-50/50 dark:bg-slate-800/80 px-6 py-4 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 shadow-sm">
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{filteredSaldoTransactions.length} Items</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black text-xs whitespace-nowrap uppercase flex items-center gap-1.5">
+                  <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold">TOTAL PENAMBAHAN:</span>
+                  {formatRupiah(totalSaldoNominal).replace(',00', '')}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")} style={{ backgroundColor: 'var(--container-bg, #ffffff)' }}>

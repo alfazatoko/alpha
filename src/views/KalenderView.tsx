@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { cn } from "../lib/utils";
 
 const MONTH_NAMES = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -75,7 +76,7 @@ interface Holiday {
   type: "merah" | "cuti";
 }
 
-const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void }> = ({ active, setActiveView }) => {
+const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void; isPc?: boolean }> = ({ active, setActiveView, isPc }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [yearHolidays, setYearHolidays] = useState<Holiday[]>([]);
@@ -93,7 +94,6 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
   const fetchHolidays = async (year: number) => {
     setLoading(true);
     try {
-      // Nager API as base for official Gregorian holidays
       let formatted: Holiday[] = [];
       try {
         const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/ID`);
@@ -114,9 +114,7 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
         console.warn("Nager API failed", e);
       }
 
-      // Hardcoded missing holidays and Cuti Bersama for 2025 & 2026
       const extraHolidays = [
-        // 2025
         { date: 27, month: 0, year: 2025, name: "Isra Mikraj", type: "merah" },
         { date: 28, month: 0, year: 2025, name: "Cuti Bersama Isra Mikraj/Imlek", type: "cuti" },
         { date: 29, month: 0, year: 2025, name: "Tahun Baru Imlek", type: "merah" },
@@ -136,7 +134,6 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
         { date: 27, month: 5, year: 2025, name: "Tahun Baru Islam 1447 H", type: "merah" },
         { date: 5, month: 8, year: 2025, name: "Maulid Nabi Muhammad SAW", type: "merah" },
         { date: 26, month: 11, year: 2025, name: "Cuti Bersama Natal", type: "cuti" },
-        // 2026
         { date: 17, month: 1, year: 2026, name: "Isra Mikraj / Imlek", type: "merah" },
         { date: 18, month: 1, year: 2026, name: "Cuti Bersama", type: "cuti" },
         { date: 19, month: 2, year: 2026, name: "Hari Suci Nyepi", type: "merah" },
@@ -159,13 +156,11 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
         if (!formatted.find(f => f.date === extra.date && f.month === extra.month)) {
           formatted.push(extra as Holiday);
         } else if (extra.type === "cuti") {
-          // If exist but we want it as cuti, update it
           const idx = formatted.findIndex(f => f.date === extra.date && f.month === extra.month);
           if (idx !== -1) formatted[idx] = extra as Holiday;
         }
       });
 
-      // Sort by date and month
       formatted.sort((a, b) => {
         if (a.month !== b.month) return a.month - b.month;
         return a.date - b.date;
@@ -174,7 +169,7 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
       setYearHolidays(formatted);
     } catch (e) {
       console.warn("Holiday fetch suppressed or failed:", e);
-      setYearHolidays([]); // Fallback to empty
+      setYearHolidays([]);
     } finally {
       setLoading(false);
     }
@@ -190,6 +185,65 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
 
   const firstHijri = getHijriDate(firstDayOfMonth);
   const lastHijri = getHijriDate(lastDayOfMonth);
+
+  const renderPcCells = () => {
+    const cells = [];
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      const dayNum = prevMonthLastDay - startingDayOfWeek + i + 1;
+      cells.push(
+        <div key={`prev-${i}`} className="border-b border-r border-slate-100 dark:border-slate-700/50 p-3 bg-slate-50/50 dark:bg-slate-900/10 flex flex-col justify-between h-[100px] opacity-40">
+          <span className="text-xl font-bold text-slate-300 dark:text-slate-700">{dayNum}</span>
+        </div>
+      );
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateObj = new Date(currentYear, currentMonth, i);
+      const isSunday = dateObj.getDay() === 0;
+      const holiday = holidays.find(h => h.date === i);
+      let gregorianColor = "text-slate-800 dark:text-slate-100";
+      if (isSunday || holiday?.type === "merah") gregorianColor = "text-rose-500 font-black";
+      else if (holiday?.type === "cuti") gregorianColor = "text-amber-500 font-black";
+
+      const hijri = getHijriDate(dateObj);
+      const hijriColor = hijri.month === firstHijri.month ? "text-emerald-600 dark:text-emerald-400" : "text-blue-600 dark:text-blue-400";
+      const isToday = i === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
+      const isSelected = selectedDate?.getDate() === i && selectedDate?.getMonth() === currentMonth && selectedDate?.getFullYear() === currentYear;
+
+      let cellBg = "bg-white dark:bg-slate-800";
+      if (isSelected) cellBg = "bg-sky-50 dark:bg-sky-950/20 ring-inset ring-2 ring-sky-500 z-10";
+      else if (isToday) cellBg = "bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100/50 dark:hover:bg-amber-950/30";
+      else cellBg = "bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50";
+
+      cells.push(
+        <div 
+          key={`curr-${i}`} 
+          onClick={() => setSelectedDate(dateObj)} 
+          className={`border-b border-r border-slate-100 dark:border-slate-700/50 p-3 flex flex-col justify-between h-[100px] cursor-pointer transition-all ${cellBg}`}
+        >
+          <div className="flex justify-between items-start">
+            <span className={`text-xl font-bold ${gregorianColor}`}>{i}</span>
+            {isToday && (
+              <span className="text-[7px] font-black uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none">Hari Ini</span>
+            )}
+          </div>
+          <div className="flex flex-col items-end">
+            <span className={`text-[10px] font-black ${hijriColor}`}>{hijri.day}</span>
+            <span className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight">{hijri.month.split(' ')[0]}</span>
+          </div>
+        </div>
+      );
+    }
+    const totalCells = cells.length;
+    const remainingCells = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= remainingCells; i++) {
+      cells.push(
+        <div key={`next-${i}`} className="border-b border-r border-slate-100 dark:border-slate-700/50 p-3 bg-slate-50/50 dark:bg-slate-900/10 flex flex-col justify-between h-[100px] opacity-40">
+          <span className="text-xl font-bold text-slate-300 dark:text-slate-700">{i}</span>
+        </div>
+      );
+    }
+    return cells;
+  };
 
   const renderCells = () => {
     const cells = [];
@@ -241,6 +295,168 @@ const KalenderView: React.FC<{ active: boolean; setActiveView: (v: string) => vo
   };
 
   if (!active) return null;
+
+  if (isPc) {
+    const selectedHijri = selectedDate ? getHijriDate(selectedDate) : null;
+    const selectedHoliday = selectedDate ? holidays.find(h => h.date === selectedDate.getDate()) : null;
+    
+    return (
+      <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+        
+        <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
+          <div>
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Kalender Kerja & Hari Libur</h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Sistem kalender gregorian terintegrasi dengan penanggalan hijriah & hari libur nasional</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Pilih Tahun:</span>
+            <div className="relative">
+              <select 
+                className="border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 pr-10 font-black text-xs focus:outline-none bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-all appearance-none cursor-pointer"
+                value={currentYear}
+                onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), currentMonth, 1))}
+              >
+                {Array.from({length: 10}).map((_, i) => {
+                  const y = new Date().getFullYear() - 5 + i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-grow flex overflow-hidden p-8 gap-8">
+          
+          <div className="w-[320px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
+            
+            {selectedDate && (
+              <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 shrink-0">
+                <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pb-2 border-b border-slate-100 dark:border-slate-700">Tanggal Terpilih</h4>
+                
+                <div className="text-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <p className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">{selectedDate.getDate()}</p>
+                  <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mt-1">{MONTH_NAMES[selectedDate.getMonth()]} {selectedDate.getFullYear()}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    {DAY_NAMES[selectedDate.getDay()].full}
+                  </p>
+                </div>
+
+                {selectedHijri && (
+                  <div className="flex justify-between items-center text-[10px] font-bold bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30">
+                    <span className="text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Hijriah</span>
+                    <span className="text-emerald-900 dark:text-emerald-300">{selectedHijri.day} {selectedHijri.month} {selectedHijri.year} H</span>
+                  </div>
+                )}
+
+                {selectedHoliday && (
+                  <div className={cn(
+                    "p-3 rounded-xl border text-[10px] font-bold leading-relaxed",
+                    selectedHoliday.type === 'merah' 
+                      ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-400"
+                      : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400"
+                  )}>
+                    <p className="uppercase tracking-widest text-[8px] font-black mb-1">Hari Libur:</p>
+                    <p>{selectedHoliday.name}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden flex-grow flex flex-col min-h-[200px]">
+              <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-700 shrink-0">
+                <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Daftar Libur Bulan Ini</h4>
+              </div>
+              
+              <div className="flex-grow overflow-y-auto scrollbar-thin p-6">
+                {loading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  </div>
+                ) : holidays.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-center">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Tidak ada libur</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {holidays.map((h, i) => (
+                      <div 
+                        key={i} 
+                        onClick={() => setSelectedDate(new Date(currentYear, currentMonth, h.date))}
+                        className={cn(
+                          "p-3 rounded-2xl border text-xs font-bold flex gap-3 cursor-pointer hover:scale-[1.02] transition-transform",
+                          h.type === "merah" 
+                            ? "bg-rose-50/50 border-rose-100/50 text-rose-600 dark:bg-rose-950/10 dark:border-rose-900/20 dark:text-rose-400" 
+                            : "bg-amber-50/50 border-amber-100/50 text-amber-600 dark:bg-amber-950/10 dark:border-amber-900/20 dark:text-amber-400"
+                        )}
+                      >
+                        <span className="w-6 shrink-0 text-center font-black">{h.date}</span>
+                        <span className="flex-1">{h.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          <div className="flex-grow h-full bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+            
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <button 
+                  onClick={() => setCurrentDate(new Date(currentYear, currentMonth - 1, 1))}
+                  className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  <i className="fa-solid fa-chevron-left text-xs"></i>
+                </button>
+                <button 
+                  onClick={() => setCurrentDate(new Date())}
+                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  Hari Ini
+                </button>
+                <button 
+                  onClick={() => setCurrentDate(new Date(currentYear, currentMonth + 1, 1))}
+                  className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  <i className="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+              </div>
+
+              <div className="text-center">
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{MONTH_NAMES[currentMonth]} {currentYear}</h3>
+                <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">
+                  {firstHijri.month} {firstHijri.year} H - {lastHijri.month} {lastHijri.year} H
+                </p>
+              </div>
+
+              <div className="w-[120px]"></div>
+            </div>
+
+            <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-700 shrink-0 bg-slate-50/50 dark:bg-slate-900/20">
+              {DAY_NAMES.map((d, i) => (
+                <div key={i} className="flex flex-col items-center justify-center py-3 border-r border-slate-100 dark:border-slate-700/50 last:border-r-0">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${d.isWeekend ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'}`}>{d.full}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 flex-grow overflow-y-auto scrollbar-thin">
+              {renderPcCells()}
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  if (isPc) return null; // safety fallback
 
   return (
     <div className="page-view active bg-gray-100 hide-scrollbar pb-24">
