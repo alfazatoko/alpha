@@ -59,6 +59,18 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     }
   }, [props.currentUsername, props.kasirList])
 
+  // State for local smooth typing in Store Profile
+  const [localStoreName, setLocalStoreName] = useState(props.storeName || '')
+  const [localStoreSubtext, setLocalStoreSubtext] = useState(props.storeSubtext || '')
+
+  useEffect(() => {
+    setLocalStoreName(props.storeName || '')
+  }, [props.storeName])
+
+  useEffect(() => {
+    setLocalStoreSubtext(props.storeSubtext || '')
+  }, [props.storeSubtext])
+
   const handleUploadToCloud = async () => {
     if (!props.onUploadToCloud) return
     setIsCloudLoading(true)
@@ -273,10 +285,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       <label className="text-[9px] font-black text-emerald-600 uppercase tracking-tight ml-1 mb-2 block">Nama Toko</label>
                       <input 
                         type="text" 
-                        value={props.storeName || ''} 
-                        onChange={(e) => props.onSaveStoreName?.(e.target.value)}
+                        value={localStoreName} 
+                        onChange={(e) => setLocalStoreName(e.target.value)}
+                        onBlur={() => {
+                          if (localStoreName !== props.storeName) {
+                            props.onSaveStoreName?.(localStoreName)
+                          }
+                        }}
                         placeholder="Nama Toko Anda"
                         className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                       />
                     </div>
 
@@ -284,10 +302,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       <label className="text-[9px] font-black text-emerald-600 uppercase tracking-tight ml-1 mb-2 block">Sub-Teks / Slogan</label>
                       <input 
                         type="text" 
-                        value={props.storeSubtext || ''} 
-                        onChange={(e) => props.onSaveStoreSubtext?.(e.target.value)}
+                        value={localStoreSubtext} 
+                        onChange={(e) => setLocalStoreSubtext(e.target.value)}
+                        onBlur={() => {
+                          if (localStoreSubtext !== props.storeSubtext) {
+                            props.onSaveStoreSubtext?.(localStoreSubtext)
+                          }
+                        }}
                         placeholder="Contoh: Pembukuan Agen brilink & Konter"
                         className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                       />
                     </div>
                   </div>
