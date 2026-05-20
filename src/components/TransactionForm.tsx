@@ -316,10 +316,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="relative group">
-            <label className="block text-[10px] font-black text-gray-700 mb-1.5 uppercase tracking-widest flex items-center gap-1.5 ml-1">
-              <i className="fa-solid fa-coins text-yellow-500"></i>
-              {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
-            </label>
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-coins text-yellow-500"></i>
+                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
+              </label>
+            </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
