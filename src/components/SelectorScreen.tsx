@@ -160,14 +160,14 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   }
 
   return (
-    <div className="login-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-50 via-slate-100 to-gray-200 min-h-screen w-screen overflow-y-auto">
+    <div className="login-screen flex items-start justify-center p-4 bg-gradient-to-br from-gray-50 via-slate-100 to-gray-200 min-h-screen w-screen overflow-y-auto pb-40 pt-10">
       {/* Background decoration */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[120px]"></div>
       </div>
 
-      <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-[2.5rem] p-8 shadow-2xl relative z-10 flex flex-col my-8">
+      <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative z-10 flex flex-col mb-10">
         
         {/* Top Header */}
         <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-100">
@@ -180,28 +180,6 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
               <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-1">Multi-Store Switcher</p>
             </div>
           </div>
-          <button 
-            onClick={onLogoutGoogle}
-            className="bg-gray-100 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-600 transition-all active:scale-95 shadow-sm"
-          >
-            Logout Google
-          </button>
-        </div>
-
-        {/* User Info Card */}
-        <div className="bg-blue-50 border border-blue-100/50 p-4 rounded-2xl mb-8 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500/15 text-blue-600 flex items-center justify-center border border-blue-200">
-              <i className="fa-solid fa-user-shield text-lg"></i>
-            </div>
-            <div>
-              <p className="text-[9px] text-blue-600 font-black uppercase tracking-widest">Signed In As Owner</p>
-              <p className="text-xs font-bold text-gray-800">{googleEmail}</p>
-            </div>
-          </div>
-          <span className="text-[8px] bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 px-2 py-1 rounded-full font-black uppercase tracking-wider">
-            Connected
-          </span>
         </div>
 
         {error && (
@@ -364,16 +342,41 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
           </div>
         )}
 
+        {/* User Info & Logout (Moved to bottom) */}
+        <div className="mt-8 pt-6 border-t border-gray-100 flex flex-col gap-4">
+          <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex justify-between items-center flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-500/15 text-blue-600 flex items-center justify-center border border-blue-200 shrink-0">
+                <i className="fa-solid fa-user-shield text-lg"></i>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] text-blue-600 font-black uppercase tracking-widest">Signed In As Owner</p>
+                <p className="text-xs font-bold text-gray-800 break-all">{googleEmail}</p>
+              </div>
+            </div>
+            <span className="text-[8px] bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 px-2 py-1 rounded-full font-black uppercase tracking-wider shrink-0">
+              Connected
+            </span>
+          </div>
+          
+          <button 
+            onClick={onLogoutGoogle}
+            className="w-full bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 transition-all active:scale-95 shadow-sm flex justify-center items-center gap-2"
+          >
+            <i className="fa-solid fa-right-from-bracket"></i> Logout Akun Google
+          </button>
+        </div>
+
         {/* Footer */}
-        <p className="text-center text-[8px] text-gray-400 font-black uppercase tracking-[0.2em] mt-12 pt-6 border-t border-gray-100">
+        <p className="text-center text-[8px] text-gray-400 font-black uppercase tracking-[0.2em] mt-6">
           ALPHA Pro • Cloud Sync Multi-Tenant
         </p>
       </div>
 
       {/* ===== PIN MODAL OVERLAY ===== */}
       {showPinModal && (
-        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] p-6 w-full max-w-[320px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300 border border-gray-100">
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-start md:items-center justify-center p-4 pt-16 md:pt-4 overflow-y-auto pb-40 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-[320px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300 border border-gray-100 m-auto mt-4 md:m-auto">
             
             {!showEditOwner ? (
               /* --- PIN Entry Mode --- */
