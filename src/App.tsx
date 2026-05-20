@@ -746,16 +746,44 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  const saveRunningTexts = (texts: string[]) => {
+  const saveRunningTexts = async (texts: string[]) => {
     setRunningTexts(texts)
-    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_runningTexts` : 'alphaPro_runningTexts'
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    const key = targetId !== 'all' ? `alphaPro_${targetId}_runningTexts` : 'alphaPro_runningTexts'
     localStorage.setItem(key, JSON.stringify(texts))
+
+    if (targetId !== 'all') {
+      const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      await supabase.from('store_settings').upsert({
+        store_id: targetId,
+        cashiers: kasirList,
+        presets: presets,
+        running_texts: texts,
+        main_announcement: mainAnnouncement,
+        is_pin_enabled: isPin,
+        updated_at: new Date().toISOString()
+      })
+    }
   }
 
-  const saveMainAnnouncement = (text: string) => {
+  const saveMainAnnouncement = async (text: string) => {
     setMainAnnouncement(text)
-    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_mainAnnouncement` : 'alphaPro_mainAnnouncement'
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    const key = targetId !== 'all' ? `alphaPro_${targetId}_mainAnnouncement` : 'alphaPro_mainAnnouncement'
     localStorage.setItem(key, text)
+
+    if (targetId !== 'all') {
+      const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      await supabase.from('store_settings').upsert({
+        store_id: targetId,
+        cashiers: kasirList,
+        presets: presets,
+        running_texts: runningTexts,
+        main_announcement: text,
+        is_pin_enabled: isPin,
+        updated_at: new Date().toISOString()
+      })
+    }
   }
 
 

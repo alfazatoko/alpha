@@ -71,6 +71,22 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     setLocalStoreSubtext(props.storeSubtext || '')
   }, [props.storeSubtext])
 
+  // State for local smooth typing in Promo Settings
+  const [localMainAnnouncement, setLocalMainAnnouncement] = useState(props.mainAnnouncement || '')
+  const [localRunningTextsText, setLocalRunningTextsText] = useState(() => {
+    const texts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
+    return texts.filter(t => t.trim() !== '').join('\n')
+  })
+
+  useEffect(() => {
+    setLocalMainAnnouncement(props.mainAnnouncement || '')
+  }, [props.mainAnnouncement])
+
+  useEffect(() => {
+    const texts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
+    setLocalRunningTextsText(texts.filter(t => t.trim() !== '').join('\n'))
+  }, [props.runningTexts])
+
   const handleUploadToCloud = async () => {
     if (!props.onUploadToCloud) return
     setIsCloudLoading(true)
@@ -402,8 +418,13 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Teks Utama (Highlight)</label>
                       <input 
                         type="text" 
-                        value={props.mainAnnouncement || ''} 
-                        onChange={(e) => props.onSaveMainAnnouncement?.(e.target.value)}
+                        value={localMainAnnouncement} 
+                        onChange={(e) => setLocalMainAnnouncement(e.target.value)}
+                        onBlur={() => {
+                          if (localMainAnnouncement !== props.mainAnnouncement) {
+                            props.onSaveMainAnnouncement?.(localMainAnnouncement)
+                          }
+                        }}
                         placeholder="Contoh: Promo Aksesoris 20%..."
                         className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 placeholder:text-gray-400 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
                       />
@@ -417,9 +438,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       <div className="relative group/textarea">
                         <textarea 
                           rows={8}
-                          value={safeRunningTexts.filter(t => t.trim() !== '').join('\n')}
-                          onChange={(e) => {
-                            const lines = e.target.value.split('\n');
+                          value={localRunningTextsText}
+                          onChange={(e) => setLocalRunningTextsText(e.target.value)}
+                          onBlur={() => {
+                            const lines = localRunningTextsText.split('\n');
                             const newTexts = Array(15).fill('');
                             lines.slice(0, 15).forEach((line, i) => {
                               newTexts[i] = line;
