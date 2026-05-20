@@ -14,6 +14,7 @@ interface OtomatisViewProps {
   kasirName?: string
   kasirRole?: string
   setIsSidePanelOpen?: (v: boolean) => void
+  onConfirm?: (title: string, message: string, onConfirm: () => void) => void
 }
 
 const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
@@ -23,6 +24,14 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   const [formModal, setFormModal] = useState('')
   const [formJual, setFormJual] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({})
+
+  const toggleCategory = (kat: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [kat]: !prev[kat]
+    }))
+  }
   
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -79,9 +88,20 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   }
 
   const handleDelete = (id: string) => {
-    if (confirm('Hapus preset ini?')) {
-      props.setPresets(props.presets.filter(p => p.id !== id))
-      props.showToast('Preset dihapus!')
+    if (props.onConfirm) {
+      props.onConfirm(
+        "HAPUS PRESET",
+        "Apakah Anda yakin ingin menghapus preset teks otomatis ini?",
+        () => {
+          props.setPresets(props.presets.filter(p => p.id !== id))
+          props.showToast('Preset dihapus!')
+        }
+      )
+    } else {
+      if (confirm('Hapus preset ini?')) {
+        props.setPresets(props.presets.filter(p => p.id !== id))
+        props.showToast('Preset dihapus!')
+      }
     }
   }
 
@@ -238,33 +258,63 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                 const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
                 if (filtered.length === 0) return null;
                 
+                const isCollapsed = !!collapsedCategories[kat];
+                
                 return (
-                  <div key={kat} className="space-y-1.5">
-                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">{kat}</h4>
-                    <div className={kat === 'Order Kuota' ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5"}>
-                      {filtered.map(p => (
-                        <div key={p.id} className="bg-white p-2 rounded-lg border border-gray-200 flex items-center justify-between gap-1 shadow-sm">
-                          <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <h4 className="text-[10px] font-black text-gray-800 truncate leading-tight">{p.keterangan}</h4>
-                            {kat === 'Order Kuota' && (
-                              <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
-                                <span className="text-blue-600">M:{p.modal/1000}k</span>
-                                <span className="text-gray-300">|</span>
-                                <span className="text-emerald-600">J:{p.jual/1000}k</span>
-                              </div>
-                            )}
+                  <div key={kat} className="space-y-2 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
+                    {/* Category Header (Clickable Toggle) */}
+                    <button 
+                      onClick={() => toggleCategory(kat)}
+                      className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
+                    >
+                      <h4 className="text-[10px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                        {kat}
+                        <span className="text-[8px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-bold">
+                          {filtered.length} preset
+                        </span>
+                      </h4>
+                      <div className="flex items-center gap-1.5 text-gray-400 group-hover:text-purple-600 transition-colors">
+                        <span className="text-[8px] font-bold uppercase tracking-tighter">
+                          {isCollapsed ? 'Tampilkan' : 'Sembunyikan'}
+                        </span>
+                        <i className={cn(
+                          "fa-solid text-[9px] transition-transform duration-200",
+                          isCollapsed ? "fa-chevron-right" : "fa-chevron-down"
+                        )}></i>
+                      </div>
+                    </button>
+
+                    {/* Presets List (Conditionally rendered/hidden) */}
+                    {!isCollapsed && (
+                      <div className={cn(
+                        "pt-2.5 border-t border-gray-100/60 animate-in fade-in duration-200",
+                        kat === 'Order Kuota' ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5"
+                      )}>
+                        {filtered.map(p => (
+                          <div key={p.id} className="bg-gray-50/50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between gap-1 shadow-sm">
+                            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                              <h4 className="text-[10px] font-bold text-gray-800 truncate leading-tight">{p.keterangan}</h4>
+                              {kat === 'Order Kuota' && (
+                                <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
+                                  <span className="text-blue-600">M:{p.modal/1000}k</span>
+                                  <span className="text-gray-300">|</span>
+                                  <span className="text-emerald-600">J:{p.jual/1000}k</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-0.5 shrink-0">
+                              <button onClick={() => handleEdit(p)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all">
+                                <i className="fa-solid fa-pen text-[9px]"></i>
+                              </button>
+                              <button onClick={() => handleDelete(p.id)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
+                                <i className="fa-solid fa-xmark text-[10px]"></i>
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex gap-0.5 shrink-0">
-                            <button onClick={() => handleEdit(p)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all">
-                              <i className="fa-solid fa-pen text-[9px]"></i>
-                            </button>
-                            <button onClick={() => handleDelete(p.id)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
-                              <i className="fa-solid fa-xmark text-[10px]"></i>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}

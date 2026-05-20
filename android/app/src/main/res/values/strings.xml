@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">ALFAZA CELL</string>
-    <string name="title_activity_main">ALFAZA CELL</string>
+    <string name="app_name">AlfazaCell</string>
+    <string name="title_activity_main">AlfazaCell</string>
     <string name="package_name">com.alfazacell.alpha</string>
     <string name="custom_url_scheme">com.alfazacell.alpha</string>
 </resources>

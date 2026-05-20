@@ -27,9 +27,11 @@ export const saveKasirAccounts = (accounts: Record<string, KasirAccount>) => {
 
 interface LoginScreenProps {
   onLogin: (username: string, account: KasirAccount) => void
+  storeName?: string
+  kasirListOverride?: Record<string, KasirAccount>
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirListOverride }) => {
   const [selectedUser, setSelectedUser] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
@@ -38,8 +40,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
 
   useEffect(() => {
-    setKasirList(getKasirAccounts())
-  }, [])
+    if (kasirListOverride && Object.keys(kasirListOverride).length > 0) {
+      setKasirList(kasirListOverride)
+    } else {
+      setKasirList(getKasirAccounts())
+    }
+  }, [kasirListOverride])
+
 
 
   // Check if PIN is enabled from localStorage
@@ -99,9 +106,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="login-header">
           <img src="/logo_icon.png" alt="ALPHA Logo" className="w-20 h-20 object-contain mx-auto mb-4 drop-shadow-xl" />
           <h1 className="login-title">
-            ALPHA <span className="login-title-accent">Pro</span>
+            {storeName ? storeName.toUpperCase() : 'ALPHA'} <span className="login-title-accent">{storeName ? '' : 'Pro'}</span>
           </h1>
-          <p className="login-subtitle">Pembukuan Agen brilink & Konter</p>
+          <p className="login-subtitle">{storeName ? 'Login Kasir' : 'Pembukuan Agen brilink & Konter'}</p>
+
         </div>
 
         {/* Form */}

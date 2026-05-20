@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['logo_icon.png', 'icons.svg'],
       manifest: {
-        name: 'ALFAZA CELL',
-        short_name: 'ALFAZA CELL',
-        description: 'ALFAZA CELL',
+        name: 'AlfazaCell',
+        short_name: 'AlfazaCell',
+        description: 'AlfazaCell',
         theme_color: '#005daa',
         orientation: 'any',
         icons: [

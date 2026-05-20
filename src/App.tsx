@@ -9,9 +9,12 @@ import type { Transaction } from './types'
 // Components
 import Navigation from './components/Navigation'
 import SidePanel from './components/SidePanel'
-import LoginScreen, { getKasirAccounts, type KasirAccount } from './components/LoginScreen'
+import LoginScreen, { type KasirAccount } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
+import { SelectorScreen } from './components/SelectorScreen'
+import type { Store } from './types'
+
 
 // Views
 import BerandaView from './views/BerandaView'
@@ -43,29 +46,16 @@ const App: React.FC = () => {
   const [googleSession, setGoogleSession] = useState<any>(hasBypass ? { user: { id: 'bypass-google-uid', email: 'demo@alfaza.com' } } : null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(hasBypass ? false : true)
 
+  // ── Multi-Store States ──
+  const [selectedRole, setSelectedRole] = useState<'owner' | 'kasir' | null>(null)
+  const [activeStoreId, setActiveStoreId] = useState<string | 'all'>('all')
+  const [activeStore, setActiveStore] = useState<Store | null>(null)
+
   // ── Kasir Profile State ──
   const [isLoggedIn, setIsLoggedIn] = useState(hasBypass ? true : false)
   const [currentUsername, setCurrentUsername] = useState(hasBypass ? 'demo_owner' : '')
   const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(hasBypass ? { name: 'Demo Owner', role: 'owner', pin: '1234' } : null)
-  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>(() => {
-    const list = getKasirAccounts()
-    if (hasBypass && Object.keys(list).length === 0) {
-      list['demo_owner'] = { name: 'Demo Owner', role: 'owner', pin: '1234' }
-    }
-    return list
-  })
-
-  const refreshKasirList = useCallback(() => {
-    const list = getKasirAccounts()
-    if (hasBypass && Object.keys(list).length === 0) {
-      list['demo_owner'] = { name: 'Demo Owner', role: 'owner', pin: '1234' }
-    }
-    setKasirList(list)
-  }, [hasBypass])
-
-  useEffect(() => {
-    refreshKasirList()
-  }, [refreshKasirList])
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
 
   // Check Supabase Auth
   useEffect(() => {
@@ -120,13 +110,64 @@ const App: React.FC = () => {
   useEffect(() => {
     const storedLoggedIn = localStorage.getItem('alphaPro_loggedIn')
     const storedUsername = localStorage.getItem('alphaPro_username')
-    const kasirList = getKasirAccounts()
-    if (storedLoggedIn === 'true' && storedUsername && kasirList[storedUsername]) {
-      setIsLoggedIn(true)
-      setCurrentUsername(storedUsername)
-      setCurrentAccount(kasirList[storedUsername])
+    const storedRole = localStorage.getItem('alphaPro_active_role') as 'owner' | 'kasir' | null
+    const storedStoreId = localStorage.getItem('alphaPro_active_store_id') || 'all'
+    const storedStore = localStorage.getItem('alphaPro_active_store')
+
+    if (storedRole) {
+      setSelectedRole(storedRole)
+      setActiveStoreId(storedStoreId)
+      if (storedStore) {
+        try { setActiveStore(JSON.parse(storedStore)) } catch(e){}
+      }
+
+      if (storedRole === 'owner') {
+        setIsLoggedIn(true)
+        setCurrentUsername('owner')
+        setCurrentAccount({ name: 'Owner', role: 'owner', pin: '' })
+      } else if (storedLoggedIn === 'true' && storedUsername) {
+        const storeKasirs = localStorage.getItem(`alphaPro_${storedStoreId}_kasir_list`)
+        if (storeKasirs) {
+          try {
+            const kList = JSON.parse(storeKasirs)
+            if (kList[storedUsername]) {
+              setIsLoggedIn(true)
+              setCurrentUsername(storedUsername)
+              setCurrentAccount(kList[storedUsername])
+              setKasirList(kList)
+            }
+          } catch(e){}
+        }
+      }
     }
   }, [])
+
+  // Fetch store settings when activeStoreId changes
+  useEffect(() => {
+    if (!googleSession || activeStoreId === 'all') return
+
+    const fetchStoreSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('*')
+          .eq('store_id', activeStoreId)
+          .maybeSingle()
+
+        if (error) throw error
+
+        if (data) {
+          const cList = data.cashiers || {}
+          setKasirList(cList)
+          localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(cList))
+        }
+      } catch (err) {
+        console.error('Error fetching store settings:', err)
+      }
+    }
+
+    fetchStoreSettings()
+  }, [activeStoreId, googleSession])
 
   // ── Login / Logout Handlers ──
   const handleLogin = useCallback((username: string, account: KasirAccount) => {
@@ -137,9 +178,60 @@ const App: React.FC = () => {
     setIsLoggedIn(true)
     setCurrentUsername(username)
     setCurrentAccount(account)
+    window.location.hash = '#/beranda'
   }, [])
 
-  const handleLogout = useCallback(() => {
+  const handleSelectRole = (role: 'owner' | 'kasir', storeId: string | 'all', store?: Store) => {
+    setSelectedRole(role)
+    setActiveStoreId(storeId)
+    setActiveStore(store || null)
+    localStorage.setItem('alphaPro_active_role', role)
+    localStorage.setItem('alphaPro_active_store_id', storeId)
+    if (store) {
+      localStorage.setItem('alphaPro_active_store', JSON.stringify(store))
+    } else {
+      localStorage.removeItem('alphaPro_active_store')
+    }
+
+    window.location.hash = '#/beranda'
+
+    if (role === 'owner') {
+      localStorage.setItem('alphaPro_loggedIn', 'true')
+      localStorage.setItem('alphaPro_username', 'owner')
+      localStorage.setItem('alphaPro_name', 'Owner')
+      localStorage.setItem('alphaPro_role', 'owner')
+      setIsLoggedIn(true)
+      setCurrentUsername('owner')
+      setCurrentAccount({ name: 'Owner', role: 'owner', pin: '' })
+    } else {
+      localStorage.removeItem('alphaPro_loggedIn')
+      localStorage.removeItem('alphaPro_username')
+      localStorage.removeItem('alphaPro_name')
+      localStorage.removeItem('alphaPro_role')
+      setIsLoggedIn(false)
+      setCurrentUsername('')
+      setCurrentAccount(null)
+    }
+  }
+
+  const handleExitStore = () => {
+    localStorage.removeItem('alphaPro_loggedIn')
+    localStorage.removeItem('alphaPro_username')
+    localStorage.removeItem('alphaPro_name')
+    localStorage.removeItem('alphaPro_role')
+    localStorage.removeItem('alphaPro_active_role')
+    localStorage.removeItem('alphaPro_active_store_id')
+    localStorage.removeItem('alphaPro_active_store')
+    setSelectedRole(null)
+    setActiveStoreId('all')
+    setActiveStore(null)
+    setIsLoggedIn(false)
+    setCurrentUsername('')
+    setCurrentAccount(null)
+    window.location.hash = '#/beranda'
+  }
+
+  const handleLogoutCashierOnly = () => {
     localStorage.removeItem('alphaPro_loggedIn')
     localStorage.removeItem('alphaPro_username')
     localStorage.removeItem('alphaPro_name')
@@ -147,7 +239,20 @@ const App: React.FC = () => {
     setIsLoggedIn(false)
     setCurrentUsername('')
     setCurrentAccount(null)
-  }, [])
+    window.location.hash = '#/beranda'
+  }
+
+  const handleLogoutGoogle = async () => {
+    localStorage.clear()
+    setSelectedRole(null)
+    setActiveStoreId('all')
+    setActiveStore(null)
+    setIsLoggedIn(false)
+    setCurrentUsername('')
+    setCurrentAccount(null)
+    window.location.hash = '#/beranda'
+    await supabase.auth.signOut()
+  }
 
   // ── Show loading if checking auth ──
   if (isCheckingAuth) {
@@ -159,17 +264,33 @@ const App: React.FC = () => {
     return <GoogleAuthScreen />
   }
 
-  // ── Show Profile Selection (Kasir) if not selected ──
+  // ── Show Selector Screen if role not selected ──
+  if (!selectedRole) {
+    return (
+      <SelectorScreen 
+        googleUid={googleSession.user.id} 
+        googleEmail={googleSession.user.email} 
+        onSelectRole={handleSelectRole} 
+        onLogoutGoogle={handleLogoutGoogle} 
+      />
+    )
+  }
+
+  // ── Show Profile Selection (Kasir) if not logged in ──
   if (!isLoggedIn || !currentAccount) {
     return (
       <div className="relative">
         <button 
-          onClick={() => supabase.auth.signOut()} 
-          className="absolute top-4 right-4 z-50 bg-white/50 backdrop-blur-md px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 border border-red-100 hover:bg-red-50 transition-all"
+          onClick={handleExitStore} 
+          className="absolute top-4 right-4 z-50 bg-white/50 backdrop-blur-md px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-blue-600 border border-blue-100 hover:bg-blue-50 transition-all shadow-md"
         >
-          Logout Google
+          Pilih Toko Lain
         </button>
-        <LoginScreen onLogin={handleLogin} />
+        <LoginScreen 
+          onLogin={handleLogin} 
+          storeName={activeStore?.name} 
+          kasirListOverride={kasirList} 
+        />
       </div>
     )
   }
@@ -181,10 +302,18 @@ const App: React.FC = () => {
       account={currentAccount} 
       googleUid={googleSession.user.id} 
       googleEmail={googleSession.user.email}
-      onLogout={handleLogout}
+      onLogout={selectedRole === 'owner' ? handleExitStore : handleLogoutCashierOnly}
       kasirList={kasirList}
-      refreshKasirList={refreshKasirList}
+      setKasirList={setKasirList}
+      refreshKasirList={() => {}}
       isLoggedIn={isLoggedIn}
+      activeStoreId={activeStoreId}
+      activeRole={selectedRole}
+      activeStore={activeStore}
+      onUpdateActiveCashier={(uname, acc) => {
+        setCurrentUsername(uname)
+        setCurrentAccount(acc)
+      }}
     />
   )
 }
@@ -199,11 +328,31 @@ interface MainAppProps {
   googleEmail?: string
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
+  setKasirList: React.Dispatch<React.SetStateAction<Record<string, KasirAccount>>>
   refreshKasirList: () => void
   isLoggedIn: boolean
+  activeStoreId: string | 'all'
+  activeRole: 'owner' | 'kasir'
+  activeStore: Store | null
+  onUpdateActiveCashier: (username: string, account: KasirAccount) => void
 }
 
-const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleEmail, onLogout, kasirList, refreshKasirList, isLoggedIn }) => {
+const MainApp: React.FC<MainAppProps> = ({ 
+  username, 
+  account, 
+  googleUid, 
+  googleEmail, 
+  onLogout, 
+  kasirList, 
+  setKasirList,
+  refreshKasirList, 
+  isLoggedIn,
+  activeStoreId,
+  activeRole,
+  activeStore,
+  onUpdateActiveCashier
+}) => {
+
   // PWA Update State
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -212,6 +361,11 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
+
+  // ── Multi-Store States & Derived Store Info ──
+  const [pantauStoreId, setPantauStoreId] = useState<string | 'all'>(activeStoreId)
+  const [stores, setStores] = useState<Store[]>([])
+  const targetStoreId = activeRole === 'owner' ? pantauStoreId : activeStoreId
 
   // Sync activeView with URL Hash
   useEffect(() => {
@@ -312,7 +466,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
   // Running Text State
   const [runningTexts, setRunningTexts] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('alphaPro_runningTexts')
+      const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_runningTexts` : 'alphaPro_runningTexts'
+      const saved = localStorage.getItem(key)
       const parsed = saved ? JSON.parse(saved) : null
       return Array.isArray(parsed) ? parsed : Array(15).fill('')
     } catch (e) {
@@ -320,13 +475,15 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     }
   })
   const [mainAnnouncement, setMainAnnouncement] = useState<string>(() => {
-    return localStorage.getItem('alphaPro_mainAnnouncement') || 'Selamat Datang di ALFAZA CELL'
+    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_mainAnnouncement` : 'alphaPro_mainAnnouncement'
+    return localStorage.getItem(key) || 'Selamat Datang di ALFAZA CELL'
   })
 
   // Presets Otomatis State
   const [presets, setPresets] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem(`alphaPro_${googleUid}_presets`)
+      const key = activeStoreId !== 'all' ? `alphaPro_${googleUid}_${activeStoreId}_presets` : `alphaPro_${googleUid}_presets`
+      const saved = localStorage.getItem(key)
       const parsed = saved ? JSON.parse(saved) : null
       return Array.isArray(parsed) ? parsed : []
     } catch (e) {
@@ -336,91 +493,144 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
 
   useEffect(() => {
     if (googleUid) {
-      const saved = localStorage.getItem(`alphaPro_${googleUid}_presets`)
+      const key = activeStoreId !== 'all' ? `alphaPro_${googleUid}_${activeStoreId}_presets` : `alphaPro_${googleUid}_presets`
+      const saved = localStorage.getItem(key)
       if (saved) {
         try {
           setPresets(JSON.parse(saved))
         } catch(e){}
+      } else {
+        setPresets([])
       }
     }
-  }, [googleUid])
+  }, [googleUid, activeStoreId])
 
   const handleUploadToCloud = async () => {
-    if (!googleUid) return
-    const settings = {
-      kasir_list: localStorage.getItem('alphaPro_kasir_list'),
-      presets: localStorage.getItem(`alphaPro_${googleUid}_presets`),
-      storeName: localStorage.getItem('alphaPro_storeName'),
-      storeSubtext: localStorage.getItem('alphaPro_storeSubtext'),
-      storePhoto: localStorage.getItem('alphaPro_storePhoto'),
-      runningTexts: localStorage.getItem('alphaPro_runningTexts'),
-      mainAnnouncement: localStorage.getItem('alphaPro_mainAnnouncement'),
-      isPinEnabled: localStorage.getItem('alphaPro_isPinEnabled')
-    }
+    if (!googleUid || targetStoreId === 'all') return
+    
+    // Save locally
+    localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(kasirList))
+    localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_presets`, JSON.stringify(presets))
+    localStorage.setItem(`alphaPro_${targetStoreId}_runningTexts`, JSON.stringify(runningTexts))
+    localStorage.setItem(`alphaPro_${targetStoreId}_mainAnnouncement`, mainAnnouncement)
 
-    const { error } = await supabase.from('app_settings').upsert({
-      user_id: googleUid,
-      settings: settings,
+    const isPin = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`) !== 'false'
+
+    const { error } = await supabase.from('store_settings').upsert({
+      store_id: targetStoreId,
+      cashiers: kasirList,
+      presets: presets,
+      running_texts: runningTexts,
+      main_announcement: mainAnnouncement,
+      is_pin_enabled: isPin,
       updated_at: new Date().toISOString()
     })
     
     if (error) {
       console.error("Gagal sync upload ke cloud:", error.message)
+    } else {
+      showToast("PENGATURAN DISINKRONKAN KE CLOUD!")
+    }
+  }
+
+  const handleSaveCashierSelf = async (username: string, updatedAccount: { name: string, pin: string }) => {
+    if (activeStoreId === 'all') return
+    const updatedList = {
+      ...kasirList,
+      [username]: {
+        ...kasirList[username],
+        name: updatedAccount.name,
+        pin: updatedAccount.pin
+      }
+    }
+    setKasirList(updatedList)
+    localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(updatedList))
+    
+    // Update active session locally via callback
+    onUpdateActiveCashier(username, updatedList[username])
+    localStorage.setItem('alphaPro_name', updatedAccount.name)
+
+    // Sync directly to cloud
+    const isPin = localStorage.getItem(`alphaPro_${activeStoreId}_isPinEnabled`) !== 'false'
+    const { error } = await supabase.from('store_settings').upsert({
+      store_id: activeStoreId,
+      cashiers: updatedList,
+      presets: presets,
+      running_texts: runningTexts,
+      main_announcement: mainAnnouncement,
+      is_pin_enabled: isPin,
+      updated_at: new Date().toISOString()
+    })
+
+    if (error) {
+      console.error("Gagal sinkronisasi data kasir baru ke cloud:", error.message)
+      throw new Error("Gagal menyimpan ke Cloud, namun data lokal terupdate.")
     }
   }
 
   const handleDownloadFromCloud = async (silent: boolean = false) => {
     if (!googleUid) return
     
-    const { data, error } = await supabase.from('app_settings').select('settings').eq('user_id', googleUid).maybeSingle()
+    if (targetStoreId === 'all') {
+      setKasirList({})
+      setPresets([])
+      setRunningTexts(Array(15).fill(''))
+      setMainAnnouncement('Selamat Datang di ALFAZA CELL')
+      return
+    }
+    
+    const { data, error } = await supabase.from('store_settings').select('*').eq('store_id', targetStoreId).maybeSingle()
     
     if (error) {
       console.error("Gagal sync download dari cloud:", error.message)
       return
     }
 
-    if (data && data.settings) {
-      const s = data.settings
+    if (data) {
       let changed = false
 
-      if (s.kasir_list && localStorage.getItem('alphaPro_kasir_list') !== s.kasir_list) {
-        localStorage.setItem('alphaPro_kasir_list', s.kasir_list)
-        changed = true
-        refreshKasirList()
+      if (data.cashiers) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`)
+        const remoteStr = JSON.stringify(data.cashiers)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, remoteStr)
+          setKasirList(data.cashiers)
+          changed = true
+        }
       }
-      if (s.presets && localStorage.getItem(`alphaPro_${googleUid}_presets`) !== s.presets) {
-        localStorage.setItem(`alphaPro_${googleUid}_presets`, s.presets)
-        changed = true
-        try { setPresets(JSON.parse(s.presets)) } catch(e){}
+      if (data.presets) {
+        const local = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`)
+        const remoteStr = JSON.stringify(data.presets)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_presets`, remoteStr)
+          setPresets(data.presets)
+          changed = true
+        }
       }
-      if (s.storeName && localStorage.getItem('alphaPro_storeName') !== s.storeName) {
-        localStorage.setItem('alphaPro_storeName', s.storeName)
-        changed = true
-        setStoreName(s.storeName)
+      if (data.running_texts) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_runningTexts`)
+        const remoteStr = JSON.stringify(data.running_texts)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_runningTexts`, remoteStr)
+          setRunningTexts(data.running_texts)
+          changed = true
+        }
       }
-      if (s.storeSubtext && localStorage.getItem('alphaPro_storeSubtext') !== s.storeSubtext) {
-        localStorage.setItem('alphaPro_storeSubtext', s.storeSubtext)
-        changed = true
-        setStoreSubtext(s.storeSubtext)
+      if (data.main_announcement) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_mainAnnouncement`)
+        if (local !== data.main_announcement) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_mainAnnouncement`, data.main_announcement)
+          setMainAnnouncement(data.main_announcement)
+          changed = true
+        }
       }
-      if (s.storePhoto && localStorage.getItem('alphaPro_storePhoto') !== s.storePhoto) {
-        localStorage.setItem('alphaPro_storePhoto', s.storePhoto)
-        changed = true
-        setStorePhoto(s.storePhoto)
-      }
-      if (s.runningTexts && localStorage.getItem('alphaPro_runningTexts') !== s.runningTexts) {
-        localStorage.setItem('alphaPro_runningTexts', s.runningTexts)
-        changed = true
-        try { setRunningTexts(JSON.parse(s.runningTexts)) } catch(e){}
-      }
-      if (s.mainAnnouncement && localStorage.getItem('alphaPro_mainAnnouncement') !== s.mainAnnouncement) {
-        localStorage.setItem('alphaPro_mainAnnouncement', s.mainAnnouncement)
-        changed = true
-        setMainAnnouncement(s.mainAnnouncement)
-      }
-      if (s.isPinEnabled && localStorage.getItem('alphaPro_isPinEnabled') !== s.isPinEnabled) {
-        localStorage.setItem('alphaPro_isPinEnabled', s.isPinEnabled)
-        changed = true
+      if (data.is_pin_enabled !== undefined) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`)
+        const remoteStr = String(data.is_pin_enabled)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_isPinEnabled`, remoteStr)
+          changed = true
+        }
       }
 
       if (changed && !silent) {
@@ -429,66 +639,139 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     }
   }
 
-  // Auto-download settings on boot when googleUid is available
+  // Auto-download settings when targetStoreId changes
   useEffect(() => {
     if (googleUid) {
       handleDownloadFromCloud(true)
     }
-  }, [googleUid])
+  }, [googleUid, targetStoreId])
 
   const savePresets = (newPresets: any[]) => {
     setPresets(newPresets)
     if (googleUid) {
-      localStorage.setItem(`alphaPro_${googleUid}_presets`, JSON.stringify(newPresets))
+      const key = targetStoreId !== 'all' ? `alphaPro_${googleUid}_${targetStoreId}_presets` : `alphaPro_${googleUid}_presets`
+      localStorage.setItem(key, JSON.stringify(newPresets))
     }
   }
 
-  const [storeName, setStoreName] = useState<string>(() => {
-    const saved = localStorage.getItem('alphaPro_storeName')
-    if (!saved || saved === 'ALFAZA CELL - Pembukuan Agen Link') {
-      localStorage.setItem('alphaPro_storeName', 'ALFAZA CELL')
-      return 'ALFAZA CELL'
-    }
-    return saved
-  })
-  const [storeSubtext, setStoreSubtext] = useState<string>(() => {
-    return localStorage.getItem('alphaPro_storeSubtext') || 'Pembukuan Agen brilink & Konter'
-  })
-  const [storePhoto, setStorePhoto] = useState<string>(() => {
-    return localStorage.getItem('alphaPro_storePhoto') || ''
-  })
 
-  const saveStoreName = (name: string) => {
-    setStoreName(name)
-    localStorage.setItem('alphaPro_storeName', name)
+  const [storeName, setStoreName] = useState('ALFAZA CELL')
+  const [storeSubtext, setStoreSubtext] = useState('Pembukuan Agen brilink & Konter')
+  const [storePhoto, setStorePhoto] = useState('')
+
+  // Keep pantauStoreId in sync with activeStoreId if cashier
+  useEffect(() => {
+    if (activeRole === 'kasir') {
+      setPantauStoreId(activeStoreId)
+    }
+  }, [activeStoreId, activeRole])
+
+  // Fetch stores list for owner
+  useEffect(() => {
+    if (activeRole !== 'owner') return
+    const fetchStores = async () => {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('user_id', googleUid)
+        .order('created_at', { ascending: true })
+      if (!error && data) {
+        setStores(data)
+      }
+    }
+    fetchStores()
+  }, [activeRole, googleUid])
+
+  // Sync active store details based on pantauStoreId or activeStore
+  useEffect(() => {
+    if (activeRole === 'kasir' && activeStore) {
+      setStoreName(activeStore.name)
+      setStoreSubtext(activeStore.subtext || '')
+      setStorePhoto(activeStore.photo_url || '')
+    } else if (activeRole === 'owner') {
+      if (pantauStoreId === 'all') {
+        setStoreName('Pusat Monitoring')
+        setStoreSubtext('Memantau Semua Toko')
+        setStorePhoto('')
+      } else {
+        const s = stores.find(st => st.id === pantauStoreId)
+        if (s) {
+          setStoreName(s.name)
+          setStoreSubtext(s.subtext || '')
+          setStorePhoto(s.photo_url || '')
+        }
+      }
+    }
+  }, [activeRole, activeStore, pantauStoreId, stores])
+
+  const saveStoreName = async (name: string) => {
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    if (targetId === 'all') return
+    const { error } = await supabase.from('stores').update({ name }).eq('id', targetId)
+    if (!error) {
+      setStores(prev => prev.map(s => s.id === targetId ? { ...s, name } : s))
+      if (activeStore && targetId === activeStore.id) {
+        const updated = { ...activeStore, name }
+        localStorage.setItem('alphaPro_active_store', JSON.stringify(updated))
+      }
+      setStoreName(name)
+    }
   }
-  const saveStoreSubtext = (sub: string) => {
-    setStoreSubtext(sub)
-    localStorage.setItem('alphaPro_storeSubtext', sub)
+
+  const saveStoreSubtext = async (subtext: string) => {
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    if (targetId === 'all') return
+    const { error } = await supabase.from('stores').update({ subtext }).eq('id', targetId)
+    if (!error) {
+      setStores(prev => prev.map(s => s.id === targetId ? { ...s, subtext } : s))
+      if (activeStore && targetId === activeStore.id) {
+        const updated = { ...activeStore, subtext }
+        localStorage.setItem('alphaPro_active_store', JSON.stringify(updated))
+      }
+      setStoreSubtext(subtext)
+    }
   }
-  const saveStorePhoto = (photo: string) => {
-    setStorePhoto(photo)
-    localStorage.setItem('alphaPro_storePhoto', photo)
+
+  const saveStorePhoto = async (photo_url: string) => {
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    if (targetId === 'all') return
+    const { error } = await supabase.from('stores').update({ photo_url }).eq('id', targetId)
+    if (!error) {
+      setStores(prev => prev.map(s => s.id === targetId ? { ...s, photo_url } : s))
+      if (activeStore && targetId === activeStore.id) {
+        const updated = { ...activeStore, photo_url }
+        localStorage.setItem('alphaPro_active_store', JSON.stringify(updated))
+      }
+      setStorePhoto(photo_url)
+    }
   }
 
   const saveRunningTexts = (texts: string[]) => {
     setRunningTexts(texts)
-    localStorage.setItem('alphaPro_runningTexts', JSON.stringify(texts))
+    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_runningTexts` : 'alphaPro_runningTexts'
+    localStorage.setItem(key, JSON.stringify(texts))
   }
 
   const saveMainAnnouncement = (text: string) => {
     setMainAnnouncement(text)
-    localStorage.setItem('alphaPro_mainAnnouncement', text)
+    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_mainAnnouncement` : 'alphaPro_mainAnnouncement'
+    localStorage.setItem(key, text)
   }
+
 
   // Fetch from Supabase
   useEffect(() => {
     const fetchTransactions = async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', googleUid)
-        .order('timestamp', { ascending: false })
+
+      if (activeRole === 'kasir' && activeStoreId !== 'all') {
+        query = query.eq('store_id', activeStoreId)
+      }
+
+      const { data, error } = await query.order('timestamp', { ascending: false })
 
       if (error) {
         console.error('Error fetching transactions:', error)
@@ -501,7 +784,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           adminFee: Number(row.admin_fee),
           keterangan: row.keterangan || '-',
           timestamp: row.timestamp,
-          kasir_id: row.kasir_id
+          kasir_id: row.kasir_id,
+          store_id: row.store_id
         }))
         setTransactions(mappedTx)
       }
@@ -520,8 +804,13 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           table: 'transactions',
           filter: `user_id=eq.${googleUid}`
         },
-        () => {
-          // Re-fetch everything on change for simplicity and consistency
+        (payload: any) => {
+          if (activeRole === 'kasir' && activeStoreId !== 'all') {
+            const row = payload.new || payload.old
+            if (row && row.store_id !== activeStoreId) {
+              return
+            }
+          }
           fetchTransactions()
         }
       )
@@ -530,7 +819,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [googleUid])
+  }, [googleUid, activeStoreId, activeRole])
+
 
   // Fetch and Record Attendance
   useEffect(() => {
@@ -539,14 +829,19 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     const today = getLocalDateString()
     
     const manageAbsensi = async () => {
-      // 1. Check/Record today's attendance for current user
-      const { data: current, error: checkError } = await supabase
+      // 1. Check/Record today's attendance for current user and current store
+      let checkQuery = supabase
         .from('absensi')
         .select('*')
         .eq('user_id', googleUid)
         .eq('username', username)
         .eq('tanggal', today)
-        .maybeSingle()
+
+      if (activeStoreId !== 'all') {
+        checkQuery = checkQuery.eq('store_id', activeStoreId)
+      }
+
+      const { data: current, error: checkError } = await checkQuery.maybeSingle()
 
       if (checkError) {
         console.error("Absensi Fetch Error:", checkError.message || checkError)
@@ -565,7 +860,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           nama: account.name,
           tanggal: today,
           jam_masuk: jam,
-          status: 'Hadir'
+          status: 'Hadir',
+          store_id: activeStoreId !== 'all' ? activeStoreId : null
         })
 
         if (insertError) {
@@ -576,12 +872,17 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         setTodayAbsen(jam)
       }
 
-      // 2. Fetch all attendance for owner view
-      const { data: allData } = await supabase
+      // 2. Fetch all attendance for owner view or current store for cashier
+      let allQuery = supabase
         .from('absensi')
         .select('*')
         .eq('user_id', googleUid)
-        .order('tanggal', { ascending: false })
+
+      if (activeRole === 'kasir' && activeStoreId !== 'all') {
+        allQuery = allQuery.eq('store_id', activeStoreId)
+      }
+
+      const { data: allData } = await allQuery.order('tanggal', { ascending: false })
       
       if (allData) setAbsensi(allData)
     }
@@ -597,7 +898,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [googleUid, isLoggedIn, username, account?.name])
+  }, [googleUid, isLoggedIn, username, account?.name, activeStoreId, activeRole])
+
 
   // Filter State
   const [filterTanggalMulai, setFilterTanggalMulai] = useState(getLocalDateString())
@@ -614,10 +916,15 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
     let relevantTxs = transactions;
-    if (account.role !== 'owner') {
+    if (account.role === 'owner') {
+      if (pantauStoreId !== 'all') {
+        relevantTxs = relevantTxs.filter(t => t.store_id === pantauStoreId)
+      }
+      if (filterKasir !== 'Semua') {
+        relevantTxs = relevantTxs.filter(t => t.kasir_id === filterKasir)
+      }
+    } else {
       relevantTxs = transactions.filter(t => t.kasir_id === username);
-    } else if (filterKasir !== 'Semua') {
-      relevantTxs = transactions.filter(t => t.kasir_id === filterKasir);
     }
 
     const todayISO = getLocalDateString()
@@ -667,7 +974,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     setSaldoBank(calcSaldoBank)
     setKasModal(calcKasModal)
     setTotalPenjualan(calcPenjualan)
-  }, [transactions, account?.role, username, filterKasir])
+  }, [transactions, account?.role, username, filterKasir, pantauStoreId])
 
   // Fetch Aggregated Report for LaporanView
   useEffect(() => {
@@ -843,6 +1150,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
 
     // Proses simpan ke Supabase
     const id = Date.now().toString()
+    const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
     const newTx = {
       id,
       user_id: googleUid,
@@ -851,7 +1159,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       nominal: finalNominal,
       admin_fee: finalAdmin,
       keterangan: finalKeterangan,
-      timestamp: getLocalISOString()
+      timestamp: getLocalISOString(),
+      store_id: finalStoreId
     }
 
     supabase.from('transactions').insert(newTx).then(({ error }) => {
@@ -867,7 +1176,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           adminFee: newTx.admin_fee,
           keterangan: newTx.keterangan,
           timestamp: newTx.timestamp,
-          kasir_id: newTx.kasir_id
+          kasir_id: newTx.kasir_id,
+          store_id: newTx.store_id || undefined
         }
         setTransactions(prev => [optimisticTx, ...prev])
 
@@ -885,6 +1195,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     setIsSaving(true)
 
     const id = Date.now().toString()
+    const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
     const newTx = {
       id,
       user_id: googleUid,
@@ -893,7 +1204,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       nominal,
       admin_fee: 0,
       keterangan: 'Topup Modal by Owner',
-      timestamp: getLocalISOString()
+      timestamp: getLocalISOString(),
+      store_id: finalStoreId
     }
 
     supabase.from('transactions').insert(newTx).then(({ error }) => {
@@ -908,7 +1220,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           adminFee: newTx.admin_fee,
           keterangan: newTx.keterangan,
           timestamp: newTx.timestamp,
-          kasir_id: newTx.kasir_id
+          kasir_id: newTx.kasir_id,
+          store_id: newTx.store_id || undefined
         }
         setTransactions(prev => [optimisticTx, ...prev])
         showToast(`Modal ${kasirId} berhasil ditambahkan!`)
@@ -925,6 +1238,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
     setIsSaving(true)
 
     const id = Date.now().toString()
+    const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
     const newTx = {
       id,
       user_id: googleUid,
@@ -933,7 +1247,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       nominal,
       admin_fee: 0,
       keterangan: isiKeterangan || 'Setoran Saldo',
-      timestamp: getLocalISOString()
+      timestamp: getLocalISOString(),
+      store_id: finalStoreId
     }
 
     supabase.from('transactions').insert(newTx).then(({ error }) => {
@@ -949,7 +1264,8 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
           adminFee: newTx.admin_fee,
           keterangan: newTx.keterangan,
           timestamp: newTx.timestamp,
-          kasir_id: newTx.kasir_id
+          kasir_id: newTx.kasir_id,
+          store_id: newTx.store_id || undefined
         }
         setTransactions(prev => [optimisticTx, ...prev])
 
@@ -961,6 +1277,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       }
     })
   }
+
 
   const handleStartEdit = (tx: Transaction) => {
     setEditingTx(tx)
@@ -1024,10 +1341,14 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
   // Today's Date in Local Time (YYYY-MM-DD)
   const todayISO = new Date().toLocaleDateString('en-CA')
   
-  // Apply Kasir Filter (Owner sees all/filtered, Kasir ONLY sees their own)
+  // Apply Store and Kasir Filter (Owner sees all/filtered store, Kasir ONLY sees active store)
+  const storeFilteredTransactions = activeRole === 'owner'
+    ? (pantauStoreId !== 'all' ? transactions.filter(t => t.store_id === pantauStoreId) : transactions)
+    : transactions;
+
   const displayTransactions = account.role === 'owner' 
-    ? (filterKasir !== 'Semua' ? transactions.filter(t => t.kasir_id === filterKasir) : transactions)
-    : transactions.filter(t => t.kasir_id === username);
+    ? (filterKasir !== 'Semua' ? storeFilteredTransactions.filter(t => t.kasir_id === filterKasir) : storeFilteredTransactions)
+    : storeFilteredTransactions.filter(t => t.kasir_id === username);
 
   // Filtered Transactions for Dashboard (Today Only)
   const todayTransactions = displayTransactions.filter(t => t.timestamp.startsWith(todayISO))
@@ -1123,6 +1444,10 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         showToast={showToast}
         onConfirm={handleConfirm}
         presets={presets}
+        activeStoreId={activeStoreId}
+        pantauStoreId={pantauStoreId}
+        setPantauStoreId={setPantauStoreId}
+        stores={stores}
       />
 
       <RiwayatView 
@@ -1210,6 +1535,10 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         onSaveStoreSubtext={saveStoreSubtext}
         onSaveStorePhoto={saveStorePhoto}
         setIsSidePanelOpen={setIsSidePanelOpen}
+        onConfirm={handleConfirm}
+        currentUsername={username}
+        kasirList={kasirList}
+        onSaveCashierSelf={handleSaveCashierSelf}
       />
 
       <IsiSaldoView 
@@ -1249,6 +1578,7 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
         kasirName={account.name}
         kasirRole={account.role}
         setIsSidePanelOpen={setIsSidePanelOpen}
+        onConfirm={handleConfirm}
       />
 
       <Navigation activeView={activeView} setActiveView={setActiveView} />
@@ -1366,31 +1696,41 @@ const MainApp: React.FC<MainAppProps> = ({ username, account, googleUid, googleE
       )}
 
       {/* Global Confirm Dialog */}
-      {confirmDialog && confirmDialog.show && (
-        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-xs shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
-            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
-              <i className="fa-solid fa-circle-question text-2xl"></i>
-            </div>
-            <h3 className="font-black text-xs uppercase tracking-widest text-gray-900 mb-2">{confirmDialog.title}</h3>
-            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">{confirmDialog.message}</p>
-            <div className="flex gap-2 w-full">
-              <button 
-                onClick={() => setConfirmDialog(null)}
-                className="flex-1 bg-gray-100 text-gray-500 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
-                className="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-200 active:scale-95 transition-all"
-              >
-                Ya, Lanjut
-              </button>
+      {confirmDialog && confirmDialog.show && (() => {
+        const isDangerous = confirmDialog.title.toUpperCase().includes('HAPUS') || confirmDialog.title.toUpperCase().includes('RESET');
+        const iconClass = isDangerous ? "fa-solid fa-triangle-exclamation text-xl animate-pulse" : "fa-solid fa-circle-question text-xl";
+        const accentBg = isDangerous ? "bg-rose-50 text-rose-600" : "bg-purple-50 text-purple-600";
+        const primaryBtnBg = isDangerous 
+          ? "bg-rose-600 hover:bg-rose-700 shadow-rose-200" 
+          : "bg-purple-600 hover:bg-purple-700 shadow-purple-200";
+
+        return (
+          <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2rem] p-6 w-full max-w-[280px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300 border border-gray-100">
+              <div className={cn("w-14 h-14 rounded-full flex items-center justify-center mb-3 shadow-inner", accentBg)}>
+                <i className={iconClass}></i>
+              </div>
+              <h3 className="font-black text-[11px] uppercase tracking-widest text-gray-900 mb-1.5">{confirmDialog.title}</h3>
+              <p className="text-[10px] font-bold text-gray-500 mb-5 leading-relaxed px-1">{confirmDialog.message}</p>
+              <div className="flex gap-2 w-full">
+                <button 
+                  onClick={() => setConfirmDialog(null)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all border border-gray-200/50"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
+                  className={cn("flex-1 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all", primaryBtnBg)}
+                  style={{ color: '#ffffff' }}
+                >
+                  Ya, Lanjut
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Logout Confirmation Notif */}
       {showLogoutConfirm && (

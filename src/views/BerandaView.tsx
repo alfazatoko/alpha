@@ -3,7 +3,7 @@ import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateStr
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
-import type { Transaction } from '../types'
+import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 interface BerandaViewProps {
   active: boolean
@@ -53,6 +53,10 @@ interface BerandaViewProps {
   showToast: (m: string) => void
   onConfirm: (t: string, m: string, c: () => void) => void
   presets?: any[]
+  activeStoreId?: string | 'all'
+  pantauStoreId?: string | 'all'
+  setPantauStoreId?: (id: string | 'all') => void
+  stores?: Store[]
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -844,24 +848,49 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       </div>
 
       <div className="mx-1.5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
-        {props.kasirRole === 'owner' && props.kasirList && (
-          <div className="mb-3 bg-blue-50/50 px-3 py-2 rounded-xl border border-blue-100/50 flex items-center justify-between">
-            <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
-              <i className="fa-solid fa-user-tie text-blue-600"></i> Mode Pantau Kasir
-            </span>
-            <div className="relative">
-               <select 
-                 value={props.filterKasir || 'Semua'}
-                 onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                 className="bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6"
-               >
-                 <option value="Semua">Semua Kasir</option>
-                 {Object.entries(props.kasirList).map(([id, acc]) => (
-                   <option key={id} value={id}>{acc.name}</option>
-                 ))}
-               </select>
-               <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+        {props.kasirRole === 'owner' && (
+          <div className="mb-3 space-y-2">
+            {/* Store Filter */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 rounded-xl border border-blue-100/50 flex items-center justify-between shadow-sm">
+              <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-store text-blue-600"></i> Pantau Toko
+              </span>
+              <div className="relative">
+                 <select 
+                   value={props.pantauStoreId || 'all'}
+                   onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                   className="bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6 font-bold"
+                 >
+                   <option value="all">🌐 Semua Toko (Pusat)</option>
+                   {(props.stores || []).map((store) => (
+                     <option key={store.id} value={store.id}>🏬 {store.name}</option>
+                   ))}
+                 </select>
+                 <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+              </div>
             </div>
+
+            {/* Cashier Filter - Only displayed if monitoring a specific store */}
+            {props.pantauStoreId !== 'all' && props.kasirList && Object.keys(props.kasirList).length > 0 && (
+              <div className="bg-blue-50/30 px-3 py-1.5 rounded-xl border border-blue-100/30 flex items-center justify-between">
+                <span className="text-[10px] font-black text-blue-800/80 uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-tie text-blue-500"></i> Mode Pantau Kasir
+                </span>
+                <div className="relative">
+                   <select 
+                     value={props.filterKasir || 'Semua'}
+                     onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                     className="bg-transparent text-blue-700/80 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6"
+                   >
+                     <option value="Semua">Semua Kasir</option>
+                     {Object.entries(props.kasirList).map(([id, acc]) => (
+                       <option key={id} value={id}>{acc.name}</option>
+                     ))}
+                   </select>
+                   <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500/50 pointer-events-none"></i>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1215,120 +1244,156 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           {/* Sub-View Content */}
           <div className="flex-1 overflow-y-auto hide-scrollbar p-5 pb-24">
             {activeOwnerSubView === 'monitor' && (
-                <div className="space-y-4">
-                  {/* Add Kasir Form */}
-                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                    <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>
-                    <div className="space-y-2">
-                      <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
-                      <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
-                      <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
-                      <button onClick={() => {
-                        if(!kasirFormId || !kasirFormName || !kasirFormPin) return props.showToast('Lengkapi data kasir');
-                        const newKasirList = { ...props.kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
-                        saveKasirAccounts(newKasirList);
-                        props.refreshKasirList();
-                        setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
-                      }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
-                    </div>
+              <div className="space-y-4">
+                {(!props.pantauStoreId || props.pantauStoreId === 'all') ? (
+                  <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+                    <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+                    <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+                    <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko dari dropdown di Beranda Utama untuk mengelola kasir.</p>
                   </div>
-
-                  <div className="space-y-2">
-                    {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
-                      return (
-                        <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
-                          <div>
-                            <p className="text-xs font-black text-gray-800">{account.name}</p>
-                            <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                              <i className="fa-solid fa-pen text-[10px]"></i>
-                            </button>
-                            <button onClick={() => {
-                              props.onConfirm('HAPUS KASIR', `Hapus ${account.name}?`, () => {
-                                const n = {...props.kasirList}; delete n[id];
-                                saveKasirAccounts(n); props.refreshKasirList();
-                                props.showToast("Berhasil Dihapus");
-                              })
-                            }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
-                              <i className="fa-solid fa-trash text-[10px]"></i>
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* PANTAU AKTIVITAS PER KASIR */}
-                  <div className="border-t border-gray-200 pt-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
-                        <i className="fa-solid fa-chart-bar"></i> Pantau Aktivitas
-                      </h4>
-                      <input 
-                        type="date" 
-                        value={pantauTanggal} 
-                        onChange={e => setPantauTanggal(e.target.value)}
-                        className="text-[10px] font-bold border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-blue-400"
-                      />
+                ) : (
+                  <>
+                    {/* Add Kasir Form */}
+                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                      <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>
+                      <div className="space-y-2">
+                        <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <button onClick={() => {
+                          if(!kasirFormId || !kasirFormName || !kasirFormPin) return props.showToast('Lengkapi data kasir');
+                          const newKasirList = { ...props.kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
+                          const targetStoreId = props.pantauStoreId;
+                          if (targetStoreId && targetStoreId !== 'all') {
+                            localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(newKasirList));
+                            supabase.from('store_settings').upsert({
+                              store_id: targetStoreId,
+                              cashiers: newKasirList,
+                              updated_at: new Date().toISOString()
+                            }).then(({ error }) => {
+                              if (error) console.error("Gagal update cashiers ke DB:", error.message);
+                            });
+                          } else {
+                            saveKasirAccounts(newKasirList);
+                          }
+                          props.refreshKasirList();
+                          setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
+                          props.showToast("Data Kasir Disimpan!");
+                        }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
+                      </div>
                     </div>
-                    
-                    <div className="space-y-2">
-                      {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, account]) => {
-                        const kasirTxs = props.transactions.filter(t => 
-                          t.kasir_id === id && 
-                          t.timestamp.startsWith(pantauTanggal) && 
-                          !t.kategori.startsWith('Isi')
-                        )
-                        const totalNom = kasirTxs.reduce((s, t) => s + t.nominal, 0)
-                        const totalAdm = kasirTxs.reduce((s, t) => s + t.adminFee, 0)
-                        const totalIsi = props.transactions.filter(t => 
-                          t.kasir_id === id && 
-                          t.timestamp.startsWith(pantauTanggal) && 
-                          t.kategori === 'Isi Saldo Bank'
-                        ).reduce((s, t) => s + t.nominal, 0)
 
+                    <div className="space-y-2">
+                      {Object.entries(props.kasirList || {}).filter(([id]) => id !== 'owner').map(([id, account]) => {
                         return (
-                          <div key={id} className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
-                                  {account.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                  <p className="text-xs font-black text-gray-800">{account.name}</p>
-                                  <p className="text-[8px] text-gray-400 font-bold uppercase">{parseLocalISO(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                                </div>
-                              </div>
-                              <span className={cn(
-                                "text-[10px] px-2 py-0.5 rounded-full font-black uppercase",
-                                kasirTxs.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
-                              )}>
-                                {kasirTxs.length > 0 ? `${kasirTxs.length} TRX` : 'KOSONG'}
-                              </span>
+                          <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
+                            <div>
+                              <p className="text-xs font-black text-gray-800">{account.name}</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin}</p>
                             </div>
-                            <div className="grid grid-cols-3 gap-1.5">
-                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-blue-100/50">
-                                <p className="text-[9px] font-black text-gray-400 uppercase">Nominal</p>
-                                <p className="text-[12px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
-                              </div>
-                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-emerald-100/50">
-                                <p className="text-[9px] font-black text-gray-400 uppercase">Admin</p>
-                                <p className="text-[12px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
-                              </div>
-                              <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-indigo-100/50">
-                                <p className="text-[9px] font-black text-gray-400 uppercase">Isi Saldo</p>
-                                <p className="text-[12px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
-                              </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                <i className="fa-solid fa-pen text-[10px]"></i>
+                              </button>
+                              <button onClick={() => {
+                                props.onConfirm('HAPUS KASIR', `Hapus ${account.name}?`, () => {
+                                  const n = {...props.kasirList}; delete n[id];
+                                  const targetStoreId = props.pantauStoreId;
+                                  if (targetStoreId && targetStoreId !== 'all') {
+                                    localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(n));
+                                    supabase.from('store_settings').upsert({
+                                      store_id: targetStoreId,
+                                      cashiers: n,
+                                      updated_at: new Date().toISOString()
+                                    }).then(({ error }) => {
+                                      if (error) console.error("Gagal update cashiers ke DB:", error.message);
+                                    });
+                                  } else {
+                                    saveKasirAccounts(n);
+                                  }
+                                  props.refreshKasirList();
+                                  props.showToast("Berhasil Dihapus");
+                                })
+                              }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                                <i className="fa-solid fa-trash text-[10px]"></i>
+                              </button>
                             </div>
                           </div>
                         )
                       })}
                     </div>
-                  </div>
-                </div>
-              )}
+
+                    {/* PANTAU AKTIVITAS PER KASIR */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
+                          <i className="fa-solid fa-chart-bar"></i> Pantau Aktivitas
+                        </h4>
+                        <input 
+                          type="date" 
+                          value={pantauTanggal} 
+                          onChange={e => setPantauTanggal(e.target.value)}
+                          className="text-[10px] font-bold border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-blue-400"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {Object.entries(props.kasirList || {}).filter(([id]) => id !== 'owner').map(([id, account]) => {
+                          const kasirTxs = props.transactions.filter(t => 
+                            t.kasir_id === id && 
+                            t.timestamp.startsWith(pantauTanggal) && 
+                            !t.kategori.startsWith('Isi')
+                          )
+                          const totalNom = kasirTxs.reduce((s, t) => s + t.nominal, 0)
+                          const totalAdm = kasirTxs.reduce((s, t) => s + t.adminFee, 0)
+                          const totalIsi = props.transactions.filter(t => 
+                            t.kasir_id === id && 
+                            t.timestamp.startsWith(pantauTanggal) && 
+                            t.kategori === 'Isi Saldo Bank'
+                          ).reduce((s, t) => s + t.nominal, 0)
+
+                          return (
+                            <div key={id} className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
+                                    {account.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black text-gray-800">{account.name}</p>
+                                    <p className="text-[8px] text-gray-400 font-bold uppercase">{parseLocalISO(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                  </div>
+                                </div>
+                                <span className={cn(
+                                  "text-[10px] px-2 py-0.5 rounded-full font-black uppercase",
+                                  kasirTxs.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                                )}>
+                                  {kasirTxs.length > 0 ? `${kasirTxs.length} TRX` : 'KOSONG'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-blue-100/50">
+                                  <p className="text-[9px] font-black text-gray-400 uppercase">Nominal</p>
+                                  <p className="text-[12px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
+                                </div>
+                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-emerald-100/50">
+                                  <p className="text-[9px] font-black text-gray-400 uppercase">Admin</p>
+                                  <p className="text-[12px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
+                                </div>
+                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-indigo-100/50">
+                                  <p className="text-[9px] font-black text-gray-400 uppercase">Isi Saldo</p>
+                                  <p className="text-[12px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
               {activeOwnerSubView === 'laporan' && (
                 <div className="space-y-4">

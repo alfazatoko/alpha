@@ -71,41 +71,333 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   const currentTotalSaldoKas = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
 
-  const handleShare = async (type: 'download-pdf' | 'share-pdf' | 'share-excel') => {
+  const handleShare = async (type: 'download-pdf' | 'share-pdf' | 'share-excel' | 'share-wa-text') => {
     setShowShareMenu(false);
     setIsSharing(true);
     try {
       if (type === 'download-pdf' || type === 'share-pdf') {
-        const html2canvas = (await import('html2canvas')).default;
         const jsPDF = (await import('jspdf')).default;
         
-        const el = document.getElementById('laporan-content');
-        if (!el) {
-          setIsSharing(false);
-          return;
-        }
-        
-        const headerAction = document.getElementById('laporan-header-actions');
-        const shareBtn = document.getElementById('laporan-share-action');
-        if (headerAction) headerAction.style.display = 'none';
-        if (shareBtn) shareBtn.style.display = 'none';
-
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#f9fafb' });
-        
-        if (headerAction) headerAction.style.display = 'flex';
-        if (shareBtn) shareBtn.style.display = 'flex';
-
-        const imgData = canvas.toDataURL('image/png');
-        const pdfWidth = 210; // A4 width in mm
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
-          format: [pdfWidth, pdfHeight]
+          format: 'a4'
         });
         
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        // Define margins and pointer
+        let y = 10;
+        
+        // 1. Header (Deep Blue / Navy card)
+        pdf.setFillColor(5, 28, 95);
+        pdf.rect(10, y, 190, 36, 'F');
+        
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(16);
+        pdf.text((props.storeName || 'ALFAZA CELL').toUpperCase(), 15, y + 9);
+        
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(200, 210, 255);
+        pdf.text(props.storeSubtext || 'Pembukuan Agen brilink & Konter', 15, y + 14);
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(`Kasir: ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`, 15, y + 23);
+        
+        if (props.filterKasir && props.filterKasir !== 'Semua') {
+          const kasirObj = props.kasirList[props.filterKasir];
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(200, 210, 255);
+          pdf.text(`Pantau Kasir: ${kasirObj ? kasirObj.name : props.filterKasir}`, 15, y + 28);
+        }
+        
+        // Date on Right of Header
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(200, 210, 255);
+        pdf.text('Laporan Tanggal:', 195, y + 9, { align: 'right' });
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(255, 220, 100);
+        pdf.text(props.filterTanggal, 195, y + 15, { align: 'right' });
+        
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(200, 210, 255);
+        pdf.text(`Waktu Cetak: ${new Date().toLocaleString('id-ID')}`, 195, y + 30, { align: 'right' });
+        
+        y += 42;
+        
+        // 2. Summary Boxes (Bank & Laci)
+        // Box 1: Saldo Bank
+        pdf.setFillColor(235, 245, 255);
+        pdf.rect(10, y, 92, 20, 'F');
+        pdf.setDrawColor(200, 225, 255);
+        pdf.rect(10, y, 92, 20, 'D');
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(30, 80, 150);
+        pdf.text('SALDO BANK', 15, y + 6);
+        pdf.setFontSize(12.5);
+        pdf.setTextColor(5, 28, 95);
+        pdf.text(formatRupiah(currentSaldoBank), 15, y + 14);
+        
+        // Box 2: Saldo Laci Kasir
+        pdf.setFillColor(230, 250, 240);
+        pdf.rect(108, y, 92, 20, 'F');
+        pdf.setDrawColor(180, 240, 200);
+        pdf.rect(108, y, 92, 20, 'D');
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(20, 120, 80);
+        pdf.text('SALDO LACI KASIR', 113, y + 6);
+        pdf.setFontSize(12.5);
+        pdf.setTextColor(10, 90, 50);
+        pdf.text(formatRupiah(currentTotalSaldoKas), 113, y + 14);
+        
+        y += 26;
+        
+        // 3. Table: Rekap per Kategori
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(5, 28, 95);
+        pdf.text('REKAP PER KATEGORI', 10, y);
+        y += 3.5;
+        
+        pdf.setFillColor(240, 244, 248);
+        pdf.rect(10, y, 190, 7, 'F');
+        pdf.setDrawColor(210, 215, 220);
+        pdf.line(10, y, 200, y);
+        pdf.line(10, y + 7, 200, y + 7);
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(60, 60, 60);
+        pdf.text('Kategori', 13, y + 4.5);
+        pdf.text('Qty', 90, y + 4.5, { align: 'center' });
+        pdf.text('Nominal', 140, y + 4.5, { align: 'right' });
+        pdf.text('Laba / Admin', 195, y + 4.5, { align: 'right' });
+        
+        y += 7;
+        
+        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
+        let rowCount = 0;
+        categories.forEach(cat => {
+          let filtered = [];
+          if (cat === 'Transaksi Khusus') {
+            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+          } else {
+            filtered = props.transactions.filter(t => 
+              t.kategori === cat && 
+              !(t.keterangan || '').includes('[KHUSUS]')
+            );
+          }
+          
+          if (filtered.length > 0) {
+            const qty = filtered.length;
+            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
+            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
+            
+            if (rowCount % 2 === 1) {
+              pdf.setFillColor(249, 250, 251);
+              pdf.rect(10, y, 190, 6, 'F');
+            }
+            
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(8);
+            pdf.setTextColor(40, 40, 40);
+            pdf.text(cat, 13, y + 4.2);
+            
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(String(qty), 90, y + 4.2, { align: 'center' });
+            pdf.text(formatRupiah(nom), 140, y + 4.2, { align: 'right' });
+            
+            pdf.setTextColor(16, 185, 129); // green
+            pdf.text(formatRupiah(laba), 195, y + 4.2, { align: 'right' });
+            
+            pdf.setDrawColor(240, 242, 245);
+            pdf.line(10, y + 6, 200, y + 6);
+            
+            y += 6;
+            rowCount++;
+          }
+        });
+        
+        y += 6;
+        
+        // 4. Details Section (Two Columns)
+        const col1X = 10;
+        const col2X = 108;
+        const startY = y;
+        
+        // Col 1: Kas Masuk & Kas Keluar
+        let col1Y = startY;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(16, 185, 129);
+        pdf.text('KAS MASUK', col1X, col1Y);
+        col1Y += 3.5;
+        
+        const drawPDFDetailRow = (cx: number, cy: number, label: string, value: number, isMinus = false) => {
+          pdf.setFillColor(248, 250, 252);
+          pdf.rect(cx, cy, 92, 6, 'F');
+          pdf.setDrawColor(240, 242, 245);
+          pdf.rect(cx, cy, 92, 6, 'D');
+          
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(60, 60, 60);
+          pdf.text(label, cx + 3, cy + 4.2);
+          
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(20, 20, 20);
+          pdf.text(`${isMinus ? '-' : ''}${formatRupiah(value)}`, cx + 89, cy + 4.2, { align: 'right' });
+          return cy + 6.5;
+        };
+        
+        col1Y = drawPDFDetailRow(col1X, col1Y, 'Modal Tunai Kasir', props.kasModal);
+        col1Y = drawPDFDetailRow(col1X, col1Y, 'Penjualan Digital', currentPenjualanDigital);
+        col1Y = drawPDFDetailRow(col1X, col1Y, 'Penjualan Aksesoris', currentTotalAksesoris);
+        col1Y = drawPDFDetailRow(col1X, col1Y, 'Total Admin Fee', currentTotalAdmin);
+        
+        col1Y += 2;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(225, 29, 72);
+        pdf.text('KAS KELUAR', col1X, col1Y);
+        col1Y += 3.5;
+        col1Y = drawPDFDetailRow(col1X, col1Y, 'Tarik Tunai Nasabah', currentTotalTarik, true);
+        
+        // Total Saldo Laci Kasir Banner (under col1)
+        col1Y += 2;
+        pdf.setFillColor(5, 28, 95);
+        pdf.rect(col1X, col1Y, 92, 9, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(200, 210, 255);
+        pdf.text('TOTAL SALDO LACI KASIR', col1X + 3, col1Y + 5.8);
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(74, 222, 128);
+        pdf.text(formatRupiah(currentTotalSaldoKas), col1X + 89, col1Y + 5.8, { align: 'right' });
+        col1Y += 9;
+        
+        // Col 2: Kas Lainnya
+        let col2Y = startY;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(124, 58, 237);
+        pdf.text('KAS LAINNYA', col2X, col2Y);
+        col2Y += 3.5;
+        
+        col2Y = drawPDFDetailRow(col2X, col2Y, 'Admin Dalam/Non Tunai', totalAdminDalam);
+        col2Y = drawPDFDetailRow(col2X, col2Y, 'Transaksi Non Tunai', totalNonTunai);
+        col2Y = drawPDFDetailRow(col2X, col2Y, 'Transaksi Khusus', totalKhusus);
+        
+        col2Y += 2;
+        pdf.setFillColor(124, 58, 237);
+        pdf.rect(col2X, col2Y, 92, 9, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(240, 230, 255);
+        pdf.text('TOTAL KAS LAINNYA', col2X + 3, col2Y + 5.8);
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus), col2X + 89, col2Y + 5.8, { align: 'right' });
+        col2Y += 9;
+        
+        y = Math.max(col1Y, col2Y) + 6;
+        
+        // 5. Jurnal Penyesuaian Saldo Section
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(5, 28, 95);
+        pdf.text('JURNAL PENYESUAIAN SALDO', 10, y);
+        y += 3.5;
+        
+        pdf.setFillColor(250, 251, 252);
+        pdf.rect(10, y, 190, 38, 'F');
+        pdf.setDrawColor(210, 215, 220);
+        pdf.rect(10, y, 190, 38, 'D');
+        
+        let itemY = y + 1.5;
+        const drawPDFJurnalRow = (label: string, subtitle: string, val: number, isMinus = false) => {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.setTextColor(40, 40, 40);
+          pdf.text(label, 14, itemY + 3.2);
+          
+          pdf.setFont('helvetica', 'italic');
+          pdf.setFontSize(7);
+          pdf.setTextColor(120, 120, 120);
+          pdf.text(subtitle, 14, itemY + 6.8);
+          
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8.5);
+          pdf.setTextColor(20, 20, 20);
+          pdf.text(`${isMinus ? '-' : ''}${formatRupiah(val)}`, 196, itemY + 5, { align: 'right' });
+          
+          pdf.setDrawColor(240, 242, 245);
+          pdf.line(12, itemY + 8.5, 198, itemY + 8.5);
+          itemY += 9;
+        };
+        
+        drawPDFJurnalRow('1. Modal Saldo Bank (Isi)', 'Total pengisian/setoran saldo hari ini', currentIsiBank);
+        drawPDFJurnalRow('2. Penjualan Digital', 'Saldo Bank yang sudah terpakai', currentPenjualanDigital, true);
+        drawPDFJurnalRow('3. Sisa Saldo (Buku)', 'Uang seharusnya di bank', currentSaldoBank);
+        drawPDFJurnalRow('4. Saldo Real App (HP)', "Input menu 'Isi Saldo'", props.saldoReal);
+        
+        // Status box under Jurnal - Centered and narrower to prevent cut-off issues
+        const selisih = props.saldoReal - currentSaldoBank;
+        let statusText = '';
+        let statusDesc = '';
+        let statusVal = '';
+        let r = 0, g = 0, b = 0;
+        
+        if (selisih === 0) {
+          statusText = 'STATUS: KLOP';
+          statusDesc = 'Sisa saldo di HP cocok dengan catatan buku';
+          statusVal = '✓ MATCH';
+          r = 16; g = 185; b = 129; // Emerald green
+        } else if (selisih > 0) {
+          statusText = 'STATUS: SURPLUS';
+          statusDesc = 'Saldo di HP lebih besar dari catatan';
+          statusVal = `+${formatRupiah(selisih)}`;
+          r = 37; g = 99; b = 235; // Blue
+        } else {
+          statusText = 'STATUS: SELISIH';
+          statusDesc = 'Saldo di HP lebih kecil (Uang kurang)';
+          statusVal = formatRupiah(selisih);
+          r = 225; g = 29; b = 72; // Rose/Red
+        }
+        
+        const boxWidth = 150;
+        const boxHeight = 15;
+        const boxX = (210 - boxWidth) / 2; // 30mm margin on left and right
+        const boxY = y + 38;
+        
+        pdf.setFillColor(r, g, b);
+        pdf.rect(boxX, boxY, boxWidth, boxHeight, 'F');
+        
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.text(`${statusText} (${statusVal})`, 105, boxY + 5.5, { align: 'center' });
+        
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(240, 240, 240);
+        pdf.text(statusDesc, 105, boxY + 10.5, { align: 'center' });
+        
+        // Footer at bottom of A4
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(140, 140, 140);
+        pdf.text('Dokumen ini dibuat otomatis oleh Aplikasi ALFAZA CELL dan sah sebagai rekapitulasi keuangan.', 105, 285, { align: 'center' });
         
         const fileName = `Laporan_Alfaza_${props.filterTanggal}.pdf`;
         
@@ -131,6 +423,96 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           } catch (e) {
             console.error('Share failed, fallback to download', e);
             pdf.save(fileName);
+          }
+        }
+      } else if (type === 'share-wa-text') {
+        const lines = [
+          `*LAPORAN KEUANGAN HARIAN*`,
+          `*${(props.storeName || 'ALFAZA CELL').toUpperCase()}*`,
+          `_${props.storeSubtext || 'Pembukuan Agen brilink & Konter'}_`,
+          `==================================`,
+          `📅 *Tanggal:* ${props.filterTanggal}`,
+          `👤 *Kasir:* ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`,
+          props.filterKasir && props.filterKasir !== 'Semua' ? `👁️ *Mode Pantau:* ${props.kasirList[props.filterKasir]?.name || props.filterKasir}` : '',
+          `==================================`,
+          `💵 *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
+          `🏦 *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
+          `==================================`,
+          `📊 *REKAP PER KATEGORI*`
+        ].filter(Boolean);
+
+        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
+        categories.forEach(cat => {
+          let filtered = [];
+          if (cat === 'Transaksi Khusus') {
+            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+          } else {
+            filtered = props.transactions.filter(t => 
+              t.kategori === cat && 
+              !(t.keterangan || '').includes('[KHUSUS]')
+            );
+          }
+          if (filtered.length > 0) {
+            const qty = filtered.length;
+            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
+            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
+            lines.push(`• *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
+          }
+        });
+
+        lines.push(`==================================`);
+        lines.push(`📥 *KAS MASUK*`);
+        lines.push(`• Modal Tunai Kasir: ${formatRupiah(props.kasModal)}`);
+        lines.push(`• Penjualan Digital: ${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`• Penjualan Aksesoris: ${formatRupiah(currentTotalAksesoris)}`);
+        lines.push(`• Total Admin Fee: ${formatRupiah(currentTotalAdmin)}`);
+        
+        lines.push(`==================================`);
+        lines.push(`📤 *KAS KELUAR*`);
+        lines.push(`• Tarik Tunai Nasabah: -${formatRupiah(currentTotalTarik)}`);
+        
+        lines.push(`==================================`);
+        lines.push(`💼 *KAS LAINNYA*`);
+        lines.push(`• Admin Dalam: ${formatRupiah(totalAdminDalam)}`);
+        lines.push(`• Transaksi Non Tunai: ${formatRupiah(totalNonTunai)}`);
+        lines.push(`• Transaksi Khusus: ${formatRupiah(totalKhusus)}`);
+        lines.push(`*Total Kas Lainnya:* ${formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}`);
+        
+        lines.push(`==================================`);
+        lines.push(`⚖️ *JURNAL PENYESUAIAN SALDO*`);
+        lines.push(`• 1. Modal Saldo Bank (Isi): ${formatRupiah(currentIsiBank)}`);
+        lines.push(`• 2. Penjualan Digital: -${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`• 3. Sisa Saldo (Buku): ${formatRupiah(currentSaldoBank)}`);
+        lines.push(`• 4. Saldo Real HP: ${formatRupiah(props.saldoReal)}`);
+        
+        const selisih = props.saldoReal - currentSaldoBank;
+        let statusStr = '';
+        if (selisih === 0) statusStr = '✅ KLOP (✓ MATCH)';
+        else if (selisih > 0) statusStr = `🔵 SURPLUS (+${formatRupiah(selisih)})`;
+        else statusStr = `🔴 SELISIH (${formatRupiah(selisih)})`;
+        
+        lines.push(`👉 *STATUS:* *${statusStr}*`);
+        lines.push(`==================================`);
+        lines.push(`_Dicetak via Aplikasi ALFAZA CELL_`);
+
+        const text = lines.join('\n');
+
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          const { Share } = await import('@capacitor/share');
+          await Share.share({
+            title: 'Laporan Keuangan',
+            text: text,
+            dialogTitle: 'Bagikan Laporan WA'
+          });
+        } else {
+          if (navigator.share) {
+            await navigator.share({
+              title: 'Laporan Keuangan',
+              text: text
+            });
+          } else {
+            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
           }
         }
       } else if (type === 'share-excel') {
@@ -261,7 +643,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <i className="fa-solid fa-download text-emerald-500 w-4 text-center text-sm"></i> Download PDF
               </button>
               <button onClick={() => handleShare('share-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
-                <i className="fa-brands fa-whatsapp text-green-500 w-4 text-center text-sm"></i> Share PDF
+                <i className="fa-solid fa-file-pdf text-red-500 w-4 text-center text-sm"></i> Share PDF
+              </button>
+              <button onClick={() => handleShare('share-wa-text')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
+                <i className="fa-brands fa-whatsapp text-green-500 w-4 text-center text-sm"></i> Share WA Teks
               </button>
               <button onClick={() => handleShare('share-excel')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 transition-colors">
                 <i className="fa-solid fa-file-excel text-green-600 w-4 text-center text-sm"></i> Share Excel

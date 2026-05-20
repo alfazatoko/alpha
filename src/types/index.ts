@@ -22,6 +22,7 @@ export interface Transaction {
   originalAdminFee?: number;
   originalKategori?: string;
   kasir_id?: string;
+  store_id?: string; // Menyimpan ID toko transaksi ini
 }
 
 export interface AppState {
@@ -29,6 +30,7 @@ export interface AppState {
   totalPenjualan: number;
   transactions: Transaction[];
 }
+
 export interface Absensi {
   id?: number;
   username: string;
@@ -36,6 +38,7 @@ export interface Absensi {
   tanggal: string; // YYYY-MM-DD
   jam_masuk: string; // HH:mm:ss
   status: 'Hadir' | 'Libur';
+  store_id?: string; // Menyimpan ID toko absensi ini
 }
 
 export interface PresetOtomatis {
@@ -45,3 +48,22 @@ export interface PresetOtomatis {
   modal: number;
   jual: number;
 }
+
+export interface Store {
+  id: string;
+  user_id: string;
+  name: string;
+  subtext?: string;
+  photo_url?: string;
+  created_at?: string;
+}
+
+export interface StoreSettings {
+  store_id: string;
+  cashiers: Record<string, any>;
+  presets: PresetOtomatis[];
+  running_texts: string[];
+  main_announcement: string;
+  is_pin_enabled: boolean;
+}
+

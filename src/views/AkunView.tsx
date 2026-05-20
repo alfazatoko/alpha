@@ -23,6 +23,10 @@ interface AkunViewProps {
   googleUid?: string
   onUploadToCloud?: () => Promise<void>
   onDownloadFromCloud?: (silent?: boolean) => Promise<void>
+  onConfirm?: (title: string, message: string, onConfirm: () => void) => void
+  currentUsername?: string
+  kasirList?: Record<string, any>
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string }) => Promise<void>
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -37,27 +41,57 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  
   const safeRunningTexts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
   const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem('alphaPro_isPinEnabled') !== 'false')
   const [openCategory, setOpenCategory] = useState<string | null>('profil')
   const [savedStatus, setSavedStatus] = useState(false)
   const [isCloudLoading, setIsCloudLoading] = useState(false)
 
+  // State for cashier self-edit
+  const [editKasirName, setEditKasirName] = useState('')
+  const [editKasirPin, setEditKasirPin] = useState('')
+  const [showKasirPin, setShowKasirPin] = useState(false)
+
+  useEffect(() => {
+    if (props.currentUsername && props.kasirList && props.kasirList[props.currentUsername]) {
+      setEditKasirName(props.kasirList[props.currentUsername].name || '')
+      setEditKasirPin(props.kasirList[props.currentUsername].pin || '')
+    }
+  }, [props.currentUsername, props.kasirList])
+
   const handleUploadToCloud = async () => {
     if (!props.onUploadToCloud) return
     setIsCloudLoading(true)
     await props.onUploadToCloud()
     setIsCloudLoading(false)
-    alert("BERHASIL UPLOAD KE CLOUD!\n\nSekarang Anda bisa menekan tombol Download di HP lain.")
   }
 
   const handleDownloadFromCloud = async () => {
     if (!props.onDownloadFromCloud) return
-    if (!confirm('PERINGATAN!\nPengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?')) return
+    
+    if (props.onConfirm) {
+      props.onConfirm(
+        "DOWNLOAD DARI CLOUD",
+        "Pengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?",
+        async () => {
+          setIsCloudLoading(true)
+          await props.onDownloadFromCloud?.(false)
+          setIsCloudLoading(false)
+        }
+      )
+    } else {
+      if (!confirm('PERINGATAN!\nPengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?')) return
+      setIsCloudLoading(true)
+      await props.onDownloadFromCloud(false)
+      setIsCloudLoading(false)
+    }
+  }
 
+  const handleSyncAll = async () => {
+    if (!props.onUploadToCloud || !props.onDownloadFromCloud) return
     setIsCloudLoading(true)
-    await props.onDownloadFromCloud(false)
+    await props.onUploadToCloud()
+    await props.onDownloadFromCloud(true)
     setIsCloudLoading(false)
   }
 
@@ -107,9 +141,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }
 
   const handleResetSystem = () => {
-    if (confirm('PERINGATAN KRITIKAL!\n\nSemua data lokal (PIN, Nama Toko, Slogan) akan dikembalikan ke awal.\n\nLanjutkan reset?')) {
-      localStorage.clear()
-      window.location.reload()
+    if (props.onConfirm) {
+      props.onConfirm(
+        "RESET SISTEM",
+        "Semua data lokal (PIN, Nama Toko, Slogan) akan dikembalikan ke awal. Anda yakin ingin melanjutkan reset?",
+        () => {
+          localStorage.clear()
+          window.location.reload()
+        }
+      )
+    } else {
+      if (confirm('PERINGATAN KRITIKAL!\n\nSemua data lokal (PIN, Nama Toko, Slogan) akan dikembalikan ke awal.\n\nLanjutkan reset?')) {
+        localStorage.clear()
+        window.location.reload()
+      }
     }
   }
 
@@ -490,46 +535,64 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
               </div>
-              {/* Kategori: Sinkronisasi Cloud */}
-              <div className="group">
-                <button 
-                  onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'cloud' ? "bg-purple-600 text-white border-purple-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'cloud' ? "bg-white/20 text-white" : "bg-purple-50 text-purple-600"
-                    )}>
-                      <i className="fa-solid fa-cloud text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Sinkronisasi Cloud</span>
-                  </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'cloud' && "rotate-180"
-                  )}></i>
-                </button>
-
-                {openCategory === 'cloud' && (
-                  <div className="mt-2 p-5 bg-purple-50/50 border border-purple-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
-                    <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="w-full bg-white border border-purple-200 text-purple-700 py-3 rounded-xl font-black text-[10px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
-                      <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
-                      Upload Pengaturan Ke Cloud
-                    </button>
-                    <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="w-full bg-purple-600 border border-purple-600 text-white py-3 rounded-xl font-black text-[10px] shadow-md uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50">
-                      <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
-                      Download Dari Cloud
-                    </button>
-                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-2">Gunakan fitur ini untuk menyamakan Data Kasir, Logo Toko, dan Daftar Preset Teks Otomatis antar perangkat.</p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
+
+          {/* Kategori: Sinkronisasi Cloud (Semua role: Owner & Kasir) */}
+          <div className="group">
+            <button 
+              onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
+              className={cn(
+                "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                openCategory === 'cloud' ? "bg-purple-600 text-white border-purple-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                  openCategory === 'cloud' ? "bg-white/20 text-white" : "bg-purple-50 text-purple-600"
+                )}>
+                  <i className="fa-solid fa-cloud text-xs"></i>
+                </div>
+                <div className="text-left">
+                  <span className="text-[11px] font-black uppercase tracking-widest block">Sinkronisasi Cloud</span>
+                  <span className="text-[8px] font-bold opacity-80 block">Backup data & samakan setelan dengan perangkat lain</span>
+                </div>
+              </div>
+              <i className={cn(
+                "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                openCategory === 'cloud' && "rotate-180"
+              )}></i>
+            </button>
+
+            {openCategory === 'cloud' && (
+              <div className="mt-2 p-5 bg-purple-50/50 border border-purple-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-3">
+                {/* Tombol Update Sync (Upload + Download sekali klik) */}
+                <button 
+                  onClick={handleSyncAll} 
+                  disabled={isCloudLoading} 
+                  className="w-full bg-purple-600 border border-purple-600 text-white py-3.5 rounded-xl font-black text-[10px] shadow-lg shadow-purple-200 uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50"
+                  style={{ color: '#ffffff' }}
+                >
+                  <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-arrows-rotate"}></i>
+                  {isCloudLoading ? 'Sinkronisasi...' : 'Update Sync'}
+                </button>
+
+                <div className="flex gap-2">
+                  <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
+                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
+                    Upload
+                  </button>
+                  <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
+                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
+                    Download
+                  </button>
+                </div>
+
+                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-1">Update Sync = Upload lokal ke cloud, lalu download terbaru dari cloud. Gunakan untuk menyamakan data antar perangkat.</p>
+              </div>
+            )}
+          </div>
 
           {/* Kategori: Teks Otomatis (Setting Keterangan) */}
           <div className="group">
@@ -549,6 +612,103 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               <i className="fa-solid fa-chevron-right text-[10px] text-gray-400"></i>
             </button>
           </div>
+
+          {/* Kategori: Pengaturan PIN & Nama Kasir Mandiri */}
+          {props.kasirRole === 'kasir' && (
+            <div className="group">
+              <button 
+                onClick={() => setOpenCategory(openCategory === 'kasirSelf' ? null : 'kasirSelf')}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                  openCategory === 'kasirSelf' ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                    openCategory === 'kasirSelf' ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-600"
+                  )}>
+                    <i className="fa-solid fa-user-lock text-xs"></i>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[11px] font-black uppercase tracking-widest block">PIN & NAMA KASIR</span>
+                    <span className="text-[8px] font-bold opacity-80">Edit nama dan PIN kasir Anda</span>
+                  </div>
+                </div>
+                <i className={cn(
+                  "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                  openCategory === 'kasirSelf' && "rotate-180"
+                )}></i>
+              </button>
+
+              {openCategory === 'kasirSelf' && (
+                <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Nama Kasir</label>
+                    <input 
+                      type="text"
+                      value={editKasirName}
+                      onChange={e => setEditKasirName(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-500 font-bold"
+                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">PIN Kasir (Minimal 4 angka)</label>
+                    <div className="relative">
+                      <input 
+                        type={showKasirPin ? "text" : "password"}
+                        inputMode="numeric"
+                        maxLength={8}
+                        value={editKasirPin}
+                        onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-500 font-bold tracking-widest"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKasirPin(!showKasirPin)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <i className={showKasirPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={async () => {
+                      if (!editKasirName.trim()) {
+                        alert("Nama kasir tidak boleh kosong!");
+                        return;
+                      }
+                      if (editKasirPin.length < 4) {
+                        alert("PIN minimal harus 4 digit angka!");
+                        return;
+                      }
+                      try {
+                        if (props.onSaveCashierSelf && props.currentUsername) {
+                          await props.onSaveCashierSelf(props.currentUsername, {
+                            name: editKasirName.trim(),
+                            pin: editKasirPin
+                          });
+                          setSavedStatus(true);
+                          setTimeout(() => setSavedStatus(false), 2000);
+                        }
+                      } catch (err: any) {
+                        alert(err.message || "Gagal menyimpan perubahan kasir");
+                      }
+                    }}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                    style={{ color: '#ffffff' }}
+                  >
+                    <i className="fa-solid fa-circle-check"></i>
+                    Simpan PIN & Nama
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Menu Akun</p>
           
