@@ -1707,6 +1707,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       storePhoto={storePhoto}
                       kasirName={account.name}
                       setIsSidePanelOpen={setIsSidePanelOpen}
+                      activeStoreId={targetStoreId}
                     />
                   );
                 case 'view-akun':
@@ -1979,6 +1980,7 @@ const MainApp: React.FC<MainAppProps> = ({
             storePhoto={storePhoto}
             kasirName={account.name}
             setIsSidePanelOpen={setIsSidePanelOpen}
+            activeStoreId={targetStoreId}
           />
 
           <AkunView 

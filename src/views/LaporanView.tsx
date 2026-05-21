@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { formatRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
 
@@ -31,6 +31,113 @@ interface LaporanViewProps {
   kasirName?: string
   setIsSidePanelOpen?: (v: boolean) => void
   isPc?: boolean
+  activeStoreId?: string
+}
+
+interface VoucherItem {
+  id: number
+  name: string
+  price: number
+  modal: number
+  awal: number
+  akhir: number
+}
+
+const initialDataVoucher: Record<string, VoucherItem[]> = {
+  'AXIS': [
+    { id: 301, name: '5.5 GB/1 H', price: 8000, modal: 6500, awal: 0, akhir: 0 },
+    { id: 302, name: '15 GB/1 H', price: 10000, modal: 8500, awal: 0, akhir: 0 },
+    { id: 303, name: '5,5 GB/2 H', price: 10000, modal: 8500, awal: 0, akhir: 0 },
+    { id: 304, name: '3,5 GB/3 H', price: 11000, modal: 9500, awal: 0, akhir: 0 },
+    { id: 305, name: '5.5 GB/3 H', price: 13000, modal: 11500, awal: 0, akhir: 0 },
+    { id: 306, name: '9 GB/3 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 307, name: '13 GB/3 H', price: 18000, modal: 16500, awal: 0, akhir: 0 },
+    { id: 308, name: '5GB/5 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 309, name: '6 GB/5 H', price: 17000, modal: 15500, awal: 0, akhir: 0 },
+    { id: 310, name: '17 GB/5 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 311, name: '25 GB/5 H', price: 28000, modal: 26500, awal: 0, akhir: 0 },
+    { id: 312, name: '4 GB/7 H', price: 16000, modal: 14500, awal: 0, akhir: 0 },
+    { id: 313, name: '12 GB/7 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 314, name: '19 GB/7 H', price: 30000, modal: 28500, awal: 0, akhir: 0 },
+    { id: 315, name: '6 GB/14 H', price: 23000, modal: 21500, awal: 0, akhir: 0 },
+    { id: 316, name: '9 GB/14 H', price: 29000, modal: 27500, awal: 0, akhir: 0 },
+    { id: 317, name: '27 GB/14 H', price: 46000, modal: 44500, awal: 0, akhir: 0 },
+    { id: 318, name: '2 GB/28 H', price: 27000, modal: 25500, awal: 0, akhir: 0 },
+    { id: 319, name: '7 GB/28 H', price: 33000, modal: 31500, awal: 0, akhir: 0 },
+    { id: 320, name: '16 GB/28 H', price: 47000, modal: 45500, awal: 0, akhir: 0 },
+    { id: 321, name: '26 GB/28 H', price: 63000, modal: 61500, awal: 0, akhir: 0 }
+  ],
+  'INDOSAT': [
+    { id: 601, name: '5 GB/1 H', price: 8000, modal: 6500, awal: 0, akhir: 0 },
+    { id: 602, name: '6 GB/2 H', price: 11000, modal: 9500, awal: 0, akhir: 0 },
+    { id: 603, name: '8 GB/3 H', price: 16000, modal: 14500, awal: 0, akhir: 0 },
+    { id: 604, name: '5 GB/5 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 605, name: '6 GB/5 H', price: 17000, modal: 15500, awal: 0, akhir: 0 },
+    { id: 606, name: '9 GB/5 H', price: 20000, modal: 18500, awal: 0, akhir: 0 },
+    { id: 607, name: '13 GB/7 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 608, name: '22 GB/7 H', price: 32000, modal: 30500, awal: 0, akhir: 0 },
+    { id: 609, name: '7 GB/14 H', price: 24000, modal: 22500, awal: 0, akhir: 0 },
+    { id: 610, name: '5 GB/30 H', price: 27000, modal: 25500, awal: 0, akhir: 0 },
+    { id: 611, name: '7 GB/28 H', price: 35000, modal: 33500, awal: 0, akhir: 0 },
+    { id: 612, name: '10 GB/28 H', price: 40000, modal: 38500, awal: 0, akhir: 0 },
+    { id: 613, name: '16 GB/28 H', price: 50000, modal: 48500, awal: 0, akhir: 0 },
+    { id: 614, name: '24 GB/28 H', price: 62000, modal: 60500, awal: 0, akhir: 0 },
+    { id: 615, name: '30 GB/28 H', price: 70000, modal: 68500, awal: 0, akhir: 0 }
+  ],
+  'SMARTFREN': [
+    { id: 501, name: '2 GB/3 H', price: 10000, modal: 8500, awal: 0, akhir: 0 },
+    { id: 502, name: '4 GB/3 H', price: 11000, modal: 9500, awal: 0, akhir: 0 },
+    { id: 503, name: '3 GB/5 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 504, name: '6 GB/7 H', price: 17000, modal: 15500, awal: 0, akhir: 0 },
+    { id: 505, name: '10 GB/6 H', price: 22000, modal: 20500, awal: 0, akhir: 0 },
+    { id: 506, name: '4 GB/14 H', price: 22000, modal: 20500, awal: 0, akhir: 0 },
+    { id: 507, name: '7 GB/28 H', price: 35000, modal: 33500, awal: 0, akhir: 0 },
+    { id: 508, name: '10 GB/28 H', price: 44000, modal: 42500, awal: 0, akhir: 0 },
+    { id: 509, name: 'Unli 2 GB/7 H', price: 28000, modal: 26500, awal: 0, akhir: 0 },
+    { id: 510, name: 'Unli 1 GB/28 H', price: 72000, modal: 70500, awal: 0, akhir: 0 },
+    { id: 511, name: 'Unli 2 GB/28 H', price: 95000, modal: 93500, awal: 0, akhir: 0 }
+  ],
+  'TELKOMSEL': [
+    { id: 201, name: '4 GB/1 H', price: 8000, modal: 6500, awal: 0, akhir: 0 },
+    { id: 202, name: '6 GB/2 H', price: 12000, modal: 10500, awal: 0, akhir: 0 },
+    { id: 203, name: '5 GB/3 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 204, name: '4 GB/5 H', price: 15000, modal: 13500, awal: 0, akhir: 0 },
+    { id: 205, name: '9 GB/5 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 206, name: '9 GB/7 H', price: 31000, modal: 29500, awal: 0, akhir: 0 },
+    { id: 207, name: '10 GB/30 H', price: 45000, modal: 43500, awal: 0, akhir: 0 },
+    { id: 208, name: '18 GB/30 H', price: 55000, modal: 53500, awal: 0, akhir: 0 }
+  ],
+  'TRI': [
+    { id: 101, name: '6 GB/1 H', price: 8000, modal: 6500, awal: 0, akhir: 0 },
+    { id: 102, name: '7 GB/2 H', price: 11000, modal: 9500, awal: 0, akhir: 0 },
+    { id: 103, name: '8 GB/3 H', price: 14000, modal: 12500, awal: 0, akhir: 0 },
+    { id: 104, name: '10 GB/3 H', price: 16000, modal: 14500, awal: 0, akhir: 0 },
+    { id: 105, name: '10 GB/5 H', price: 20000, modal: 18500, awal: 0, akhir: 0 },
+    { id: 106, name: '12 GB/5 H', price: 22000, modal: 20500, awal: 0, akhir: 0 },
+    { id: 107, name: '15 GB/7 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 108, name: '8 GB/14 H', price: 25000, modal: 23500, awal: 0, akhir: 0 },
+    { id: 109, name: '7 GB/28 H', price: 34000, modal: 32500, awal: 0, akhir: 0 },
+    { id: 110, name: '10 GB/28 H', price: 40000, modal: 38500, awal: 0, akhir: 0 },
+    { id: 111, name: '16 GB/28 H', price: 50000, modal: 48500, awal: 0, akhir: 0 }
+  ],
+  'XL': [
+    { id: 401, name: '3 GB/1 H', price: 8000, modal: 6500, awal: 0, akhir: 0 },
+    { id: 402, name: '6 GB/2 H', price: 12000, modal: 10500, awal: 0, akhir: 0 },
+    { id: 403, name: '3 GB/3 H', price: 12000, modal: 10500, awal: 0, akhir: 0 },
+    { id: 404, name: '7 GB/3 H', price: 16000, modal: 14500, awal: 0, akhir: 0 },
+    { id: 405, name: '2 GB/5 H', price: 13000, modal: 11500, awal: 0, akhir: 0 },
+    { id: 406, name: '5 GB/5 H', price: 17000, modal: 15500, awal: 0, akhir: 0 },
+    { id: 407, name: '15 GB/5 H', price: 27000, modal: 25500, awal: 0, akhir: 0 },
+    { id: 408, name: '4 GB/7 H', price: 16000, modal: 14500, awal: 0, akhir: 0 },
+    { id: 409, name: '7 GB/7 H', price: 21000, modal: 19500, awal: 0, akhir: 0 },
+    { id: 410, name: '12 GB/7 H', price: 26000, modal: 24500, awal: 0, akhir: 0 },
+    { id: 411, name: '20 GB/7 H', price: 32000, modal: 30500, awal: 0, akhir: 0 },
+    { id: 412, name: '4 GB/14 H', price: 23000, modal: 21500, awal: 0, akhir: 0 },
+    { id: 413, name: '7 GB/28 H', price: 34000, modal: 32500, awal: 0, akhir: 0 },
+    { id: 414, name: '16 GB/28 H', price: 48000, modal: 46500, awal: 0, akhir: 0 },
+    { id: 415, name: '23 GB/28 H', price: 63000, modal: 61500, awal: 0, akhir: 0 },
+    { id: 416, name: '31 GB/28 H', price: 68000, modal: 66500, awal: 0, akhir: 0 }
+  ]
 }
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
@@ -71,6 +178,46 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   // Admin fee (exclude Admin Dalam and transactions from LAIN tab)
   const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   const currentTotalSaldoKas = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
+
+  const [syncTrigger, setSyncTrigger] = useState(0)
+  useEffect(() => {
+    const handleSync = () => setSyncTrigger(prev => prev + 1)
+    window.addEventListener('alphaSyncUpdate', handleSync)
+    return () => window.removeEventListener('alphaSyncUpdate', handleSync)
+  }, [])
+
+  const { totalQtyLaku, totalUangKeseluruhan, totalUangQris } = useMemo(() => {
+    if (!props.activeStoreId) {
+      return { totalQtyLaku: 0, totalUangKeseluruhan: 0, totalUangQris: 0 }
+    }
+    const savedV = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_voucher_${props.filterTanggal}`)
+    const dataVoucher = savedV ? JSON.parse(savedV) : initialDataVoucher
+
+    const savedQ = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_qris_${props.filterTanggal}`)
+    const dataQris = savedQ ? JSON.parse(savedQ) : []
+
+    let qty = 0
+    let uang = 0
+    let qris = 0
+    
+    Object.values(dataVoucher).forEach((items: any) => {
+      items.forEach((item: any) => {
+        const laku = Math.max(0, item.awal - item.akhir)
+        qty += laku
+        uang += laku * item.price
+      });
+    });
+    
+    dataQris.forEach((item: any) => {
+      qris += item.harga * item.qty
+    });
+    
+    return { 
+      totalQtyLaku: qty, 
+      totalUangKeseluruhan: uang, 
+      totalUangQris: qris
+    }
+  }, [props.activeStoreId, props.filterTanggal, syncTrigger])
 
   const handleShare = async (type: 'download-pdf' | 'share-pdf' | 'share-excel' | 'share-wa-text') => {
     setShowShareMenu(false);
@@ -161,7 +308,25 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         pdf.setTextColor(10, 90, 50);
         pdf.text(formatRupiah(currentTotalSaldoKas), 113, y + 14);
         
-        y += 26;
+        y += 25;
+        
+        // 2b. Voucher Summary Row in PDF
+        pdf.setFillColor(250, 250, 250);
+        pdf.rect(10, y, 190, 12, 'F');
+        pdf.setDrawColor(230, 230, 235);
+        pdf.rect(10, y, 190, 12, 'D');
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(80, 80, 100);
+        pdf.text('REKAP VOUCHER:', 15, y + 8);
+        
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Laku: ${totalQtyLaku} pcs`, 50, y + 8);
+        pdf.text(`Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`, 100, y + 8);
+        pdf.text(`QRIS: ${formatRupiah(totalUangQris)}`, 150, y + 8);
+        
+        y += 18;
         
         // 3. Table: Rekap per Kategori
         pdf.setFont('helvetica', 'bold');
@@ -439,6 +604,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           `💵 *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
           `🏦 *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
           `==================================`,
+          `🎟️ *REKAP PENJUALAN VOUCHER*`,
+          `• Laku: ${totalQtyLaku} pcs`,
+          `• Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`,
+          `• QRIS: ${formatRupiah(totalUangQris)}`,
+          `==================================`,
           `📊 *REKAP PER KATEGORI*`
         ].filter(Boolean);
 
@@ -543,6 +713,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         csvContent += `"Tarik Tunai Nasabah",-${currentTotalTarik}\n`;
         csvContent += `"Total KAS LAINNYA",${totalAdminDalam + totalNonTunai + totalKhusus}\n`;
         csvContent += `"TOTAL SALDO LACI KASIR",${currentTotalSaldoKas}\n`;
+        csvContent += `\nRekap Penjualan Voucher\n`;
+        csvContent += `"Voucher Laku (Qty)",${totalQtyLaku}\n`;
+        csvContent += `"Voucher Tunai",${totalUangKeseluruhan - totalUangQris}\n`;
+        csvContent += `"Voucher QRIS",${totalUangQris}\n`;
         
         const fileName = `Laporan_Alfaza_${props.filterTanggal}.csv`;
         try {
@@ -679,6 +853,43 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </p>
             <p className="text-2xl font-black mt-3 drop-shadow-sm">{formatRupiah(props.kasModal)}</p>
             <p className="text-[9px] text-slate-400 font-medium mt-1 uppercase tracking-wider">Modal laci saat buka toko</p>
+          </div>
+        </div>
+
+        {/* VOUCHER SALES SUMMARY FOR PC */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-ticket text-sm"></i>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Voucher Terjual (LAKU)</p>
+                <p className="text-lg font-black text-slate-800 dark:text-white mt-0.5">{totalQtyLaku} pcs</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-money-bill-wave text-sm"></i>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Pembayaran Tunai</p>
+                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{formatRupiah(totalUangKeseluruhan - totalUangQris)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-qrcode text-sm"></i>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Pembayaran QRIS</p>
+                <p className="text-lg font-black text-sky-600 dark:text-sky-400 mt-0.5">{formatRupiah(totalUangQris)}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1135,6 +1346,40 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="font-black text-[10px] text-blue-200 tracking-[0.2em] uppercase leading-[1.2]">Laci Kasir</span>
               </div>
               <span className="font-black text-2xl text-green-400 drop-shadow-[0_2px_10px_rgba(74,222,128,0.3)]">{formatRupiah(currentTotalSaldoKas)}</span>
+            </div>
+          </div>
+
+          {/* Voucher Summary Columns */}
+          <div className="relative mt-7 mb-3">
+            <div className="absolute -top-2 left-0 w-full flex justify-center z-10">
+              <h4 className="bg-gray-50 px-2 text-[11px] font-black text-gray-800 tracking-widest uppercase whitespace-nowrap">
+                TOTAL PENJUALAN VOUCHER
+              </h4>
+            </div>
+            <div className="bg-white border border-black rounded-[1.5rem] pt-5 pb-3 px-1 shadow-sm grid grid-cols-3 divide-x divide-gray-100">
+              <div className="flex flex-col items-center justify-center px-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <i className="fa-solid fa-ticket text-[10px] text-blue-500"></i>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Laku</span>
+                </div>
+                <span className="text-[13px] font-black text-gray-800">{totalQtyLaku}</span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center px-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <i className="fa-solid fa-money-bill-wave text-[10px] text-emerald-500"></i>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Tunai</span>
+                </div>
+                <span className="text-[13px] font-black text-emerald-600 truncate w-full text-center">{formatRupiah(totalUangKeseluruhan - totalUangQris)}</span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center px-1">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <i className="fa-solid fa-qrcode text-[10px] text-sky-500"></i>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">QRIS</span>
+                </div>
+                <span className="text-[13px] font-black text-sky-600 truncate w-full text-center">{formatRupiah(totalUangQris)}</span>
+              </div>
             </div>
           </div>
 
