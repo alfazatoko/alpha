@@ -40,7 +40,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
 
   useEffect(() => {
-    if (kasirListOverride && Object.keys(kasirListOverride).length > 0) {
+    if (kasirListOverride) {
       setKasirList(kasirListOverride)
     } else {
       setKasirList(getKasirAccounts())
@@ -124,9 +124,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
                 className="login-select"
               >
                 <option value="" disabled>Pilih Pengguna</option>
-                {Object.entries(kasirList).map(([id, acc]) => (
+                {Object.entries(kasirList)
+                  .filter(([_id, acc]) => acc.role !== 'owner')
+                  .map(([id, acc]) => (
                   <option key={id} value={id}>
-                    {acc.role === 'owner' ? `👑 ${acc.name} (Owner)` : `${acc.name} (Kasir)`}
+                    {acc.name} (Kasir)
                   </option>
                 ))}
               </select>

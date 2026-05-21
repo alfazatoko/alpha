@@ -37,7 +37,7 @@ interface BerandaViewProps {
   setFilterKasir: (v: string) => void
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
-  refreshKasirList: () => void
+  refreshKasirList: (newList?: Record<string, KasirAccount>) => void
   jamAbsen?: string
   absensiList: any[]
   runningTexts: string[]
@@ -91,15 +91,16 @@ const GajiPanel: React.FC<{
   absensiList?: any[]
   storeName?: string
   showToast: (m: string) => void
-}> = ({ kasirList, absensiList, storeName, showToast }) => {
+  activeStoreId: string
+}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId }) => {
   const [selectedKasir, setSelectedKasir] = useState<string>('')
   const [month, setMonth] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
   const [mode, setMode] = useState<'harian' | 'bulanan'>('harian')
-  const [gajiPerHari, setGajiPerHari] = useState(() => localStorage.getItem("alfaza_gaji_per_hari") || "50000")
-  const [gajiBulanan, setGajiBulanan] = useState(() => localStorage.getItem("alfaza_gaji_bulanan") || "0")
+  const [gajiPerHari, setGajiPerHari] = useState(() => localStorage.getItem(`alfaza_${activeStoreId}_gaji_per_hari`) || "50000")
+  const [gajiBulanan, setGajiBulanan] = useState(() => localStorage.getItem(`alfaza_${activeStoreId}_gaji_bulanan`) || "0")
   const [bonus, setBonus] = useState("0")
   const [potonganLain, setPotonganLain] = useState("0")
   const [ketPotongan, setKetPotongan] = useState("")
@@ -113,18 +114,18 @@ const GajiPanel: React.FC<{
   const [izinList, setIzinList] = useState<any[]>([])
   
   useEffect(() => {
-    const saved = localStorage.getItem('alphaPro_catatanIzin')
+    const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`)
     if (saved) {
       setIzinList(JSON.parse(saved))
     }
-  }, [month])
+  }, [month, activeStoreId])
 
   useEffect(() => {
-    localStorage.setItem("alfaza_gaji_per_hari", gajiPerHari.replace(/\D/g, ''))
-  }, [gajiPerHari])
+    localStorage.setItem(`alfaza_${activeStoreId}_gaji_per_hari`, gajiPerHari.replace(/\D/g, ''))
+  }, [gajiPerHari, activeStoreId])
   useEffect(() => {
-    localStorage.setItem("alfaza_gaji_bulanan", gajiBulanan.replace(/\D/g, ''))
-  }, [gajiBulanan])
+    localStorage.setItem(`alfaza_${activeStoreId}_gaji_bulanan`, gajiBulanan.replace(/\D/g, ''))
+  }, [gajiBulanan, activeStoreId])
 
   const kasirArr = Object.entries(kasirList).filter(([id]) => id !== 'owner')
   useEffect(() => {
@@ -471,8 +472,9 @@ const BackupPanel: React.FC<{
   absensiList?: any[],
   storeName?: string,
   showToast: (m: string) => void,
-  onConfirm: (t: string, m: string, c: () => void) => void
-}> = ({ transactions, absensiList, storeName, showToast, onConfirm }) => {
+  onConfirm: (t: string, m: string, c: () => void) => void,
+  activeStoreId: string
+}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId }) => {
   const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
 
   const handleBackup = async () => {
@@ -483,7 +485,7 @@ const BackupPanel: React.FC<{
         data: {
           transactions,
           absensi: absensiList || [],
-          catatanIzin: JSON.parse(localStorage.getItem('alphaPro_catatanIzin') || '[]')
+          catatanIzin: JSON.parse(localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`) || '[]')
         }
       };
 
@@ -528,11 +530,21 @@ const BackupPanel: React.FC<{
       setResetStep(2);
       try {
         // 1. Reset Transactions
-        const { error: txError } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
+        let txQuery = supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (activeStoreId !== 'all') {
+          txQuery = txQuery.eq('store_id', activeStoreId);
+        }
+        const { error: txError } = await txQuery;
+        
         // 2. Reset Attendance
-        const { error: absError } = await supabase.from('absensi').delete().neq('id', 0);
+        let absQuery = supabase.from('absensi').delete().neq('id', 0);
+        if (activeStoreId !== 'all') {
+          absQuery = absQuery.eq('store_id', activeStoreId);
+        }
+        const { error: absError } = await absQuery;
+        
         // 3. Reset Local Data
-        localStorage.removeItem('alphaPro_catatanIzin');
+        localStorage.removeItem(`alphaPro_${activeStoreId}_catatanIzin`);
         
         if (txError || absError) throw new Error("Beberapa data gagal dihapus");
         
@@ -639,8 +651,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [izinNamaKasir, setIzinNamaKasir] = useState('')
   const [izinTanggal, setIzinTanggal] = useState(getLocalDateString())
   const [izinAlasan, setIzinAlasan] = useState('')
+  const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
   const [catatanIzin, setCatatanIzin] = useState<any[]>([])
-  const STORAGE_KEY_IZIN = 'alphaPro_catatanIzin'
+  const STORAGE_KEY_IZIN = `alphaPro_${currentTargetStoreId}_catatanIzin`
 
   // Pantau State
   const [pantauTanggal, setPantauTanggal] = useState(getLocalDateString())
@@ -659,12 +672,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // Audit State
   const [auditFisik, setAuditFisik] = useState('')
   const [auditHistory, setAuditHistory] = useState<any[]>([])
-  const STORAGE_KEY_AUDIT = 'alphaPro_auditHistory'
+  const STORAGE_KEY_AUDIT = `alphaPro_${currentTargetStoreId}_auditHistory`
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY_AUDIT)
     if (saved) setAuditHistory(JSON.parse(saved))
-  }, [])
+    else setAuditHistory([])
+  }, [STORAGE_KEY_AUDIT])
 
   const handleSimpanAudit = () => {
     const fisik = parseInt(auditFisik.replace(/[^0-9]/g, '')) || 0
@@ -713,11 +727,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_IZIN)
         if (saved) setCatatanIzin(JSON.parse(saved))
+        else setCatatanIzin([])
       } catch (e) {
         console.error('Failed to load izin', e)
       }
     }
-  }, [activeOwnerSubView])
+  }, [activeOwnerSubView, STORAGE_KEY_IZIN])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -879,14 +894,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 <span className="text-[10px] font-black text-blue-800/80 uppercase tracking-widest flex items-center gap-1.5">
                   <i className="fa-solid fa-user-tie text-blue-500"></i> Mode Pantau Kasir
                 </span>
-                <div className="relative">
+                <div className="relative flex-1 flex justify-end">
                    <select 
                      value={props.filterKasir || 'Semua'}
                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                     className="bg-transparent text-blue-700/80 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6"
+                     className="bg-transparent text-blue-700/80 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6 w-full relative z-50"
                    >
                      <option value="Semua">Semua Kasir</option>
-                     {Object.entries(props.kasirList).map(([id, acc]) => (
+                     {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
                        <option key={id} value={id}>{acc.name}</option>
                      ))}
                    </select>
@@ -1299,7 +1314,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           } else {
                             saveKasirAccounts(newKasirList);
                           }
-                          props.refreshKasirList();
+                          props.refreshKasirList(newKasirList);
                           setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
                           props.showToast("Data Kasir Disimpan!");
                         }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
@@ -1334,7 +1349,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                   } else {
                                     saveKasirAccounts(n);
                                   }
-                                  props.refreshKasirList();
+                                  props.refreshKasirList(n);
                                   props.showToast("Berhasil Dihapus");
                                 })
                               }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
@@ -1841,6 +1856,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   absensiList={props.absensiList} 
                   storeName={props.storeName} 
                   showToast={props.showToast}
+                  activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
                 />
               )}
 
@@ -1852,6 +1868,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     storeName={props.storeName} 
                     showToast={props.showToast}
                     onConfirm={props.onConfirm}
+                    activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
                   />
                 </div>
               )}
@@ -2278,18 +2295,18 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
                 {/* Filter Kasir Selector - Conditional */}
                 {localStorage.getItem('alphaPro_showKasirFilter') !== 'false' && (
-                  <div className="relative">
+                  <div className="relative z-50">
                     <select 
                       value={props.filterKasir || 'Semua'}
                       onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                      className="appearance-none bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer hover:bg-white/20 transition-all uppercase tracking-widest"
+                      className="appearance-none bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer hover:bg-white/20 transition-all uppercase tracking-widest relative z-50 w-full"
                     >
                       <option value="Semua" className="text-gray-900">Semua</option>
-                      {Object.entries(props.kasirList).map(([id, acc]) => (
+                      {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
                         <option key={id} value={id} className="text-gray-900">{acc.name}</option>
                       ))}
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/50 text-[8px]">
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/50 text-[8px] z-10">
                       <i className="fa-solid fa-chevron-down"></i>
                     </div>
                   </div>

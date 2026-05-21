@@ -28,6 +28,8 @@ interface AkunViewProps {
   currentUsername?: string
   kasirList?: Record<string, any>
   onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string }) => Promise<void>
+  activeStoreId?: string | 'all'
+  transactions?: any[]
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -61,7 +63,15 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     }
   }
 
-  const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem('alphaPro_isPinEnabled') !== 'false')
+  const storageKeyPin = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_isPinEnabled` : 'alphaPro_isPinEnabled'
+  const storageKeyFilter = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_showKasirFilter` : 'alphaPro_showKasirFilter'
+
+  const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem(storageKeyPin) !== 'false')
+  
+  useEffect(() => {
+    setIsPinEnabled(localStorage.getItem(storageKeyPin) !== 'false')
+  }, [storageKeyPin])
+
   const [openCategory, setOpenCategory] = useState<string | null>('profil')
   const [savedStatus, setSavedStatus] = useState(false)
   const [isCloudLoading, setIsCloudLoading] = useState(false)
@@ -163,12 +173,12 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const togglePin = () => {
     const newValue = !isPinEnabled
     setIsPinEnabled(newValue)
-    localStorage.setItem('alphaPro_isPinEnabled', newValue.toString())
+    localStorage.setItem(storageKeyPin, newValue.toString())
   }
 
   const handleExportData = () => {
     const data = {
-      transactions: props.kasirRole === 'owner' ? localStorage.getItem('alphaPro_transactions') : 'access_denied',
+      transactions: props.kasirRole === 'owner' ? props.transactions : 'access_denied',
       settings: {
         storeName: props.storeName,
         storeSubtext: props.storeSubtext,
@@ -190,16 +200,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const handleExportCSV = () => {
     if (props.kasirRole !== 'owner') return alert("Akses ditolak");
     
-    const rawData = localStorage.getItem('alphaPro_transactions');
-    if (!rawData) return alert("Belum ada data transaksi untuk diekspor");
-    
-    let txs = [];
-    try {
-      txs = JSON.parse(rawData);
-    } catch(e) {
-      return alert("Data transaksi rusak");
-    }
-    
+    const txs = props.transactions || [];
     if (txs.length === 0) return alert("Belum ada data transaksi");
 
     // Create CSV header
@@ -557,20 +558,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </div>
                     <button 
                       onClick={() => {
-                        const current = localStorage.getItem('alphaPro_showKasirFilter') !== 'false';
-                        localStorage.setItem('alphaPro_showKasirFilter', (!current).toString());
+                        const current = localStorage.getItem(storageKeyFilter) !== 'false';
+                        localStorage.setItem(storageKeyFilter, (!current).toString());
                         window.dispatchEvent(new Event('storage'));
                         setSavedStatus(true);
                         setTimeout(() => setSavedStatus(false), 2000);
                       }}
                       className={cn(
                         "w-14 h-8 rounded-full p-1 transition-all duration-300 relative",
-                        (localStorage.getItem('alphaPro_showKasirFilter') !== 'false') ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
+                        (localStorage.getItem(storageKeyFilter) !== 'false') ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
                       )}
                     >
                       <div className={cn(
                         "w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300",
-                        (localStorage.getItem('alphaPro_showKasirFilter') !== 'false') ? "translate-x-6" : "translate-x-0"
+                        (localStorage.getItem(storageKeyFilter) !== 'false') ? "translate-x-6" : "translate-x-0"
                       )}></div>
                     </button>
                   </div>
@@ -1079,20 +1080,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       </div>
                       <button 
                         onClick={() => {
-                          const current = localStorage.getItem('alphaPro_showKasirFilter') !== 'false';
-                          localStorage.setItem('alphaPro_showKasirFilter', (!current).toString());
+                          const current = localStorage.getItem(storageKeyFilter) !== 'false';
+                          localStorage.setItem(storageKeyFilter, (!current).toString());
                           window.dispatchEvent(new Event('storage')); // Trigger update if needed
                           setSavedStatus(true);
                           setTimeout(() => setSavedStatus(false), 2000);
                         }}
                         className={cn(
                           "w-12 h-6 rounded-full p-1 transition-all duration-300 relative",
-                          (localStorage.getItem('alphaPro_showKasirFilter') !== 'false') ? "bg-indigo-600" : "bg-gray-300"
+                          (localStorage.getItem(storageKeyFilter) !== 'false') ? "bg-indigo-600" : "bg-gray-300"
                         )}
                       >
                         <div className={cn(
                           "w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300",
-                          (localStorage.getItem('alphaPro_showKasirFilter') !== 'false') ? "translate-x-6" : "translate-x-0"
+                          (localStorage.getItem(storageKeyFilter) !== 'false') ? "translate-x-6" : "translate-x-0"
                         )}></div>
                       </button>
                     </div>

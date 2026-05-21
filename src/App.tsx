@@ -12,7 +12,7 @@ import SidePanel from './components/SidePanel'
 import SidebarPC from './components/SidebarPC'
 import TransactionForm from './components/TransactionForm'
 import SummaryCards from './components/SummaryCards'
-import LoginScreen, { type KasirAccount, getKasirAccounts } from './components/LoginScreen'
+import LoginScreen, { type KasirAccount } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
@@ -138,11 +138,6 @@ const App: React.FC = () => {
           } catch(e){}
         }
         
-        // Fallback to default/global kasir list if store-specific list is empty
-        // This prevents users from getting logged out on refresh if Supabase hasn't synced cashiers yet
-        if (Object.keys(kList).length === 0) {
-          kList = getKasirAccounts()
-        }
         
         if (kList[storedUsername]) {
           setIsLoggedIn(true)
@@ -172,6 +167,8 @@ const App: React.FC = () => {
           const cList = data.cashiers || {}
           setKasirList(cList)
           localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(cList))
+        } else {
+          setKasirList({})
         }
       } catch (err) {
         console.error('Error fetching store settings:', err)
@@ -317,7 +314,7 @@ const App: React.FC = () => {
       onLogout={selectedRole === 'owner' ? handleExitStore : handleLogoutCashierOnly}
       kasirList={kasirList}
       setKasirList={setKasirList}
-      refreshKasirList={() => {}}
+      refreshKasirList={(newList) => { if (newList) setKasirList(newList) }}
       isLoggedIn={isLoggedIn}
       activeStoreId={activeStoreId}
       activeRole={selectedRole}
@@ -341,7 +338,7 @@ interface MainAppProps {
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
   setKasirList: React.Dispatch<React.SetStateAction<Record<string, KasirAccount>>>
-  refreshKasirList: () => void
+  refreshKasirList: (newList?: Record<string, KasirAccount>) => void
   isLoggedIn: boolean
   activeStoreId: string | 'all'
   activeRole: 'owner' | 'kasir'
@@ -845,8 +842,8 @@ const MainApp: React.FC<MainAppProps> = ({
         .select('*')
         .eq('user_id', googleUid)
 
-      if (activeRole === 'kasir' && activeStoreId !== 'all') {
-        query = query.eq('store_id', activeStoreId)
+      if (targetStoreId !== 'all') {
+        query = query.eq('store_id', targetStoreId)
       }
 
       const { data, error } = await query.order('timestamp', { ascending: false })
@@ -883,9 +880,9 @@ const MainApp: React.FC<MainAppProps> = ({
           filter: `user_id=eq.${googleUid}`
         },
         (payload: any) => {
-          if (activeRole === 'kasir' && activeStoreId !== 'all') {
+          if (targetStoreId !== 'all') {
             const row = payload.new || payload.old
-            if (row && row.store_id !== activeStoreId) {
+            if (row && row.store_id !== targetStoreId) {
               return
             }
           }
@@ -897,7 +894,7 @@ const MainApp: React.FC<MainAppProps> = ({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [googleUid, activeStoreId, activeRole])
+  }, [googleUid, targetStoreId, activeRole])
 
 
   // Fetch and Record Attendance
@@ -956,8 +953,8 @@ const MainApp: React.FC<MainAppProps> = ({
         .select('*')
         .eq('user_id', googleUid)
 
-      if (activeRole === 'kasir' && activeStoreId !== 'all') {
-        allQuery = allQuery.eq('store_id', activeStoreId)
+      if (targetStoreId !== 'all') {
+        allQuery = allQuery.eq('store_id', targetStoreId)
       }
 
       const { data: allData } = await allQuery.order('tanggal', { ascending: false })
@@ -976,7 +973,7 @@ const MainApp: React.FC<MainAppProps> = ({
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [googleUid, isLoggedIn, username, account?.name, activeStoreId, activeRole])
+  }, [googleUid, isLoggedIn, username, account?.name, activeStoreId, activeRole, targetStoreId])
 
 
   // Filter State
@@ -1739,6 +1736,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       currentUsername={username}
                       kasirList={kasirList}
                       onSaveCashierSelf={handleSaveCashierSelf}
+                      activeStoreId={targetStoreId}
+                      transactions={transactions}
                     />
                   );
                 case 'view-isi-saldo':
@@ -2009,6 +2008,8 @@ const MainApp: React.FC<MainAppProps> = ({
             currentUsername={username}
             kasirList={kasirList}
             onSaveCashierSelf={handleSaveCashierSelf}
+            activeStoreId={targetStoreId}
+            transactions={transactions}
           />
 
           <IsiSaldoView 
@@ -2273,8 +2274,7 @@ const MainApp: React.FC<MainAppProps> = ({
         </div>
       )}
     </div>
-
   )
 }
 
-export default App
+export default App
