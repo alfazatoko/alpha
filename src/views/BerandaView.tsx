@@ -1275,7 +1275,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                      <i className={`fa-solid ${icon} text-2xl drop-shadow-md`}></i>
                    </div>
                    <div>
-                    <div>
                        <h3 className="font-black text-2xl tracking-tight uppercase leading-none drop-shadow-md">{title}</h3>
                        {storeLabel ? (
                          <div className="mt-1.5 inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">
@@ -1288,13 +1287,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                          </p>
                        )}
                     </div>
+                  </div>
                ) : (
                  <>
                    <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90 relative z-10">
                      <i className="fa-solid fa-arrow-left"></i>
                    </button>
                    <div className="text-center relative z-10">
-                    <div className="text-center relative z-10">
                       <h3 className="font-black text-sm tracking-widest uppercase leading-none">{title}</h3>
                       {storeLabel ? (
                         <div className="mt-1 inline-flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
