@@ -130,6 +130,10 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   }
 
   const handlePinSubmit = () => {
+    if (!pinInput || pinInput.length === 0) {
+      setPinError('PIN tidak boleh kosong!')
+      return
+    }
     const correctPin = getOwnerPin()
     if (pinInput === correctPin) {
       setShowPinModal(false)
@@ -142,8 +146,16 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   }
 
   const handleSaveOwnerSettings = () => {
+    if (!editOwnerPin || editOwnerPin.length === 0) {
+      setPinError('PIN tidak boleh kosong!')
+      return
+    }
     if (editOwnerPin.length < 4) {
       setPinError('PIN minimal 4 digit!')
+      return
+    }
+    if (editOwnerPin.length > 8) {
+      setPinError('PIN maksimal 8 digit!')
       return
     }
     localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, editOwnerPin)

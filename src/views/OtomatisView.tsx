@@ -16,6 +16,7 @@ interface OtomatisViewProps {
   setIsSidePanelOpen?: (v: boolean) => void
   onConfirm?: (title: string, message: string, onConfirm: () => void) => void
   isPc?: boolean
+  activeStoreId?: string
 }
 
 const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
@@ -33,7 +34,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
       [kat]: !prev[kat]
     }))
   }
-  
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
@@ -45,7 +46,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
   const handleSimpan = () => {
     if (!formKeterangan) return props.showToast('Keterangan tidak boleh kosong!')
-    
+
     let modalNum = 0;
     let jualNum = 0;
 
@@ -114,6 +115,33 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
     setFormJual('')
   }
 
+  if (props.activeStoreId === 'all') {
+    const warningContent = (
+      <div className="flex-grow h-full flex items-center justify-center p-6">
+        <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl max-w-md">
+          <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+          <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+          <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko di Beranda untuk mengelola Teks Otomatis.</p>
+        </div>
+      </div>
+    );
+    if (props.isPc) {
+      return (
+        <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", props.active ? "flex" : "hidden")}>
+          {warningContent}
+        </div>
+      );
+    }
+    return (
+      <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
+        <div className="px-4 pt-12 pb-4 border-b flex justify-center items-center bg-blue-600 text-white shadow-lg">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">TEKS OTOMATIS</h2>
+        </div>
+        {warningContent}
+      </div>
+    );
+  }
+
   if (props.isPc) {
     return (
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", props.active ? "flex" : "hidden")}>
@@ -146,13 +174,13 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Kategori Transaksi</label>
                   <div className="flex flex-wrap gap-1.5">
                     {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai'].map((kat) => (
-                      <button 
+                      <button
                         key={kat}
                         onClick={() => setFormKategori(kat)}
                         className={cn(
                           "py-2 px-3 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
-                          formKategori === kat 
-                            ? "bg-purple-600 border-purple-600 text-white shadow-md" 
+                          formKategori === kat
+                            ? "bg-purple-600 border-purple-600 text-white shadow-md"
                             : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300"
                         )}
                         style={formKategori === kat ? { color: '#ffffff' } : undefined}
@@ -165,12 +193,12 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Keterangan / Nama Produk</label>
-                  <input 
-                    type="text" 
-                    placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"} 
+                  <input
+                    type="text"
+                    placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"}
                     value={formKeterangan}
                     onChange={(e) => setFormKeterangan(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20"
                   />
                   <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 mt-1 ml-1 leading-tight">
                     Ketika kasir mengetik kata kunci ini di Keterangan Opsional, pilihan preset otomatis akan langsung muncul.
@@ -181,10 +209,10 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Harga Modal</label>
-                      <input 
-                        type="text" 
-                        inputMode="numeric" 
-                        placeholder="0" 
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0"
                         value={formModal}
                         onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
                         className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
@@ -192,10 +220,10 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                     </div>
                     <div>
                       <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Harga Jual</label>
-                      <input 
-                        type="text" 
-                        inputMode="numeric" 
-                        placeholder="0" 
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0"
                         value={formJual}
                         onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
                         className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
@@ -204,8 +232,8 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                   </div>
                 )}
 
-                <button 
-                  onClick={handleSimpan} 
+                <button
+                  onClick={handleSimpan}
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
                   style={{ color: '#ffffff' }}
                 >
@@ -229,13 +257,13 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                   {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
                     const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
                     if (filtered.length === 0) return null;
-                    
+
                     const isCollapsed = !!collapsedCategories[kat];
-                    
+
                     return (
                       <div key={kat} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm transition-all duration-300">
                         {/* Category Header */}
-                        <button 
+                        <button
                           onClick={() => toggleCategory(kat)}
                           className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
                         >
@@ -354,12 +382,12 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
           <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
             <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
           </h3>
-          
+
           <div className="mb-2">
             <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>
             <div className="flex flex-wrap gap-1">
               {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai'].map((kat) => (
-                <button 
+                <button
                   key={kat}
                   onClick={() => setFormKategori(kat)}
                   className={cn(
@@ -375,9 +403,9 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
           <div>
             <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-widest ml-1">Keterangan / Nama Produk</label>
-            <input 
-              type="text" 
-              placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"} 
+            <input
+              type="text"
+              placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"}
               value={formKeterangan}
               onChange={(e) => setFormKeterangan(e.target.value)}
               className="form-input-modern w-full text-[13px] font-black px-3 h-10"
@@ -389,10 +417,10 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
-                <input 
-                  type="text" 
-                  inputMode="numeric" 
-                  placeholder="0" 
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   value={formModal}
                   onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
                   className="form-input-modern w-full text-[13px] font-black h-10 px-3"
@@ -400,10 +428,10 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
               </div>
               <div>
                 <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
-                <input 
-                  type="text" 
-                  inputMode="numeric" 
-                  placeholder="0" 
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   value={formJual}
                   onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
                   className="form-input-modern w-full text-[13px] font-black h-10 px-3"
@@ -414,15 +442,15 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
           <div className="flex gap-2 mt-2 pt-2">
             {editingId && (
-              <button 
+              <button
                 onClick={resetForm}
                 className="flex-1 bg-gray-100 text-gray-600 text-[10px] font-black py-3 rounded-lg hover:bg-gray-200 transition-all active:scale-95 uppercase tracking-widest"
               >
                 BATAL
               </button>
             )}
-            <button 
-              onClick={handleSimpan} 
+            <button
+              onClick={handleSimpan}
               className="flex-[2] bg-purple-600 text-white text-[10px] font-black py-3 rounded-lg hover:bg-purple-700 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
             >
               <i className="fa-solid fa-save"></i> SIMPAN PRESET
@@ -434,7 +462,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
           <h3 className="font-black text-gray-800 text-[11px] mb-2 flex items-center gap-2 uppercase tracking-tighter ml-1">
             <i className="fa-solid fa-list-ul text-blue-600"></i> DAFTAR PRESET OTOMATIS
           </h3>
-          
+
           {props.presets.length === 0 ? (
             <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
               <i className="fa-solid fa-box-open text-2xl text-gray-300 mb-2 block"></i>
@@ -445,13 +473,13 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
               {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
                 const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
                 if (filtered.length === 0) return null;
-                
+
                 const isCollapsed = !!collapsedCategories[kat];
-                
+
                 return (
                   <div key={kat} className="space-y-2 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
                     {/* Category Header (Clickable Toggle) */}
-                    <button 
+                    <button
                       onClick={() => toggleCategory(kat)}
                       className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
                     >
@@ -485,9 +513,9 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                               <h4 className="text-[10px] font-bold text-gray-800 truncate leading-tight">{p.keterangan}</h4>
                               {kat === 'Order Kuota' && (
                                 <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
-                                  <span className="text-blue-600">M:{p.modal/1000}k</span>
+                                  <span className="text-blue-600">M:{p.modal / 1000}k</span>
                                   <span className="text-gray-300">|</span>
-                                  <span className="text-emerald-600">J:{p.jual/1000}k</span>
+                                  <span className="text-emerald-600">J:{p.jual / 1000}k</span>
                                 </div>
                               )}
                             </div>

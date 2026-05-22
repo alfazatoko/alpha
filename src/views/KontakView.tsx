@@ -12,9 +12,9 @@ interface KontakRecord {
   kasir?: string;
 }
 
-const KontakView: React.FC<{ 
-  active: boolean; 
-  setActiveView: (v: string) => void; 
+const KontakView: React.FC<{
+  active: boolean;
+  setActiveView: (v: string) => void;
   kasirName: string;
   showToast: (m: string) => void;
   onConfirm: (t: string, m: string, c: () => void) => void;
@@ -60,9 +60,11 @@ const KontakView: React.FC<{
         } else {
           setKontakList([]);
         }
+      } else {
+        setKontakList([]);
       }
     };
-    
+
     loadData();
     window.addEventListener('alphaSyncUpdate', loadData);
     return () => window.removeEventListener('alphaSyncUpdate', loadData);
@@ -71,7 +73,7 @@ const KontakView: React.FC<{
   useEffect(() => {
     if (activeStoreId && activeStoreId !== 'all') {
       localStorage.setItem(`alphaPro_${activeStoreId}_kontak_list`, JSON.stringify(kontakList));
-      
+
       const syncToCloud = async () => {
         try {
           await supabase.from('store_settings').upsert({
@@ -83,7 +85,7 @@ const KontakView: React.FC<{
           console.error("Gagal sync Kontak", e);
         }
       };
-      
+
       const timer = setTimeout(syncToCloud, 1000);
       return () => clearTimeout(timer);
     }
@@ -143,7 +145,7 @@ const KontakView: React.FC<{
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setIsCapturing(true);
     try {
       const compressedBase64 = await compressImage(file);
@@ -168,6 +170,33 @@ const KontakView: React.FC<{
 
   if (!active) return null;
 
+  if (activeStoreId === 'all') {
+    const warningContent = (
+      <div className="flex-grow h-full flex items-center justify-center p-6">
+        <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl max-w-md">
+          <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+          <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+          <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko di Beranda untuk melihat data Kontak.</p>
+        </div>
+      </div>
+    );
+    if (isPc) {
+      return (
+        <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+          {warningContent}
+        </div>
+      );
+    }
+    return (
+      <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
+        <div className="px-4 pt-7 pb-4 border-b flex justify-center items-center bg-emerald-500 text-white shadow-lg">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">KONTAK PELANGGAN</h2>
+        </div>
+        {warningContent}
+      </div>
+    );
+  }
+
   if (isPc) {
     return (
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
@@ -179,7 +208,7 @@ const KontakView: React.FC<{
         </div>
 
         <div className="flex-grow flex overflow-hidden p-8 gap-8">
-          
+
           <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
               <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-700">
@@ -196,38 +225,38 @@ const KontakView: React.FC<{
               <div className="space-y-4">
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Pelanggan</label>
-                  <input 
+                  <input
                     ref={namaRef}
-                    value={nama} 
-                    onChange={e => setNama(e.target.value)} 
-                    placeholder="Masukkan nama..." 
+                    value={nama}
+                    onChange={e => setNama(e.target.value)}
+                    placeholder="Masukkan nama..."
                     onKeyDown={(e) => handleKeyDown(e, nomorRef)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">NoHP / No Rekening / Token</label>
-                  <input 
+                  <input
                     ref={nomorRef}
-                    value={nomor} 
-                    onChange={e => setNomor(e.target.value)} 
-                    placeholder="Ketik nomor/detail di sini..." 
+                    value={nomor}
+                    onChange={e => setNomor(e.target.value)}
+                    placeholder="Ketik nomor/detail di sini..."
                     onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Keterangan</label>
-                  <textarea 
+                  <textarea
                     ref={keteranganRef}
-                    value={keterangan} 
-                    onChange={e => setKeterangan(e.target.value)} 
-                    placeholder="Contoh: Rekening BRI Utama..." 
-                    rows={2} 
+                    value={keterangan}
+                    onChange={e => setKeterangan(e.target.value)}
+                    placeholder="Contoh: Rekening BRI Utama..."
+                    rows={2}
                     onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none"
                   />
                 </div>
 
@@ -253,8 +282,8 @@ const KontakView: React.FC<{
                   </div>
                 )}
 
-                <button 
-                  onClick={handleSave} 
+                <button
+                  onClick={handleSave}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest"
                   style={{ color: '#ffffff' }}
                 >
@@ -268,11 +297,11 @@ const KontakView: React.FC<{
             <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm shrink-0">
               <div className="relative w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  value={searchText} 
-                  onChange={e => setSearchText(e.target.value)} 
-                  placeholder="Cari nama pelanggan atau nomor..." 
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all" 
+                <input
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  placeholder="Cari nama pelanggan atau nomor..."
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all"
                 />
               </div>
             </div>
@@ -288,7 +317,7 @@ const KontakView: React.FC<{
                   {filteredKontak.map(k => (
                     <div key={k.id} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all">
                       <div className="flex gap-4">
-                        <div 
+                        <div
                           className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950 flex-shrink-0 flex items-center justify-center overflow-hidden border border-emerald-100 dark:border-emerald-900 cursor-pointer group/photo relative"
                           onClick={() => k.photoUrl && setPreviewImage(k.photoUrl)}
                         >
@@ -303,14 +332,14 @@ const KontakView: React.FC<{
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start gap-2">
                             <h4 className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{k.nama}</h4>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {k.nomor && (
-                                <button 
-                                  onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }} 
+                                <button
+                                  onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }}
                                   className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors"
                                   title="Salin Nomor"
                                 >
@@ -360,7 +389,7 @@ const KontakView: React.FC<{
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
       <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-emerald-500 text-white shadow-lg">
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -370,7 +399,7 @@ const KontakView: React.FC<{
           <h2 className="font-black text-xs uppercase tracking-widest leading-none">KONTAK PELANGGAN</h2>
           <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
         </div>
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -392,11 +421,11 @@ const KontakView: React.FC<{
         <div className="flex items-center gap-2 mb-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              value={searchText} 
-              onChange={e => setSearchText(e.target.value)} 
-              placeholder="Cari nama atau nomor..." 
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-blue-400 transition-all" 
+            <input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Cari nama atau nomor..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-blue-400 transition-all"
             />
           </div>
         </div>
@@ -411,7 +440,7 @@ const KontakView: React.FC<{
             filteredKontak.map(k => (
               <div key={k.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-start gap-4">
-                  <div 
+                  <div
                     className="w-14 h-14 rounded-2xl bg-blue-50 flex-shrink-0 flex items-center justify-center overflow-hidden border border-blue-100 cursor-pointer"
                     onClick={() => k.photoUrl && setPreviewImage(k.photoUrl)}
                   >
@@ -426,8 +455,8 @@ const KontakView: React.FC<{
                       <h4 className="font-bold text-sm text-gray-800 truncate">{k.nama}</h4>
                       <div className="flex items-center gap-1">
                         {k.nomor && (
-                          <button 
-                            onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }} 
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(k.nomor); showToast("Nomor disalin!"); }}
                             className="p-1.5 rounded-lg bg-blue-50 text-blue-600 active:scale-95 transition-all"
                             title="Copy Nomor"
                           >
@@ -472,40 +501,40 @@ const KontakView: React.FC<{
             <div className="space-y-3 mb-5">
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA</label>
-                <input 
+                <input
                   ref={namaRef}
-                  value={nama} 
-                  onChange={e => setNama(e.target.value)} 
-                  placeholder="Masukkan nama..." 
+                  value={nama}
+                  onChange={e => setNama(e.target.value)}
+                  placeholder="Masukkan nama..."
                   onKeyDown={(e) => handleKeyDown(e, nomorRef)}
-                  className="form-input-modern w-full" 
+                  className="form-input-modern w-full"
                 />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">Nohp, No Rekening, PPOB, Token Listrik</label>
-                <input 
+                <input
                   ref={nomorRef}
-                  value={nomor} 
-                  onChange={e => setNomor(e.target.value)} 
-                  inputMode="text" 
-                  placeholder="Ketik nomor/keterangan di sini..." 
+                  value={nomor}
+                  onChange={e => setNomor(e.target.value)}
+                  inputMode="text"
+                  placeholder="Ketik nomor/keterangan di sini..."
                   onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
-                  className="form-input-modern w-full" 
+                  className="form-input-modern w-full"
                 />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
-                <textarea 
+                <textarea
                   ref={keteranganRef}
-                  value={keterangan} 
-                  onChange={e => setKeterangan(e.target.value)} 
-                  placeholder="Contoh: Pelanggan setia..." 
-                  rows={2} 
+                  value={keterangan}
+                  onChange={e => setKeterangan(e.target.value)}
+                  placeholder="Contoh: Pelanggan setia..."
+                  rows={2}
                   onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-                  className="form-input-modern w-full resize-none" 
+                  className="form-input-modern w-full resize-none"
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex flex-col items-center justify-center gap-1.5 bg-gray-50 border border-dashed border-gray-300 rounded-xl py-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all group">
                   {isCapturing ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : <Camera className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />}

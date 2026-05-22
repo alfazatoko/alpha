@@ -15,9 +15,9 @@ interface HutangRecord {
   kasir?: string;
 }
 
-const KasbonView: React.FC<{ 
-  active: boolean; 
-  setActiveView: (v: string) => void; 
+const KasbonView: React.FC<{
+  active: boolean;
+  setActiveView: (v: string) => void;
   kasirName: string;
   showToast: (m: string) => void;
   onConfirm: (t: string, m: string, c: () => void) => void;
@@ -64,9 +64,11 @@ const KasbonView: React.FC<{
         } else {
           setHutangList([]);
         }
+      } else {
+        setHutangList([]);
       }
     };
-    
+
     loadData();
     window.addEventListener('alphaSyncUpdate', loadData);
     return () => window.removeEventListener('alphaSyncUpdate', loadData);
@@ -75,7 +77,7 @@ const KasbonView: React.FC<{
   useEffect(() => {
     if (activeStoreId && activeStoreId !== 'all') {
       localStorage.setItem(`alphaPro_${activeStoreId}_kasbon_list`, JSON.stringify(hutangList));
-      
+
       // Auto sync to supabase
       const syncToCloud = async () => {
         try {
@@ -88,7 +90,7 @@ const KasbonView: React.FC<{
           console.error("Gagal sync Kasbon", e);
         }
       };
-      
+
       // Debounce sync slightly
       const timer = setTimeout(syncToCloud, 1000);
       return () => clearTimeout(timer);
@@ -135,7 +137,7 @@ const KasbonView: React.FC<{
   };
 
   const handleLunas = (h: HutangRecord) => {
-    setHutangList(hutangList.map(item => 
+    setHutangList(hutangList.map(item =>
       item.id === h.id ? { ...item, lunas: !item.lunas, tglLunas: !item.lunas ? new Date().toLocaleDateString('id-ID') : undefined } : item
     ));
   };
@@ -154,7 +156,7 @@ const KasbonView: React.FC<{
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setIsCapturing(true);
     try {
       const compressedBase64 = await compressImage(file);
@@ -185,6 +187,33 @@ const KasbonView: React.FC<{
 
   if (!active) return null;
 
+  if (activeStoreId === 'all') {
+    const warningContent = (
+      <div className="flex-grow h-full flex items-center justify-center p-6">
+        <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl max-w-md">
+          <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+          <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+          <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko di Beranda untuk melihat data Kasbon.</p>
+        </div>
+      </div>
+    );
+    if (isPc) {
+      return (
+        <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+          {warningContent}
+        </div>
+      );
+    }
+    return (
+      <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
+        <div className="px-4 pt-7 pb-4 border-b flex justify-center items-center bg-blue-600 text-white shadow-lg">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">KASBON PELANGGAN</h2>
+        </div>
+        {warningContent}
+      </div>
+    );
+  }
+
   if (isPc) {
     return (
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
@@ -198,7 +227,7 @@ const KasbonView: React.FC<{
 
         {/* Content Pane */}
         <div className="flex-grow flex overflow-hidden p-8 gap-8">
-          
+
           {/* Left Column: Form & Summary */}
           <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
             {/* Total Piutang Card */}
@@ -223,23 +252,23 @@ const KasbonView: React.FC<{
               <div className="space-y-4">
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Pelanggan</label>
-                  <input 
+                  <input
                     ref={namaRef}
-                    value={nama} 
-                    onChange={e => setNama(e.target.value)} 
-                    placeholder="Masukkan nama..." 
+                    value={nama}
+                    onChange={e => setNama(e.target.value)}
+                    placeholder="Masukkan nama..."
                     onKeyDown={(e) => handleKeyDown(e, nominalRef)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nominal Hutang (RP)</label>
-                  <input 
+                  <input
                     ref={nominalRef}
-                    type="text" 
-                    inputMode="numeric" 
-                    placeholder="0" 
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
                     value={nominalDisplay}
                     onChange={(e) => setNominalDisplay(formatInputRupiah(e.target.value))}
                     onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
@@ -249,14 +278,14 @@ const KasbonView: React.FC<{
 
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Keterangan</label>
-                  <textarea 
+                  <textarea
                     ref={keteranganRef}
-                    value={keterangan} 
-                    onChange={e => setKeterangan(e.target.value)} 
-                    placeholder="Masukkan keterangan..." 
-                    rows={2} 
+                    value={keterangan}
+                    onChange={e => setKeterangan(e.target.value)}
+                    placeholder="Masukkan keterangan..."
+                    rows={2}
                     onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none" 
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 resize-none"
                   />
                 </div>
 
@@ -282,8 +311,8 @@ const KasbonView: React.FC<{
                   </div>
                 )}
 
-                <button 
-                  onClick={handleSave} 
+                <button
+                  onClick={handleSave}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest"
                   style={{ color: '#ffffff' }}
                 >
@@ -299,22 +328,22 @@ const KasbonView: React.FC<{
             <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center shrink-0">
               <div className="relative flex-1 w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  value={searchText} 
-                  onChange={e => setSearchText(e.target.value)} 
-                  placeholder="Cari nama pelanggan atau keterangan..." 
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all" 
+                <input
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  placeholder="Cari nama pelanggan atau keterangan..."
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 transition-all"
                 />
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tampilkan Lunas:</span>
-                <button 
-                  onClick={() => setShowLunas(!showLunas)} 
+                <button
+                  onClick={() => setShowLunas(!showLunas)}
                   className={cn(
                     "px-4 py-3 rounded-2xl border font-black text-[10px] tracking-wider transition-all",
-                    showLunas 
-                      ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100 dark:shadow-none" 
+                    showLunas
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-100 dark:shadow-none"
                       : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
                   )}
                   style={showLunas ? { color: '#ffffff' } : undefined}
@@ -351,7 +380,7 @@ const KasbonView: React.FC<{
                         </div>
 
                         {h.photoUrl && (
-                          <div 
+                          <div
                             className="w-full aspect-video rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 mb-4 overflow-hidden cursor-pointer group/photo relative"
                             onClick={() => setPreviewImage(h.photoUrl!)}
                           >
@@ -367,20 +396,20 @@ const KasbonView: React.FC<{
                         <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                           {h.lunas ? `LUNAS: ${h.tglLunas}` : "STATUS: BELUM LUNAS"}
                         </span>
-                        
+
                         <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleLunas(h)} 
+                          <button
+                            onClick={() => handleLunas(h)}
                             className={cn(
                               "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors border",
-                              h.lunas 
-                                ? 'bg-orange-50 border-orange-100 text-orange-600 dark:bg-orange-950/20 dark:border-orange-900/30 dark:text-orange-400' 
+                              h.lunas
+                                ? 'bg-orange-50 border-orange-100 text-orange-600 dark:bg-orange-950/20 dark:border-orange-900/30 dark:text-orange-400'
                                 : 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400'
                             )}
                           >
                             {h.lunas ? <Ban className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {h.lunas ? "Batal Lunas" : "Set Lunas"}
                           </button>
-                          
+
                           <button onClick={() => openEdit(h)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors">
                             <Edit className="w-3.5 h-3.5" />
                           </button>
@@ -413,7 +442,7 @@ const KasbonView: React.FC<{
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
       <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-blue-600 text-white shadow-lg">
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -423,7 +452,7 @@ const KasbonView: React.FC<{
           <h2 className="font-black text-xs uppercase tracking-widest leading-none">KASBON PELANGGAN</h2>
           <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
         </div>
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -450,15 +479,15 @@ const KasbonView: React.FC<{
         <div className="flex items-center gap-2 mb-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              value={searchText} 
-              onChange={e => setSearchText(e.target.value)} 
-              placeholder="Cari nama atau keterangan..." 
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-blue-400 transition-all" 
+            <input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Cari nama atau keterangan..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-blue-400 transition-all"
             />
           </div>
-          <button 
-            onClick={() => setShowLunas(!showLunas)} 
+          <button
+            onClick={() => setShowLunas(!showLunas)}
             className={cn(
               "px-3 py-2.5 rounded-xl border font-bold text-[10px] transition-all",
               showLunas ? "bg-green-50 border-green-200 text-green-600" : "bg-white border-gray-200 text-gray-500"
@@ -492,7 +521,7 @@ const KasbonView: React.FC<{
                 </div>
 
                 {h.photoUrl && (
-                  <div 
+                  <div
                     className="w-full aspect-video rounded-xl bg-gray-50 border border-gray-100 mb-3 overflow-hidden cursor-pointer"
                     onClick={() => setPreviewImage(h.photoUrl!)}
                   >
@@ -536,22 +565,22 @@ const KasbonView: React.FC<{
             <div className="space-y-3 mb-5">
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA PELANGGAN</label>
-                <input 
+                <input
                   ref={namaRef}
-                  value={nama} 
-                  onChange={e => setNama(e.target.value)} 
-                  placeholder="Masukkan nama..." 
+                  value={nama}
+                  onChange={e => setNama(e.target.value)}
+                  placeholder="Masukkan nama..."
                   onKeyDown={(e) => handleKeyDown(e, nominalRef)}
-                  className="form-input-modern w-full" 
+                  className="form-input-modern w-full"
                 />
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NOMINAL HUTANG</label>
-                <input 
+                <input
                   ref={nominalRef}
-                  type="text" 
-                  inputMode="numeric" 
-                  placeholder="0" 
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   value={nominalDisplay}
                   onChange={(e) => setNominalDisplay(formatInputRupiah(e.target.value))}
                   onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
@@ -560,17 +589,17 @@ const KasbonView: React.FC<{
               </div>
               <div>
                 <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">KETERANGAN</label>
-                <textarea 
+                <textarea
                   ref={keteranganRef}
-                  value={keterangan} 
-                  onChange={e => setKeterangan(e.target.value)} 
-                  placeholder="Contoh: Pinjam saldo bank, belum bayar..." 
-                  rows={2} 
+                  value={keterangan}
+                  onChange={e => setKeterangan(e.target.value)}
+                  placeholder="Contoh: Pinjam saldo bank, belum bayar..."
+                  rows={2}
                   onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-                  className="form-input-modern w-full resize-none" 
+                  className="form-input-modern w-full resize-none"
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex flex-col items-center justify-center gap-1.5 bg-gray-50 border border-dashed border-gray-300 rounded-xl py-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all group">
                   {isCapturing ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : <Camera className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />}

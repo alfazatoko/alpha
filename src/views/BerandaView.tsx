@@ -93,6 +93,16 @@ const GajiPanel: React.FC<{
   showToast: (m: string) => void
   activeStoreId: string
 }> = ({ kasirList, absensiList, storeName, showToast, activeStoreId }) => {
+  if (activeStoreId === 'all') {
+    return (
+      <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+        <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+        <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk mengelola data gajih.</p>
+      </div>
+    );
+  }
+
   const [selectedKasir, setSelectedKasir] = useState<string>('')
   const [month, setMonth] = useState<string>(() => {
     const now = new Date()
@@ -475,6 +485,16 @@ const BackupPanel: React.FC<{
   onConfirm: (t: string, m: string, c: () => void) => void,
   activeStoreId: string
 }> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId }) => {
+  if (activeStoreId === 'all') {
+    return (
+      <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+        <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+        <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk melakukan backup.</p>
+      </div>
+    );
+  }
+
   const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
 
   const handleBackup = async () => {

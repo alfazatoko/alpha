@@ -220,6 +220,18 @@ const App: React.FC = () => {
       setIsLoggedIn(false)
       setCurrentUsername('')
       setCurrentAccount(null)
+      // ── ISOLASI KASIRLIST PER-TOKO ──
+      // Reset kasirList dulu, lalu load dari localStorage toko yang dipilih.
+      // Ini mencegah nama kasir toko lain bocor ke LoginScreen kasir.
+      setKasirList({})
+      if (storeId && storeId !== 'all') {
+        try {
+          const storedList = localStorage.getItem(`alphaPro_${storeId}_kasir_list`)
+          if (storedList) setKasirList(JSON.parse(storedList))
+        } catch(e) {
+          console.error('Gagal load kasirList dari localStorage:', e)
+        }
+      }
     }
   }
 
@@ -689,6 +701,19 @@ const MainApp: React.FC<MainAppProps> = ({
   // Auto-download settings when targetStoreId changes
   useEffect(() => {
     if (googleUid) {
+      // Load local data FIRST for the new targetStoreId before fetching cloud
+      if (targetStoreId === 'all') {
+        setKasirList({})
+        setPresets([])
+        setRunningTexts(Array(15).fill(''))
+        setMainAnnouncement('Selamat Datang di ALFAZA CELL')
+      } else {
+        try { const lk = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`); setKasirList(lk ? JSON.parse(lk) : {}); } catch(e){}
+        try { const lp = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`); setPresets(lp ? JSON.parse(lp) : []); } catch(e){}
+        try { const lr = localStorage.getItem(`alphaPro_${targetStoreId}_runningTexts`); setRunningTexts(lr ? JSON.parse(lr) : Array(15).fill('')); } catch(e){}
+        setMainAnnouncement(localStorage.getItem(`alphaPro_${targetStoreId}_mainAnnouncement`) || 'Selamat Datang di ALFAZA CELL')
+      }
+
       handleDownloadFromCloud(true)
     }
   }, [googleUid, targetStoreId])
@@ -837,6 +862,9 @@ const MainApp: React.FC<MainAppProps> = ({
   // Fetch from Supabase
   useEffect(() => {
     const fetchTransactions = async () => {
+      // CLEAR TRANSACTIONS SEBELUM FETCH AGAR TIDAK TERJADI STATE LEAK (SALDO TERCAMPUR)
+      setTransactions([])
+      
       let query = supabase
         .from('transactions')
         .select('*')
@@ -1055,12 +1083,17 @@ const MainApp: React.FC<MainAppProps> = ({
   useEffect(() => {
     const fetchDailyReport = async () => {
 
-      const { data } = await supabase
+      let query = supabase
         .from('daily_reports')
         .select('*')
         .eq('user_id', googleUid)
         .eq('tanggal', filterTanggalLaporan)
-        .maybeSingle()
+        
+      if (targetStoreId !== 'all') {
+        query = query.eq('store_id', targetStoreId)
+      }
+
+      const { data } = await query.maybeSingle()
       
       if (data) {
         setDailyReport({
@@ -1789,6 +1822,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       kasirRole={account.role}
                       setIsSidePanelOpen={setIsSidePanelOpen}
                       onConfirm={handleConfirm}
+                      activeStoreId={targetStoreId}
                     />
                   );
                 case 'view-owner-monitor':
@@ -2050,6 +2084,7 @@ const MainApp: React.FC<MainAppProps> = ({
             kasirRole={account.role}
             setIsSidePanelOpen={setIsSidePanelOpen}
             onConfirm={handleConfirm}
+            activeStoreId={targetStoreId}
           />
 
           <Navigation activeView={activeView} setActiveView={setActiveView} />
@@ -2277,4 +2312,4 @@ const MainApp: React.FC<MainAppProps> = ({
   )
 }
 
-export default App
+export default App

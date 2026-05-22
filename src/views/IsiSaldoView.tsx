@@ -20,6 +20,7 @@ interface IsiSaldoViewProps {
   kasirName?: string
   kasirRole?: string
   setIsSidePanelOpen?: (v: boolean) => void
+  activeStoreId?: string
 }
 
 const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {

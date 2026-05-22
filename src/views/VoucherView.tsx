@@ -119,18 +119,18 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
 
 const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void; isPc?: boolean; activeStoreId: string; kasirRole?: string }> = ({ active, setActiveView, showToast, onConfirm, isPc, activeStoreId, kasirRole }) => {
   const [selectedDate, setSelectedDate] = useState(getLocalISOString().split('T')[0]);
-  
+
   const [dataVoucher, setDataVoucher] = useState<Record<string, VoucherItem[]>>(() => {
     const saved = localStorage.getItem(`alphaPro_${activeStoreId}_stok_voucher_${selectedDate}`);
     return saved ? JSON.parse(saved) : initialDataVoucher;
   });
-  
+
   const [dataQris, setDataQris] = useState<QrisItem[]>(() => {
     const saved = localStorage.getItem(`alphaPro_${activeStoreId}_stok_qris_${selectedDate}`);
     return saved ? JSON.parse(saved) : [];
   });
-  
-  
+
+
   const [activeEditingCell, setActiveEditingCell] = useState<string | null>(null);
   const [selectedProviderTab, setSelectedProviderTab] = useState<string>('ALL');
 
@@ -144,7 +144,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
     total: true,
     qris: true
   });
-  
+
   const toggleCol = (col: keyof typeof visibleCols) => {
     setVisibleCols(prev => ({ ...prev, [col]: !prev[col] }));
   };
@@ -159,12 +159,15 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
       if (activeStoreId && activeStoreId !== 'all') {
         const savedV = localStorage.getItem(`alphaPro_${activeStoreId}_stok_voucher_${selectedDate}`);
         setDataVoucher(savedV ? JSON.parse(savedV) : initialDataVoucher);
-        
+
         const savedQ = localStorage.getItem(`alphaPro_${activeStoreId}_stok_qris_${selectedDate}`);
         setDataQris(savedQ ? JSON.parse(savedQ) : []);
+      } else {
+        setDataVoucher(initialDataVoucher);
+        setDataQris([]);
       }
     };
-    
+
     loadData();
     window.addEventListener('alphaSyncUpdate', loadData);
     return () => window.removeEventListener('alphaSyncUpdate', loadData);
@@ -174,18 +177,18 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
     if (activeStoreId && activeStoreId !== 'all') {
       localStorage.setItem(`alphaPro_${activeStoreId}_stok_voucher_${selectedDate}`, JSON.stringify(dataVoucher));
       localStorage.setItem(`alphaPro_${activeStoreId}_stok_qris_${selectedDate}`, JSON.stringify(dataQris));
-      
+
       const syncToCloud = async () => {
         try {
           // Fetch existing voucher data to merge
           const { data } = await supabase.from('store_settings').select('voucher_data').eq('store_id', activeStoreId).maybeSingle();
           let existingData = data?.voucher_data || {};
-          
+
           existingData[selectedDate] = {
             voucher: dataVoucher,
             qris: dataQris
           };
-          
+
           await supabase.from('store_settings').upsert({
             store_id: activeStoreId,
             voucher_data: existingData,
@@ -195,7 +198,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
           console.error("Gagal sync Voucher", e);
         }
       };
-      
+
       const timer = setTimeout(syncToCloud, 1000);
       return () => clearTimeout(timer);
     }
@@ -212,7 +215,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
   const handleEditItem = (provider: string, id: number, field: keyof VoucherItem, value: any) => {
     setDataVoucher(prev => {
       const newData = { ...prev };
-      newData[provider] = newData[provider].map(item => 
+      newData[provider] = newData[provider].map(item =>
         item.id === id ? { ...item, [field]: field === 'price' || field === 'modal' ? parseInt(value) || 0 : value } : item
       );
       return newData;
@@ -224,7 +227,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
     let uang = 0;
     let qris = 0;
     let modal = 0;
-    
+
     Object.values(dataVoucher).forEach(items => {
       items.forEach(item => {
         const laku = Math.max(0, item.awal - item.akhir);
@@ -233,14 +236,14 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
         modal += laku * (item.modal || 0);
       });
     });
-    
+
     dataQris.forEach(item => {
       qris += item.harga * item.qty;
     });
-    
-    return { 
-      totalQtyLaku: qty, 
-      totalUangKeseluruhan: uang, 
+
+    return {
+      totalQtyLaku: qty,
+      totalUangKeseluruhan: uang,
       totalUangQris: qris,
       totalLaba: uang - modal
     };
@@ -298,26 +301,53 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
 
   if (!active) return null;
 
+  if (activeStoreId === 'all') {
+    const warningContent = (
+      <div className="flex-grow h-full flex items-center justify-center p-6">
+        <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl max-w-md">
+          <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+          <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+          <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko di Beranda untuk melihat data Voucher.</p>
+        </div>
+      </div>
+    );
+    if (isPc) {
+      return (
+        <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")}>
+          {warningContent}
+        </div>
+      );
+    }
+    return (
+      <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
+        <div className="px-4 pt-7 pb-4 border-b flex justify-center items-center bg-blue-800 text-white shadow-lg">
+          <h2 className="font-black text-xs uppercase tracking-widest leading-none">STOK VOUCHER</h2>
+        </div>
+        {warningContent}
+      </div>
+    );
+  }
+
   const providers = ['ALL', ...Object.keys(dataVoucher)];
 
   if (isPc) {
     return (
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", active ? "flex" : "hidden")} onClick={() => { setActiveControl(null); }}>
-        
+
         <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
           <div>
             <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Stok Voucher Fisik & Digital</h1>
             <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Pantau jumlah stock awal/akhir voucher serta pencatatan transaksi QRIS harian</p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tanggal Pembukuan:</span>
             <div className="relative">
-              <input 
-                type="date" 
-                value={selectedDate} 
-                onChange={(e) => setSelectedDate(e.target.value)} 
-                className="absolute inset-0 opacity-0 cursor-pointer" 
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
               />
               <button className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:text-white px-4 py-2.5 rounded-2xl text-[10px] font-black flex items-center gap-2 shadow-sm uppercase tracking-wider">
                 <Calendar className="w-3.5 h-3.5" />
@@ -328,9 +358,9 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
         </div>
 
         <div className="flex-grow flex overflow-hidden p-8 gap-8">
-          
+
           <div className="w-[360px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
-            
+
             <div className={cn("grid gap-3 shrink-0", kasirRole === 'owner' ? "grid-cols-4" : "grid-cols-3")}>
               <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm text-center">
                 <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider mb-1">Terjual</p>
@@ -355,18 +385,18 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-3 shrink-0">
               <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-2 pb-2 border-b border-slate-100 dark:border-slate-700">Aksi Cepat</h4>
               <div className="grid grid-cols-2 gap-3">
-                <button 
+                <button
                   onClick={resetToDefault}
                   className="bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black py-3 rounded-2xl border border-slate-200 dark:border-slate-700 transition-all uppercase tracking-wider"
                 >
                   Reset Data
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveEditingCell(activeEditingCell === 'master' ? null : 'master')}
                   className={cn(
                     "text-[10px] font-black py-3 rounded-2xl border transition-all uppercase tracking-wider",
-                    activeEditingCell === 'master' 
-                      ? "bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-100 dark:shadow-none" 
+                    activeEditingCell === 'master'
+                      ? "bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-100 dark:shadow-none"
                       : "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100 dark:shadow-none"
                   )}
                   style={{ color: '#ffffff' }}
@@ -403,7 +433,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                   </div>
                 )}
               </div>
-              
+
               {dataQris.length > 0 && (
                 <div className="bg-blue-50/50 dark:bg-blue-950/20 px-6 py-4 flex justify-between items-center border-t border-blue-100 dark:border-blue-900/30 shrink-0">
                   <span className="text-[10px] font-black text-blue-800 dark:text-blue-400 uppercase tracking-widest">Total QRIS</span>
@@ -415,7 +445,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
           </div>
 
           <div className="flex-grow h-full flex flex-col gap-6 overflow-hidden">
-            
+
             <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 shrink-0">
               {providers.map(prov => (
                 <button
@@ -461,13 +491,13 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                           {dataVoucher[provider].map((item, idx) => {
                             const laku = Math.max(0, item.awal - item.akhir);
                             const totalNominal = laku * item.price;
-                            
+
                             return (
                               <tr key={item.id} className="border-b border-slate-50 dark:border-slate-700/30 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                 <td className="p-3 pl-6">
                                   {activeEditingCell === 'master' ? (
-                                    <input 
-                                      value={item.name} 
+                                    <input
+                                      value={item.name}
                                       onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
                                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none"
                                     />
@@ -475,32 +505,32 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">{item.name}</span>
                                   )}
                                 </td>
-                                
+
                                 <td className="p-3 text-center">
                                   <div className="flex items-center justify-center min-h-[32px]">
                                     {activeControl === `${provider}-${item.id}-awal` ? (
                                       <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 p-1 rounded-xl border border-blue-100 dark:border-blue-900/30 shadow-inner animate-in zoom-in duration-150">
-                                        <button 
-                                          onClick={(e) => updateStok(e, provider, idx, 'awal', -1)} 
+                                        <button
+                                          onClick={(e) => updateStok(e, provider, idx, 'awal', -1)}
                                           className="w-6 h-6 rounded-lg bg-white border border-blue-200 dark:bg-slate-800 dark:border-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm active:scale-90 transition-all"
                                         >
                                           <Minus className="w-3 h-3" />
                                         </button>
-                                        <div 
+                                        <div
                                           onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
                                           className="text-xs font-black text-blue-800 dark:text-blue-400 w-4 text-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded"
                                         >
                                           {item.awal}
                                         </div>
-                                        <button 
-                                          onClick={(e) => updateStok(e, provider, idx, 'awal', 1)} 
+                                        <button
+                                          onClick={(e) => updateStok(e, provider, idx, 'awal', 1)}
                                           className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
                                         >
                                           <Plus className="w-3 h-3" />
                                         </button>
                                       </div>
                                     ) : (
-                                      <div 
+                                      <div
                                         onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-awal`); }}
                                         className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center cursor-pointer transition-colors bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700"
                                       >
@@ -514,27 +544,27 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                   <div className="flex items-center justify-center min-h-[32px]">
                                     {activeControl === `${provider}-${item.id}-akhir` ? (
                                       <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/30 p-1 rounded-xl border border-emerald-100 dark:border-emerald-900/30 shadow-inner animate-in zoom-in duration-150">
-                                        <button 
-                                          onClick={(e) => updateStok(e, provider, idx, 'akhir', -1)} 
+                                        <button
+                                          onClick={(e) => updateStok(e, provider, idx, 'akhir', -1)}
                                           className="w-6 h-6 rounded-lg bg-white border border-emerald-200 dark:bg-slate-800 dark:border-slate-700 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm active:scale-90 transition-all"
                                         >
                                           <Minus className="w-3 h-3" />
                                         </button>
-                                        <div 
+                                        <div
                                           onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
                                           className="text-xs font-black text-emerald-800 dark:text-emerald-400 w-4 text-center cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded"
                                         >
                                           {item.akhir}
                                         </div>
-                                        <button 
-                                          onClick={(e) => updateStok(e, provider, idx, 'akhir', 1)} 
+                                        <button
+                                          onClick={(e) => updateStok(e, provider, idx, 'akhir', 1)}
                                           className="w-6 h-6 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
                                         >
                                           <Plus className="w-3 h-3" />
                                         </button>
                                       </div>
                                     ) : (
-                                      <div 
+                                      <div
                                         onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-akhir`); }}
                                         className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center cursor-pointer transition-colors bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700"
                                       >
@@ -547,13 +577,13 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                 <td className="p-3 text-center bg-emerald-50/10 dark:bg-emerald-950/5">
                                   <span className={cn("text-xs font-black", laku > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-300 dark:text-slate-600")}>{laku}</span>
                                 </td>
-                                
+
                                 {kasirRole === 'owner' && (
                                   <td className="p-3 text-right">
                                     {activeEditingCell === 'master' ? (
-                                      <input 
+                                      <input
                                         type="number"
-                                        value={item.modal || 0} 
+                                        value={item.modal || 0}
                                         onChange={(e) => handleEditItem(provider, item.id, 'modal', e.target.value)}
                                         className="w-[80px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
                                       />
@@ -565,9 +595,9 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
 
                                 <td className="p-3 text-right">
                                   {activeEditingCell === 'master' ? (
-                                    <input 
+                                    <input
                                       type="number"
-                                      value={item.price} 
+                                      value={item.price}
                                       onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
                                       className="w-[80px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
                                     />
@@ -575,7 +605,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                     <span className="text-xs font-black text-slate-500 dark:text-slate-400">{formatRupiah(item.price)}</span>
                                   )}
                                 </td>
-                                
+
                                 <td className="p-3 text-right bg-emerald-50/10 dark:bg-emerald-950/5">
                                   <span className={cn("text-xs font-black tracking-wide", totalNominal > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-300 dark:text-slate-600")}>
                                     {totalNominal > 0 ? formatRupiah(totalNominal) : '-'}
@@ -583,7 +613,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                 </td>
 
                                 <td className="p-3 pr-6 text-center">
-                                  <button 
+                                  <button
                                     onClick={() => jualQris(provider, idx)}
                                     className="bg-sky-500 hover:bg-sky-600 text-white text-[9px] font-black px-3 py-1.5 rounded-xl shadow-sm active:scale-95 transition-all"
                                   >
@@ -613,7 +643,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
   return (
     <div className="page-view active bg-gray-50 hide-scrollbar pb-24" onClick={() => { setActiveControl(null); }}>
       <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-blue-800 text-white shadow-lg">
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -623,7 +653,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
           <h2 className="font-black text-xs uppercase tracking-widest leading-none">STOK VOUCHER</h2>
           <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
         </div>
-        <button 
+        <button
           onClick={() => setActiveView('view-beranda')}
           className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
         >
@@ -641,42 +671,42 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
         </div>
       </div>
 
-        <div className="flex gap-2 mb-4">
-          <button 
-            onClick={resetToDefault}
-            className="flex-1 bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold py-2 rounded-lg border border-white/20 transition-all"
-          >
-            RESET DATA
-          </button>
-          <button 
-            onClick={() => setActiveEditingCell(activeEditingCell === 'master' ? null : 'master')}
-            className={cn(
-              "flex-1 text-[10px] font-bold py-2 rounded-lg border transition-all",
-              activeEditingCell === 'master' ? "bg-yellow-400 text-yellow-900 border-yellow-500" : "bg-white/20 text-white border-white/20 hover:bg-white/30"
-            )}
-          >
-            {activeEditingCell === 'master' ? 'SELESAI EDIT' : 'MODE EDIT'}
-          </button>
-        </div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={resetToDefault}
+          className="flex-1 bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold py-2 rounded-lg border border-white/20 transition-all"
+        >
+          RESET DATA
+        </button>
+        <button
+          onClick={() => setActiveEditingCell(activeEditingCell === 'master' ? null : 'master')}
+          className={cn(
+            "flex-1 text-[10px] font-bold py-2 rounded-lg border transition-all",
+            activeEditingCell === 'master' ? "bg-yellow-400 text-yellow-900 border-yellow-500" : "bg-white/20 text-white border-white/20 hover:bg-white/30"
+          )}
+        >
+          {activeEditingCell === 'master' ? 'SELESAI EDIT' : 'MODE EDIT'}
+        </button>
+      </div>
 
-        <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex justify-between items-center">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">TANGGAL PEMBUKUAN</span>
-            <span className="text-xs font-bold">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-          </div>
-          <div className="relative">
-            <input 
-              type="date" 
-              value={selectedDate} 
-              onChange={(e) => setSelectedDate(e.target.value)} 
-              className="absolute inset-0 opacity-0 cursor-pointer" 
-            />
-            <button className="bg-white text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm">
-              <Calendar className="w-3 h-3" /> UBAH
-            </button>
-          </div>
+      <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex justify-between items-center">
+        <div className="flex flex-col">
+          <span className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">TANGGAL PEMBUKUAN</span>
+          <span className="text-xs font-bold">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
-      
+        <div className="relative">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+          <button className="bg-white text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm">
+            <Calendar className="w-3 h-3" /> UBAH
+          </button>
+        </div>
+      </div>
+
 
       <div className="p-4">
         <div className={cn("grid gap-2 mb-4", kasirRole === 'owner' ? "grid-cols-4" : "grid-cols-3")}>
@@ -730,7 +760,7 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                   onClick={() => toggleCol(col as keyof typeof visibleCols)}
                   className={cn(
                     "px-3 py-1.5 rounded-full text-[9px] font-black uppercase shadow-sm transition-all border",
-                    isVisible 
+                    isVisible
                       ? "bg-blue-600 text-white border-blue-600"
                       : "bg-gray-100 text-gray-400 border-gray-200"
                   )}
@@ -761,156 +791,156 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                 {Object.keys(dataVoucher)
                   .filter(p => selectedProviderTab === 'ALL' || selectedProviderTab === p)
                   .map(provider => (
-                  <React.Fragment key={provider}>
-                    {selectedProviderTab === 'ALL' && (
-                      <tr className={cn(getProviderColor(provider), "text-[9px] font-bold uppercase tracking-wider")}>
-                        <td colSpan={visibleColCount} className="px-2 py-1.5">{provider}</td>
-                      </tr>
-                    )}
-                    {dataVoucher[provider].map((item, idx) => {
-                      const laku = Math.max(0, item.awal - item.akhir);
-                      const totalNominal = laku * item.price;
-                      
-                      return (
-                        <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                          {visibleCols.produk && (
-                            <td className="p-2">
-                              {activeEditingCell === 'master' ? (
-                                  <input 
-                                    value={item.name} 
+                    <React.Fragment key={provider}>
+                      {selectedProviderTab === 'ALL' && (
+                        <tr className={cn(getProviderColor(provider), "text-[9px] font-bold uppercase tracking-wider")}>
+                          <td colSpan={visibleColCount} className="px-2 py-1.5">{provider}</td>
+                        </tr>
+                      )}
+                      {dataVoucher[provider].map((item, idx) => {
+                        const laku = Math.max(0, item.awal - item.akhir);
+                        const totalNominal = laku * item.price;
+
+                        return (
+                          <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                            {visibleCols.produk && (
+                              <td className="p-2">
+                                {activeEditingCell === 'master' ? (
+                                  <input
+                                    value={item.name}
                                     onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
                                     className="form-input-modern w-[70px] h-6 px-1 text-[10px]"
                                   />
-                              ) : (
-                                <span className="text-[10px] font-bold text-gray-800 block leading-tight whitespace-nowrap">{item.name}</span>
-                              )}
-                            </td>
-                          )}
-                          {visibleCols.awal && (
-                            <td className="p-1 text-center">
-                            <div className="flex items-center justify-center min-h-[28px]">
-                              {activeControl === `${provider}-${item.id}-awal` ? (
-                                <div className="flex items-center gap-1 bg-blue-50 p-1 rounded-lg border border-blue-100 shadow-sm animate-in zoom-in duration-200">
-                                  <button 
-                                    onClick={(e) => updateStok(e, provider, idx, 'awal', -1)} 
-                                    className="w-6 h-6 rounded bg-white border border-blue-200 flex items-center justify-center text-blue-600 shadow-sm active:scale-90 transition-all"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <div 
-                                    onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
-                                    className="text-xs font-black text-blue-800 w-4 text-center cursor-pointer hover:bg-blue-100 rounded"
-                                  >
-                                    {item.awal}
-                                  </div>
-                                  <button 
-                                    onClick={(e) => updateStok(e, provider, idx, 'awal', 1)} 
-                                    className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-gray-800 block leading-tight whitespace-nowrap">{item.name}</span>
+                                )}
+                              </td>
+                            )}
+                            {visibleCols.awal && (
+                              <td className="p-1 text-center">
+                                <div className="flex items-center justify-center min-h-[28px]">
+                                  {activeControl === `${provider}-${item.id}-awal` ? (
+                                    <div className="flex items-center gap-1 bg-blue-50 p-1 rounded-lg border border-blue-100 shadow-sm animate-in zoom-in duration-200">
+                                      <button
+                                        onClick={(e) => updateStok(e, provider, idx, 'awal', -1)}
+                                        className="w-6 h-6 rounded bg-white border border-blue-200 flex items-center justify-center text-blue-600 shadow-sm active:scale-90 transition-all"
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </button>
+                                      <div
+                                        onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
+                                        className="text-xs font-black text-blue-800 w-4 text-center cursor-pointer hover:bg-blue-100 rounded"
+                                      >
+                                        {item.awal}
+                                      </div>
+                                      <button
+                                        onClick={(e) => updateStok(e, provider, idx, 'awal', 1)}
+                                        className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-awal`); }}
+                                      className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors bg-gray-50 border border-gray-100"
+                                    >
+                                      <span className="text-[10px] font-bold text-gray-800">{item.awal}</span>
+                                    </div>
+                                  )}
                                 </div>
-                              ) : (
-                                <div 
-                                  onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-awal`); }}
-                                  className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors bg-gray-50 border border-gray-100"
-                                >
-                                  <span className="text-[10px] font-bold text-gray-800">{item.awal}</span>
+                              </td>
+                            )}
+                            {visibleCols.akhir && (
+                              <td className="p-1 text-center">
+                                <div className="flex items-center justify-center min-h-[28px]">
+                                  {activeControl === `${provider}-${item.id}-akhir` ? (
+                                    <div className="flex items-center gap-1 bg-emerald-50 p-1 rounded-lg border border-emerald-100 shadow-sm animate-in zoom-in duration-200">
+                                      <button
+                                        onClick={(e) => updateStok(e, provider, idx, 'akhir', -1)}
+                                        className="w-6 h-6 rounded bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm active:scale-90 transition-all"
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </button>
+                                      <div
+                                        onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
+                                        className="text-xs font-black text-emerald-800 w-4 text-center cursor-pointer hover:bg-emerald-100 rounded"
+                                      >
+                                        {item.akhir}
+                                      </div>
+                                      <button
+                                        onClick={(e) => updateStok(e, provider, idx, 'akhir', 1)}
+                                        className="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-akhir`); }}
+                                      className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors bg-gray-50 border border-gray-100"
+                                    >
+                                      <span className="text-[10px] font-bold text-gray-800">{item.akhir}</span>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                            </td>
-                          )}
-                          {visibleCols.akhir && (
-                            <td className="p-1 text-center">
-                            <div className="flex items-center justify-center min-h-[28px]">
-                              {activeControl === `${provider}-${item.id}-akhir` ? (
-                                <div className="flex items-center gap-1 bg-emerald-50 p-1 rounded-lg border border-emerald-100 shadow-sm animate-in zoom-in duration-200">
-                                  <button 
-                                    onClick={(e) => updateStok(e, provider, idx, 'akhir', -1)} 
-                                    className="w-6 h-6 rounded bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm active:scale-90 transition-all"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <div 
-                                    onClick={(e) => { e.stopPropagation(); setActiveControl(null); }}
-                                    className="text-xs font-black text-emerald-800 w-4 text-center cursor-pointer hover:bg-emerald-100 rounded"
-                                  >
-                                    {item.akhir}
-                                  </div>
-                                  <button 
-                                    onClick={(e) => updateStok(e, provider, idx, 'akhir', 1)} 
-                                    className="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center text-white shadow-sm active:scale-90 transition-all"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div 
-                                  onClick={(e) => { e.stopPropagation(); setActiveControl(`${provider}-${item.id}-akhir`); }}
-                                  className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors bg-gray-50 border border-gray-100"
-                                >
-                                  <span className="text-[10px] font-bold text-gray-800">{item.akhir}</span>
-                                </div>
-                              )}
-                            </div>
-                            </td>
-                          )}
-                          {visibleCols.laku && (
-                            <td className="p-1 text-center bg-emerald-50/20">
-                              <span className={cn("text-[10px] font-black", laku > 0 ? "text-emerald-600" : "text-gray-300")}>{laku}</span>
-                            </td>
-                          )}
-                          {kasirRole === 'owner' && visibleCols.modal && (
-                            <td className="p-1 text-right">
-                              {activeEditingCell === 'master' ? (
-                                  <input 
+                              </td>
+                            )}
+                            {visibleCols.laku && (
+                              <td className="p-1 text-center bg-emerald-50/20">
+                                <span className={cn("text-[10px] font-black", laku > 0 ? "text-emerald-600" : "text-gray-300")}>{laku}</span>
+                              </td>
+                            )}
+                            {kasirRole === 'owner' && visibleCols.modal && (
+                              <td className="p-1 text-right">
+                                {activeEditingCell === 'master' ? (
+                                  <input
                                     type="number"
-                                    value={item.modal || 0} 
+                                    value={item.modal || 0}
                                     onChange={(e) => handleEditItem(provider, item.id, 'modal', e.target.value)}
                                     className="form-input-modern w-[45px] h-6 px-1 text-[10px] text-right"
                                   />
-                              ) : (
-                                <span className="text-[9px] font-black text-amber-600">{((item.modal || 0)/1000)}k</span>
-                              )}
-                            </td>
-                          )}
-                          {visibleCols.harga && (
-                            <td className="p-1 text-right">
-                              {activeEditingCell === 'master' ? (
-                                  <input 
+                                ) : (
+                                  <span className="text-[9px] font-black text-amber-600">{((item.modal || 0) / 1000)}k</span>
+                                )}
+                              </td>
+                            )}
+                            {visibleCols.harga && (
+                              <td className="p-1 text-right">
+                                {activeEditingCell === 'master' ? (
+                                  <input
                                     type="number"
-                                    value={item.price} 
+                                    value={item.price}
                                     onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
                                     className="form-input-modern w-[45px] h-6 px-1 text-[10px] text-right"
                                   />
-                              ) : (
-                                <span className="text-[9px] font-black text-gray-500">{(item.price/1000)}k</span>
-                              )}
-                            </td>
-                          )}
-                          {visibleCols.total && (
-                            <td className="p-1 text-right bg-emerald-50/20">
-                              <span className={cn("text-[9px] font-black tracking-tight", totalNominal > 0 ? "text-emerald-600" : "text-gray-300")}>
-                                {totalNominal > 0 ? formatRupiah(totalNominal).replace('Rp\u00a0', '').replace('Rp ', '') : '-'}
-                              </span>
-                            </td>
-                          )}
-                          {visibleCols.qris && (
-                            <td className="p-2 text-center">
-                              <button 
-                                onClick={() => jualQris(provider, idx)}
-                                className="bg-sky-500 text-white text-[8px] font-black px-1.5 py-1 rounded shadow-sm active:scale-95 transition-all"
-                              >
-                                QRIS
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
+                                ) : (
+                                  <span className="text-[9px] font-black text-gray-500">{(item.price / 1000)}k</span>
+                                )}
+                              </td>
+                            )}
+                            {visibleCols.total && (
+                              <td className="p-1 text-right bg-emerald-50/20">
+                                <span className={cn("text-[9px] font-black tracking-tight", totalNominal > 0 ? "text-emerald-600" : "text-gray-300")}>
+                                  {totalNominal > 0 ? formatRupiah(totalNominal).replace('Rp\u00a0', '').replace('Rp ', '') : '-'}
+                                </span>
+                              </td>
+                            )}
+                            {visibleCols.qris && (
+                              <td className="p-2 text-center">
+                                <button
+                                  onClick={() => jualQris(provider, idx)}
+                                  className="bg-sky-500 text-white text-[8px] font-black px-1.5 py-1 rounded shadow-sm active:scale-95 transition-all"
+                                >
+                                  QRIS
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
               </tbody>
             </table>
           </div>
