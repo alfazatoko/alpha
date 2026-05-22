@@ -976,6 +976,8 @@ const MainApp: React.FC<MainAppProps> = ({
       }
 
       // 2. Fetch all attendance for owner view or current store for cashier
+      setAbsensi([]) // CLEAR PREVIOUS STATE TO PREVENT LEAK
+      
       let allQuery = supabase
         .from('absensi')
         .select('*')
