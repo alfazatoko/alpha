@@ -1252,6 +1252,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           }
         };
         const { title, color, icon, desc } = getSubViewDetails();
+        // Nama toko aktif untuk ditampilkan di header
+        const activePantauStore = (props.stores || []).find(s => s.id === props.pantauStoreId)
+        const storeLabel = activePantauStore?.name || (props.pantauStoreId && props.pantauStoreId !== 'all' ? props.pantauStoreId : null)
 
         return (
           <div className={cn(
@@ -1319,8 +1322,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                         <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                         <button onClick={() => {
-                          if(!kasirFormId || !kasirFormName || !kasirFormPin) return props.showToast('Lengkapi data kasir');
-                          const newKasirList = { ...props.kasirList, [kasirFormId]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName } };
+                          if(!kasirFormId.trim() || !kasirFormName.trim() || !kasirFormPin) return props.showToast('Lengkapi data kasir');
+                          // Validasi: ID kasir tidak boleh sama dengan yang sudah ada
+                          const existingIds = Object.keys(props.kasirList || {})
+                          if (existingIds.includes(kasirFormId.trim())) {
+                            return props.showToast(`ID "${kasirFormId}" sudah digunakan kasir lain!`);
+                          }
+                          if (kasirFormPin.length < 4) return props.showToast('PIN minimal 4 digit!');
+                          const newKasirList = { ...props.kasirList, [kasirFormId.trim()]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName.trim() } };
                           const targetStoreId = props.pantauStoreId;
                           if (targetStoreId && targetStoreId !== 'all') {
                             localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(newKasirList));

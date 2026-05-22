@@ -81,6 +81,12 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [editKasirPin, setEditKasirPin] = useState('')
   const [showKasirPin, setShowKasirPin] = useState(false)
 
+  // State untuk edit PIN Owner
+  const [ownerPinOld, setOwnerPinOld] = useState('')
+  const [ownerPinNew, setOwnerPinNew] = useState('')
+  const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
+  const [showOwnerPin, setShowOwnerPin] = useState(false)
+
   useEffect(() => {
     if (props.currentUsername && props.kasirList && props.kasirList[props.currentUsername]) {
       setEditKasirName(props.kasirList[props.currentUsername].name || '')
@@ -492,6 +498,88 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     <div className="mt-6 p-5 bg-blue-50/30 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-950/30 rounded-2xl text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed font-semibold">
                       <i className="fa-solid fa-circle-info mr-2"></i>
                       Apabila PIN diaktifkan, pastikan setiap akun kasir telah dikonfigurasi dengan PIN masing-masing di tab Kasir atau menu absensi. PIN bawaan default untuk kasir baru adalah <strong className="text-blue-900 dark:text-blue-200">1234</strong>.
+                    </div>
+                  </div>
+
+                  {/* Card Edit PIN Owner */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                        <i className="fa-solid fa-user-shield text-sm"></i>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">Ganti PIN Owner</h3>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">Ubah PIN masuk khusus akun Owner</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 mt-6">
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Lama</label>
+                        <div className="relative">
+                          <input
+                            type={showOwnerPin ? 'text' : 'password'}
+                            inputMode="numeric"
+                            maxLength={8}
+                            value={ownerPinOld}
+                            onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
+                            placeholder="Masukkan PIN lama"
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
+                          />
+                          <button type="button" onClick={() => setShowOwnerPin(v => !v)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                            <i className={showOwnerPin ? 'fa-solid fa-eye-slash text-sm' : 'fa-solid fa-eye text-sm'}></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Baru (min. 4 digit)</label>
+                        <input
+                          type={showOwnerPin ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={ownerPinNew}
+                          onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Masukkan PIN baru"
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Konfirmasi PIN Baru</label>
+                        <input
+                          type={showOwnerPin ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={ownerPinConfirm}
+                          onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Ulangi PIN baru"
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
+                          if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
+                          // Verifikasi PIN lama dari kasirList
+                          const ownerAcc = props.kasirList?.['owner']
+                          if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                          // Simpan PIN baru
+                          if (props.onSaveCashierSelf) {
+                            props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+                              .then(() => {
+                                setSavedStatus(true);
+                                setTimeout(() => setSavedStatus(false), 2000);
+                                setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
+                              })
+                              .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
+                          }
+                        }}
+                        disabled={props.activeStoreId === 'all'}
+                        className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
+                        style={{ color: '#ffffff' }}
+                      >
+                        <i className="fa-solid fa-shield-halved"></i>
+                        Simpan PIN Owner Baru
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -960,7 +1048,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 </button>
 
                 {openCategory === 'keamanan' && (
-                  <div className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 overflow-hidden">
+                  <div className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 overflow-hidden space-y-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
@@ -984,6 +1072,74 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         )}></div>
                       </button>
                     </div>
+
+                    {/* Ganti PIN Owner */}
+                    {props.kasirRole === 'owner' && (
+                      <div className="border-t border-blue-100 pt-4 space-y-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                            <i className="fa-solid fa-user-shield text-xs"></i>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">Ganti PIN Owner</p>
+                            <p className="text-[9px] text-gray-500 font-medium">Ubah PIN masuk akun Owner</p>
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type={showOwnerPin ? 'text' : 'password'}
+                            inputMode="numeric"
+                            maxLength={8}
+                            value={ownerPinOld}
+                            onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
+                            placeholder="PIN Lama"
+                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
+                          />
+                          <button type="button" onClick={() => setShowOwnerPin(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                            <i className={showOwnerPin ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
+                          </button>
+                        </div>
+                        <input
+                          type={showOwnerPin ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={ownerPinNew}
+                          onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
+                          placeholder="PIN Baru (min. 4 digit)"
+                          className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
+                        />
+                        <input
+                          type={showOwnerPin ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={ownerPinConfirm}
+                          onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Konfirmasi PIN Baru"
+                          className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
+                            if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
+                            const ownerAcc = props.kasirList?.['owner'];
+                            if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                            if (props.onSaveCashierSelf) {
+                              props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+                                .then(() => {
+                                  setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
+                                  alert('PIN Owner berhasil diubah!');
+                                })
+                                .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
+                            }
+                          }}
+                          className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
+                          style={{ color: '#ffffff' }}
+                        >
+                          <i className="fa-solid fa-shield-halved"></i>
+                          Simpan PIN Owner
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
