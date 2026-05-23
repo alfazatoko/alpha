@@ -1405,14 +1405,24 @@ const MainApp: React.FC<MainAppProps> = ({
     setEditingTx(tx)
     setEditKategori(tx.kategori)
     setEditNominal(tx.nominal.toLocaleString('id-ID').replace(/,/g, '.'))
-    setEditAdmin(tx.adminFee.toLocaleString('id-ID').replace(/,/g, '.'))
+    
+    if (tx.kategori === 'Order Kuota') {
+      setEditAdmin((tx.nominal + tx.adminFee).toLocaleString('id-ID').replace(/,/g, '.'))
+    } else {
+      setEditAdmin(tx.adminFee.toLocaleString('id-ID').replace(/,/g, '.'))
+    }
+    
     setEditKeterangan(tx.keterangan)
   }
 
   const handleSaveEdit = () => {
     if (!editingTx || isSaving) return
     const newNominal = parseNominal(editNominal)
-    const newAdmin = parseNominal(editAdmin)
+    let newAdmin = parseNominal(editAdmin)
+
+    if (editKategori === 'Order Kuota') {
+      newAdmin = newAdmin - newNominal;
+    }
 
     setIsSaving(true)
 
@@ -2143,7 +2153,9 @@ const MainApp: React.FC<MainAppProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Nominal</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
+                    {editKategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                  </label>
                   <input 
                     ref={editNominalRef}
                     value={editNominal} 
@@ -2153,7 +2165,9 @@ const MainApp: React.FC<MainAppProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Admin</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
+                    {editKategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
+                  </label>
                   <input 
                     ref={editAdminRef}
                     value={editAdmin} 
