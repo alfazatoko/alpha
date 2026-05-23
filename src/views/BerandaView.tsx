@@ -684,6 +684,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // Grafik State
   const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
   const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
+  const [grafikType, setGrafikType] = useState<'bar'|'line'|'pie'>('bar')
 
   const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
@@ -1927,16 +1928,18 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <div>
                         <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NAMA KASIR</label>
                         <div className="relative">
-                          <select 
+                          <input 
+                            list="kasir-list-izin"
                             value={izinNamaKasir} 
                             onChange={e => setIzinNamaKasir(e.target.value)}
-                            className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400 appearance-none cursor-pointer"
-                          >
-                            <option value="" disabled>Pilih kasir</option>
+                            placeholder="Pilih atau ketik nama kasir"
+                            className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400"
+                          />
+                          <datalist id="kasir-list-izin">
                             {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                              <option key={id} value={acc.name}>{acc.name}</option>
+                              <option key={id} value={acc.name} />
                             ))}
-                          </select>
+                          </datalist>
                           <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-orange-400 pointer-events-none"></i>
                         </div>
                       </div>
@@ -2109,37 +2112,152 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volSemua/1000).toLocaleString('id-ID')}K</h2>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-2">
                       <div>
                         <h4 className="text-[14px] font-black text-gray-900 uppercase tracking-tighter">Performa Transaksi</h4>
                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                             {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
                         </p>
                       </div>
-                      <div className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[9px] font-black uppercase">Statistik</div>
+                      <div className="flex bg-gray-100 rounded-lg p-1">
+                        <button onClick={() => setGrafikType('bar')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'bar' ? "bg-white shadow-sm text-blue-600" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-simple"></i></button>
+                        <button onClick={() => setGrafikType('line')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'line' ? "bg-white shadow-sm text-emerald-600" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-line"></i></button>
+                        <button onClick={() => setGrafikType('pie')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'pie' ? "bg-white shadow-sm text-amber-500" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-pie"></i></button>
+                      </div>
                     </div>
 
                     <div className="bg-white rounded-[2rem] p-5 shadow-xl shadow-blue-500/5 border border-blue-50 relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
-                      <div className="h-40 flex items-end justify-between gap-1 pt-4 relative z-10">
-                        {chartData.map((d, i) => {
-                          const heightPct = Math.max((d.value / maxVal) * 100, 4);
-                          return (
-                            <div key={i} className="relative flex flex-col items-center flex-1 group h-full justify-end pb-6">
-                              <div className="absolute -top-8 bg-gray-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
-                                Rp {(d.value/1000).toLocaleString('id-ID')}K
+                      
+                      {/* CSS ANIMATIONS FOR CHARTS */}
+                      <style>{`
+                        @keyframes growBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+                        @keyframes drawLine { to { stroke-dashoffset: 0; } }
+                        .animate-bar { animation: growBar 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
+                        .animate-line { animation: drawLine 1.5s ease-out forwards; }
+                      `}</style>
+
+                      {grafikType === 'bar' && (
+                        <div className="h-40 flex items-end justify-between gap-1 pt-4 relative z-10">
+                          {chartData.map((d, i) => {
+                            const heightPct = Math.max((d.value / maxVal) * 100, 4);
+                            return (
+                              <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-6">
+                                <div className="absolute -top-8 bg-gray-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                                  Rp {(d.value/1000).toLocaleString('id-ID')}K
+                                </div>
+                                <div 
+                                  className="w-full max-w-[28px] bg-gradient-to-t from-blue-500 to-indigo-400 rounded-t-[6px] shadow-sm animate-bar hover:from-blue-400 hover:to-indigo-300"
+                                  style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
+                                ></div>
+                                <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
+                                  {d.label}
+                                </span>
                               </div>
-                              <div 
-                                className="w-full max-w-[28px] bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t-[4px] transition-all duration-500 hover:from-emerald-400 hover:to-teal-300 shadow-sm"
-                                style={{ height: `${heightPct}%` }}
-                              ></div>
-                              <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
-                                {d.label}
-                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {grafikType === 'line' && (() => {
+                        const points = chartData.map((d, i) => {
+                          const x = (i / Math.max(chartData.length - 1, 1)) * 100;
+                          const y = 100 - ((d.value / maxVal) * 100);
+                          return `${x},${y}`;
+                        }).join(' ');
+                        return (
+                          <div className="h-40 relative w-full pt-4 pb-6 px-4 z-10">
+                            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                              <defs>
+                                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <polygon points={`0,100 ${points} 100,100`} fill="url(#lineGrad)" className="animate-in fade-in duration-1000" />
+                              <polyline 
+                                points={points} 
+                                fill="none" 
+                                stroke="#10b981" 
+                                strokeWidth="3" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round" 
+                                className="animate-line" 
+                                style={{ strokeDasharray: 500, strokeDashoffset: 500 }} 
+                              />
+                              {chartData.map((d, i) => {
+                                const x = (i / Math.max(chartData.length - 1, 1)) * 100;
+                                const y = 100 - ((d.value / maxVal) * 100);
+                                return (
+                                  <g key={i} className="group/pt cursor-pointer">
+                                    <circle cx={x} cy={y} r="4" fill="#ffffff" stroke="#10b981" strokeWidth="2.5" className="animate-in zoom-in duration-500 delay-500 group-hover/pt:r-6 transition-all" />
+                                    <text x={x} y={y - 12} fontSize="6" fontWeight="bold" fill="#374151" textAnchor="middle" className="opacity-0 group-hover/pt:opacity-100 transition-opacity">
+                                      {(d.value/1000).toLocaleString('id-ID')}K
+                                    </text>
+                                  </g>
+                                )
+                              })}
+                            </svg>
+                            <div className="absolute bottom-0 left-0 w-full flex justify-between px-4">
+                              {chartData.map((d, i) => (
+                                <span key={i} className="text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-8 text-center -ml-4">
+                                  {d.label}
+                                </span>
+                              ))}
                             </div>
-                          )
-                        })}
-                      </div>
+                          </div>
+                        )
+                      })()}
+
+                      {grafikType === 'pie' && (() => {
+                        const total = chartData.reduce((s, d) => s + d.value, 0) || 1;
+                        let currentOffset = 0;
+                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+                        return (
+                          <div className="h-40 flex items-center justify-center relative pt-2 pb-6 z-10">
+                            <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible transform -rotate-90">
+                              {chartData.map((d, i) => {
+                                if (d.value === 0) return null;
+                                const radius = 40;
+                                const circumference = 2 * Math.PI * radius;
+                                const percentage = d.value / total;
+                                const strokeLength = percentage * circumference;
+                                const dasharray = `${strokeLength} ${circumference}`;
+                                const dashoffset = -currentOffset;
+                                currentOffset += strokeLength;
+                                return (
+                                  <circle
+                                    key={i}
+                                    cx="50"
+                                    cy="50"
+                                    r={radius}
+                                    fill="transparent"
+                                    stroke={colors[i % colors.length]}
+                                    strokeWidth="16"
+                                    strokeDasharray={dasharray}
+                                    strokeDashoffset={dashoffset}
+                                    strokeLinecap={percentage > 0.99 ? "round" : "butt"}
+                                    className="animate-in zoom-in duration-1000 hover:stroke-[20] transition-all cursor-pointer"
+                                    style={{ animationDelay: `${i * 100}ms` }}
+                                  />
+                                )
+                              })}
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-16px]">
+                              <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Total</span>
+                              <span className="text-[11px] font-black text-gray-800">{(total/1000).toLocaleString('id-ID')}K</span>
+                            </div>
+                            <div className="absolute bottom-0 left-0 w-full flex justify-center gap-2 overflow-x-auto hide-scrollbar pb-1">
+                              {chartData.map((d, i) => d.value > 0 && (
+                                <div key={i} className="flex items-center gap-1 shrink-0">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }}></div>
+                                  <span className="text-[7px] font-bold text-gray-500 uppercase">{d.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 );

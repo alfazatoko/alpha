@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { CreditCard, Plus, Minus, Calendar } from "lucide-react";
+import { CreditCard, Plus, Minus, Calendar, Trash2 } from "lucide-react";
 import { formatRupiah, cn, getLocalISOString } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 
@@ -222,6 +222,30 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
     });
   };
 
+  const handleAddProduct = (provider: string) => {
+    const newId = Date.now();
+    setDataVoucher(prev => {
+      const newData = { ...prev };
+      newData[provider] = [
+        ...newData[provider],
+        { id: newId, name: 'PRODUK BARU', price: 0, modal: 0, awal: 0, akhir: 0 }
+      ];
+      return newData;
+    });
+    setActiveEditingCell(`edit-${provider}-${newId}`);
+  };
+
+  const handleDeleteProduct = (provider: string, id: number) => {
+    onConfirm("HAPUS PRODUK", "Yakin ingin menghapus produk ini?", () => {
+      setDataVoucher(prev => {
+        const newData = { ...prev };
+        newData[provider] = newData[provider].filter(item => item.id !== id);
+        return newData;
+      });
+      showToast("Produk berhasil dihapus");
+    });
+  };
+
   const { totalQtyLaku, totalUangKeseluruhan, totalUangQris, totalLaba } = useMemo(() => {
     let qty = 0;
     let uang = 0;
@@ -361,23 +385,23 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
 
           <div className="w-[360px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
 
-            <div className={cn("grid gap-3 shrink-0", kasirRole === 'owner' ? "grid-cols-4" : "grid-cols-3")}>
-              <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm text-center">
+            <div className={cn("grid gap-3 shrink-0", kasirRole === 'owner' ? "grid-cols-2" : "grid-cols-3")}>
+              <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm text-center flex flex-col justify-center">
                 <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider mb-1">Terjual</p>
                 <p className="text-lg font-black text-slate-800 dark:text-white leading-tight">{totalQtyLaku}</p>
               </div>
-              <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-3xl p-4 border border-emerald-100 dark:border-emerald-900/30 shadow-sm text-center">
+              <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-3xl p-4 border border-emerald-100 dark:border-emerald-900/30 shadow-sm text-center flex flex-col justify-center">
                 <p className="text-[9px] text-emerald-500 dark:text-emerald-400 font-black uppercase tracking-wider mb-1">Uang Tunai</p>
-                <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 leading-tight truncate">{formatRupiah(totalUangKeseluruhan - totalUangQris)}</p>
+                <p className={cn("font-black text-emerald-600 dark:text-emerald-400 leading-tight", kasirRole === 'owner' ? "text-sm" : "text-[11px] truncate")}>{formatRupiah(totalUangKeseluruhan - totalUangQris)}</p>
               </div>
-              <div className="bg-sky-50 dark:bg-sky-950/20 rounded-3xl p-4 border border-sky-100 dark:border-sky-900/30 shadow-sm text-center">
+              <div className="bg-sky-50 dark:bg-sky-950/20 rounded-3xl p-4 border border-sky-100 dark:border-sky-900/30 shadow-sm text-center flex flex-col justify-center">
                 <p className="text-[9px] text-sky-500 dark:text-sky-400 font-black uppercase tracking-wider mb-1">Via QRIS</p>
-                <p className="text-xs font-black text-sky-600 dark:text-sky-400 leading-tight truncate">{formatRupiah(totalUangQris)}</p>
+                <p className={cn("font-black text-sky-600 dark:text-sky-400 leading-tight", kasirRole === 'owner' ? "text-sm" : "text-[11px] truncate")}>{formatRupiah(totalUangQris)}</p>
               </div>
               {kasirRole === 'owner' && (
-                <div className="bg-amber-50 dark:bg-amber-950/20 rounded-3xl p-4 border border-amber-100 dark:border-amber-900/30 shadow-sm text-center">
+                <div className="bg-amber-50 dark:bg-amber-950/20 rounded-3xl p-4 border border-amber-100 dark:border-amber-900/30 shadow-sm text-center flex flex-col justify-center">
                   <p className="text-[9px] text-amber-500 dark:text-amber-400 font-black uppercase tracking-wider mb-1">Total Laba</p>
-                  <p className="text-xs font-black text-amber-600 dark:text-amber-400 leading-tight truncate">{formatRupiah(totalLaba)}</p>
+                  <p className="text-sm font-black text-amber-600 dark:text-amber-400 leading-tight">{formatRupiah(totalLaba)}</p>
                 </div>
               )}
             </div>
@@ -495,14 +519,38 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                             return (
                               <tr key={item.id} className="border-b border-slate-50 dark:border-slate-700/30 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                 <td className="p-3 pl-6">
-                                  {activeEditingCell === 'master' ? (
-                                    <input
-                                      value={item.name}
-                                      onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
-                                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none"
-                                    />
+                                  {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        value={item.name}
+                                        onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none"
+                                        autoFocus={activeEditingCell === `edit-${provider}-${item.id}`}
+                                      />
+                                      {activeEditingCell === `edit-${provider}-${item.id}` ? (
+                                        <button onClick={() => setActiveEditingCell(null)} className="text-emerald-500 hover:text-emerald-600 p-1 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg shrink-0">
+                                          <i className="fa-solid fa-check text-xs"></i>
+                                        </button>
+                                      ) : kasirRole === 'owner' ? (
+                                        <button onClick={() => handleDeleteProduct(provider, item.id)} className="text-red-500 hover:text-red-600 p-1 bg-red-50 dark:bg-red-950/30 rounded-lg shrink-0">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      ) : null}
+                                    </div>
                                   ) : (
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">{item.name}</span>
+                                    <div className="flex items-center gap-2 group">
+                                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">{item.name}</span>
+                                      {kasirRole === 'owner' && (
+                                        <div className="hidden group-hover:flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                                          <button onClick={() => setActiveEditingCell(`edit-${provider}-${item.id}`)} className="text-blue-500 hover:text-blue-600">
+                                            <i className="fa-solid fa-pen text-[10px]"></i>
+                                          </button>
+                                          <button onClick={() => handleDeleteProduct(provider, item.id)} className="text-red-500 hover:text-red-600">
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
 
@@ -580,12 +628,12 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
 
                                 {kasirRole === 'owner' && (
                                   <td className="p-3 text-right">
-                                    {activeEditingCell === 'master' ? (
+                                    {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
                                       <input
                                         type="number"
                                         value={item.modal || 0}
                                         onChange={(e) => handleEditItem(provider, item.id, 'modal', e.target.value)}
-                                        className="w-[80px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
+                                        className="w-[110px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
                                       />
                                     ) : (
                                       <span className="text-xs font-black text-amber-600 dark:text-amber-500">{formatRupiah(item.modal || 0)}</span>
@@ -594,12 +642,12 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                                 )}
 
                                 <td className="p-3 text-right">
-                                  {activeEditingCell === 'master' ? (
+                                  {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
                                     <input
                                       type="number"
                                       value={item.price}
                                       onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
-                                      className="w-[80px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
+                                      className="w-[110px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 dark:text-white outline-none text-right"
                                     />
                                   ) : (
                                     <span className="text-xs font-black text-slate-500 dark:text-slate-400">{formatRupiah(item.price)}</span>
@@ -623,6 +671,18 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                               </tr>
                             );
                           })}
+                          {kasirRole === 'owner' && (
+                            <tr className="border-b border-slate-50 dark:border-slate-700/30">
+                              <td colSpan={kasirRole === 'owner' ? 8 : 7} className="p-3 text-center">
+                                <button
+                                  onClick={() => handleAddProduct(provider)}
+                                  className="text-[10px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-4 py-2 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors uppercase tracking-widest"
+                                >
+                                  <Plus className="w-3 h-3 inline mr-1 -mt-0.5" /> Tambah Produk {provider}
+                                </button>
+                              </td>
+                            </tr>
+                          )}
                         </React.Fragment>
                       ))}
                   </tbody>
@@ -671,44 +731,47 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
         </div>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={resetToDefault}
-          className="flex-1 bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold py-2 rounded-lg border border-white/20 transition-all"
-        >
-          RESET DATA
-        </button>
-        <button
-          onClick={() => setActiveEditingCell(activeEditingCell === 'master' ? null : 'master')}
-          className={cn(
-            "flex-1 text-[10px] font-bold py-2 rounded-lg border transition-all",
-            activeEditingCell === 'master' ? "bg-yellow-400 text-yellow-900 border-yellow-500" : "bg-white/20 text-white border-white/20 hover:bg-white/30"
-          )}
-        >
-          {activeEditingCell === 'master' ? 'SELESAI EDIT' : 'MODE EDIT'}
-        </button>
+      <div className="px-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={resetToDefault}
+              className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 text-[10px] font-black py-3 rounded-xl border border-gray-200 transition-all uppercase tracking-wider"
+            >
+              Reset Data
+            </button>
+            <button
+              onClick={() => setActiveEditingCell(activeEditingCell === 'master' ? null : 'master')}
+              className={cn(
+                "flex-1 text-[10px] font-black py-3 rounded-xl border transition-all uppercase tracking-wider",
+                activeEditingCell === 'master' ? "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-100" : "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-100"
+              )}
+            >
+              {activeEditingCell === 'master' ? 'Batal Edit' : 'Edit Master'}
+            </button>
+          </div>
+
+          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex justify-between items-center">
+            <div className="flex flex-col">
+              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">TANGGAL PEMBUKUAN</span>
+              <span className="text-[11px] font-black text-gray-800">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            </div>
+            <div className="relative shrink-0">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <button className="bg-white text-blue-600 border border-blue-100 px-3 py-2 rounded-lg text-[10px] font-black flex items-center gap-1.5 shadow-sm hover:bg-blue-50 transition-colors">
+                <Calendar className="w-3.5 h-3.5" /> UBAH
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white/10 p-3 rounded-xl border border-white/10 flex justify-between items-center">
-        <div className="flex flex-col">
-          <span className="text-[9px] text-blue-200 font-bold uppercase tracking-widest">TANGGAL PEMBUKUAN</span>
-          <span className="text-xs font-bold">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-        </div>
-        <div className="relative">
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="absolute inset-0 opacity-0 cursor-pointer"
-          />
-          <button className="bg-white text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm">
-            <Calendar className="w-3 h-3" /> UBAH
-          </button>
-        </div>
-      </div>
-
-
-      <div className="p-4">
+      <div className="px-4">
         <div className={cn("grid gap-2 mb-4", kasirRole === 'owner' ? "grid-cols-4" : "grid-cols-3")}>
           <div className="bg-white border border-gray-200 rounded-xl p-3 text-center shadow-sm">
             <div className="text-[9px] text-gray-400 font-bold uppercase mb-1">LAKU</div>
@@ -805,14 +868,38 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                           <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                             {visibleCols.produk && (
                               <td className="p-2">
-                                {activeEditingCell === 'master' ? (
-                                  <input
-                                    value={item.name}
-                                    onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
-                                    className="form-input-modern w-[70px] h-6 px-1 text-[10px]"
-                                  />
+                                {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      value={item.name}
+                                      onChange={(e) => handleEditItem(provider, item.id, 'name', e.target.value)}
+                                      className="form-input-modern w-[110px] h-6 px-1 text-[10px]"
+                                      autoFocus={activeEditingCell === `edit-${provider}-${item.id}`}
+                                    />
+                                    {activeEditingCell === `edit-${provider}-${item.id}` ? (
+                                      <button onClick={() => setActiveEditingCell(null)} className="text-emerald-500 p-0.5 bg-emerald-50 rounded shrink-0">
+                                        <i className="fa-solid fa-check text-[10px]"></i>
+                                      </button>
+                                    ) : kasirRole === 'owner' ? (
+                                      <button onClick={() => handleDeleteProduct(provider, item.id)} className="text-red-500 p-0.5 bg-red-50 rounded shrink-0">
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    ) : null}
+                                  </div>
                                 ) : (
-                                  <span className="text-[10px] font-bold text-gray-800 block leading-tight whitespace-nowrap">{item.name}</span>
+                                  <div className="flex items-center gap-1 group">
+                                    <span className="text-[10px] font-bold text-gray-800 block leading-tight whitespace-nowrap">{item.name}</span>
+                                    {kasirRole === 'owner' && (
+                                      <div className="flex items-center gap-1 opacity-60">
+                                        <button onClick={() => setActiveEditingCell(`edit-${provider}-${item.id}`)} className="text-blue-500 hover:text-blue-600">
+                                          <i className="fa-solid fa-pen text-[9px]"></i>
+                                        </button>
+                                        <button onClick={() => handleDeleteProduct(provider, item.id)} className="text-red-500 hover:text-red-600">
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                             )}
@@ -893,12 +980,12 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                             )}
                             {kasirRole === 'owner' && visibleCols.modal && (
                               <td className="p-1 text-right">
-                                {activeEditingCell === 'master' ? (
+                                {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
                                   <input
                                     type="number"
                                     value={item.modal || 0}
                                     onChange={(e) => handleEditItem(provider, item.id, 'modal', e.target.value)}
-                                    className="form-input-modern w-[45px] h-6 px-1 text-[10px] text-right"
+                                    className="form-input-modern w-[75px] h-6 px-1 text-[10px] text-right"
                                   />
                                 ) : (
                                   <span className="text-[9px] font-black text-amber-600">{((item.modal || 0) / 1000)}k</span>
@@ -907,12 +994,12 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                             )}
                             {visibleCols.harga && (
                               <td className="p-1 text-right">
-                                {activeEditingCell === 'master' ? (
+                                {activeEditingCell === 'master' || activeEditingCell === `edit-${provider}-${item.id}` ? (
                                   <input
                                     type="number"
                                     value={item.price}
                                     onChange={(e) => handleEditItem(provider, item.id, 'price', e.target.value)}
-                                    className="form-input-modern w-[45px] h-6 px-1 text-[10px] text-right"
+                                    className="form-input-modern w-[75px] h-6 px-1 text-[10px] text-right"
                                   />
                                 ) : (
                                   <span className="text-[9px] font-black text-gray-500">{(item.price / 1000)}k</span>
@@ -939,6 +1026,18 @@ const VoucherView: React.FC<{ active: boolean; setActiveView: (v: string) => voi
                           </tr>
                         );
                       })}
+                      {kasirRole === 'owner' && (
+                        <tr className="border-b border-gray-50">
+                          <td colSpan={visibleColCount} className="p-2 text-center">
+                            <button
+                              onClick={() => handleAddProduct(provider)}
+                              className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors uppercase tracking-widest w-full"
+                            >
+                              <Plus className="w-3 h-3 inline mr-1 -mt-0.5" /> Tambah Produk {provider}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   ))}
               </tbody>

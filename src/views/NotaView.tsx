@@ -15,6 +15,7 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
   const [items, setItems] = useState<NotaItem[]>([]);
   const [currentItem, setCurrentItem] = useState<NotaItem>({ nama: "", harga: "", jumlah: "" });
   const [tanggal, setTanggal] = useState(getLocalISOString().split('T')[0]);
+  const [ukuranKertas, setUkuranKertas] = useState<'58mm'|'80mm'>('58mm');
 
   const [isPreview, setIsPreview] = useState(false);
   
@@ -56,6 +57,44 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
     window.print();
   };
 
+  const ThermalReceipt = () => (
+    <div className="bg-white text-black mx-auto p-3 flex flex-col font-mono" style={{ width: ukuranKertas, minHeight: '150px' }}>
+      <div className="text-center mb-3">
+        <h2 className="text-[14px] font-bold leading-tight">{shopName}</h2>
+        <p className="text-[10px] leading-tight">{address}</p>
+      </div>
+      <div className="text-[10px] mb-2 border-b border-black border-dashed pb-2 space-y-0.5">
+        <div className="flex justify-between"><span>Tgl:</span><span>{tanggal}</span></div>
+        <div className="flex justify-between"><span>No:</span><span>#{Date.now().toString().slice(-6)}</span></div>
+      </div>
+      <table className="w-full text-[10px] mb-2">
+        <thead>
+          <tr className="border-b border-black border-dashed">
+            <th className="text-left font-normal pb-1">Item</th>
+            <th className="text-center font-normal px-1 pb-1">Qty</th>
+            <th className="text-right font-normal pb-1">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, i) => (
+            <tr key={i}>
+              <td className="py-1 align-top pr-1 leading-tight">{item.nama}</td>
+              <td className="py-1 text-center align-top leading-tight">{item.jumlah}</td>
+              <td className="py-1 text-right align-top leading-tight">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="border-t border-black border-dashed pt-2 flex justify-between items-center text-[11px] font-bold">
+        <span>TOTAL</span>
+        <span className="text-[12px]">{formatRupiah(calculateTotal())}</span>
+      </div>
+      <div className="text-center mt-6 text-[10px]">
+        <p className="font-bold">TERIMA KASIH</p>
+      </div>
+    </div>
+  );
+
   if (!active) return null;
 
   if (isPc) {
@@ -64,22 +103,32 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
         
         <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0 no-print">
           <div>
-            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Pembuat Nota Digital</h1>
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Tulis daftar belanja/jasa dan cetak struk nota fisik secara langsung</p>
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Pembuat Nota Thermal</h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Tulis daftar belanja dan cetak via printer thermal (Bluetooth/USB)</p>
           </div>
           
-          <button 
-            onClick={handlePrint} 
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black shadow-md flex items-center gap-2 uppercase tracking-widest transition-all active:scale-95"
-            style={{ color: '#ffffff' }}
-          >
-            <Printer className="w-4 h-4" /> Cetak Nota
-          </button>
+          <div className="flex items-center gap-3">
+            <select 
+              value={ukuranKertas} 
+              onChange={(e) => setUkuranKertas(e.target.value as any)}
+              className="bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none cursor-pointer"
+            >
+              <option value="58mm">Kertas 58mm (Mini)</option>
+              <option value="80mm">Kertas 80mm (Standar)</option>
+            </select>
+            <button 
+              onClick={handlePrint} 
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black shadow-md flex items-center gap-2 uppercase tracking-widest transition-all active:scale-95"
+              style={{ color: '#ffffff' }}
+            >
+              <Printer className="w-4 h-4" /> Cetak Nota
+            </button>
+          </div>
         </div>
 
-        <div className="flex-grow flex overflow-hidden p-8 gap-8">
+        <div className="flex-grow flex overflow-hidden p-8 gap-8 no-print">
           
-          <div className="w-[420px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin no-print">
+          <div className="w-[420px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
             
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
               <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest pb-2 border-b border-slate-100 dark:border-slate-700">Pengaturan Toko</h4>
@@ -168,85 +217,49 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
 
           </div>
 
-          <div className="flex-grow h-full flex flex-col items-center justify-start overflow-y-auto pr-1">
-            <div className="bg-white text-slate-900 w-full max-w-[480px] p-10 rounded-2xl shadow-xl border border-slate-200 dark:border-none font-serif min-h-[600px] relative print:shadow-none print:border-none print:p-0">
-              
-              <div className="text-center mb-8 border-b-2 border-slate-900 pb-6">
-                <h2 className="text-2xl font-black mb-1 text-slate-900">{shopName}</h2>
-                <p className="text-xs font-bold text-slate-500">{address}</p>
+          <div className="flex-grow h-full flex flex-col items-center justify-start overflow-y-auto pr-1 bg-slate-200 dark:bg-slate-950 rounded-2xl py-8">
+            {items.length === 0 ? (
+               <div className="text-center text-slate-400 italic text-sm mt-20">Belum ada item ditambahkan ke nota</div>
+            ) : (
+              <div className="shadow-2xl">
+                 <ThermalReceipt />
               </div>
-
-              <div className="mb-6 space-y-1">
-                <div className="flex justify-between text-xs font-bold text-slate-800">
-                  <span>TANGGAL:</span>
-                  <span>{tanggal}</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-slate-800">
-                  <span>NOMOR:</span>
-                  <span>#{Date.now().toString().slice(-6)}</span>
-                </div>
-              </div>
-
-              {items.length === 0 ? (
-                <div className="py-24 text-center text-slate-400 italic text-sm border-y border-dashed border-slate-200 my-6">
-                  Belum ada item ditambahkan ke nota
-                </div>
-              ) : (
-                <>
-                  <table className="w-full mb-8">
-                    <thead>
-                      <tr className="border-b-2 border-slate-900 text-left text-xs text-slate-800">
-                        <th className="py-2">ITEM</th>
-                        <th className="py-2 text-center">QTY</th>
-                        <th className="py-2 text-right">HARGA</th>
-                        <th className="py-2 text-right">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {items.map((item, i) => (
-                        <tr key={i} className="text-xs text-slate-800">
-                          <td className="py-3 font-bold flex items-center justify-between group">
-                            <span>{item.nama}</span>
-                            <button 
-                              onClick={() => removeItem(i)} 
-                              className="p-1 rounded bg-rose-50 text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity no-print ml-2"
-                              title="Hapus Item"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </td>
-                          <td className="py-3 text-center">{item.jumlah}</td>
-                          <td className="py-3 text-right">{item.harga}</td>
-                          <td className="py-3 text-right font-bold">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-900">
-                        <td colSpan={3} className="py-4 text-right font-black text-sm">TOTAL:</td>
-                        <td className="py-4 text-right font-black text-base text-blue-700">{formatRupiah(calculateTotal())}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-
-                  <div className="text-center mt-12 border-t border-dashed border-slate-200 pt-6">
-                    <p className="text-sm font-black italic text-slate-900">TERIMA KASIH</p>
-                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Atas Kepercayaan Anda</p>
+            )}
+            
+            {/* List for deleting items in PC */}
+            <div className="mt-8 w-full max-w-sm">
+               {items.map((item, i) => (
+                  <div key={i} className="flex justify-between items-center bg-white dark:bg-slate-800 p-3 mb-2 rounded-xl shadow-sm">
+                     <span className="text-xs font-bold text-slate-800 dark:text-white">{item.nama} ({item.jumlah})</span>
+                     <button onClick={() => removeItem(i)} className="p-1.5 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100">
+                        <Trash2 className="w-3 h-3" />
+                     </button>
                   </div>
-                </>
-              )}
-
+               ))}
             </div>
           </div>
 
         </div>
 
+        {/* PRINT ONLY SECTION */}
+        <div className="hidden print:block w-full thermal-print-area">
+           <ThermalReceipt />
+        </div>
+
         <style>{`
           @media print {
-            .no-print { display: none !important; }
-            body { margin: 0; padding: 0; background: white !important; }
-            .flex-grow, .h-full, .flex, .bg-slate-50 { display: block !important; height: auto !important; background: white !important; }
-            .max-w-[480px] { max-w: 100% !important; box-shadow: none !important; border: none !important; padding: 0 !important; }
+            @page { margin: 20mm; size: auto; }
+            body { margin: 0; padding: 0; background: white !important; display: flex !important; justify-content: center !important; align-items: flex-start !important; }
+            body * { visibility: hidden; }
+            .thermal-print-area, .thermal-print-area * { visibility: visible; }
+            .thermal-print-area {
+              position: static !important;
+              transform: none !important;
+              margin: 0 auto;
+              padding: 0;
+              width: auto;
+              display: block;
+            }
           }
         `}</style>
       </div>
@@ -255,71 +268,50 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
 
   if (isPreview) {
     return (
-      <div className="absolute inset-0 z-[100] bg-white overflow-y-auto">
-        <div className="absolute top-4 left-4 right-4 flex justify-between z-50 no-print">
-          <button onClick={() => setIsPreview(false)} className="px-5 py-2.5 bg-gray-900 text-white rounded-full font-bold shadow-xl flex items-center gap-2">
-            <ArrowLeft className="w-4 h-4" /> BATAL
+      <div className="absolute inset-0 z-[100] bg-slate-200 overflow-y-auto pb-20">
+        <div className="sticky top-0 left-0 right-0 p-4 flex justify-between z-50 no-print bg-slate-900 shadow-md">
+          <button onClick={() => setIsPreview(false)} className="px-5 py-2.5 bg-white/10 text-white rounded-full font-bold flex items-center gap-2 active:scale-95">
+            <ArrowLeft className="w-4 h-4" /> KEMBALI
           </button>
-          <button onClick={handlePrint} className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-black shadow-xl flex items-center gap-2">
-            <Printer className="w-5 h-5" /> CETAK NOTA
-          </button>
+          <div className="flex items-center gap-2">
+            <select 
+              value={ukuranKertas} 
+              onChange={(e) => setUkuranKertas(e.target.value as any)}
+              className="bg-white/10 border-none text-white rounded-full px-3 py-2.5 text-xs font-bold outline-none cursor-pointer"
+            >
+              <option value="58mm" className="text-black">58mm</option>
+              <option value="80mm" className="text-black">80mm</option>
+            </select>
+            <button onClick={handlePrint} className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-black shadow-xl flex items-center gap-2 active:scale-95">
+              <Printer className="w-5 h-5" /> CETAK
+            </button>
+          </div>
         </div>
 
-        <div className="pt-24 px-6 pb-12 max-w-lg mx-auto font-serif">
-          <div className="text-center mb-8 border-b-2 border-black pb-6">
-            <h2 className="text-3xl font-black mb-1">{shopName}</h2>
-            <p className="text-sm font-bold text-gray-600">{address}</p>
-          </div>
+        <div className="pt-8 px-4 flex justify-center no-print">
+           <div className="shadow-2xl">
+              <ThermalReceipt />
+           </div>
+        </div>
 
-          <div className="mb-6">
-            <div className="flex justify-between text-sm font-bold mb-1">
-              <span>TANGGAL:</span>
-              <span>{tanggal}</span>
-            </div>
-            <div className="flex justify-between text-sm font-bold">
-              <span>NOMOR:</span>
-              <span>#{Date.now().toString().slice(-6)}</span>
-            </div>
-          </div>
-
-          <table className="w-full mb-8">
-            <thead>
-              <tr className="border-b-2 border-black text-left text-xs">
-                <th className="py-2">ITEM</th>
-                <th className="py-2 text-center">QTY</th>
-                <th className="py-2 text-right">HARGA</th>
-                <th className="py-2 text-right">TOTAL</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {items.map((item, i) => (
-                <tr key={i} className="text-sm">
-                  <td className="py-3 font-bold">{item.nama}</td>
-                  <td className="py-3 text-center">{item.jumlah}</td>
-                  <td className="py-3 text-right">{item.harga}</td>
-                  <td className="py-3 text-right font-bold">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-black">
-                <td colSpan={3} className="py-4 text-right font-black text-lg">TOTAL:</td>
-                <td className="py-4 text-right font-black text-lg text-blue-700">{formatRupiah(calculateTotal())}</td>
-              </tr>
-            </tfoot>
-          </table>
-
-          <div className="text-center mt-12 border-t border-dashed border-black pt-6">
-            <p className="text-lg font-black italic">TERIMA KASIH</p>
-            <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Atas Kepercayaan Anda</p>
-          </div>
+        <div className="hidden print:block w-full thermal-print-area">
+           <ThermalReceipt />
         </div>
 
         <style>{`
           @media print {
-            .no-print { display: none !important; }
-            body { margin: 0; padding: 0; }
-            .fixed { position: static !important; }
+            @page { margin: 20mm; size: auto; }
+            body { margin: 0; padding: 0; background: white !important; display: flex !important; justify-content: center !important; align-items: flex-start !important; }
+            body * { visibility: hidden; }
+            .thermal-print-area, .thermal-print-area * { visibility: visible; }
+            .thermal-print-area {
+              position: static !important;
+              transform: none !important;
+              margin: 0 auto;
+              padding: 0;
+              width: auto;
+              display: block;
+            }
           }
         `}</style>
       </div>
@@ -349,8 +341,8 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
 
       <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-5 shadow-lg flex justify-between items-center rounded-b-[2rem] mb-4">
         <div>
-          <h2 className="text-sm font-black tracking-tight leading-none uppercase">Nota Belanja</h2>
-          <p className="text-[9px] text-blue-100 font-medium mt-1">Cetak struk belanja</p>
+          <h2 className="text-sm font-black tracking-tight leading-none uppercase">Nota Thermal</h2>
+          <p className="text-[9px] text-blue-100 font-medium mt-1">Cetak struk via printer thermal</p>
         </div>
         <button onClick={() => setIsPreview(true)} className="w-10 h-10 rounded-2xl bg-white text-blue-600 flex items-center justify-center shadow-lg active:scale-90 transition-all">
           <Printer className="w-5 h-5" />
