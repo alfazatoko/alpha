@@ -1400,6 +1400,51 @@ const MainApp: React.FC<MainAppProps> = ({
     })
   }
 
+  const handleSimpanSaldoRealAplikasi = (nominal: number, keterangan: string) => {
+    if (isSaving) return
+    if (nominal < 0) return showToast('Nominal tidak valid!')
+
+    setIsSaving(true)
+
+    const id = Date.now().toString()
+    const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
+    if (!finalStoreId) {
+      setIsSaving(false)
+      return showToast('Pilih cabang (toko) terlebih dahulu!')
+    }
+    const newTx = {
+      id,
+      user_id: googleUid,
+      kasir_id: username,
+      kategori: 'Isi Saldo Real Aplikasi',
+      nominal,
+      admin_fee: 0,
+      keterangan: keterangan || 'Update Saldo Real HP',
+      timestamp: getLocalISOString(),
+      store_id: finalStoreId
+    }
+
+    supabase.from('transactions').insert(newTx).then(({ error }) => {
+      setIsSaving(false)
+      if (error) {
+        showToast('Gagal update: ' + error.message)
+      } else {
+        const optimisticTx: Transaction = {
+          id: newTx.id,
+          kategori: newTx.kategori,
+          nominal: newTx.nominal,
+          adminFee: newTx.admin_fee,
+          keterangan: newTx.keterangan,
+          timestamp: newTx.timestamp,
+          kasir_id: newTx.kasir_id,
+          store_id: newTx.store_id || undefined
+        }
+        setTransactions(prev => [optimisticTx, ...prev])
+        showToast('Saldo Real Aplikasi Diperbarui!')
+      }
+    })
+  }
+
 
   const handleStartEdit = (tx: Transaction) => {
     setEditingTx(tx)
@@ -1741,6 +1786,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       filterTanggal={filterTanggalLaporan}
                       setFilterTanggal={setFilterTanggalLaporan}
                       saldoReal={filterTanggalLaporan === todayISO ? totalSaldoReal : displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi').reduce((s, t) => s + t.nominal, 0)}
+                      onUpdateSaldoReal={handleSimpanSaldoRealAplikasi}
+                      isSaving={isSaving}
                       onEdit={handleStartEdit}
                       onDelete={handleDeleteTx}
                       kasirList={kasirList}
@@ -2012,11 +2059,13 @@ const MainApp: React.FC<MainAppProps> = ({
             setFilterTanggal={setFilterTanggalLaporan}
             saldoReal={
               filterTanggalLaporan === todayISO 
-                ? totalSaldoReal 
+                ? displayTransactions.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Real Aplikasi').reduce((s, t) => s + t.nominal, 0)
                 : displayTransactions
                     .filter(t => t.timestamp.startsWith(filterTanggalLaporan) && t.kategori === 'Isi Saldo Real Aplikasi')
                     .reduce((s, t) => s + t.nominal, 0)
             }
+            onUpdateSaldoReal={handleSimpanSaldoRealAplikasi}
+            isSaving={isSaving}
             onEdit={handleStartEdit}
             onDelete={handleDeleteTx}
             kasirList={kasirList}
@@ -2118,94 +2167,124 @@ const MainApp: React.FC<MainAppProps> = ({
 
 
       {/* Edit Modal */}
-      {editingTx && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-xs uppercase tracking-widest text-blue-800">
-                <i className="fa-solid fa-pen-to-square mr-2"></i> Edit Transaksi
-              </h3>
-              <button onClick={() => setEditingTx(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-all">
-                <i className="fa-solid fa-xmark"></i>
+      {editingTx && (() => {
+        const isSaldoEdit = editingTx.kategori.includes('Isi ');
+        
+        return (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-black text-xs uppercase tracking-widest text-blue-800">
+                  <i className="fa-solid fa-pen-to-square mr-2"></i> Edit {isSaldoEdit ? 'Saldo' : 'Transaksi'}
+                </h3>
+                <button onClick={() => setEditingTx(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-all">
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {/* Tanda Mata (Original Data) */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-start gap-3">
+                  <i className="fa-solid fa-eye text-slate-400 mt-0.5"></i>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Data Asli Sebelum Diedit</p>
+                    <p className="text-[11px] font-bold text-slate-600 leading-tight">
+                      {editingTx.kategori} • {formatRupiah(editingTx.nominal).replace(',00', '')}
+                      {!isSaldoEdit && editingTx.adminFee > 0 && ` • Admin: ${formatRupiah(editingTx.adminFee).replace(',00', '')}`}
+                    </p>
+                    <p className="text-[10px] text-slate-500 italic mt-1">"{editingTx.keterangan || '-'}"</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Kategori</label>
+                  <div className="relative">
+                    <select 
+                      value={editKategori} 
+                      onChange={e => setEditKategori(e.target.value)}
+                      onKeyDown={(e) => handleEditKeyDown(e, editNominalRef)}
+                      className="form-input-modern w-full appearance-none pr-8"
+                    >
+                      {isSaldoEdit ? (
+                        <>
+                          <option value="Isi Saldo Bank">Isi Saldo Bank</option>
+                          <option value="Isi Modal Tunai Kasir">Isi Modal Tunai Kasir</option>
+                          <option value="Isi Saldo Real Aplikasi">Isi Saldo Real Aplikasi</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Transfer Bank">Transfer Bank</option>
+                          <option value="DANA">DANA</option>
+                          <option value="FLIP">FLIP</option>
+                          <option value="Order Kuota">Order Kuota</option>
+                          <option value="Tarik Tunai">Tarik Tunai</option>
+                          <option value="Aksesoris">Aksesoris</option>
+                        </>
+                      )}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                  </div>
+                </div>
+
+                <div className={cn("grid gap-3", isSaldoEdit ? "grid-cols-1" : "grid-cols-2")}>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
+                      {editKategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                    </label>
+                    <input 
+                      ref={editNominalRef}
+                      value={editNominal} 
+                      onChange={e => setEditNominal(formatInputRupiah(e.target.value))}
+                      onKeyDown={(e) => handleEditKeyDown(e, isSaldoEdit ? editKeteranganRef : editAdminRef)}
+                      className="form-input-modern w-full"
+                    />
+                  </div>
+                  {!isSaldoEdit && (
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
+                        {editKategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
+                      </label>
+                      <input 
+                        ref={editAdminRef}
+                        value={editAdmin} 
+                        onChange={e => setEditAdmin(formatInputRupiah(e.target.value))}
+                        onKeyDown={(e) => handleEditKeyDown(e, editKeteranganRef)}
+                        className="form-input-modern w-full text-emerald-600"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Keterangan</label>
+                  <textarea 
+                    ref={editKeteranganRef}
+                    value={editKeterangan} 
+                    onChange={e => setEditKeterangan(e.target.value)}
+                    rows={2}
+                    onKeyDown={(e) => handleEditKeyDown(e, undefined, true)}
+                    className="form-input-modern w-full resize-none"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl text-xs shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-70 disabled:scale-100"
+              >
+                {isSaving ? (
+                  <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+                ) : (
+                  <i className="fa-solid fa-check-circle"></i>
+                )}
+                {isSaving ? "SEDANG MENYIMPAN..." : "Simpan Perubahan"}
               </button>
             </div>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Kategori</label>
-              <div className="relative">
-                <select 
-                  value={editKategori} 
-                  onChange={e => setEditKategori(e.target.value)}
-                  onKeyDown={(e) => handleEditKeyDown(e, editNominalRef)}
-                  className="form-input-modern w-full appearance-none pr-8"
-                >
-                  <option value="Transfer Bank">Transfer Bank</option>
-                  <option value="DANA">DANA</option>
-                  <option value="FLIP">FLIP</option>
-                  <option value="Order Kuota">Order Kuota</option>
-                  <option value="Tarik Tunai">Tarik Tunai</option>
-                  <option value="Aksesoris">Aksesoris</option>
-                </select>
-                <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
-              </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
-                    {editKategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
-                  </label>
-                  <input 
-                    ref={editNominalRef}
-                    value={editNominal} 
-                    onChange={e => setEditNominal(formatInputRupiah(e.target.value))}
-                    onKeyDown={(e) => handleEditKeyDown(e, editAdminRef)}
-                    className="form-input-modern w-full"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
-                    {editKategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
-                  </label>
-                  <input 
-                    ref={editAdminRef}
-                    value={editAdmin} 
-                    onChange={e => setEditAdmin(formatInputRupiah(e.target.value))}
-                    onKeyDown={(e) => handleEditKeyDown(e, editKeteranganRef)}
-                    className="form-input-modern w-full text-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">Keterangan</label>
-                <textarea 
-                  ref={editKeteranganRef}
-                  value={editKeterangan} 
-                  onChange={e => setEditKeterangan(e.target.value)}
-                  rows={2}
-                  onKeyDown={(e) => handleEditKeyDown(e, undefined, true)}
-                  className="form-input-modern w-full resize-none"
-                />
-              </div>
-            </div>
-
-            <button 
-              onClick={handleSaveEdit}
-              disabled={isSaving}
-              className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl text-xs shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-70 disabled:scale-100"
-            >
-              {isSaving ? (
-                <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
-              ) : (
-                <i className="fa-solid fa-check-circle"></i>
-              )}
-              {isSaving ? "SEDANG MENYIMPAN..." : "Simpan Perubahan"}
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       {/* Floating Success Notification */}
       {toast && (

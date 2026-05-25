@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { formatRupiah, cn } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
 
 interface LaporanViewProps {
@@ -20,6 +20,8 @@ interface LaporanViewProps {
   filterTanggal: string
   setFilterTanggal: (v: string) => void
   saldoReal: number
+  onUpdateSaldoReal?: (nominal: number, keterangan: string) => void
+  isSaving?: boolean
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
   kasirList: Record<string, any>
@@ -142,6 +144,10 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [inputSaldoReal, setInputSaldoReal] = useState('')
+  const [showSaldoRealModal, setShowSaldoRealModal] = useState(false)
+  const [inputSaldoRealKeterangan, setInputSaldoRealKeterangan] = useState('')
+
   
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -991,12 +997,33 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="font-black text-xs text-blue-900 dark:text-white">{formatRupiah(currentSaldoBank)}</span>
               </div>
 
-              <div className="flex justify-between items-center p-2.5 bg-emerald-50/30 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/30">
-                <div>
-                  <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">4. Saldo Real App (HP)</p>
-                  <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Input manual sisa saldo di HP</p>
+              <div className="flex flex-col gap-2 p-2.5 bg-emerald-50/30 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">4. Saldo Real App (HP)</p>
+                    <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Input manual sisa saldo di HP</p>
+                  </div>
+                  <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{formatRupiah(props.saldoReal)}</span>
                 </div>
-                <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{formatRupiah(props.saldoReal)}</span>
+                {props.onUpdateSaldoReal && (
+                  <button
+                    onClick={() => setShowSaldoRealModal(true)}
+                    className="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-xl py-3 px-4 flex items-center justify-between shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-mobile-screen-button text-sm"></i>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[11px] font-black uppercase tracking-widest leading-none mb-1">Catat Sisa Saldo Aplikasi Banking</p>
+                        <p className="text-[9px] font-medium opacity-90 leading-tight">Input saldo aplikasi Real Mbangking di aplikasi Hp</p>
+                      </div>
+                    </div>
+                    <div className="bg-yellow-400 text-yellow-900 px-4 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest shadow-sm">
+                      UPDATE
+                    </div>
+                  </button>
+                )}
               </div>
 
               {(() => {
@@ -1115,6 +1142,71 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
           </div>
         </div>
+
+        {/* MODAL UPDATE SALDO REAL APLIKASI (PC View) */}
+        {showSaldoRealModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !props.isSaving && setShowSaldoRealModal(false)}></div>
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700">
+              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+                <div>
+                  <h3 className="font-black text-sm uppercase tracking-widest">Update Saldo Aplikasi</h3>
+                  <p className="text-[10px] text-emerald-100 font-medium mt-0.5">Bisa diinput berkali-kali</p>
+                </div>
+                <button 
+                  onClick={() => setShowSaldoRealModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  disabled={props.isSaving}
+                >
+                  <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Keterangan Aplikasi</label>
+                  <input 
+                    type="text"
+                    value={inputSaldoRealKeterangan}
+                    onChange={(e) => setInputSaldoRealKeterangan(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                    placeholder="Cth: BRImo, Dana, BCA, BNI dll"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Nominal Saldo</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">Rp</span>
+                    <input 
+                      type="text"
+                      inputMode="numeric"
+                      value={inputSaldoReal}
+                      onChange={(e) => setInputSaldoReal(formatInputRupiah(e.target.value))}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-4 text-lg font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const nominal = parseInt(inputSaldoReal.replace(/\./g, '')) || 0;
+                    if (nominal <= 0) return;
+                    props.onUpdateSaldoReal?.(nominal, inputSaldoRealKeterangan);
+                    setInputSaldoReal('');
+                    setInputSaldoRealKeterangan('');
+                    setShowSaldoRealModal(false);
+                  }}
+                  disabled={props.isSaving || !inputSaldoReal}
+                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all active:scale-[0.98] disabled:opacity-50 mt-2 flex justify-center items-center gap-2"
+                >
+                  {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN SALDO</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1445,12 +1537,33 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="font-black text-[13px] text-blue-900">{formatRupiah(currentSaldoBank)}</span>
               </div>
 
-              <div className="flex justify-between items-center p-1.5 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
-                <div>
-                  <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real App (HP)</p>
-                  <p className="text-[9px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input menu 'Isi Saldo'</p>
+              <div className="flex flex-col gap-2 p-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-tight">4. Saldo Real App (HP)</p>
+                    <p className="text-[9px] text-emerald-400 font-medium italic -mt-0.5 whitespace-nowrap">Input manual sisa saldo</p>
+                  </div>
+                  <span className="font-black text-[13px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
                 </div>
-                <span className="font-black text-[13px] text-emerald-900">{formatRupiah(props.saldoReal)}</span>
+                {props.onUpdateSaldoReal && (
+                  <button
+                    onClick={() => setShowSaldoRealModal(true)}
+                    className="w-full mt-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 active:bg-emerald-600 text-white rounded-xl py-2.5 px-3 flex items-center justify-between shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 pr-2">
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-mobile-screen-button text-sm"></i>
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest leading-tight mb-0.5">Catat Sisa Saldo Aplikasi Banking</p>
+                        <p className="text-[8px] font-medium opacity-90 leading-tight">Input saldo aplikasi Real Mbangking di aplikasi Hp</p>
+                      </div>
+                    </div>
+                    <div className="bg-yellow-400 text-yellow-900 px-3 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-widest shadow-sm shrink-0">
+                      UPDATE
+                    </div>
+                  </button>
+                )}
               </div>
 
               {(() => {
@@ -1484,6 +1597,72 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           </div>
         </div>
       </div>
+
+      {/* MODAL UPDATE SALDO REAL APLIKASI */}
+      {showSaldoRealModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !props.isSaving && setShowSaldoRealModal(false)}></div>
+          <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700">
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+              <div>
+                <h3 className="font-black text-sm uppercase tracking-widest">Update Saldo Aplikasi</h3>
+                <p className="text-[10px] text-emerald-100 font-medium mt-0.5">Bisa diinput berkali-kali</p>
+              </div>
+              <button 
+                onClick={() => setShowSaldoRealModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                disabled={props.isSaving}
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Keterangan Aplikasi</label>
+                <input 
+                  type="text"
+                  value={inputSaldoRealKeterangan}
+                  onChange={(e) => setInputSaldoRealKeterangan(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                  placeholder="Cth: BRImo, Dana, BCA, BNI dll"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Nominal Saldo</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">Rp</span>
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    value={inputSaldoReal}
+                    onChange={(e) => setInputSaldoReal(formatInputRupiah(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-4 text-lg font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  const nominal = parseInt(inputSaldoReal.replace(/\./g, '')) || 0;
+                  if (nominal <= 0) return;
+                  props.onUpdateSaldoReal?.(nominal, inputSaldoRealKeterangan);
+                  setInputSaldoReal('');
+                  setInputSaldoRealKeterangan('');
+                  setShowSaldoRealModal(false);
+                }}
+                disabled={props.isSaving || !inputSaldoReal}
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all active:scale-[0.98] disabled:opacity-50 mt-2 flex justify-center items-center gap-2"
+              >
+                {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN SALDO</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

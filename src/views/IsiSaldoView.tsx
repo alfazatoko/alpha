@@ -97,19 +97,19 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">JENIS SALDO</label>
-                  <div className="relative">
-                    <select 
-                      value={props.isiJenis}
-                      onChange={(e) => props.setIsiJenis(e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, nominalRef)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 appearance-none pr-10"
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => props.setIsiJenis('Saldo Bank')}
+                      className={cn("py-3.5 px-4 rounded-xl border flex items-center justify-center gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all", props.isiJenis === 'Saldo Bank' ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20" : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-400/50")}
                     >
-                      <option value="" disabled>Pilih jenis saldo</option>
-                      <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
-                      <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
-                      <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
-                    </select>
-                    <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+                      <i className="fa-solid fa-building-columns"></i> SALDO BANK
+                    </button>
+                    <button 
+                      onClick={() => props.setIsiJenis('Modal Tunai Kasir')}
+                      className={cn("py-3.5 px-4 rounded-xl border flex items-center justify-center gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all", props.isiJenis === 'Modal Tunai Kasir' ? "bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-emerald-400/50")}
+                    >
+                      <i className="fa-solid fa-money-bill-wave"></i> KASIR (TUNAI)
+                    </button>
                   </div>
                 </div>
 
@@ -217,20 +217,22 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           </h3>
           
           <div>
-            <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JENIS SALDO</label>
-            <div className="relative">
-              <select 
-                value={props.isiJenis}
-                onChange={(e) => props.setIsiJenis(e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, nominalRef)}
-                className="form-input-modern w-full appearance-none pr-8"
+            <label className="block text-[9px] font-black text-black mb-1.5 uppercase tracking-widest">JENIS SALDO</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => props.setIsiJenis('Saldo Bank')}
+                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all", props.isiJenis === 'Saldo Bank' ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
               >
-                <option value="" disabled>Pilih jenis saldo</option>
-                <option value="Saldo Bank">🏦 Saldo Bank (Plafon)</option>
-                <option value="Saldo Real Aplikasi">📱 Saldo Real Aplikasi (HP)</option>
-                <option value="Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
-              </select>
-              <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                <i className="fa-solid fa-building-columns text-sm"></i> 
+                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">SALDO BANK</span>
+              </button>
+              <button 
+                onClick={() => props.setIsiJenis('Modal Tunai Kasir')}
+                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all", props.isiJenis === 'Modal Tunai Kasir' ? "bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
+              >
+                <i className="fa-solid fa-money-bill-wave text-sm"></i> 
+                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">TUNAI (KASIR)</span>
+              </button>
             </div>
           </div>
 

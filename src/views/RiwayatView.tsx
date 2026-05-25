@@ -650,12 +650,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest w-56">Jenis Mutasi</th>
                     <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Keterangan</th>
                     <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right w-48">Nominal</th>
+                    <th className="py-4 px-5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center w-36">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {filteredSaldoTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-16 text-center text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest bg-slate-50/10">
+                      <td colSpan={6} className="py-16 text-center text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest bg-slate-50/10">
                         Tidak ada mutasi saldo dalam filter ini
                       </td>
                     </tr>
@@ -664,6 +665,10 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       const dateObj = parseLocalISO(t.timestamp)
                       const jam = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
                       const tgl = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                      
+                      const isToday = t.timestamp.startsWith(getLocalDateString())
+                      const canEdit = isToday
+                      const canDelete = isToday && props.kasirRole === 'owner'
                       
                       let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
                       if (t.kategori.includes('Bank')) badgeStyle = "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30";
@@ -681,6 +686,28 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                           </td>
                           <td className="py-3.5 px-5 text-xs text-slate-600 dark:text-slate-400 font-bold">{t.keterangan || '-'}</td>
                           <td className="py-3.5 px-5 text-xs font-black text-right text-slate-900 dark:text-white">{t.nominal.toLocaleString('id-ID')}</td>
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit ? (
+                                <button 
+                                  onClick={() => props.onEdit(t)}
+                                  className="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-600 dark:hover:text-white px-2.5 py-1 rounded-xl text-[9px] font-black flex items-center gap-1.5 transition-all border border-blue-100 dark:border-blue-900/30"
+                                >
+                                  <i className="fa-solid fa-pen text-[7px]"></i> EDIT
+                                </button>
+                              ) : (
+                                <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold italic py-1 px-2.5 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl">LOCKED</span>
+                              )}
+                              {canDelete && (
+                                <button 
+                                  onClick={() => props.onDelete?.(t)}
+                                  className="bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-600 dark:hover:text-white w-7 h-7 rounded-xl flex items-center justify-center transition-all border border-rose-100 dark:border-rose-900/30"
+                                >
+                                  <i className="fa-solid fa-trash-can text-[9px]"></i>
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       )
                     })
@@ -903,32 +930,61 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               {filteredSaldoTransactions.length === 0 ? (
                 <div className="py-6 text-center text-slate-300 text-[10px] font-bold">KOSONG</div>
               ) : (
-                filteredSaldoTransactions.map((t, i) => (
-                  <div key={t.id} className="py-1.5 px-4 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
-                     <div className="flex gap-4 items-center">
-                        <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
-                        <div className="flex flex-col gap-0">
-                           <div className={cn(
-                             "text-[13px] font-black uppercase leading-tight",
-                             t.kategori.includes('Bank') ? "text-blue-600" : 
-                             t.kategori.includes('Real') ? "text-emerald-600" : "text-fuchsia-600"
-                           )}>
-                             {t.kategori.replace('Isi ', 'TAMBAH ')}
-                           </div>
-                           <div className="text-[10px] text-slate-400 font-bold">
-                              {(() => {
-                                const d = parseLocalISO(t.timestamp);
-                                return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                              })()}
-                           </div>
-                        </div>
-                     </div>
-                      <div className="text-right flex flex-col items-end gap-0">
-                        <div className="text-[13px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
-                        <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
-                     </div>
-                  </div>
-                ))
+                  filteredSaldoTransactions.map((t, i) => {
+                    const isToday = t.timestamp.startsWith(getLocalDateString())
+                    const canEdit = isToday
+                    const canDelete = isToday && props.kasirRole === 'owner'
+
+                    return (
+                    <div key={t.id} className="py-2 px-4 flex flex-col gap-1.5 hover:bg-slate-50/50 transition-colors">
+                       <div className="flex justify-between items-center">
+                         <div className="flex gap-4 items-center">
+                            <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
+                            <div className="flex flex-col gap-0">
+                               <div className={cn(
+                                 "text-[13px] font-black uppercase leading-tight",
+                                 t.kategori.includes('Bank') ? "text-blue-600" : 
+                                 t.kategori.includes('Real') ? "text-emerald-600" : "text-fuchsia-600"
+                               )}>
+                                 {t.kategori.replace('Isi ', 'TAMBAH ')}
+                               </div>
+                               <div className="text-[10px] text-slate-400 font-bold">
+                                  {(() => {
+                                    const d = parseLocalISO(t.timestamp);
+                                    return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                  })()}
+                               </div>
+                            </div>
+                         </div>
+                          <div className="text-right flex flex-col items-end gap-0">
+                            <div className="text-[13px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
+                            <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
+                         </div>
+                       </div>
+                       
+                       <div className="flex justify-end items-center gap-2 border-t border-slate-100 pt-2 mt-0.5">
+                         {canEdit ? (
+                           <button 
+                             onClick={() => props.onEdit(t)}
+                             className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                           >
+                             <i className="fa-solid fa-pen text-[8px]"></i> EDIT
+                           </button>
+                         ) : (
+                           <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2.5 bg-slate-50 rounded-lg">LOCKED</span>
+                         )}
+                         {canDelete && (
+                           <button 
+                             onClick={() => props.onDelete?.(t)}
+                             className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center"
+                           >
+                             <i className="fa-solid fa-trash-can text-[9px]"></i>
+                           </button>
+                         )}
+                       </div>
+                    </div>
+                    )
+                  })
               )}
             </div>
             {filteredSaldoTransactions.length > 0 && (
