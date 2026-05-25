@@ -147,8 +147,23 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [inputSaldoReal, setInputSaldoReal] = useState('')
   const [showSaldoRealModal, setShowSaldoRealModal] = useState(false)
   const [inputSaldoRealKeterangan, setInputSaldoRealKeterangan] = useState('')
+  const [catatanKasir, setCatatanKasir] = useState('')
 
-  
+  useEffect(() => {
+    if (props.activeStoreId && props.filterTanggal) {
+      const savedCatatan = localStorage.getItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`)
+      setCatatanKasir(savedCatatan || '')
+    }
+  }, [props.activeStoreId, props.filterTanggal])
+
+  const handleCatatanChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setCatatanKasir(val)
+    if (props.activeStoreId && props.filterTanggal) {
+      localStorage.setItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`, val)
+    }
+  }
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
@@ -565,6 +580,21 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         pdf.setTextColor(240, 240, 240);
         pdf.text(statusDesc, 105, boxY + 10.5, { align: 'center' });
         
+        let footerY = boxY + 25;
+        if (catatanKasir.trim()) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(9);
+          pdf.setTextColor(60, 60, 60);
+          pdf.text('CATATAN KASIR:', 15, footerY);
+          
+          pdf.setFont('helvetica', 'italic');
+          pdf.setFontSize(8.5);
+          pdf.setTextColor(80, 80, 80);
+          const splitCatatan = pdf.splitTextToSize(`"${catatanKasir}"`, 180);
+          pdf.text(splitCatatan, 15, footerY + 5);
+          footerY += (splitCatatan.length * 4) + 10;
+        }
+
         // Footer at bottom of A4
         pdf.setFont('helvetica', 'italic');
         pdf.setFontSize(7.5);
@@ -669,6 +699,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         else statusStr = `🔴 SELISIH (${formatRupiah(selisih)})`;
         
         lines.push(`👉 *STATUS:* *${statusStr}*`);
+        if (catatanKasir.trim()) {
+          lines.push(`==================================`);
+          lines.push(`📝 *CATATAN KASIR:*`);
+          lines.push(`"${catatanKasir}"`);
+        }
         lines.push(`==================================`);
         lines.push(`_Dicetak via Aplikasi ALFAZA CELL_`);
 
@@ -724,6 +759,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         csvContent += `"Voucher Tunai",${totalUangKeseluruhan - totalUangQris}\n`;
         csvContent += `"Voucher QRIS",${totalUangQris}\n`;
         
+        if (catatanKasir.trim()) {
+          csvContent += `\nCatatan Kasir\n`;
+          csvContent += `"${catatanKasir.replace(/"/g, '""')}"\n`;
+        }
+
         const fileName = `Laporan_Alfaza_${props.filterTanggal}.csv`;
         try {
           const { Share } = await import('@capacitor/share');
@@ -1053,6 +1093,20 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   </div>
                 );
               })()}
+            </div>
+            
+            {/* Catatan Kasir PC */}
+            <div className="mt-4 bg-amber-50/50 dark:bg-amber-950/20 rounded-[1.8rem] p-4 border border-amber-100 dark:border-amber-900/30">
+              <div className="flex items-center gap-2 mb-2">
+                <i className="fa-solid fa-pen-to-square text-amber-500"></i>
+                <h4 className="text-xs font-black text-amber-800 dark:text-amber-500 uppercase tracking-widest">Catatan Kasir</h4>
+              </div>
+              <textarea
+                value={catatanKasir}
+                onChange={handleCatatanChange}
+                placeholder="Tulis pesan, kendala, atau keterangan tambahan untuk owner di sini..."
+                className="w-full bg-white dark:bg-slate-900 border border-amber-200/50 dark:border-amber-900/50 rounded-xl p-3 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none min-h-[80px]"
+              />
             </div>
           </div>
         </div>
@@ -1596,6 +1650,26 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
           </div>
         </div>
+
+        {/* Catatan Kasir Mobile */}
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-100 rounded-[1.8rem] p-4 shadow-lg shadow-amber-500/10 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-amber-200/50 flex items-center justify-center text-amber-600">
+              <i className="fa-solid fa-pen-to-square text-sm"></i>
+            </div>
+            <div>
+              <h4 className="text-[13px] font-black text-amber-800 tracking-widest uppercase">Catatan Kasir</h4>
+              <p className="text-[9px] font-bold text-amber-600/80 italic -mt-0.5">Pesan untuk owner</p>
+            </div>
+          </div>
+          <textarea
+            value={catatanKasir}
+            onChange={handleCatatanChange}
+            placeholder="Tulis pesan, selisih uang, atau keterangan tambahan shift ini..."
+            className="w-full bg-white/80 backdrop-blur-sm border border-amber-200 rounded-xl p-3 text-[11px] font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none min-h-[80px] shadow-inner"
+          />
+        </div>
+
       </div>
 
       {/* MODAL UPDATE SALDO REAL APLIKASI */}
