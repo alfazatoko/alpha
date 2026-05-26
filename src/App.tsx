@@ -718,11 +718,27 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [googleUid, targetStoreId])
 
-  const savePresets = (newPresets: any[]) => {
+  const savePresets = async (newPresets: any[]) => {
     setPresets(newPresets)
+    const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
     if (googleUid) {
-      const key = targetStoreId !== 'all' ? `alphaPro_${googleUid}_${targetStoreId}_presets` : `alphaPro_${googleUid}_presets`
+      // Simpan ke localStorage
+      const key = targetId !== 'all' ? `alphaPro_${googleUid}_${targetId}_presets` : `alphaPro_${googleUid}_presets`
       localStorage.setItem(key, JSON.stringify(newPresets))
+      
+      // Auto-sync ke Supabase cloud agar tidak hilang saat app update
+      if (targetId && targetId !== 'all') {
+        const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+        await supabase.from('store_settings').upsert({
+          store_id: targetId,
+          cashiers: kasirList,
+          presets: newPresets,
+          running_texts: runningTexts,
+          main_announcement: mainAnnouncement,
+          is_pin_enabled: isPin,
+          updated_at: new Date().toISOString()
+        })
+      }
     }
   }
 
