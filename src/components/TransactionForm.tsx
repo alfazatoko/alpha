@@ -113,6 +113,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         setErrorMsg('Nominal & Admin Wajib diisi!')
         return
       }
+
+      // Validasi khusus Order Kuota: Jual HARUS lebih besar dari Modal
+      if (kategori === 'Order Kuota') {
+        if (cleanAdmin <= cleanNominal) {
+          setErrorMsg('⚠️ Harga JUAL harus lebih besar dari Harga MODAL! Cek kembali inputan Anda.')
+          adminRef.current?.focus()
+          return
+        }
+      } else {
+        // Untuk kategori lain: Admin harus lebih kecil dari Nominal (reminder saja, tidak block)
+        if (cleanAdmin >= cleanNominal && activeMode !== 'AKSESORIS') {
+          setErrorMsg('⚠️ Perhatian: ADMIN biasanya lebih kecil dari NOMINAL. Pastikan tidak terbalik!')
+          return
+        }
+      }
     }
 
     const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
@@ -313,10 +328,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="flex gap-3 flex-nowrap">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
-                <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                  <i className="fa-solid fa-coins text-yellow-500"></i>
-                  {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
-                </label>
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className="fa-solid fa-coins text-yellow-500"></i>
+                {kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+              </label>
+              {kategori !== 'Order Kuota' && (
+                <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+              )}
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -335,10 +353,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative group flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5">
-                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i>
-                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
+                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-emerald-500" : "fa-hand-holding-dollar text-purple-500")}></i>
+                {kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
               </label>
-                <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
+              {kategori !== 'Order Kuota' && (
+                <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap ml-auto">
                   <input
                     type="checkbox"
                     checked={isAdminNonTunai}
@@ -347,6 +366,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   />
                   <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest">DALAM</span>
                 </label>
+              )}
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -360,14 +380,85 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
                 className={cn(
                   "w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
-                  isAdminNonTunai 
+                  kategori === 'Order Kuota' && (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    return m > 0 && j > 0 && j <= m
+                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                      : m > 0 && j > m
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
+                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
+                  })() || (isAdminNonTunai 
                     ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
-                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50"
+                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
                 )}
               />
+              {/* Indikator real-time untuk Order Kuota */}
+              {kategori === 'Order Kuota' && (() => {
+                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                if (m > 0 && j > 0) {
+                  if (j > m) {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                        <i className="fa-solid fa-check text-white text-[10px]"></i>
+                      </div>
+                    )
+                  } else {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                      </div>
+                    )
+                  }
+                }
+                return null
+              })()}
             </div>
           </div>
         </div>
+        {/* Peringatan real-time Order Kuota: Jual < Modal */}
+        {kategori === 'Order Kuota' && (() => {
+          const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+          const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+          if (m > 0 && j > 0 && j <= m) {
+            return (
+              <div className="-mt-1 bg-red-50 border border-red-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <i className="fa-solid fa-triangle-exclamation text-red-500 text-sm shrink-0"></i>
+                <p className="text-[10px] font-black text-red-700 uppercase tracking-wide leading-tight">
+                  Harga JUAL ({j.toLocaleString('id-ID')}) harus lebih besar dari MODAL ({m.toLocaleString('id-ID')})!
+                </p>
+              </div>
+            )
+          }
+          if (m > 0 && j > m) {
+            return (
+              <div className="-mt-1 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in duration-200">
+                <i className="fa-solid fa-circle-check text-emerald-500 text-sm shrink-0"></i>
+                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-wide">
+                  Laba: Rp {(j - m).toLocaleString('id-ID')} ✓
+                </p>
+              </div>
+            )
+          }
+          return null
+        })()}
+        {/* Reminder untuk kategori BUKAN Order Kuota */}
+        {kategori !== 'Order Kuota' && activeMode === 'DIGITAL' && (() => {
+          const n = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+          const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+          if (n > 0 && a >= n) {
+            return (
+              <div className="-mt-1 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <i className="fa-solid fa-triangle-exclamation text-amber-500 text-sm shrink-0"></i>
+                <p className="text-[10px] font-black text-amber-700 uppercase tracking-wide leading-tight">
+                  Admin ({a.toLocaleString('id-ID')}) harusnya lebih kecil dari Nominal ({n.toLocaleString('id-ID')}). Cek kembali!
+                </p>
+              </div>
+            )
+          }
+          return null
+        })()}
 
         {errorMsg && (
           <div className="bg-red-50/80 border border-red-200 p-2.5 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-300 backdrop-blur-sm shadow-sm">
