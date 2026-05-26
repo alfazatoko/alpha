@@ -123,7 +123,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         }
       } else {
         // Untuk kategori lain: Admin harus lebih kecil dari Nominal (reminder saja, tidak block)
-        if (cleanAdmin >= cleanNominal && activeMode !== 'AKSESORIS') {
+        if (cleanAdmin >= cleanNominal) {
           setErrorMsg('⚠️ Perhatian: ADMIN biasanya lebih kecil dari NOMINAL. Pastikan tidak terbalik!')
           return
         }
