@@ -890,7 +890,7 @@ const MainApp: React.FC<MainAppProps> = ({
         query = query.eq('store_id', targetStoreId)
       }
 
-      const { data, error } = await query.order('timestamp', { ascending: false })
+      const { data, error } = await query.order('timestamp', { ascending: false }).limit(300)
 
       if (error) {
         console.error('Error fetching transactions:', error)
@@ -1876,7 +1876,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 case 'view-kontak':
                   return <KontakView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />;
                 case 'view-stok-voucher':
-                  return <VoucherView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} />;
+                  return <VoucherView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} />;
                 case 'view-kalender':
                   return <KalenderView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
                 case 'view-nota':
@@ -1945,6 +1945,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       refreshKasirList={refreshKasirList}
                       jamAbsen={todayAbsen}
                       absensiList={absensi}
+                      userId={googleUid}
                       runningTexts={runningTexts}
                       mainAnnouncement={mainAnnouncement}
                       storeName={storeName}
@@ -2006,6 +2007,7 @@ const MainApp: React.FC<MainAppProps> = ({
             onLogout={onLogout}
             kasirList={kasirList}
             refreshKasirList={refreshKasirList}
+            userId={googleUid}
             jamAbsen={todayAbsen}
             absensiList={absensi}
             runningTexts={runningTexts}
@@ -2145,7 +2147,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
           <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
           <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
-          <VoucherView active={activeView === 'view-stok-voucher'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} />
+          <VoucherView active={activeView === 'view-stok-voucher'} isPc={false} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} />
           <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
           <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
           <OtomatisView 

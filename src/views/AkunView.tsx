@@ -81,6 +81,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [editKasirPin, setEditKasirPin] = useState('')
   const [showKasirPin, setShowKasirPin] = useState(false)
 
+  // State untuk API Key Gemini (Lokal Perangkat)
+  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '')
+
+  // States for Bluetooth simulator
+  const [btConnected, setBtConnected] = useState(false);
+  const [btConnecting, setBtConnecting] = useState(false);
+
+  const toggleBluetoothDevice = () => {
+    if (btConnected) {
+      setBtConnected(false);
+    } else {
+      setBtConnecting(true);
+      setTimeout(() => {
+        setBtConnecting(false);
+        setBtConnected(true);
+      }, 1500);
+    }
+  };
+
   // State untuk edit PIN Owner
   const [ownerPinOld, setOwnerPinOld] = useState('')
   const [ownerPinNew, setOwnerPinNew] = useState('')
@@ -265,10 +284,12 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
       { id: 'keamanan', label: 'Keamanan & Akses', icon: 'fa-shield-halved', color: 'blue' },
       { id: 'promo', label: 'Tampilan & Promo', icon: 'fa-bullhorn', color: 'orange' },
       { id: 'pantau', label: 'Pantau Dashboard', icon: 'fa-eye', color: 'indigo' },
+      { id: 'printer', label: 'Printer & Hardware', icon: 'fa-print', color: 'slate' },
       { id: 'backup', label: 'Backup & Reset', icon: 'fa-cloud-arrow-down', color: 'red' },
       { id: 'cloud', label: 'Sinkronisasi Cloud', icon: 'fa-cloud', color: 'purple' },
     ] : [
       { id: 'kasirSelf', label: 'PIN & Nama Kasir', icon: 'fa-user-lock', color: 'indigo' },
+      { id: 'printer', label: 'Printer & Hardware', icon: 'fa-print', color: 'slate' },
       { id: 'cloud', label: 'Sinkronisasi Cloud', icon: 'fa-cloud', color: 'purple' },
     ]
 
@@ -681,6 +702,53 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           (localStorage.getItem(storageKeyFilter) !== 'false') ? "translate-x-6" : "translate-x-0"
                         )}></div>
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'printer' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm max-w-xl w-full mx-auto">
+                    <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Koneksi Printer Bluetooth POS</h3>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Konfigurasi hardware thermal struk kasir.</p>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
+                         <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                            <div>
+                               <p className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">PRINTER THERMAL 58MM</p>
+                               <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase mt-0.5">
+                                 STATUS: {btConnected ? 'TERHUBUNG (ID: POS-80-BT)' : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                               </p>
+                            </div>
+                         </div>
+                         <button 
+                           type="button"
+                           onClick={toggleBluetoothDevice}
+                           disabled={btConnecting}
+                           className={`text-[10px] font-black px-4 py-2 rounded-lg active:scale-95 transition-all shadow-sm cursor-pointer uppercase tracking-widest
+                             ${btConnected 
+                               ? 'bg-rose-50 border border-rose-200 text-rose-600' 
+                               : 'bg-blue-600 text-white hover:bg-blue-700'
+                             }
+                           `}
+                         >
+                            {btConnected ? 'PUTUSKAN' : btConnecting ? 'SINKRON...' : 'HUBUNGKAN'}
+                         </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">
+                         <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900">
+                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">KERAPATAN HURUF</span>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-200">32 Karakter / Baris</span>
+                         </div>
+                         <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900">
+                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">KECEPATAN CETAK</span>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-200">90 mm / Detik</span>
+                         </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1408,6 +1476,129 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             )}
           </div>
+
+          {/* Kategori: Printer Bluetooth */}
+          <div className="group">
+            <button
+              onClick={() => setOpenCategory(openCategory === 'printer' ? null : 'printer')}
+              className={cn(
+                "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                openCategory === 'printer' ? "bg-slate-800 text-white border-slate-800 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                  openCategory === 'printer' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                )}>
+                  <i className="fa-solid fa-print text-xs"></i>
+                </div>
+                <div className="text-left">
+                  <span className="text-[11px] font-black uppercase tracking-widest block text-black">Printer Bluetooth</span>
+                  <span className="text-[8px] font-bold opacity-80 text-gray-500">Koneksi Hardware Thermal</span>
+                </div>
+              </div>
+              <i className={cn(
+                "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                openCategory === 'printer' && "rotate-180"
+              )}></i>
+            </button>
+
+            {openCategory === 'printer' && (
+              <div className="mt-2 p-5 bg-slate-50 border border-slate-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                 <div className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                       <div className={`w-3 h-3 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                       <div>
+                          <p className="text-[11px] font-extrabold text-slate-800 uppercase">PRINTER THERMAL</p>
+                          <p className="text-[8px] text-slate-500 font-bold uppercase mt-0.5">
+                            STATUS: {btConnected ? 'TERHUBUNG (ID: POS-80-BT)' : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                          </p>
+                       </div>
+                    </div>
+                 </div>
+
+                 <button 
+                   type="button"
+                   onClick={toggleBluetoothDevice}
+                   disabled={btConnecting}
+                   className={`w-full text-[10px] font-black py-3 rounded-xl active:scale-95 transition-all shadow-md cursor-pointer uppercase tracking-widest flex items-center justify-center gap-2
+                     ${btConnected 
+                       ? 'bg-rose-500 text-white hover:bg-rose-600' 
+                       : 'bg-blue-600 text-white hover:bg-blue-700'
+                     }
+                   `}
+                 >
+                    <i className={btConnected ? "fa-solid fa-unlink" : btConnecting ? "fa-solid fa-spinner fa-spin" : "fa-brands fa-bluetooth"}></i>
+                    {btConnected ? 'PUTUSKAN KONEKSI' : btConnecting ? 'MENYAMBUNGKAN...' : 'HUBUNGKAN PRINTER'}
+                 </button>
+
+                 <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold uppercase mt-4">
+                    <div className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm text-center">
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">KERAPATAN</span>
+                       <span className="font-extrabold text-slate-700">32 Kar/Baris</span>
+                    </div>
+                    <div className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm text-center">
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">KECEPATAN</span>
+                       <span className="font-extrabold text-slate-700">90 mm/Detik</span>
+                    </div>
+                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Kategori: Pengaturan AI & Kamera */}
+          {props.kasirRole === 'owner' && (
+            <div className="group">
+              <button
+                onClick={() => setOpenCategory(openCategory === 'ai_setting' ? null : 'ai_setting')}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                  openCategory === 'ai_setting' ? "bg-pink-600 text-white border-pink-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                    openCategory === 'ai_setting' ? "bg-white/20 text-white" : "bg-pink-50 text-pink-600"
+                  )}>
+                    <i className="fa-solid fa-microchip text-xs"></i>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[11px] font-black uppercase tracking-widest block text-black">PENGATURAN AI</span>
+                    <span className="text-[8px] font-bold opacity-80 text-gray-500">Konfigurasi Gemini & Kamera</span>
+                  </div>
+                </div>
+                <i className={cn(
+                  "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                  openCategory === 'ai_setting' && "rotate-180"
+                )}></i>
+              </button>
+
+              {openCategory === 'ai_setting' && (
+                <div className="mt-2 p-5 bg-pink-50 border border-pink-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                  <div>
+                    <label className="text-[9px] font-black text-pink-800 uppercase tracking-widest block mb-2">API Key Gemini (Google AI)</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: AIzaSyBxxxx..."
+                      value={geminiApiKey}
+                      onChange={(e) => {
+                        setGeminiApiKey(e.target.value);
+                        localStorage.setItem('gemini_api_key', e.target.value);
+                      }}
+                      className="w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-800 outline-none focus:ring-4 focus:ring-pink-100 transition-all"
+                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                    />
+                    <p className="text-[8px] font-bold text-pink-600 mt-2 px-1">
+                      <i className="fa-solid fa-info-circle mr-1"></i>
+                      Jika kuota API habis, Anda bisa menggantinya di sini tanpa perlu install ulang APK.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Kategori: Teks Otomatis (Setting Keterangan) */}
           <div className="group">

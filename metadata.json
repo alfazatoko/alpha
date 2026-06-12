@@ -1,0 +1,11 @@
+{
+  "name": "Kasir Cubic Perorangan",
+  "description": "Sistem Manajemen Kasir & Inventaris 1 Pintu (POS)",
+  "requestFramePermissions": [
+    "bluetooth",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

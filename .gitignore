@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 release.keystore 
 keystore_base64.txt 
+backend-ai/.env

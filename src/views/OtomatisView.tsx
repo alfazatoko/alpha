@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { cn, formatInputRupiah, parseNominal } from '../lib/utils'
 import type { PresetOtomatis } from '../types'
+import generatedPresets from '../generated_presets.json'
 
 interface OtomatisViewProps {
   active: boolean
@@ -115,6 +116,24 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
     setFormJual('')
   }
 
+  const handleImportPresets = () => {
+    if (props.onConfirm) {
+      props.onConfirm(
+        "IMPORT PRESET",
+        "Tindakan ini akan menimpa preset Anda saat ini dengan default 50+ preset. Lanjutkan?",
+        () => {
+          props.setPresets(generatedPresets as PresetOtomatis[]);
+          props.showToast('Berhasil import 50+ preset. Klik Simpan Preset untuk Upload ke Cloud!');
+        }
+      )
+    } else {
+      if (confirm('Tindakan ini akan menimpa preset Anda saat ini dengan default 50+ preset. Lanjutkan?')) {
+        props.setPresets(generatedPresets as PresetOtomatis[]);
+        props.showToast('Berhasil import 50+ preset. Jangan lupa sync ke Cloud!');
+      }
+    }
+  }
+
   if (props.activeStoreId === 'all') {
     const warningContent = (
       <div className="flex-grow h-full flex items-center justify-center p-6">
@@ -162,11 +181,18 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                 <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
                   {editingId ? "Edit Preset Transaksi" : "Tambah Preset Baru"}
                 </h4>
-                {editingId && (
-                  <button onClick={resetForm} className="text-[9px] font-black text-rose-500 hover:underline uppercase tracking-wider">
-                    Batal Edit
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {!editingId && (
+                    <button onClick={handleImportPresets} className="text-[9px] font-black text-indigo-500 hover:underline uppercase tracking-wider">
+                      Import 50+ Default Preset
+                    </button>
+                  )}
+                  {editingId && (
+                    <button onClick={resetForm} className="text-[9px] font-black text-rose-500 hover:underline uppercase tracking-wider">
+                      Batal Edit
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -379,9 +405,16 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
 
       <div className="px-1.5 pb-8 space-y-5">
         <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
-          <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
-            <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
-          </h3>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
+              <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
+            </h3>
+            {!editingId && (
+              <button onClick={handleImportPresets} className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-wider">
+                <i className="fa-solid fa-download"></i> IMPORT
+              </button>
+            )}
+          </div>
 
           <div className="mb-2">
             <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>

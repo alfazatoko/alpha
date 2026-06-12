@@ -58,6 +58,7 @@ interface BerandaViewProps {
   setPantauStoreId?: (id: string | 'all') => void
   stores?: Store[]
   isPc?: boolean
+  userId: string
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -642,6 +643,234 @@ const BackupPanel: React.FC<{
 
 // Extra panels removed to resolve duplicate declaration error
 
+interface Catatan {
+  id: string;
+  judul: string;
+  isi: string;
+  kategori: string;
+  tanggal: string;
+  selesai: boolean;
+}
+
+const CatatanPanel: React.FC<{
+  showToast: (m: string) => void,
+  onConfirm: (t: string, m: string, c: () => void) => void
+}> = ({ showToast, onConfirm }) => {
+  const STORAGE_KEY = 'alphaPro_global_catatanOwner';
+  const [catatanList, setCatatanList] = useState<Catatan[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
+  
+  const [judul, setJudul] = useState('');
+  const [isi, setIsi] = useState('');
+  const [kategori, setKategori] = useState('Penting');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setCatatanList(JSON.parse(saved));
+      } catch(e) {}
+    }
+  }, []);
+
+  const saveToStorage = (data: Catatan[]) => {
+    setCatatanList(data);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  };
+
+  const handleSimpan = () => {
+    if (!judul.trim() || !isi.trim()) {
+      return showToast('Judul dan isi catatan harus diisi!');
+    }
+    const baru: Catatan = {
+      id: Date.now().toString(),
+      judul: judul.trim(),
+      isi: isi.trim(),
+      kategori,
+      tanggal: new Date().toISOString(),
+      selesai: false
+    };
+    saveToStorage([baru, ...catatanList]);
+    setJudul('');
+    setIsi('');
+    setFormOpen(false);
+    showToast('Catatan berhasil disimpan');
+  };
+
+  const hapusCatatan = (id: string) => {
+    onConfirm('HAPUS CATATAN', 'Apakah Anda yakin ingin menghapus catatan ini?', () => {
+      const updated = catatanList.filter(c => c.id !== id);
+      saveToStorage(updated);
+      showToast('Catatan dihapus');
+    });
+  };
+
+  const toggleSelesai = (id: string) => {
+    const updated = catatanList.map(c => c.id === id ? { ...c, selesai: !c.selesai } : c);
+    saveToStorage(updated);
+  };
+
+  const copyCatatan = async (c: Catatan) => {
+    const text = `*${c.judul}*\nKategori: ${c.kategori}\nTanggal: ${new Date(c.tanggal).toLocaleDateString('id-ID')}\n\n${c.isi}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        showToast('Teks disalin ke clipboard');
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        showToast('Teks disalin ke clipboard');
+      }
+    } catch(err) {
+      showToast('Gagal menyalin teks');
+    }
+  };
+
+  const getCatIcon = (kat: string) => {
+    if (kat === 'Belanja') return 'fa-cart-shopping text-blue-500 bg-blue-100';
+    if (kat === 'Ide') return 'fa-lightbulb text-amber-500 bg-amber-100';
+    return 'fa-circle-exclamation text-rose-500 bg-rose-100';
+  };
+
+  return (
+    <div className="space-y-4 pb-10">
+      {!formOpen ? (
+        <>
+          <button
+            onClick={() => setFormOpen(true)}
+            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-orange-200/50 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <i className="fa-solid fa-plus"></i> Buat Catatan Baru
+          </button>
+          
+          {catatanList.length === 0 ? (
+            <div className="p-8 text-center bg-gray-50 border border-gray-100 rounded-3xl mt-4">
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i className="fa-solid fa-clipboard-list text-2xl text-gray-400"></i>
+              </div>
+              <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Belum Ada Catatan</p>
+              <p className="text-[10px] text-gray-400 font-bold mt-1">Catatan Anda akan tampil di sini.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 mt-4">
+              {catatanList.map(c => (
+                <div key={c.id} className={cn("bg-white border rounded-2xl p-4 shadow-sm transition-all", c.selesai ? "border-gray-200 bg-gray-50/50" : "border-orange-100")}>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={cn("w-10 h-10 shrink-0 rounded-xl flex items-center justify-center", getCatIcon(c.kategori), c.selesai && "opacity-50 grayscale")}>
+                        <i className={`fa-solid ${getCatIcon(c.kategori).split(' ')[0]} text-lg`}></i>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={cn("text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md", c.selesai ? "bg-gray-200 text-gray-500" : "bg-orange-100 text-orange-700")}>
+                            {c.kategori}
+                          </span>
+                          <span className="text-[8px] font-bold text-gray-400">{new Date(c.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
+                        </div>
+                        <h4 className={cn("font-black text-sm text-gray-800 truncate", c.selesai && "line-through text-gray-400")}>{c.judul}</h4>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => toggleSelesai(c.id)} className={cn("w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all", c.selesai ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500")}>
+                        <i className="fa-solid fa-check"></i>
+                      </button>
+                      <button onClick={() => copyCatatan(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 active:scale-90 transition-all">
+                        <i className="fa-regular fa-copy"></i>
+                      </button>
+                      <button onClick={() => hapusCatatan(c.id)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500 active:scale-90 transition-all">
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                    className={cn(
+                      "mt-3 pt-3 border-t text-xs font-bold leading-relaxed cursor-pointer transition-all",
+                      c.selesai ? "border-gray-200 text-gray-400 line-through decoration-gray-300" : "border-orange-50 text-gray-600",
+                      expandedId === c.id ? "whitespace-pre-wrap" : "truncate"
+                    )}
+                    title="Klik untuk melihat catatan lengkap"
+                  >
+                    {c.isi}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="bg-white border border-orange-100 rounded-[2rem] p-5 shadow-sm animate-in fade-in duration-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-black text-orange-600 text-[13px] tracking-widest uppercase">CATATAN BARU</h3>
+            <button onClick={() => setFormOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">JUDUL CATATAN</label>
+              <input
+                type="text"
+                placeholder="Cth: Belanja Stok XL"
+                value={judul}
+                onChange={e => setJudul(e.target.value)}
+                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 focus:border-orange-400 focus:bg-white transition-colors"
+              />
+            </div>
+            
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">KATEGORI</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['Penting', 'Belanja', 'Ide'].map(kat => (
+                  <button
+                    key={kat}
+                    onClick={() => setKategori(kat)}
+                    className={cn(
+                      "py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                      kategori === kat 
+                        ? "bg-orange-50 border-orange-400 text-orange-600 shadow-sm" 
+                        : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"
+                    )}
+                  >
+                    {kat}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">ISI CATATAN</label>
+              <textarea
+                placeholder="Ketik rincian di sini..."
+                value={isi}
+                onChange={e => setIsi(e.target.value)}
+                rows={5}
+                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 resize-none focus:border-orange-400 focus:bg-white transition-colors"
+              ></textarea>
+            </div>
+            
+            <button
+              onClick={handleSimpan}
+              className="w-full bg-green-600 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-all mt-2"
+            >
+              SIMPAN CATATAN
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
 
@@ -685,6 +914,96 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
   const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
   const [grafikType, setGrafikType] = useState<'bar'|'line'|'pie'>('bar')
+
+  // Performa State
+  const [performaRange, setPerformaRange] = useState<'harian'|'mingguan'|'bulanan'>('bulanan')
+
+  // Analytics State
+  const [analyticsData, setAnalyticsData] = useState<any[]>([])
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
+
+  const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
+  const isOwnerSubView = !!activeOwnerSubView
+
+  useEffect(() => {
+    if (activeOwnerSubView === 'performa' || activeOwnerSubView === 'grafik') {
+      const fetchAnalytics = async () => {
+        setIsAnalyticsLoading(true)
+        try {
+          const now = new Date()
+          let days = 30
+          
+          if (activeOwnerSubView === 'performa') {
+            if (performaRange === 'harian') days = 0
+            else if (performaRange === 'mingguan') days = 6
+            else days = 29
+          } else {
+            if (grafikRange === 'harian') days = 7
+            else if (grafikRange === 'mingguan') days = 30
+            else days = 90
+          }
+
+          const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days)
+          const fmt = (d: Date) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+          const startStr = fmt(cutoffDate)
+          const endStr = fmt(now)
+          const storeId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')
+
+          let query = supabase
+            .from('transactions')
+            .select('kasir_id, nominal, timestamp, kategori')
+            .eq('user_id', props.userId)
+            .order('timestamp', { ascending: false })
+            .limit(3000)
+
+          if (storeId !== 'all') {
+            query = query.eq('store_id', storeId)
+          }
+
+          const { data, error } = await query
+
+          if (error) {
+            console.error('Analytics Error:', error.message || error)
+          } else if (data) {
+            // Filter locally to avoid any Supabase Postgres date casting bugs
+            // Filter locally using strict string comparison to bypass ALL timezone bugs
+            const validData = data.filter(r => {
+              if (!r.timestamp || !r.kategori || r.kategori.startsWith('Isi')) return false
+              const txDay = typeof r.timestamp === 'string' ? r.timestamp.substring(0, 10) : ''
+              return txDay >= startStr && txDay <= endStr
+            })
+            
+            // Group data locally exactly like the RPC did
+            const aggregated = validData.reduce((acc, row) => {
+               const day = typeof row.timestamp === 'string' ? row.timestamp.substring(0, 10) : ''
+               if (!day) return acc;
+               
+               const kId = row.kasir_id || 'Unknown'
+               const key = `${day}_${kId}`
+               if (!acc[key]) {
+                 acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0 }
+               }
+               acc[key].total_omzet += Number(row.nominal || 0)
+               acc[key].total_transaksi += 1
+               return acc
+            }, {} as Record<string, any>)
+
+            const finalAnalyticsData = Object.values(aggregated)
+            console.log('Analytics Berhasil ditarik & digrup:', finalAnalyticsData.length, 'baris grup dari', validData.length, 'transaksi')
+            setAnalyticsData(finalAnalyticsData)
+            
+            // Temporary debug toast
+            if (finalAnalyticsData.length === 0) {
+              props.showToast(`Debug: Supabase=${data.length} txs, ValidDate=${validData.length} txs`)
+            }
+          }
+        } finally {
+          setIsAnalyticsLoading(false)
+        }
+      }
+      fetchAnalytics()
+    }
+  }, [activeOwnerSubView, performaRange, grafikRange, props.activeStoreId, props.pantauStoreId])
 
   const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
@@ -734,8 +1053,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     })
   }
 
-  const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
-  const isOwnerSubView = !!activeOwnerSubView
 
   // Auto-close sub-panels when navigating away to any other view
   useEffect(() => {
@@ -1215,6 +1532,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
               { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
               { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+              { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
               { id: 'view-akun', title: 'Setting', desc: 'Pengaturan app', icon: 'fa-gear', color: 'bg-slate-600' },
             ].map((item) => (
               <button 
@@ -1249,6 +1567,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             case 'gaji': return { title: 'DATA GAJI KASIR', color: 'from-green-600 to-green-800', icon: 'fa-dollar-sign', desc: 'Perhitungan dan riwayat penggajian kasir.' }
             case 'saldo': return { title: 'PENGATURAN SALDO', color: 'from-emerald-600 to-emerald-800', icon: 'fa-wallet', desc: 'Alokasi dan penambahan modal harian kasir.' }
             case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
+            case 'catatan': return { title: 'CATATAN OWNER', color: 'from-amber-500 to-orange-600', icon: 'fa-clipboard-list', desc: 'Catat pengingat penting dan daftar belanja.' }
             default: return { title: 'BACKUP & RESET', color: 'from-red-600 to-red-800', icon: 'fa-database', desc: 'Cadangkan data dan kembalikan ke pengaturan awal.' }
           }
         };
@@ -2004,93 +2323,156 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerSubView === 'grafik' && (() => {
+                if (isAnalyticsLoading) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                       <i className="fa-solid fa-spinner fa-spin text-4xl text-purple-200 mb-3"></i>
+                       <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Memuat Grafik...</p>
+                    </div>
+                  )
+                }
+
                 const now = new Date()
                 now.setHours(0,0,0,0)
                 
-                // Helper to format Date or timestamp string to 'YYYY-MM-DD' in LOCAL timezone
+                // Helper to format Date string to 'YYYY-MM-DD' safely
                 const formatLocalISO = (d: Date | string) => {
-                  const dateObj = typeof d === 'string' ? new Date(d) : d;
-                  const tzOffset = dateObj.getTimezoneOffset() * 60000;
-                  return (new Date(dateObj.getTime() - tzOffset)).toISOString().split('T')[0];
+                  if (!d) return '';
+                  if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    return d.substring(0, 10);
+                  }
+                  try {
+                    const dateObj = typeof d === 'string' ? new Date(d) : d;
+                    if (isNaN(dateObj.getTime())) return '';
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  } catch (e) {
+                    return '';
+                  }
                 }
 
-                // Filter transactions by selected Kasir and EXCLUDE non-sales (Isi Saldo, dsb)
-                let filteredTxs = props.transactions.filter(t => !t.kategori.startsWith('Isi'))
+                // Filter analytics by selected Kasir
+                let filteredAnalytics = analyticsData;
+                let filterKasirName = grafikFilterKasir;
+                
                 if (grafikFilterKasir !== 'Semua') {
-                  filteredTxs = filteredTxs.filter(t => t.kasir_id === grafikFilterKasir)
+                  filterKasirName = props.kasirList[grafikFilterKasir]?.name || grafikFilterKasir;
+                  // DB stores kasir_id as login username (grafikFilterKasir), so match against that
+                  filteredAnalytics = filteredAnalytics.filter(r => 
+                    (r.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase()
+                  );
                 }
 
-                // Function to group by date string prefix (comparing using Local ISO)
+                // Function to group by date string prefix
                 const sumByPrefix = (prefix: string) => 
-                  filteredTxs.filter(t => formatLocalISO(t.timestamp).startsWith(prefix)).reduce((s, t) => s + t.nominal, 0)
+                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                   .reduce((s, r) => s + Number(r.total_omzet), 0)
 
-                let chartData: { label: string, value: number }[] = []
+                let trendData: { label: string, value: number }[] = []
                 
                 if (grafikRange === 'harian') {
-                  // Last 7 days
-                  chartData = Array.from({length: 7}, (_, i) => {
+                  trendData = Array.from({length: 7}, (_, i) => {
                     const d = new Date(now)
                     d.setDate(d.getDate() - (6 - i))
-                    const val = sumByPrefix(formatLocalISO(d))
-                    return { label: d.toLocaleDateString('id-ID', { weekday: 'short' }), value: val }
+                    const prefix = formatLocalISO(d)
+                    return { label: d.toLocaleDateString('id-ID', { weekday: 'short' }), value: sumByPrefix(prefix) }
                   })
                 } else if (grafikRange === 'mingguan') {
-                  // Last 4 weeks
-                  chartData = Array.from({length: 4}, (_, i) => {
+                  trendData = Array.from({length: 4}, (_, i) => {
                     const d = new Date(now)
-                    d.setDate(d.getDate() - (21 - i * 7)) // 3 weeks ago, 2 weeks, 1 week, this week
-                    // To simplify, we'll just sum the 7 days of that week
+                    d.setDate(d.getDate() - (21 - i * 7)) 
                     let weekSum = 0
                     for(let j=0; j<7; j++) {
                       const wd = new Date(d)
                       wd.setDate(wd.getDate() + j)
-                      weekSum += sumByPrefix(formatLocalISO(wd))
+                      const prefix = formatLocalISO(wd)
+                      weekSum += sumByPrefix(prefix)
                     }
                     return { label: `M${i+1}`, value: weekSum }
                   })
                 } else {
-                  // Last 6 months
-                  chartData = Array.from({length: 6}, (_, i) => {
+                  trendData = Array.from({length: 6}, (_, i) => {
                     const d = new Date(now)
                     d.setMonth(d.getMonth() - (5 - i))
                     const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                    const val = sumByPrefix(yearMonth)
-                    return { label: d.toLocaleDateString('id-ID', { month: 'short' }), value: val }
+                    return { label: d.toLocaleDateString('id-ID', { month: 'short' }), value: sumByPrefix(yearMonth) }
                   })
                 }
 
-                const maxVal = Math.max(...chartData.map(d => d.value), 1) // avoid div by 0
+                const maxTrendVal = Math.max(...trendData.map(d => d.value), 1)
 
-                const todayISO = formatLocalISO(now)
-                const volHarian = sumByPrefix(todayISO)
-                const volSemua = filteredTxs.reduce((s,t) => s + t.nominal, 0)
+                // KPI Metriks from Analytics Data
+                const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet), 0)
+                const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi), 0)
+                const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0
+
+                // Use recent transactions (props.transactions) for Category and Time analysis
+                // because analyticsData does not contain category or hour details
+                const recentValidTxs = props.transactions.filter(t => t && t.kategori && !t.kategori.startsWith('Isi'))
+                let filteredRecentTxs = recentValidTxs
+                if (grafikFilterKasir !== 'Semua') {
+                  filteredRecentTxs = filteredRecentTxs.filter(t => t.kasir_id === filterKasirName)
+                }
+
+                // Kategori Terlaris (Tren Terbaru)
+                const kategoriMap = new Map<string, number>()
+                filteredRecentTxs.forEach(t => {
+                  const cat = t.kategori || 'Lainnya'
+                  kategoriMap.set(cat, (kategoriMap.get(cat) || 0) + (t.nominal || 0))
+                })
+                const categoryData = Array.from(kategoriMap.entries()).map(([k, v]) => ({ label: k, value: v })).sort((a,b) => b.value - a.value)
+
+                // Jam Sibuk (Time Blocks Tren Terbaru)
+                const hourMap = new Array(24).fill(0)
+                filteredRecentTxs.forEach(t => {
+                  if (!t.timestamp) return;
+                  try {
+                    let h = 0;
+                    if (typeof t.timestamp === 'string' && t.timestamp.includes('T')) {
+                      h = parseInt(t.timestamp.split('T')[1].substring(0, 2), 10);
+                    } else {
+                      const d = new Date(t.timestamp);
+                      if (!isNaN(d.getTime())) h = d.getHours();
+                    }
+                    if (!isNaN(h) && h >= 0 && h < 24) hourMap[h]++;
+                  } catch(e) {}
+                })
+                const timeBlocks = [
+                  { label: 'Pagi', sub: '06-12', value: hourMap.slice(6, 12).reduce((a,b)=>a+b,0) },
+                  { label: 'Siang', sub: '12-15', value: hourMap.slice(12, 15).reduce((a,b)=>a+b,0) },
+                  { label: 'Sore', sub: '15-18', value: hourMap.slice(15, 18).reduce((a,b)=>a+b,0) },
+                  { label: 'Malam', sub: '18-24', value: hourMap.slice(18, 24).reduce((a,b)=>a+b,0) + hourMap.slice(0, 6).reduce((a,b)=>a+b,0) }
+                ]
+                const maxTimeVal = Math.max(...timeBlocks.map(d => d.value), 1)
 
                 return (
-                  <div className="space-y-5">
+                  <div className="space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     {/* Controls */}
-                    <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
-                      <div className="relative flex-1 mr-2">
+                    <div className="bg-white p-2 rounded-[1.25rem] border border-gray-100 shadow-sm flex items-center justify-between gap-2">
+                      <div className="relative flex-1">
                         <select
                           value={grafikFilterKasir}
                           onChange={(e) => setGrafikFilterKasir(e.target.value)}
-                          className="w-full bg-white border border-gray-200 text-emerald-800 text-[10px] font-black py-1.5 pl-2 pr-7 rounded-lg outline-none cursor-pointer appearance-none"
+                          className="w-full bg-gray-50 border border-gray-100 text-gray-800 text-[10px] font-black py-2.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none transition-all hover:bg-gray-100"
                         >
                           <option value="Semua">Semua Kasir</option>
                           {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
                             <option key={id} value={id}>{acc.name}</option>
                           ))}
                         </select>
-                        <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-emerald-400 pointer-events-none"></i>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
                       </div>
 
-                      <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0">
+                      <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
                         {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
                           <button 
                             key={range}
                             onClick={() => setGrafikRange(range)}
                             className={cn(
-                              "text-[9px] font-black uppercase px-2 py-1.5 transition-colors",
-                              grafikRange === range ? "bg-emerald-600 text-white" : "text-gray-500 hover:bg-gray-50"
+                              "text-[9px] font-black uppercase px-2.5 py-2 rounded-lg transition-all",
+                              grafikRange === range ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
                             )}
                           >
                             {range === 'harian' ? 'HARI' : range === 'mingguan' ? 'MINGGU' : 'BULAN'}
@@ -2099,165 +2481,178 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       </div>
                     </div>
 
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[1.5rem] text-white shadow-lg shadow-emerald-200 text-center relative overflow-hidden">
-                        <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
-                        <p className="text-[9px] font-black text-emerald-100 uppercase tracking-widest relative z-10">Hari Ini</p>
-                        <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volHarian/1000).toLocaleString('id-ID')}K</h2>
+                    {/* KPI Cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-emerald-200 relative overflow-hidden group">
+                        <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-emerald-100 uppercase tracking-widest relative z-10 mb-1">TOTAL OMZET</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {totalVolume.toLocaleString('id-ID')}</h2>
                       </div>
-                      <div className="p-3 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[1.5rem] text-white shadow-lg shadow-blue-200 text-center relative overflow-hidden">
-                        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
-                        <p className="text-[9px] font-black text-blue-100 uppercase tracking-widest relative z-10">Total ({grafikFilterKasir === 'Semua' ? 'All' : 'Kasir'})</p>
-                        <h2 className="text-[13px] font-black text-white mt-1 relative z-10">Rp {(volSemua/1000).toLocaleString('id-ID')}K</h2>
+                      
+                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-blue-200 relative overflow-hidden group">
+                        <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-blue-100 uppercase tracking-widest relative z-10 mb-1">TRANSAKSI</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">{totalItems.toLocaleString('id-ID')} <span className="text-[9px]">item</span></h2>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h4 className="text-[14px] font-black text-gray-900 uppercase tracking-tighter">Performa Transaksi</h4>
-                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                            {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
-                        </p>
-                      </div>
-                      <div className="flex bg-gray-100 rounded-lg p-1">
-                        <button onClick={() => setGrafikType('bar')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'bar' ? "bg-white shadow-sm text-blue-600" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-simple"></i></button>
-                        <button onClick={() => setGrafikType('line')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'line' ? "bg-white shadow-sm text-emerald-600" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-line"></i></button>
-                        <button onClick={() => setGrafikType('pie')} className={cn("px-2 py-1 rounded text-[10px] transition-all", grafikType === 'pie' ? "bg-white shadow-sm text-amber-500" : "text-gray-400 hover:text-gray-600")}><i className="fa-solid fa-chart-pie"></i></button>
+
+                      <div className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-purple-200 relative overflow-hidden group">
+                        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-purple-100 uppercase tracking-widest relative z-10 mb-1">RATA-RATA</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {avgTransaction.toLocaleString('id-ID')}</h2>
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-[2rem] p-5 shadow-xl shadow-blue-500/5 border border-blue-50 relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
-                      
-                      {/* CSS ANIMATIONS FOR CHARTS */}
+                    {/* Chart 1: Tren Pendapatan */}
+                    <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h4 className="text-[13px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                            <i className="fa-solid fa-chart-line text-blue-500"></i> Tren Pendapatan
+                          </h4>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                            {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
+                          </p>
+                        </div>
+                      </div>
+
                       <style>{`
-                        @keyframes growBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-                        @keyframes drawLine { to { stroke-dashoffset: 0; } }
-                        .animate-bar { animation: growBar 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
-                        .animate-line { animation: drawLine 1.5s ease-out forwards; }
+                        @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+                        .animate-grow { animation: growUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
                       `}</style>
 
-                      {grafikType === 'bar' && (
-                        <div className="h-40 flex items-end justify-between gap-1 pt-4 relative z-10">
-                          {chartData.map((d, i) => {
-                            const heightPct = Math.max((d.value / maxVal) * 100, 4);
-                            return (
-                              <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-6">
-                                <div className="absolute -top-8 bg-gray-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
-                                  Rp {(d.value/1000).toLocaleString('id-ID')}K
-                                </div>
-                                <div 
-                                  className="w-full max-w-[28px] bg-gradient-to-t from-blue-500 to-indigo-400 rounded-t-[6px] shadow-sm animate-bar hover:from-blue-400 hover:to-indigo-300"
-                                  style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
-                                ></div>
-                                <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
-                                  {d.label}
-                                </span>
-                              </div>
-                            )
-                          })}
+                      <div className="h-44 flex items-end justify-between gap-1.5 relative mt-6">
+                        {/* Background lines */}
+                        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                           {[...Array(4)].map((_, i) => (
+                             <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                           ))}
                         </div>
-                      )}
 
-                      {grafikType === 'line' && (() => {
-                        const points = chartData.map((d, i) => {
-                          const x = (i / Math.max(chartData.length - 1, 1)) * 100;
-                          const y = 100 - ((d.value / maxVal) * 100);
-                          return `${x},${y}`;
-                        }).join(' ');
-                        return (
-                          <div className="h-40 relative w-full pt-4 pb-6 px-4 z-10">
-                            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
-                              <defs>
-                                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                                </linearGradient>
-                              </defs>
-                              <polygon points={`0,100 ${points} 100,100`} fill="url(#lineGrad)" className="animate-in fade-in duration-1000" />
-                              <polyline 
-                                points={points} 
-                                fill="none" 
-                                stroke="#10b981" 
-                                strokeWidth="3" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round" 
-                                className="animate-line" 
-                                style={{ strokeDasharray: 500, strokeDashoffset: 500 }} 
-                              />
-                              {chartData.map((d, i) => {
-                                const x = (i / Math.max(chartData.length - 1, 1)) * 100;
-                                const y = 100 - ((d.value / maxVal) * 100);
-                                return (
-                                  <g key={i} className="group/pt cursor-pointer">
-                                    <circle cx={x} cy={y} r="4" fill="#ffffff" stroke="#10b981" strokeWidth="2.5" className="animate-in zoom-in duration-500 delay-500 group-hover/pt:r-6 transition-all" />
-                                    <text x={x} y={y - 12} fontSize="6" fontWeight="bold" fill="#374151" textAnchor="middle" className="opacity-0 group-hover/pt:opacity-100 transition-opacity">
-                                      {(d.value/1000).toLocaleString('id-ID')}K
-                                    </text>
-                                  </g>
-                                )
-                              })}
-                            </svg>
-                            <div className="absolute bottom-0 left-0 w-full flex justify-between px-4">
-                              {chartData.map((d, i) => (
-                                <span key={i} className="text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-8 text-center -ml-4">
-                                  {d.label}
-                                </span>
-                              ))}
+                        {trendData.map((d, i) => {
+                          const heightPct = Math.max((d.value / maxTrendVal) * 100, 2);
+                          return (
+                            <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-7 z-10">
+                              <div className="absolute -top-8 bg-gray-800 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/bar:opacity-100 group-active/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 shadow-lg transform -translate-y-2 group-hover/bar:-translate-y-4">
+                                Rp {d.value.toLocaleString('id-ID')}
+                                <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                              </div>
+                              <div 
+                                className="w-full max-w-[32px] bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t-xl shadow-sm animate-grow transition-all group-hover/bar:brightness-110 group-active/bar:brightness-110 cursor-pointer relative overflow-hidden"
+                                style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
+                              >
+                                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity"></div>
+                              </div>
+                              <span className="absolute bottom-0 text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate w-full text-center">
+                                {d.label}
+                              </span>
                             </div>
-                          </div>
-                        )
-                      })()}
+                          )
+                        })}
+                      </div>
+                    </div>
 
-                      {grafikType === 'pie' && (() => {
-                        const total = chartData.reduce((s, d) => s + d.value, 0) || 1;
-                        let currentOffset = 0;
-                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
-                        return (
-                          <div className="h-40 flex items-center justify-center relative pt-2 pb-6 z-10">
-                            <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible transform -rotate-90">
-                              {chartData.map((d, i) => {
-                                if (d.value === 0) return null;
-                                const radius = 40;
-                                const circumference = 2 * Math.PI * radius;
-                                const percentage = d.value / total;
-                                const strokeLength = percentage * circumference;
-                                const dasharray = `${strokeLength} ${circumference}`;
-                                const dashoffset = -currentOffset;
-                                currentOffset += strokeLength;
-                                return (
-                                  <circle
-                                    key={i}
-                                    cx="50"
-                                    cy="50"
-                                    r={radius}
-                                    fill="transparent"
-                                    stroke={colors[i % colors.length]}
-                                    strokeWidth="16"
-                                    strokeDasharray={dasharray}
-                                    strokeDashoffset={dashoffset}
-                                    strokeLinecap={percentage > 0.99 ? "round" : "butt"}
-                                    className="animate-in zoom-in duration-1000 hover:stroke-[20] transition-all cursor-pointer"
-                                    style={{ animationDelay: `${i * 100}ms` }}
-                                  />
-                                )
-                              })}
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-16px]">
-                              <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Total</span>
-                              <span className="text-[11px] font-black text-gray-800">{(total/1000).toLocaleString('id-ID')}K</span>
-                            </div>
-                            <div className="absolute bottom-0 left-0 w-full flex justify-center gap-2 overflow-x-auto hide-scrollbar pb-1">
-                              {chartData.map((d, i) => d.value > 0 && (
-                                <div key={i} className="flex items-center gap-1 shrink-0">
-                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }}></div>
-                                  <span className="text-[7px] font-bold text-gray-500 uppercase">{d.label}</span>
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      {/* Chart 2: Kategori Terlaris (Donut) */}
+                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
+                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
+                          <i className="fa-solid fa-chart-pie text-orange-500"></i> Kategori
+                        </h4>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Omzet per jenis</p>
+                        
+                        {(() => {
+                          const total = categoryData.reduce((s, d) => s + d.value, 0) || 1;
+                          let currentOffset = 0;
+                          const colors = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
+                          return (
+                            <div className="flex-1 flex flex-col">
+                              <div className="h-28 flex items-center justify-center relative mb-4">
+                                <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible transform -rotate-90">
+                                  {categoryData.map((d, i) => {
+                                    if (d.value === 0) return null;
+                                    const radius = 40;
+                                    const circumference = 2 * Math.PI * radius;
+                                    const percentage = d.value / total;
+                                    const strokeLength = percentage * circumference;
+                                    const dasharray = `${strokeLength} ${circumference}`;
+                                    const dashoffset = -currentOffset;
+                                    currentOffset += strokeLength;
+                                    return (
+                                      <circle
+                                        key={i}
+                                        cx="50"
+                                        cy="50"
+                                        r={radius}
+                                        fill="transparent"
+                                        stroke={colors[i % colors.length]}
+                                        strokeWidth="16"
+                                        strokeDasharray={dasharray}
+                                        strokeDashoffset={dashoffset}
+                                        strokeLinecap={percentage > 0.99 ? "round" : "butt"}
+                                        className="animate-in zoom-in duration-1000 hover:stroke-[20] transition-all cursor-pointer"
+                                        style={{ animationDelay: `${i * 100}ms` }}
+                                      >
+                                        <title>{d.label}: Rp {d.value.toLocaleString('id-ID')}</title>
+                                      </circle>
+                                    )
+                                  })}
+                                </svg>
+                                {/* Center Label */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-4px]">
+                                  <span className="text-[10px] font-black text-gray-800">{categoryData.length > 0 ? categoryData[0].label : '-'}</span>
+                                  <span className="text-[7px] text-gray-400 font-bold uppercase tracking-widest">Terlaris</span>
                                 </div>
-                              ))}
+                              </div>
+                              <div className="space-y-1.5 mt-auto">
+                                {categoryData.slice(0, 3).map((d, i) => (
+                                  <div key={i} className="flex justify-between items-center">
+                                    <div className="flex items-center gap-1.5 overflow-hidden">
+                                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[i % colors.length] }}></div>
+                                      <span className="text-[9px] font-black text-gray-600 truncate">{d.label}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-gray-900 ml-2">{(d.value/total*100).toFixed(0)}%</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })()}
+                          )
+                        })()}
+                      </div>
+
+                      {/* Chart 3: Jam Sibuk */}
+                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
+                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
+                          <i className="fa-solid fa-clock text-indigo-500"></i> Jam Sibuk
+                        </h4>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Transaksi</p>
+                        
+                        <div className="flex-1 flex items-end justify-between gap-1 relative mt-2">
+                           <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-4">
+                             {[...Array(3)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                           </div>
+                           
+                           {timeBlocks.map((d, i) => {
+                             const heightPct = Math.max((d.value / maxTimeVal) * 100, 5);
+                             return (
+                               <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-4 z-10">
+                                 <div className="absolute -top-6 bg-gray-800 text-white text-[8px] font-black px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-20">
+                                   {d.value} trx
+                                 </div>
+                                 <div 
+                                   className="w-full max-w-[24px] bg-indigo-100 rounded-t-lg animate-grow transition-all group-hover/bar:bg-indigo-400 relative overflow-hidden"
+                                   style={{ height: `${heightPct}%`, animationDelay: `${i * 100 + 200}ms` }}
+                                 >
+                                   <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-500"></div>
+                                 </div>
+                                 <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
+                                   {d.label}
+                                 </span>
+                               </div>
+                             )
+                           })}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2265,55 +2660,178 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
               {activeOwnerSubView === 'performa' && (
                 <div className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-[2.5rem] border border-purple-100 animate-in fade-in zoom-in duration-500 shadow-xl shadow-purple-500/5">
-                  <div className="space-y-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h4 className="text-[14px] font-black text-purple-950 uppercase tracking-tighter">Ranking Kasir</h4>
-                        <p className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Bulan Ini</p>
-                      </div>
-                      <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
-                        <i className="fa-solid fa-trophy"></i>
-                      </div>
-                    </div>
-                    {(() => {
-                      const sum = (txs: any[]) => txs.reduce((s, t) => s + t.nominal, 0)
-                      const now = new Date()
-                      const monthAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toLocaleDateString('en-CA')
+                  
+                  {/* Segmented Control Filter */}
+                  <div className="bg-white/60 p-1.5 rounded-2xl mb-6 flex backdrop-blur-md border border-white">
+                    {['harian', 'mingguan', 'bulanan'].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setPerformaRange(r as any)}
+                        className={cn(
+                          "flex-1 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all duration-300",
+                          performaRange === r 
+                            ? "bg-purple-600 text-white shadow-md shadow-purple-200" 
+                            : "text-purple-400 hover:text-purple-600 hover:bg-white/50"
+                        )}
+                      >
+                        {r === 'harian' ? 'HARI INI' : r === 'mingguan' ? 'MINGGU INI' : 'BULAN INI'}
+                      </button>
+                    ))}
+                  </div>
 
-                      const performaData = Object.keys(props.kasirList)
-                        .filter(id => id !== 'owner')
-                        .map(kId => {
-                          const txs = props.transactions.filter(t => t.kasir_id === kId)
-                          const monthTx = txs.filter(t => t.timestamp.startsWith(monthAgo.slice(0, 7)) || t.timestamp >= monthAgo)
-                          return {
-                            id: kId,
-                            name: props.kasirList[kId]?.name || kId,
-                            monthCount: monthTx.length,
-                            monthVol: sum(monthTx)
-                          }
-                        }).sort((a, b) => b.monthVol - a.monthVol)
+                  {(() => {
+                    if (isAnalyticsLoading) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                           <i className="fa-solid fa-spinner fa-spin text-4xl text-purple-200 mb-3"></i>
+                           <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Menghitung Data...</p>
+                        </div>
+                      )
+                    }
 
-                      if (performaData.length === 0) return <p className="text-center text-xs font-bold text-gray-400 py-6 italic">Belum ada data transaksi bulan ini</p>
+                    // Calculate totals from RPC data
+                    const totalGlobalOmzet = analyticsData.reduce((s, row) => s + Number(row.total_omzet), 0)
+                    const totalGlobalTxs = analyticsData.reduce((s, row) => s + Number(row.total_transaksi), 0)
 
-                      return performaData.map((p, idx) => (
-                        <div key={p.id} className="p-4 bg-white rounded-2xl border border-purple-100 shadow-sm flex justify-between items-center group hover:border-purple-300 transition-all active:scale-[0.98]">
-                          <div className="flex items-center gap-4">
-                            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shadow-md", idx === 0 ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-purple-200")}>
-                              {idx + 1}
-                            </div>
-                            <div>
-                              <p className="text-sm font-black text-gray-800 leading-none mb-1">{p.name}</p>
-                              <p className="text-[10px] text-purple-500 font-bold uppercase tracking-tight">{p.monthCount} Transaksi</p>
-                            </div>
+                    const performaData = Object.keys(props.kasirList)
+                      .filter(id => id !== 'owner')
+                      .map(kId => {
+                        const kasirName = props.kasirList[kId]?.name || kId;
+                        // DB stores kasir_id as the login username (kId), NOT the display name
+                        const rows = analyticsData.filter(r => 
+                          (r.kasir_id || '').trim().toLowerCase() === kId.trim().toLowerCase()
+                        )
+                        const vol = rows.reduce((s, r) => s + Number(r.total_omzet), 0)
+                        const count = rows.reduce((s, r) => s + Number(r.total_transaksi), 0)
+                        const avg = count > 0 ? Math.round(vol / count) : 0
+                        const contribution = totalGlobalOmzet > 0 ? ((vol / totalGlobalOmzet) * 100) : 0
+
+                        return {
+                          id: kId,
+                          name: props.kasirList[kId]?.name || kId,
+                          vol,
+                          count,
+                          avg,
+                          contribution
+                        }
+                      }).sort((a, b) => b.vol - a.vol)
+
+                    if (performaData.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                           <i className="fa-solid fa-ghost text-4xl text-purple-200 mb-3"></i>
+                           <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Data kasir tidak ditemukan</p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-4 animate-in fade-in zoom-in duration-500">
+                        {/* Summary KPI Global */}
+                        <div className="grid grid-cols-2 gap-3 mb-2">
+                          <div className="bg-white/60 backdrop-blur rounded-2xl p-3 border border-white">
+                            <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Total Transaksi</p>
+                            <p className="text-sm font-black text-purple-900">{totalGlobalTxs} <span className="text-[9px] text-purple-500 font-bold">Item</span></p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm font-black text-purple-700">{p.monthVol.toLocaleString('id-ID')}</p>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Volume 30H</p>
+                          <div className="bg-white/60 backdrop-blur rounded-2xl p-3 border border-white">
+                            <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Total Omzet</p>
+                            <p className="text-sm font-black text-purple-900 truncate">Rp {totalGlobalOmzet.toLocaleString('id-ID')}</p>
                           </div>
                         </div>
-                      ))
-                    })()}
-                  </div>
+
+                        {/* Top 1 Highlight */}
+                        {performaData.length > 0 && performaData[0].vol > 0 && (
+                          <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[2rem] p-5 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden group mb-4">
+                            <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3 relative z-10">
+                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-inner text-xl">
+                                  <i className="fa-solid fa-crown"></i>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-orange-100 uppercase tracking-widest leading-none mb-1">KASIR TERBAIK</p>
+                                  <h3 className="text-lg font-black text-white leading-none">{performaData[0].name}</h3>
+                                </div>
+                              </div>
+                              <div className="text-right relative z-10">
+                                <p className="text-[2rem] font-black text-white leading-none drop-shadow-md">#1</p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3 relative z-10">
+                              <div className="bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
+                                <p className="text-[8px] font-black text-orange-100 uppercase tracking-widest opacity-80 mb-0.5">Omzet Terkumpul</p>
+                                <p className="text-sm font-black text-white">Rp {performaData[0].vol.toLocaleString('id-ID')}</p>
+                              </div>
+                              <div className="bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
+                                <p className="text-[8px] font-black text-orange-100 uppercase tracking-widest opacity-80 mb-0.5">Jumlah Layan</p>
+                                <p className="text-sm font-black text-white">{performaData[0].count} <span className="text-[9px]">Item</span></p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Other Ranks List */}
+                        <div className="space-y-3">
+                          <p className="text-[10px] font-black text-purple-900 uppercase tracking-widest pl-1 mb-1">Rincian Performa Individu</p>
+                          {performaData.map((p, idx) => {
+                            if (idx === 0 && p.vol > 0) return null; // Skip top 1 if already highlighted
+                            
+                            const isZero = p.vol === 0;
+                            return (
+                              <div key={p.id} className={cn(
+                                "p-4 bg-white rounded-2xl border shadow-sm transition-all group",
+                                isZero ? "border-gray-100 opacity-60 grayscale" : "border-purple-100 hover:border-purple-300"
+                              )}>
+                                <div className="flex justify-between items-center mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-inner",
+                                      isZero ? "bg-gray-100 text-gray-400" :
+                                      idx === 0 ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white" :
+                                      idx === 1 ? "bg-gradient-to-br from-gray-300 to-slate-400 text-white" :
+                                      idx === 2 ? "bg-gradient-to-br from-amber-700 to-yellow-800 text-white" :
+                                      "bg-purple-100 text-purple-700"
+                                    )}>
+                                      {idx + 1}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-black text-gray-800 leading-none mb-1">{p.name}</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{p.count} Trx</span>
+                                        {!isZero && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Avg: Rp {(p.avg/1000).toFixed(0)}K</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className={cn("text-sm font-black", isZero ? "text-gray-400" : "text-purple-700")}>
+                                      Rp {p.vol.toLocaleString('id-ID')}
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                {/* Progress Bar Contribution */}
+                                {!isZero && (
+                                  <div className="relative pt-1">
+                                    <div className="flex mb-1 items-center justify-between">
+                                      <span className="text-[8px] font-bold text-purple-400 uppercase tracking-widest">Kontribusi Omzet Toko</span>
+                                      <span className="text-[9px] font-black text-purple-600">{p.contribution.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="overflow-hidden h-1.5 flex rounded-full bg-purple-50">
+                                      <div 
+                                        style={{ width: `${p.contribution}%` }} 
+                                        className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 rounded-full"
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -2411,6 +2929,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     })}
                   </div>
                 </div>
+              )}
+              {activeOwnerSubView === 'catatan' && (
+                <CatatanPanel showToast={props.showToast} onConfirm={props.onConfirm} />
               )}
             </div>
             </div>
