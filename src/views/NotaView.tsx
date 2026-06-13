@@ -75,14 +75,29 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
       receiptText += `[L]TOTAL: [R]${formatRupiah(calculateTotal())}\n`;
       receiptText += `[C]--------------------------------\n`;
       receiptText += `[C]<b>TERIMA KASIH</b>\n`;
-      receiptText += `\n\n\n`; // Feeding space for the tear-off blade
+      receiptText += `\n\n\n`;
       
+      // Coba rawbt:// scheme via anchor click (lebih kompatibel di Capacitor WebView)
+      const tryPrint = (scheme: string) => {
+        const a = document.createElement('a');
+        a.href = scheme;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+
       try {
-         const intentUrl = `intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-         window.location.href = intentUrl;
+        // Metode 1: rawbt:// URI langsung (didukung semua versi RawBT)
+        tryPrint(`rawbt://${encodeURIComponent(receiptText)}`);
       } catch (e) {
-         console.error("Gagal mencetak via RawBT", e);
-         window.print();
+        try {
+          // Metode 2: intent scheme sebagai fallback
+          tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
+        } catch (e2) {
+          console.error("Gagal mencetak via RawBT", e2);
+          alert("Gagal membuka printer. Pastikan aplikasi RawBT sudah terinstal dan printer sudah di-pair.");
+        }
       }
     } else {
       window.print();
