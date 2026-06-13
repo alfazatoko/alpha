@@ -54,7 +54,39 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
   };
 
   const handlePrint = () => {
-    window.print();
+    const isNative = !!(window as any)?.Capacitor?.isNativePlatform?.() || /android/i.test(navigator.userAgent);
+    
+    if (isNative) {
+      // Format RawBT ESC/POS Text
+      let receiptText = `[C]<b>${shopName}</b>\n`;
+      receiptText += `[C]${address}\n`;
+      receiptText += `[L]Tgl: ${tanggal}\n`;
+      receiptText += `[L]No: #${Date.now().toString().slice(-6)}\n`;
+      receiptText += `[C]--------------------------------\n`;
+      
+      items.forEach(item => {
+        receiptText += `[L]${item.nama}\n`;
+        const qtyHarga = `${item.jumlah} x ${item.harga}`;
+        const total = formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0));
+        receiptText += `[L]${qtyHarga} [R]${total}\n`;
+      });
+      
+      receiptText += `[C]--------------------------------\n`;
+      receiptText += `[L]TOTAL: [R]${formatRupiah(calculateTotal())}\n`;
+      receiptText += `[C]--------------------------------\n`;
+      receiptText += `[C]<b>TERIMA KASIH</b>\n`;
+      receiptText += `\n\n\n`; // Feeding space for the tear-off blade
+      
+      try {
+         const intentUrl = `intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
+         window.location.href = intentUrl;
+      } catch (e) {
+         console.error("Gagal mencetak via RawBT", e);
+         window.print();
+      }
+    } else {
+      window.print();
+    }
   };
 
   const ThermalReceipt = () => (

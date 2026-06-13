@@ -84,21 +84,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   // State untuk API Key Gemini (Lokal Perangkat)
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '')
 
-  // States for Bluetooth simulator
-  const [btConnected, setBtConnected] = useState(false);
-  const [btConnecting, setBtConnecting] = useState(false);
 
-  const toggleBluetoothDevice = () => {
-    if (btConnected) {
-      setBtConnected(false);
-    } else {
-      setBtConnecting(true);
-      setTimeout(() => {
-        setBtConnecting(false);
-        setBtConnected(true);
-      }, 1500);
-    }
-  };
 
   // State untuk edit PIN Owner
   const [ownerPinOld, setOwnerPinOld] = useState('')
@@ -711,42 +697,54 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm max-w-xl w-full mx-auto">
                     <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Koneksi Printer Bluetooth POS</h3>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Konfigurasi hardware thermal struk kasir.</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Konfigurasi hardware thermal via Layanan Print RawBT.</p>
 
                     <div className="space-y-4">
-                      <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
-                         <div className="flex items-center gap-3">
-                            <div className={`w-3 h-3 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
-                            <div>
-                               <p className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">PRINTER THERMAL 58MM</p>
-                               <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase mt-0.5">
-                                 STATUS: {btConnected ? 'TERHUBUNG (ID: POS-80-BT)' : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
-                               </p>
+                      <div className="p-5 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                            <i className="fa-brands fa-bluetooth-b text-lg"></i>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Driver Printer RawBT</h4>
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold leading-relaxed mb-3">
+                              Aplikasi ini menggunakan teknologi intent Android untuk mencetak. Pastikan Anda telah menginstal aplikasi <strong className="text-blue-600 dark:text-blue-400">RawBT Print Service</strong> dari Play Store dan memasangkan (pair) printer bluetooth Anda di sana.
+                            </p>
+                            <div className="flex gap-2">
+                              <a 
+                                href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
+                                style={{ color: '#ffffff' }}
+                              >
+                                <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
+                              </a>
+                              <button 
+                                onClick={() => {
+                                  const text = "[C]<b>TEST PRINT BERHASIL</b>\n[C]Koneksi RawBT & Aplikasi Kasir\n[C]berjalan normal.\n[C]--------------------------------\n\n\n";
+                                  const url = `intent:${encodeURIComponent(text)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
+                                  window.location.href = url;
+                                }}
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
+                              >
+                                <i className="fa-solid fa-print mr-1.5"></i> Tes Print
+                              </button>
                             </div>
-                         </div>
-                         <button 
-                           type="button"
-                           onClick={toggleBluetoothDevice}
-                           disabled={btConnecting}
-                           className={`text-[10px] font-black px-4 py-2 rounded-lg active:scale-95 transition-all shadow-sm cursor-pointer uppercase tracking-widest
-                             ${btConnected 
-                               ? 'bg-rose-50 border border-rose-200 text-rose-600' 
-                               : 'bg-blue-600 text-white hover:bg-blue-700'
-                             }
-                           `}
-                         >
-                            {btConnected ? 'PUTUSKAN' : btConnecting ? 'SINKRON...' : 'HUBUNGKAN'}
-                         </button>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">
-                         <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900">
-                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">KERAPATAN HURUF</span>
-                            <span className="font-extrabold text-slate-800 dark:text-slate-200">32 Karakter / Baris</span>
+                      <div className="grid grid-cols-2 gap-3 text-[10px] font-bold uppercase mt-4">
+                         <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 flex flex-col justify-center items-center text-center">
+                            <i className="fa-solid fa-text-width text-slate-400 mb-2 text-lg"></i>
+                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">UKURAN KERTAS DUKUNGAN</span>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-200">58mm & 80mm</span>
                          </div>
-                         <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900">
-                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">KECEPATAN CETAK</span>
-                            <span className="font-extrabold text-slate-800 dark:text-slate-200">90 mm / Detik</span>
+                         <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 flex flex-col justify-center items-center text-center">
+                            <i className="fa-solid fa-bolt text-slate-400 mb-2 text-lg"></i>
+                            <span className="block text-[9px] text-slate-400 dark:text-slate-500 font-black mb-1">MODE PENCETAKAN</span>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-200">ESC/POS Teks Cepat</span>
                          </div>
                       </div>
                     </div>
@@ -1506,41 +1504,51 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
             {openCategory === 'printer' && (
               <div className="mt-2 p-5 bg-slate-50 border border-slate-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
-                 <div className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                       <div className={`w-3 h-3 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                 <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                    <div className="flex items-start gap-3">
+                       <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                          <i className="fa-brands fa-bluetooth-b"></i>
+                       </div>
                        <div>
-                          <p className="text-[11px] font-extrabold text-slate-800 uppercase">PRINTER THERMAL</p>
-                          <p className="text-[8px] text-slate-500 font-bold uppercase mt-0.5">
-                            STATUS: {btConnected ? 'TERHUBUNG (ID: POS-80-BT)' : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                          <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-0.5">Driver Printer RawBT</h4>
+                          <p className="text-[9px] text-slate-600 font-bold leading-relaxed mb-3">
+                            Aplikasi menggunakan intent. Pastikan aplikasi <strong className="text-blue-600">RawBT Print Service</strong> terinstal dari Play Store.
                           </p>
+                          <div className="flex gap-2 flex-col">
+                            <a 
+                              href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
+                              style={{ color: '#ffffff' }}
+                            >
+                              <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
+                            </a>
+                            <button 
+                              onClick={() => {
+                                const text = "[C]<b>TEST PRINT BERHASIL</b>\n[C]Koneksi RawBT & Aplikasi Kasir\n[C]berjalan normal.\n[C]--------------------------------\n\n\n";
+                                const url = `intent:${encodeURIComponent(text)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
+                                window.location.href = url;
+                              }}
+                              className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
+                            >
+                              <i className="fa-solid fa-print mr-1.5"></i> Tes Print
+                            </button>
+                          </div>
                        </div>
                     </div>
                  </div>
 
-                 <button 
-                   type="button"
-                   onClick={toggleBluetoothDevice}
-                   disabled={btConnecting}
-                   className={`w-full text-[10px] font-black py-3 rounded-xl active:scale-95 transition-all shadow-md cursor-pointer uppercase tracking-widest flex items-center justify-center gap-2
-                     ${btConnected 
-                       ? 'bg-rose-500 text-white hover:bg-rose-600' 
-                       : 'bg-blue-600 text-white hover:bg-blue-700'
-                     }
-                   `}
-                 >
-                    <i className={btConnected ? "fa-solid fa-unlink" : btConnecting ? "fa-solid fa-spinner fa-spin" : "fa-brands fa-bluetooth"}></i>
-                    {btConnected ? 'PUTUSKAN KONEKSI' : btConnecting ? 'MENYAMBUNGKAN...' : 'HUBUNGKAN PRINTER'}
-                 </button>
-
                  <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold uppercase mt-4">
-                    <div className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm text-center">
-                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">KERAPATAN</span>
-                       <span className="font-extrabold text-slate-700">32 Kar/Baris</span>
+                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
+                       <i className="fa-solid fa-text-width text-slate-400 mb-1.5"></i>
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">DUKUNGAN</span>
+                       <span className="font-extrabold text-slate-700">58mm & 80mm</span>
                     </div>
-                    <div className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm text-center">
-                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">KECEPATAN</span>
-                       <span className="font-extrabold text-slate-700">90 mm/Detik</span>
+                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
+                       <i className="fa-solid fa-bolt text-slate-400 mb-1.5"></i>
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">MODE</span>
+                       <span className="font-extrabold text-slate-700">ESC/POS</span>
                     </div>
                  </div>
               </div>
