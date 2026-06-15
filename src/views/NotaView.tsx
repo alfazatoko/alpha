@@ -53,29 +53,43 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
     }, 0);
   };
 
+  // Helper: format baris teks rata tengah (untuk kertas thermal ~32 karakter)
+  const PAPER_WIDTH = 32;
+  const centerText = (text: string) => {
+    const pad = Math.max(0, Math.floor((PAPER_WIDTH - text.length) / 2));
+    return ' '.repeat(pad) + text;
+  };
+  const rightAlignTwo = (left: string, right: string) => {
+    const space = Math.max(1, PAPER_WIDTH - left.length - right.length);
+    return left + ' '.repeat(space) + right;
+  };
+  const divider = '-'.repeat(PAPER_WIDTH);
+
   const handlePrint = () => {
     const isNative = !!(window as any)?.Capacitor?.isNativePlatform?.() || /android/i.test(navigator.userAgent);
     
     if (isNative) {
-      // Format RawBT ESC/POS Text
-      let receiptText = `[C]<b>${shopName}</b>\n`;
-      receiptText += `[C]${address}\n`;
-      receiptText += `[L]Tgl: ${tanggal}\n`;
-      receiptText += `[L]No: #${Date.now().toString().slice(-6)}\n`;
-      receiptText += `[C]--------------------------------\n`;
+      // Format teks biasa tanpa tag kode (plain text untuk RawBT)
+      const noRef = Date.now().toString().slice(-6);
+      let receiptText = '';
+      receiptText += centerText(shopName) + '\n';
+      receiptText += centerText(address) + '\n';
+      receiptText += `Tgl: ${tanggal}\n`;
+      receiptText += `No: #${noRef}\n`;
+      receiptText += divider + '\n';
       
       items.forEach(item => {
-        receiptText += `[L]${item.nama}\n`;
+        receiptText += item.nama + '\n';
         const qtyHarga = `${item.jumlah} x ${item.harga}`;
         const total = formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0));
-        receiptText += `[L]${qtyHarga} [R]${total}\n`;
+        receiptText += rightAlignTwo(qtyHarga, total) + '\n';
       });
       
-      receiptText += `[C]--------------------------------\n`;
-      receiptText += `[L]TOTAL: [R]${formatRupiah(calculateTotal())}\n`;
-      receiptText += `[C]--------------------------------\n`;
-      receiptText += `[C]<b>TERIMA KASIH</b>\n`;
-      receiptText += `\n\n\n`;
+      receiptText += divider + '\n';
+      receiptText += rightAlignTwo('TOTAL:', formatRupiah(calculateTotal())) + '\n';
+      receiptText += divider + '\n';
+      receiptText += centerText('TERIMA KASIH') + '\n';
+      receiptText += '\n\n\n';
       
       // Coba rawbt:// scheme via anchor click (lebih kompatibel di Capacitor WebView)
       const tryPrint = (scheme: string) => {

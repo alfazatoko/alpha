@@ -1707,94 +1707,75 @@ export const VoucherView: React.FC<VoucherViewProps> = (props) => {
         </button>
       </div>
 
-      {/* 6-Option Menu Tab selector */}
-      <div className={cn("grid gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-2xl mb-4 shrink-0 border border-slate-250 select-none", props.isPc ? "grid-cols-6" : "grid-cols-3")}>
-        {/* Toggle 1: Daftar */}
-        <button
-          onClick={() => setActiveTab('daftar')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8.5px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'daftar'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <Smartphone size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">DAFTAR</span>
-        </button>
+      {/* 6-Option Menu Tab selector - Redesigned for Stunning Aesthetics */}
+      <div className={cn("grid gap-2 mb-5 shrink-0 select-none", props.isPc ? "grid-cols-6" : "grid-cols-3")}>
+        {[
+          { id: 'daftar', label: 'DAFTAR', icon: Smartphone, color: 'blue', desc: 'Semua Produk' },
+          { id: 'tambah', label: 'TAMBAH', icon: FolderPlus, color: 'emerald', desc: 'Produk Baru' },
+          { id: 'master', label: props.kasirRole === 'owner' ? 'STOK & QRIS' : 'INPUT QRIS', icon: QrCode, color: 'purple', desc: 'Scan & Input' },
+          { id: 'opname', label: 'ATUR STOK', icon: ClipboardList, color: 'amber', desc: 'Shift Closing', hasBadge: activeReport?.status === 'pagi_submitted' && selectedShift === 'siang' },
+          { id: 'riwayat', label: 'RIWAYAT', icon: History, color: 'rose', desc: 'Log Penjualan' },
+          { id: 'grafik', label: 'GRAFIK', icon: BarChart3, color: 'cyan', desc: 'Analisis Data' },
+        ].map((tab) => {
+          const isActive = activeTab === tab.id;
+          const Icon = tab.icon;
+          
+          // Color palettes based on the defined color
+          const colorMap: Record<string, { bgActive: string, textActive: string, borderActive: string, bgHover: string, iconBg: string }> = {
+            blue: { bgActive: 'bg-blue-600', textActive: 'text-white', borderActive: 'border-blue-500', bgHover: 'hover:bg-blue-50 dark:hover:bg-blue-900/20', iconBg: 'bg-blue-500' },
+            emerald: { bgActive: 'bg-emerald-500', textActive: 'text-white', borderActive: 'border-emerald-400', bgHover: 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20', iconBg: 'bg-emerald-400' },
+            purple: { bgActive: 'bg-purple-600', textActive: 'text-white', borderActive: 'border-purple-500', bgHover: 'hover:bg-purple-50 dark:hover:bg-purple-900/20', iconBg: 'bg-purple-500' },
+            amber: { bgActive: 'bg-amber-500', textActive: 'text-white', borderActive: 'border-amber-400', bgHover: 'hover:bg-amber-50 dark:hover:bg-amber-900/20', iconBg: 'bg-amber-400' },
+            rose: { bgActive: 'bg-rose-500', textActive: 'text-white', borderActive: 'border-rose-400', bgHover: 'hover:bg-rose-50 dark:hover:bg-rose-900/20', iconBg: 'bg-rose-400' },
+            cyan: { bgActive: 'bg-cyan-500', textActive: 'text-white', borderActive: 'border-cyan-400', bgHover: 'hover:bg-cyan-50 dark:hover:bg-cyan-900/20', iconBg: 'bg-cyan-400' },
+          };
+          
+          const palette = colorMap[tab.color];
 
-        {/* Toggle 2: Tambah (Owner preferred) */}
-        <button
-          onClick={() => setActiveTab('tambah')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8.5px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'tambah'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <FolderPlus size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">TAMBAH</span>
-        </button>
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={cn(
+                "relative group flex flex-col items-center justify-center p-3 rounded-2xl border transition-all duration-300 overflow-hidden cursor-pointer shadow-sm active:scale-95",
+                isActive 
+                  ? `${palette.bgActive} ${palette.borderActive} shadow-lg shadow-${tab.color}-500/30 scale-[1.02] z-10` 
+                  : `bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 ${palette.bgHover} text-slate-600 dark:text-slate-300`
+              )}
+            >
+              {/* Background gradient effect for active state */}
+              {isActive && (
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-50 pointer-events-none"></div>
+              )}
+              
+              {/* Notification Badge */}
+              {tab.hasBadge && (
+                <span className="absolute top-2 right-2 w-2.5 h-2.5 border-2 border-white rounded-full bg-red-500 animate-pulse z-20"></span>
+              )}
 
-        {/* Toggle 3: Master Edit / Stok & QRIS */}
-        <button
-          onClick={() => setActiveTab('master')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8.5px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'master'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <QrCode size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">{props.kasirRole === 'owner' ? "STOK & QRIS" : "INPUT QRIS"}</span>
-        </button>
-
-        {/* Toggle 4: Shift Closing */}
-        <button
-          onClick={() => setActiveTab('opname')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent relative overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'opname'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <ClipboardList size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">ATUR STOK</span>
-          {activeReport?.status === 'pagi_submitted' && selectedShift === 'siang' && (
-            <span className="absolute top-1 right-1 w-2 border border-white h-2 rounded-full bg-indigo-500 animate-ping"></span>
-          )}
-        </button>
-
-        {/* Toggle 5: Riwayat */}
-        <button
-          onClick={() => setActiveTab('riwayat')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8.5px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent relative overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'riwayat'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <History size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">RIWAYAT</span>
-        </button>
-
-        {/* Toggle 6: Grafik & Analisis */}
-        <button
-          onClick={() => setActiveTab('grafik')}
-          className={cn(
-            "py-2.5 rounded-xl font-black text-[8.5px] xs:text-[9.5px] sm:text-[10px] tracking-tight xs:tracking-normal sm:tracking-widest uppercase transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer border border-transparent relative overflow-hidden whitespace-nowrap text-ellipsis",
-            activeTab === 'grafik'
-              ? "bg-white dark:bg-slate-800 text-indigo-700 shadow-sm border-slate-250/50"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-white/40"
-          )}
-        >
-          <BarChart3 size={12} className="stroke-[3] shrink-0" />
-          <span className="mt-0.5 sm:mt-0">GRAFIK</span>
-        </button>
+              <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center mb-1.5 transition-transform duration-300 group-hover:scale-110 relative z-10",
+                isActive ? "bg-white/20 text-white shadow-inner" : `${palette.iconBg} text-white shadow-md`
+              )}>
+                <Icon size={14} className="stroke-[2.5]" />
+              </div>
+              
+              <span className={cn(
+                "font-black text-[9px] xs:text-[10px] sm:text-[11px] tracking-widest uppercase relative z-10",
+                isActive ? "text-white" : "text-slate-700 dark:text-slate-200"
+              )}>
+                {tab.label}
+              </span>
+              
+              <span className={cn(
+                "text-[7px] font-bold uppercase tracking-widest mt-0.5 opacity-80 relative z-10 hidden sm:block",
+                isActive ? "text-white/80" : "text-slate-400 dark:text-slate-500"
+              )}>
+                {tab.desc}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Main Container Views panels */}

@@ -920,6 +920,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any[]>([])
+  const [analyticsRawData, setAnalyticsRawData] = useState<any[]>([])
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
 
   const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
@@ -951,7 +952,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
           let query = supabase
             .from('transactions')
-            .select('kasir_id, nominal, timestamp, kategori')
+            .select('kasir_id, nominal, admin_fee, timestamp, kategori')
             .eq('user_id', props.userId)
             .order('timestamp', { ascending: false })
             .limit(3000)
@@ -981,16 +982,18 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                const kId = row.kasir_id || 'Unknown'
                const key = `${day}_${kId}`
                if (!acc[key]) {
-                 acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0 }
+                 acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0, total_admin: 0 }
                }
                acc[key].total_omzet += Number(row.nominal || 0)
                acc[key].total_transaksi += 1
+               acc[key].total_admin += Number(row.admin_fee || 0)
                return acc
             }, {} as Record<string, any>)
 
             const finalAnalyticsData = Object.values(aggregated)
             console.log('Analytics Berhasil ditarik & digrup:', finalAnalyticsData.length, 'baris grup dari', validData.length, 'transaksi')
             setAnalyticsData(finalAnalyticsData)
+            setAnalyticsRawData(validData)
             
             // Temporary debug toast
             if (finalAnalyticsData.length === 0) {
@@ -2407,13 +2410,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet), 0)
                 const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi), 0)
                 const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0
+                const totalAdminLaba = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_admin || 0), 0)
 
-                // Use recent transactions (props.transactions) for Category and Time analysis
-                // because analyticsData does not contain category or hour details
-                const recentValidTxs = props.transactions.filter(t => t && t.kategori && !t.kategori.startsWith('Isi'))
+                // Use analyticsRawData (which contains up to 6 months of raw txs) for Category and Time analysis
+                const recentValidTxs = analyticsRawData.filter(t => t && t.kategori && !t.kategori.startsWith('Isi'))
                 let filteredRecentTxs = recentValidTxs
                 if (grafikFilterKasir !== 'Semua') {
-                  filteredRecentTxs = filteredRecentTxs.filter(t => t.kasir_id === filterKasirName)
+                  filteredRecentTxs = filteredRecentTxs.filter(t => (t.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase())
                 }
 
                 // Kategori Terlaris (Tren Terbaru)
@@ -2502,9 +2505,29 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       </div>
                     </div>
 
+                    {/* KPI Card: Total Laba/Admin */}
+                    <div className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 p-4 rounded-[1.5rem] text-white shadow-lg shadow-orange-200 relative overflow-hidden group">
+                      <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                      <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+                      <div className="relative z-10 flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-black text-amber-100 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                            <i className="fa-solid fa-sack-dollar"></i> TOTAL LABA / ADMIN FEE
+                          </p>
+                          <h2 className="text-xl font-black text-white tabular-nums">Rp {totalAdminLaba.toLocaleString('id-ID')}</h2>
+                          <p className="text-[9px] text-amber-100 mt-0.5 font-bold">
+                            {totalItems > 0 ? `Rata-rata Rp ${Math.round(totalAdminLaba / totalItems).toLocaleString('id-ID')} / transaksi` : 'Belum ada transaksi'}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-coins text-2xl text-white/80"></i>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Chart 1: Tren Pendapatan */}
                     <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
                         <div>
                           <h4 className="text-[13px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                             <i className="fa-solid fa-chart-line text-blue-500"></i> Tren Pendapatan
@@ -2513,42 +2536,146 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
                           </p>
                         </div>
+                        
+                        {/* Toggle Bar vs Line */}
+                        <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100">
+                          <button
+                            onClick={() => setGrafikType('bar')}
+                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'bar' ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                          >
+                            <i className="fa-solid fa-chart-column"></i> Bar
+                          </button>
+                          <button
+                            onClick={() => setGrafikType('line')}
+                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'line' ? "bg-white text-amber-500 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                          >
+                            <i className="fa-solid fa-bolt"></i> Petir
+                          </button>
+                        </div>
                       </div>
 
                       <style>{`
                         @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
                         .animate-grow { animation: growUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
+                        @keyframes dashLine { to { stroke-dashoffset: 0; } }
                       `}</style>
 
-                      <div className="h-44 flex items-end justify-between gap-1.5 relative mt-6">
-                        {/* Background lines */}
-                        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                           {[...Array(4)].map((_, i) => (
-                             <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
-                           ))}
-                        </div>
+                      {grafikType === 'bar' ? (
+                        <div className="h-44 flex items-end justify-between gap-1.5 relative mt-6">
+                          {/* Background lines */}
+                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7">
+                             {[...Array(4)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                          </div>
 
-                        {trendData.map((d, i) => {
-                          const heightPct = Math.max((d.value / maxTrendVal) * 100, 2);
-                          return (
-                            <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-7 z-10">
-                              <div className="absolute -top-8 bg-gray-800 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/bar:opacity-100 group-active/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 shadow-lg transform -translate-y-2 group-hover/bar:-translate-y-4">
-                                Rp {d.value.toLocaleString('id-ID')}
-                                <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                          {trendData.map((d, i) => {
+                            const heightPct = Math.max((d.value / maxTrendVal) * 100, 2);
+                            return (
+                              <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-7 z-10">
+                                <div className="absolute -top-8 bg-gray-800 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/bar:opacity-100 group-active/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 shadow-lg transform -translate-y-2 group-hover/bar:-translate-y-4">
+                                  Rp {d.value.toLocaleString('id-ID')}
+                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                                </div>
+                                <div 
+                                  className="w-full max-w-[32px] bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t-xl shadow-sm animate-grow transition-all group-hover/bar:brightness-110 group-active/bar:brightness-110 cursor-pointer relative overflow-hidden"
+                                  style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
+                                >
+                                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity"></div>
+                                </div>
+                                <span className="absolute bottom-0 text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate w-full text-center">
+                                  {d.label}
+                                </span>
                               </div>
-                              <div 
-                                className="w-full max-w-[32px] bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t-xl shadow-sm animate-grow transition-all group-hover/bar:brightness-110 group-active/bar:brightness-110 cursor-pointer relative overflow-hidden"
-                                style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
-                              >
-                                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity"></div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="h-44 relative mt-6 pt-4">
+                          {/* Background Grid Lines */}
+                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7 pt-4">
+                             {[...Array(4)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                          </div>
+                          
+                          {/* SVG Line / Petir */}
+                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                              <defs>
+                                <linearGradient id="petirGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+                                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+                                </linearGradient>
+                                <filter id="glowPetir">
+                                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                  <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                  </feMerge>
+                                </filter>
+                              </defs>
+                              
+                              {(() => {
+                                const pts = trendData.map((d, i) => {
+                                  const x = (i / Math.max(trendData.length - 1, 1)) * 100;
+                                  const y = 100 - (d.value / maxTrendVal) * 100;
+                                  return `${x},${y}`;
+                                }).join(' ');
+                                
+                                const areaPts = `0,100 ${pts} 100,100`;
+                                
+                                return (
+                                  <>
+                                    <polygon points={areaPts} fill="url(#petirGrad)" className="animate-in fade-in duration-1000" />
+                                    <polyline 
+                                      points={pts} 
+                                      fill="none" 
+                                      stroke="#f59e0b" 
+                                      strokeWidth="3" 
+                                      vectorEffect="non-scaling-stroke"
+                                      strokeLinejoin="round" 
+                                      strokeLinecap="round" 
+                                      filter="url(#glowPetir)"
+                                      className="animate-[dashLine_1.5s_ease-out_forwards]"
+                                      strokeDasharray="1000"
+                                      strokeDashoffset="1000"
+                                    />
+                                  </>
+                                )
+                              })()}
+                            </svg>
+                          </div>
+                          
+                          {/* Nodes & Tooltips */}
+                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
+                            {trendData.map((d, i) => {
+                              const leftPct = (i / Math.max(trendData.length - 1, 1)) * 100;
+                              const bottomPct = (d.value / maxTrendVal) * 100;
+                              return (
+                                <div key={i} className="absolute group/node cursor-pointer z-10 w-6 h-6 -translate-x-1/2 translate-y-1/2" style={{ left: `${leftPct}%`, bottom: `calc(${bottomPct}% + 28px)` }}>
+                                  <div className="absolute bottom-full mb-2 bg-amber-600 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/node:opacity-100 transition-opacity whitespace-nowrap z-20 shadow-lg transform -translate-x-1/2 left-1/2 pointer-events-none">
+                                    Rp {d.value.toLocaleString('id-ID')}
+                                    <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-600 rotate-45"></div>
+                                  </div>
+                                  <div className="w-3 h-3 rounded-full border-[3px] border-white bg-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-md transform transition-transform group-hover/node:scale-150"></div>
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          {/* Labels */}
+                          <div className="absolute bottom-0 left-0 w-full flex justify-between px-1">
+                            {trendData.map((d, i) => (
+                              <div key={i} className="flex-1 flex justify-center">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate text-center">
+                                  {d.label}
+                                </span>
                               </div>
-                              <span className="absolute bottom-0 text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate w-full text-center">
-                                {d.label}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mt-4">

@@ -722,9 +722,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               </a>
                               <button 
                                 onClick={() => {
-                                  const text = "[C]<b>TEST PRINT BERHASIL</b>\n[C]Koneksi RawBT & Aplikasi Kasir\n[C]berjalan normal.\n[C]--------------------------------\n\n\n";
-                                  const url = `intent:${encodeURIComponent(text)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-                                  window.location.href = url;
+                                  const w = 32;
+                                  const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
+                                  const text = center('TEST PRINT BERHASIL') + '\n'
+                                    + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
+                                    + center('berjalan normal.') + '\n'
+                                    + '-'.repeat(w) + '\n\n\n';
+                                  const url = `rawbt://${encodeURIComponent(text)}`;
+                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
                                 }}
                                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
                               >
@@ -1526,9 +1531,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             </a>
                             <button 
                               onClick={() => {
-                                const text = "[C]<b>TEST PRINT BERHASIL</b>\n[C]Koneksi RawBT & Aplikasi Kasir\n[C]berjalan normal.\n[C]--------------------------------\n\n\n";
-                                const url = `intent:${encodeURIComponent(text)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-                                window.location.href = url;
+                                const w = 32;
+                                const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
+                                const text = center('TEST PRINT BERHASIL') + '\n'
+                                  + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
+                                  + center('berjalan normal.') + '\n'
+                                  + '-'.repeat(w) + '\n\n\n';
+                                const url = `rawbt://${encodeURIComponent(text)}`;
+                                const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
                               }}
                               className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
                             >
