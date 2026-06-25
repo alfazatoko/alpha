@@ -23,6 +23,7 @@ import type { Store } from './types'
 import BerandaView from './views/BerandaView'
 import RiwayatView from './views/RiwayatView'
 import LaporanView from './views/LaporanView'
+import PerformaKasirView from './views/PerformaKasirView'
 import AkunView from './views/AkunView'
 import IsiSaldoView from './views/IsiSaldoView'
 import KasbonView from './views/KasbonView'
@@ -469,7 +470,7 @@ const MainApp: React.FC<MainAppProps> = ({
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  const isOwnerView = activeView.startsWith('view-owner-')
+  const isOwnerView = activeView.startsWith('view-owner-') && activeView !== 'view-owner-performa'
 
   // Persist screen size to localStorage
   useEffect(() => {
@@ -876,27 +877,51 @@ const MainApp: React.FC<MainAppProps> = ({
 
 
   // Fetch from Supabase
+  const [fetchedDates, setFetchedDates] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     const fetchTransactions = async () => {
       // CLEAR TRANSACTIONS SEBELUM FETCH AGAR TIDAK TERJADI STATE LEAK (SALDO TERCAMPUR)
       setTransactions([])
+      setFetchedDates(new Set())
       
-      let query = supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', googleUid)
+      const todayStr = getLocalDateString();
+      let allRawData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
 
-      if (targetStoreId !== 'all') {
-        query = query.eq('store_id', targetStoreId)
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', googleUid)
+          .gte('timestamp', `${todayStr}T00:00:00`)
+          .lte('timestamp', `${todayStr}T23:59:59`)
+          .order('timestamp', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (targetStoreId !== 'all') {
+          query = query.eq('store_id', targetStoreId)
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          console.error('Error fetching today transactions:', error);
+          hasMore = false;
+        } else if (data && data.length > 0) {
+          allRawData = [...allRawData, ...data];
+          from += step;
+          if (data.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+        
+        if (from >= 15000) hasMore = false;
       }
 
-      const { data, error } = await query.order('timestamp', { ascending: false }).limit(300)
-
-      if (error) {
-        console.error('Error fetching transactions:', error)
-      } else if (data) {
-        // Map database row to Transaction type
-        const mappedTx = data.map(row => ({
+      if (allRawData.length > 0) {
+        const mappedTx = allRawData.map(row => ({
           id: row.id,
           kategori: row.kategori,
           nominal: Number(row.nominal),
@@ -939,6 +964,7 @@ const MainApp: React.FC<MainAppProps> = ({
       supabase.removeChannel(channel)
     }
   }, [googleUid, targetStoreId, activeRole])
+
 
 
   // Fetch and Record Attendance
@@ -1033,6 +1059,79 @@ const MainApp: React.FC<MainAppProps> = ({
   // Laporan Date Filter
   const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(getLocalDateString())
   const [dailyReport, setDailyReport] = useState<any>(null)
+
+  // --- DYNAMIC DATA FETCHER FOR PAST DATES ---
+  useEffect(() => {
+    if (!googleUid) return;
+    
+    const fetchRange = async (start: string, end: string, label: string) => {
+      if (fetchedDates.has(label)) return;
+      setFetchedDates(prev => new Set(prev).add(label));
+
+      let allRawData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', googleUid)
+          .gte('timestamp', `${start}T00:00:00`)
+          .lte('timestamp', `${end}T23:59:59`)
+          .range(from, from + step - 1);
+
+        if (targetStoreId !== 'all') {
+          query = query.eq('store_id', targetStoreId)
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          hasMore = false;
+        } else if (data && data.length > 0) {
+          allRawData = [...allRawData, ...data];
+          from += step;
+          if (data.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+        
+        if (from >= 15000) hasMore = false; // safeguard
+      }
+
+      if (allRawData.length > 0) {
+        const mappedTx = allRawData.map(row => ({
+          id: row.id,
+          kategori: row.kategori,
+          nominal: Number(row.nominal),
+          adminFee: Number(row.admin_fee),
+          keterangan: row.keterangan || '-',
+          timestamp: row.timestamp,
+          kasir_id: row.kasir_id,
+          store_id: row.store_id
+        }))
+        
+        setTransactions(prev => {
+          const merged = [...prev, ...mappedTx];
+          const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+          return unique.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        });
+      }
+    };
+
+    // Fetch Laporan Date
+    if (filterTanggalLaporan && filterTanggalLaporan !== getLocalDateString()) {
+      fetchRange(filterTanggalLaporan, filterTanggalLaporan, `Laporan_${filterTanggalLaporan}`);
+    }
+
+    // Fetch Riwayat Range
+    if (filterTanggalMulai && filterTanggalAkhir) {
+      if (filterTanggalMulai !== getLocalDateString() || filterTanggalAkhir !== getLocalDateString()) {
+         fetchRange(filterTanggalMulai, filterTanggalAkhir, `Riwayat_${filterTanggalMulai}_${filterTanggalAkhir}`);
+      }
+    }
+  }, [filterTanggalLaporan, filterTanggalMulai, filterTanggalAkhir, googleUid, fetchedDates, targetStoreId])
 
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
@@ -1900,10 +1999,23 @@ const MainApp: React.FC<MainAppProps> = ({
                       activeStoreId={targetStoreId}
                     />
                   );
+                case 'view-owner-performa':
+                  return (
+                    <PerformaKasirView
+                      active={true}
+                      isPc={screenSize === 'pc'}
+                      setActiveView={setActiveView}
+                      transactions={storeFilteredTransactions}
+                      kasirList={kasirList}
+                      storeName={storeName}
+                      kasirRole={account.role}
+                      googleUid={googleUid}
+                      targetStoreId={targetStoreId}
+                    />
+                  );
                 case 'view-owner-monitor':
                 case 'view-owner-laporan':
                 case 'view-owner-grafik':
-                case 'view-owner-performa':
                 case 'view-owner-absen':
                 case 'view-owner-izin':
                 case 'view-owner-gaji':
@@ -2164,6 +2276,18 @@ const MainApp: React.FC<MainAppProps> = ({
             setIsSidePanelOpen={setIsSidePanelOpen}
             onConfirm={handleConfirm}
             activeStoreId={targetStoreId}
+          />
+
+          <PerformaKasirView
+            active={activeView === 'view-owner-performa'}
+            isPc={false}
+            setActiveView={setActiveView}
+            transactions={storeFilteredTransactions}
+            kasirList={kasirList}
+            storeName={storeName}
+            kasirRole={account.role}
+            googleUid={googleUid}
+            targetStoreId={targetStoreId}
           />
 
           <Navigation activeView={activeView} setActiveView={setActiveView} />

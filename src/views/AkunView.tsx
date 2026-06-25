@@ -92,6 +92,138 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
   const [showOwnerPin, setShowOwnerPin] = useState(false)
 
+  // States for Native Bluetooth via Capacitor
+  const [btConnected, setBtConnected] = useState(false);
+  const [btConnecting, setBtConnecting] = useState(false);
+  const [pairedDevices, setPairedDevices] = useState<any[]>([]);
+  const [btMacAddress, setBtMacAddress] = useState<string | null>(localStorage.getItem('bluetooth_printer_mac'));
+  const [isScanningBt, setIsScanningBt] = useState(false);
+
+  useEffect(() => {
+    if (btMacAddress && (window as any).bluetoothSerial) {
+      (window as any).bluetoothSerial.isConnected(
+        () => setBtConnected(true),
+        () => setBtConnected(false)
+      );
+    } else if (btMacAddress && localStorage.getItem('use_web_bluetooth')) {
+      setBtConnected(true);
+    }
+  }, [btMacAddress]);
+
+  const requestBluetoothPermissions = (callback: () => void, errorCallback: (err: string) => void) => {
+    const permissions = (window as any).cordova?.plugins?.permissions;
+    if (!permissions) {
+      callback();
+      return;
+    }
+    const permsToRequest = [
+      permissions.BLUETOOTH_CONNECT,
+      permissions.BLUETOOTH_SCAN,
+      permissions.ACCESS_FINE_LOCATION,
+      permissions.ACCESS_COARSE_LOCATION
+    ].filter(Boolean);
+
+    permissions.requestPermissions(permsToRequest, (status: any) => {
+      if (status.hasPermission) {
+        callback();
+      } else {
+        callback();
+      }
+    }, () => callback());
+  };
+
+  const scanBluetoothDevices = async () => {
+    if ((window as any).bluetoothSerial) {
+      setIsScanningBt(true);
+      requestBluetoothPermissions(() => {
+        (window as any).bluetoothSerial.list(
+          (devices: any[]) => {
+            setPairedDevices(devices);
+            setIsScanningBt(false);
+          },
+          (error: any) => {
+            alert('Gagal mengambil daftar Bluetooth: ' + error);
+            setIsScanningBt(false);
+          }
+        );
+      }, (err) => {
+        alert(err);
+        setIsScanningBt(false);
+      });
+    } else if ((navigator as any).bluetooth) {
+      try {
+        setIsScanningBt(true);
+        const device = await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            '000018f0-0000-1000-8000-00805f9b34fb',
+            'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+            '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+          ]
+        });
+        
+        setBtConnected(true);
+        setBtMacAddress(device.name || device.id || 'Web Bluetooth Printer');
+        localStorage.setItem('bluetooth_printer_mac', device.name || device.id || 'web_bt_printer');
+        localStorage.setItem('use_web_bluetooth', 'true');
+        alert('Printer ' + (device.name || '') + ' berhasil dipilih!');
+      } catch (error: any) {
+        alert('Gagal memilih printer: ' + error.message);
+      } finally {
+        setIsScanningBt(false);
+      }
+    } else {
+      alert('Bluetooth tidak didukung di perangkat atau browser ini.');
+    }
+  };
+
+  const connectToBluetooth = (macAddress: string) => {
+    setBtConnecting(true);
+    (window as any).bluetoothSerial.connect(
+      macAddress,
+      () => {
+        setBtConnected(true);
+        setBtConnecting(false);
+        setBtMacAddress(macAddress);
+        localStorage.setItem('bluetooth_printer_mac', macAddress);
+        alert('Printer berhasil terhubung!');
+      },
+      (error: any) => {
+        (window as any).bluetoothSerial.connectInsecure(
+          macAddress,
+          () => {
+            setBtConnected(true);
+            setBtConnecting(false);
+            setBtMacAddress(macAddress);
+            localStorage.setItem('bluetooth_printer_mac', macAddress);
+            alert('Printer berhasil terhubung (Mode Insecure)!');
+          },
+          (err2: any) => {
+            setBtConnected(false);
+            setBtConnecting(false);
+            alert(`Gagal terhubung ke printer:\nNormal: ${error}\nInsecure: ${err2}`);
+          }
+        );
+      }
+    );
+  };
+
+  const disconnectBluetooth = () => {
+    if ((window as any).bluetoothSerial) {
+      (window as any).bluetoothSerial.disconnect(() => {
+        setBtConnected(false);
+        setBtMacAddress(null);
+        localStorage.removeItem('bluetooth_printer_mac');
+      });
+    } else {
+      setBtConnected(false);
+      setBtMacAddress(null);
+      localStorage.removeItem('bluetooth_printer_mac');
+      localStorage.removeItem('use_web_bluetooth');
+    }
+  };
+
+
   useEffect(() => {
     if (props.currentUsername && props.kasirList && props.kasirList[props.currentUsername]) {
       setEditKasirName(props.kasirList[props.currentUsername].name || '')
@@ -700,22 +832,72 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Konfigurasi hardware thermal via Layanan Print RawBT.</p>
 
                     <div className="space-y-4">
-                      <div className="p-5 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl">
-                        <div className="flex items-start gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                            <i className="fa-brands fa-bluetooth-b text-lg"></i>
+                      {/* Native Bluetooth Section */}
+                      <div className="p-5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                            <div>
+                              <h4 className="text-[11px] font-extrabold text-slate-800 dark:text-slate-100 uppercase">PRINTER BLUETOOTH NATIVE</h4>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                STATUS: {btConnected ? `TERHUBUNG (${btMacAddress})` : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={btConnected ? disconnectBluetooth : scanBluetoothDevices}
+                            disabled={btConnecting || isScanningBt}
+                            className={`text-[9px] font-black px-4 py-2 rounded-lg active:scale-95 transition-all shadow-sm
+                              ${btConnected 
+                                ? 'bg-rose-50 border border-rose-200 text-rose-600 font-bold' 
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                              }
+                            `}
+                          >
+                            {btConnected ? 'PUTUSKAN' : isScanningBt ? 'MENCARI...' : 'CARI PRINTER'}
+                          </button>
+                        </div>
+                        
+                        {!btConnected && pairedDevices.length > 0 && (
+                          <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-3">
+                            <p className="text-[9px] font-bold text-slate-500 mb-2">PILIH PRINTER YANG TERSEDIA:</p>
+                            <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                              {pairedDevices.map((device) => (
+                                <button
+                                  key={device.address}
+                                  onClick={() => connectToBluetooth(device.address)}
+                                  disabled={btConnecting}
+                                  className="w-full flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-blue-400 active:bg-blue-50 transition-colors text-left"
+                                >
+                                  <div>
+                                    <p className="text-[10px] font-bold text-slate-800 dark:text-slate-200">{device.name || 'Unknown Device'}</p>
+                                    <p className="text-[8px] font-mono text-slate-400">{device.address}</p>
+                                  </div>
+                                  <span className="text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">HUBUNGKAN</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100/50 dark:border-blue-900/30 rounded-2xl">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                            <i className="fa-brands fa-bluetooth-b text-base"></i>
                           </div>
                           <div>
-                            <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Driver Printer RawBT</h4>
-                            <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold leading-relaxed mb-3">
-                              Aplikasi ini menggunakan teknologi intent Android untuk mencetak. Pastikan Anda telah menginstal aplikasi <strong className="text-blue-600 dark:text-blue-400">RawBT Print Service</strong> dari Play Store dan memasangkan (pair) printer bluetooth Anda di sana.
+                            <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-0.5">Driver Printer RawBT</h4>
+                            <p className="text-[9px] text-slate-600 dark:text-slate-400 font-bold leading-relaxed mb-3">
+                              Aplikasi menggunakan intent. Pastikan aplikasi <strong className="text-blue-600 dark:text-blue-400">RawBT Print Service</strong> terinstal dari Play Store.
                             </p>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-col">
                               <a 
                                 href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
                                 target="_blank"
                                 rel="noreferrer"
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
+                                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
                                 style={{ color: '#ffffff' }}
                               >
                                 <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
@@ -728,8 +910,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                     + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
                                     + center('berjalan normal.') + '\n'
                                     + '-'.repeat(w) + '\n\n\n';
-                                  const url = `rawbt://${encodeURIComponent(text)}`;
-                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                    
+                                  const btMac = localStorage.getItem('bluetooth_printer_mac');
+                                  if (btMac && (window as any).bluetoothSerial) {
+                                    (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
+                                  } else {
+                                    const url = `rawbt:${encodeURIComponent(text)}`;
+                                    const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                  }
                                 }}
                                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
                               >
@@ -1509,6 +1697,57 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
             {openCategory === 'printer' && (
               <div className="mt-2 p-5 bg-slate-50 border border-slate-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                 
+                 {/* Native Bluetooth Section (Mobile) */}
+                 <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                        <div>
+                          <h4 className="text-[10px] font-extrabold text-slate-800 uppercase">PRINTER NATIVE</h4>
+                          <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">
+                            {btConnected ? `TERHUBUNG (${btMacAddress})` : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={btConnected ? disconnectBluetooth : scanBluetoothDevices}
+                        disabled={btConnecting || isScanningBt}
+                        className={`text-[8px] font-black px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm
+                          ${btConnected 
+                            ? 'bg-rose-50 border border-rose-200 text-rose-600' 
+                            : 'bg-blue-600 text-white'
+                          }
+                        `}
+                      >
+                        {btConnected ? 'PUTUSKAN' : isScanningBt ? 'MENCARI...' : 'CARI'}
+                      </button>
+                    </div>
+                    
+                    {!btConnected && pairedDevices.length > 0 && (
+                      <div className="mt-3 border-t border-slate-100 pt-2">
+                        <p className="text-[8px] font-bold text-slate-500 mb-1.5">PILIH PRINTER:</p>
+                        <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                          {pairedDevices.map((device) => (
+                            <button
+                              key={device.address}
+                              onClick={() => connectToBluetooth(device.address)}
+                              disabled={btConnecting}
+                              className="w-full flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg active:bg-blue-50 text-left"
+                            >
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-800">{device.name || 'Unknown Device'}</p>
+                                <p className="text-[7px] font-mono text-slate-400">{device.address}</p>
+                              </div>
+                              <span className="text-[8px] font-black text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">CONNECT</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                 </div>
+
                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
                     <div className="flex items-start gap-3">
                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
@@ -1537,8 +1776,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                   + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
                                   + center('berjalan normal.') + '\n'
                                   + '-'.repeat(w) + '\n\n\n';
-                                const url = `rawbt://${encodeURIComponent(text)}`;
-                                const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                  
+                                const btMac = localStorage.getItem('bluetooth_printer_mac');
+                                if (btMac && (window as any).bluetoothSerial) {
+                                  (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
+                                } else {
+                                  const url = `rawbt:${encodeURIComponent(text)}`;
+                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                }
                               }}
                               className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
                             >

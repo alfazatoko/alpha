@@ -91,26 +91,40 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
       receiptText += centerText('TERIMA KASIH') + '\n';
       receiptText += '\n\n\n';
       
-      // Coba rawbt:// scheme via anchor click (lebih kompatibel di Capacitor WebView)
-      const tryPrint = (scheme: string) => {
-        const a = document.createElement('a');
-        a.href = scheme;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      };
+      const btMacAddress = localStorage.getItem('bluetooth_printer_mac');
+      if (btMacAddress && (window as any).bluetoothSerial) {
+        // Gunakan bluetoothSerial jika terhubung ke native bluetooth
+        (window as any).bluetoothSerial.write(
+          receiptText,
+          () => {
+             // Berhasil cetak native
+          },
+          (err: any) => {
+             alert('Gagal cetak via Bluetooth Native: ' + err);
+          }
+        );
+      } else {
+        // Coba rawbt:// scheme via anchor click (lebih kompatibel di Capacitor WebView)
+        const tryPrint = (scheme: string) => {
+          const a = document.createElement('a');
+          a.href = scheme;
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        };
 
-      try {
-        // Metode 1: rawbt:// URI langsung (didukung semua versi RawBT)
-        tryPrint(`rawbt://${encodeURIComponent(receiptText)}`);
-      } catch (e) {
         try {
-          // Metode 2: intent scheme sebagai fallback
-          tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
-        } catch (e2) {
-          console.error("Gagal mencetak via RawBT", e2);
-          alert("Gagal membuka printer. Pastikan aplikasi RawBT sudah terinstal dan printer sudah di-pair.");
+          // Metode 1: rawbt: URI langsung (didukung semua versi RawBT)
+          tryPrint(`rawbt:${encodeURIComponent(receiptText)}`);
+        } catch (e) {
+          try {
+            // Metode 2: intent scheme sebagai fallback
+            tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
+          } catch (e2) {
+            console.error("Gagal mencetak via RawBT", e2);
+            alert("Gagal membuka printer. Pastikan aplikasi RawBT sudah terinstal dan printer sudah di-pair.");
+          }
         }
       }
     } else {

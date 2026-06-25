@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
@@ -891,6 +891,73 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showLainnya, setShowLainnya] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
 
+  // --- AUTO SYNC PERFORMA HARIAN ---
+  useEffect(() => {
+    // Only run this for kasir role when online to sync today's performance snapshot
+    if (!props.googleUid || props.kasirRole === 'owner' || !isOnline || !props.transactions || props.transactions.length === 0) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        const todayStr = getLocalDateString();
+        // Calculate today's performance for this kasir
+        let omset = 0, laba = 0, pengeluaran = 0, count = 0;
+        
+        props.transactions.forEach(t => {
+          if (t.kasir_id === props.currentUsername && t.timestamp.startsWith(todayStr)) {
+            const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]');
+            const isIsi = String(t.kategori).startsWith('Isi');
+            
+            if (!isIsi && !isKhususAtauNonTunai) {
+              count++;
+              laba += Number(t.adminFee) || 0;
+              if (t.kategori === 'Tarik Tunai') {
+                pengeluaran += Number(t.nominal) || 0;
+              } else {
+                omset += Number(t.nominal) || 0;
+              }
+            }
+          }
+        });
+
+        if (count === 0) return; // Nothing to sync
+
+        // Check existing
+        const { data: existing } = await supabase
+          .from('performa_harian')
+          .select('id')
+          .eq('user_id', props.googleUid)
+          .eq('kasir_id', props.currentUsername)
+          .eq('tanggal', todayStr)
+          .single();
+
+        const payload = {
+          user_id: props.googleUid,
+          store_id: props.activeStoreId === 'all' ? null : props.activeStoreId,
+          kasir_id: props.currentUsername,
+          tanggal: todayStr,
+          omset,
+          laba,
+          pengeluaran,
+          total_transaksi: count,
+          timestamp: new Date().toISOString()
+        };
+
+        if (existing) {
+          const { error: updErr } = await supabase.from('performa_harian').update(payload).eq('id', existing.id);
+          if (updErr) console.error('Failed auto-sync update:', updErr);
+        } else {
+          const { error: insErr } = await supabase.from('performa_harian').insert([payload]);
+          if (insErr) console.error('Failed auto-sync insert:', insErr);
+        }
+      } catch (e) {
+        console.error('Auto-sync performa harian failed:', e)
+      }
+    }, 5000); // 5 seconds debounce
+
+    return () => clearTimeout(timeout);
+  }, [props.transactions, props.googleUid, props.currentUsername, isOnline]);
+  // ---------------------------------
+
   // Kasir Management State (Form inputs remain local)
   const [kasirFormId, setKasirFormId] = useState('')
   const [kasirFormName, setKasirFormName] = useState('')
@@ -905,7 +972,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const STORAGE_KEY_IZIN = `alphaPro_${currentTargetStoreId}_catatanIzin`
 
   // Pantau State
-  const [pantauTanggal, setPantauTanggal] = useState(getLocalDateString())
+
 
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
@@ -1725,74 +1792,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           </div>
                         )
                       })}
-                    </div>
-
-                    {/* PANTAU AKTIVITAS PER KASIR */}
-                    <div className="border-t border-gray-200 pt-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
-                          <i className="fa-solid fa-chart-bar"></i> Pantau Aktivitas
-                        </h4>
-                        <input 
-                          type="date" 
-                          value={pantauTanggal} 
-                          onChange={e => setPantauTanggal(e.target.value)}
-                          className="text-[10px] font-bold border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-blue-400"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {Object.entries(props.kasirList || {}).filter(([id]) => id !== 'owner').map(([id, account]) => {
-                          const kasirTxs = props.transactions.filter(t => 
-                            t.kasir_id === id && 
-                            t.timestamp.startsWith(pantauTanggal) && 
-                            !t.kategori.startsWith('Isi')
-                          )
-                          const totalNom = kasirTxs.reduce((s, t) => s + t.nominal, 0)
-                          const totalAdm = kasirTxs.reduce((s, t) => s + t.adminFee, 0)
-                          const totalIsi = props.transactions.filter(t => 
-                            t.kasir_id === id && 
-                            t.timestamp.startsWith(pantauTanggal) && 
-                            t.kategori === 'Isi Saldo Bank'
-                          ).reduce((s, t) => s + t.nominal, 0)
-
-                          return (
-                            <div key={id} className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3">
-                              <div className="flex justify-between items-center mb-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
-                                    {account.name.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-black text-gray-800">{account.name}</p>
-                                    <p className="text-[8px] text-gray-400 font-bold uppercase">{parseLocalISO(pantauTanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                                  </div>
-                                </div>
-                                <span className={cn(
-                                  "text-[10px] px-2 py-0.5 rounded-full font-black uppercase",
-                                  kasirTxs.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
-                                )}>
-                                  {kasirTxs.length > 0 ? `${kasirTxs.length} TRX` : 'KOSONG'}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-3 gap-1.5">
-                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-blue-100/50">
-                                  <p className="text-[9px] font-black text-gray-400 uppercase">Nominal</p>
-                                  <p className="text-[12px] font-black text-gray-800">{totalNom > 0 ? (totalNom / 1000).toFixed(0) + 'K' : '0'}</p>
-                                </div>
-                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-emerald-100/50">
-                                  <p className="text-[9px] font-black text-gray-400 uppercase">Admin</p>
-                                  <p className="text-[12px] font-black text-emerald-600">{totalAdm > 0 ? (totalAdm / 1000).toFixed(0) + 'K' : '0'}</p>
-                                </div>
-                                <div className="bg-white rounded-lg py-1.5 px-2 text-center border border-indigo-100/50">
-                                  <p className="text-[9px] font-black text-gray-400 uppercase">Isi Saldo</p>
-                                  <p className="text-[12px] font-black text-indigo-600">{totalIsi > 0 ? (totalIsi / 1000).toFixed(0) + 'K' : '0'}</p>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
                     </div>
                   </>
                 )}
