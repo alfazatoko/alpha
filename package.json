@@ -21,6 +21,7 @@
     "@supabase/supabase-js": "^2.105.4",
     "autoprefixer": "^10.4.20",
     "clsx": "^2.1.1",
+    "cordova-plugin-android-permissions": "^1.1.5",
     "cordova-plugin-bluetooth-serial": "^0.4.7",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

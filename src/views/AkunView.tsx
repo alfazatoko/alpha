@@ -117,18 +117,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
       return;
     }
     const permsToRequest = [
-      permissions.BLUETOOTH_CONNECT,
-      permissions.BLUETOOTH_SCAN,
-      permissions.ACCESS_FINE_LOCATION,
-      permissions.ACCESS_COARSE_LOCATION
-    ].filter(Boolean);
+      permissions.BLUETOOTH_CONNECT || "android.permission.BLUETOOTH_CONNECT",
+      permissions.BLUETOOTH_SCAN || "android.permission.BLUETOOTH_SCAN",
+      permissions.ACCESS_FINE_LOCATION || "android.permission.ACCESS_FINE_LOCATION",
+      permissions.ACCESS_COARSE_LOCATION || "android.permission.ACCESS_COARSE_LOCATION"
+    ];
 
     permissions.requestPermissions(permsToRequest, (status: any) => {
-      if (status.hasPermission) {
-        callback();
-      } else {
-        callback();
-      }
+      callback();
     }, () => callback());
   };
 
