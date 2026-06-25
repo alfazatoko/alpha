@@ -894,7 +894,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // --- AUTO SYNC PERFORMA HARIAN ---
   useEffect(() => {
     // Only run this for kasir role when online to sync today's performance snapshot
-    if (!props.googleUid || props.kasirRole === 'owner' || !isOnline || !props.transactions || props.transactions.length === 0) return;
+    if (!props.userId || props.kasirRole === 'owner' || !isOnline || !props.transactions || props.transactions.length === 0) return;
 
     const timeout = setTimeout(async () => {
       try {
@@ -903,7 +903,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         let omset = 0, laba = 0, pengeluaran = 0, count = 0;
         
         props.transactions.forEach(t => {
-          if (t.kasir_id === props.currentUsername && t.timestamp.startsWith(todayStr)) {
+          if (t.kasir_id === props.username && t.timestamp.startsWith(todayStr)) {
             const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]');
             const isIsi = String(t.kategori).startsWith('Isi');
             
@@ -925,15 +925,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         const { data: existing } = await supabase
           .from('performa_harian')
           .select('id')
-          .eq('user_id', props.googleUid)
-          .eq('kasir_id', props.currentUsername)
+          .eq('user_id', props.userId)
+          .eq('kasir_id', props.username)
           .eq('tanggal', todayStr)
           .single();
 
         const payload = {
-          user_id: props.googleUid,
+          user_id: props.userId,
           store_id: props.activeStoreId === 'all' ? null : props.activeStoreId,
-          kasir_id: props.currentUsername,
+          kasir_id: props.username,
           tanggal: todayStr,
           omset,
           laba,
@@ -955,7 +955,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     }, 5000); // 5 seconds debounce
 
     return () => clearTimeout(timeout);
-  }, [props.transactions, props.googleUid, props.currentUsername, isOnline]);
+  }, [props.transactions, props.userId, props.username, isOnline]);
   // ---------------------------------
 
   // Kasir Management State (Form inputs remain local)
