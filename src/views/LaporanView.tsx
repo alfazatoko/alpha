@@ -20,7 +20,7 @@ interface LaporanViewProps {
   filterTanggal: string
   setFilterTanggal: (v: string) => void
   saldoReal: number
-  onUpdateSaldoReal?: (nominal: number, keterangan: string) => void
+  onUpdateSaldoReal?: (rows: {nominal: number, keterangan: string}[]) => void
   isSaving?: boolean
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
@@ -144,10 +144,14 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
 
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [inputSaldoReal, setInputSaldoReal] = useState('')
   const [showSaldoRealModal, setShowSaldoRealModal] = useState(false)
-  const [inputSaldoRealKeterangan, setInputSaldoRealKeterangan] = useState('')
+  const [saldoRealRows, setSaldoRealRows] = useState<{nominal: string, keterangan: string}[]>([
+    {nominal: '', keterangan: ''},
+    {nominal: '', keterangan: ''}
+  ])
   const [catatanKasir, setCatatanKasir] = useState('')
+  const [confirmSelisih, setConfirmSelisih] = useState(false)
+  const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
 
   useEffect(() => {
     if (props.activeStoreId && props.filterTanggal) {
@@ -1216,47 +1220,137 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 </button>
               </div>
               
-              <div className="p-6 space-y-5">
-                <div>
-                  <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Keterangan Aplikasi</label>
-                  <input 
-                    type="text"
-                    value={inputSaldoRealKeterangan}
-                    onChange={(e) => setInputSaldoRealKeterangan(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                    placeholder="Cth: BRImo, Dana, BCA, BNI dll"
-                  />
-                </div>
+              <div className="p-6 flex flex-col max-h-[80vh]">
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                  {(() => {
+                    const softColors = [
+                      'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
+                      'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50',
+                      'bg-amber-50/70 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50',
+                      'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
+                      'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
+                    ];
+                    return saldoRealRows.map((row, index) => (
+                      <div key={index} className={cn("p-3 rounded-2xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
+                        {index > 0 && (
+                          <button 
+                            onClick={() => {
+                              const newRows = [...saldoRealRows];
+                              newRows.splice(index, 1);
+                              setSaldoRealRows(newRows);
+                              setConfirmSelisih(false);
+                              setSelisihNotification({show: false, selisih: 0});
+                            }}
+                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
+                          >
+                            <i className="fa-solid fa-xmark text-[10px]"></i>
+                          </button>
+                        )}
+                        
+                        <div className="w-[45%]">
+                          <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest truncate">Aplikasi {index + 1}</label>
+                          <input 
+                            id={`ket-${index}`}
+                            type="text"
+                            value={row.keterangan}
+                            onChange={(e) => {
+                              const newRows = [...saldoRealRows];
+                              newRows[index].keterangan = e.target.value;
+                              setSaldoRealRows(newRows);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                document.getElementById(`nom-${index}`)?.focus();
+                              }
+                            }}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
+                            placeholder="BCA, Dana.."
+                          />
+                        </div>
 
-                <div>
-                  <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Nominal Saldo</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">Rp</span>
-                    <input 
-                      type="text"
-                      inputMode="numeric"
-                      value={inputSaldoReal}
-                      onChange={(e) => setInputSaldoReal(formatInputRupiah(e.target.value))}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-4 text-lg font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                      placeholder="0"
-                    />
+                        <div className="flex-1">
+                          <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest">Nominal Saldo</label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">Rp</span>
+                            <input 
+                              id={`nom-${index}`}
+                              type="text"
+                              inputMode="numeric"
+                              value={row.nominal}
+                              onChange={(e) => {
+                                const newRows = [...saldoRealRows];
+                                newRows[index].nominal = formatInputRupiah(e.target.value);
+                                setSaldoRealRows(newRows);
+                                setConfirmSelisih(false);
+                                setSelisihNotification({show: false, selisih: 0});
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const nextKet = document.getElementById(`ket-${index + 1}`);
+                                  if (nextKet) {
+                                    nextKet.focus();
+                                  } else {
+                                    setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
+                                    setTimeout(() => document.getElementById(`ket-${index + 1}`)?.focus(), 50);
+                                  }
+                                }
+                              }}
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl pl-7 pr-2.5 py-2 text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+
+                  <button 
+                    onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
+                    className="w-full py-3 rounded-2xl border-2 border-dashed border-emerald-200 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
+                  </button>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                  <div className="flex justify-between items-end mb-4 px-2">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Dihitung Sementara</span>
+                    <span className="text-xl font-black text-emerald-600">
+                      {formatRupiah(saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0))}
+                    </span>
                   </div>
-                </div>
 
-                <button
-                  onClick={() => {
-                    const nominal = parseInt(inputSaldoReal.replace(/\./g, '')) || 0;
-                    if (nominal <= 0) return;
-                    props.onUpdateSaldoReal?.(nominal, inputSaldoRealKeterangan);
-                    setInputSaldoReal('');
-                    setInputSaldoRealKeterangan('');
-                    setShowSaldoRealModal(false);
-                  }}
-                  disabled={props.isSaving || !inputSaldoReal}
-                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all active:scale-[0.98] disabled:opacity-50 mt-2 flex justify-center items-center gap-2"
-                >
-                  {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN SALDO</>}
-                </button>
+                  <button
+                    onClick={() => {
+                      const finalRows = saldoRealRows
+                        .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan }))
+                        .filter(r => r.nominal > 0);
+                        
+                      if (finalRows.length === 0) return;
+                      
+                      const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
+                      const currentSelisih = totalNominal - currentSaldoBank;
+                      
+                      if (currentSelisih < 0 && !confirmSelisih) {
+                        setConfirmSelisih(true);
+                        setSelisihNotification({ show: true, selisih: currentSelisih });
+                        setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
+                        return;
+                      }
+                      
+                      props.onUpdateSaldoReal?.(finalRows);
+                      setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+                      setShowSaldoRealModal(false);
+                      setConfirmSelisih(false);
+                    }}
+                    disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
+                    className={cn("w-full text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2", confirmSelisih ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/30 hover:shadow-rose-500/40" : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/30 hover:shadow-emerald-500/40")}
+                  >
+                    {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : confirmSelisih ? <><i className="fa-solid fa-triangle-exclamation text-lg"></i> TETAP SIMPAN</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN TOTAL SALDO</>}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1691,48 +1785,168 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </button>
             </div>
             
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Keterangan Aplikasi</label>
-                <input 
-                  type="text"
-                  value={inputSaldoRealKeterangan}
-                  onChange={(e) => setInputSaldoRealKeterangan(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                  placeholder="Cth: BRImo, Dana, BCA, BNI dll"
-                />
-              </div>
+            <div className="p-6 flex flex-col max-h-[80vh]">
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                {(() => {
+                  const softColors = [
+                    'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
+                    'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50',
+                    'bg-amber-50/70 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50',
+                    'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
+                    'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
+                  ];
+                  return saldoRealRows.map((row, index) => (
+                    <div key={index} className={cn("p-3 rounded-2xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
+                      {index > 0 && (
+                        <button 
+                          onClick={() => {
+                            const newRows = [...saldoRealRows];
+                            newRows.splice(index, 1);
+                            setSaldoRealRows(newRows);
+                            setConfirmSelisih(false);
+                            setSelisihNotification({show: false, selisih: 0});
+                          }}
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
+                        >
+                          <i className="fa-solid fa-xmark text-[10px]"></i>
+                        </button>
+                      )}
+                      
+                      <div className="w-[45%]">
+                        <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest truncate">Aplikasi {index + 1}</label>
+                        <input 
+                          id={`mobile-ket-${index}`}
+                          type="text"
+                          value={row.keterangan}
+                          onChange={(e) => {
+                            const newRows = [...saldoRealRows];
+                            newRows[index].keterangan = e.target.value;
+                            setSaldoRealRows(newRows);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              document.getElementById(`mobile-nom-${index}`)?.focus();
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
+                          placeholder="BCA, Dana.."
+                        />
+                      </div>
 
-              <div>
-                <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-widest">Nominal Saldo</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">Rp</span>
-                  <input 
-                    type="text"
-                    inputMode="numeric"
-                    value={inputSaldoReal}
-                    onChange={(e) => setInputSaldoReal(formatInputRupiah(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-4 text-lg font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                    placeholder="0"
-                  />
+                      <div className="flex-1">
+                        <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest">Nominal Saldo</label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">Rp</span>
+                          <input 
+                            id={`mobile-nom-${index}`}
+                            type="text"
+                            inputMode="numeric"
+                            value={row.nominal}
+                            onChange={(e) => {
+                              const newRows = [...saldoRealRows];
+                              newRows[index].nominal = formatInputRupiah(e.target.value);
+                              setSaldoRealRows(newRows);
+                              setConfirmSelisih(false);
+                              setSelisihNotification({show: false, selisih: 0});
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const nextKet = document.getElementById(`mobile-ket-${index + 1}`);
+                                if (nextKet) {
+                                  nextKet.focus();
+                                } else {
+                                  setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
+                                  setTimeout(() => document.getElementById(`mobile-ket-${index + 1}`)?.focus(), 50);
+                                }
+                              }
+                            }}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl pl-7 pr-2.5 py-2 text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ));
+                })()}
+
+                <button 
+                  onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
+                  className="w-full py-3 rounded-2xl border-2 border-dashed border-emerald-200 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
+                </button>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex justify-between items-end mb-4 px-2">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Dihitung Sementara</span>
+                  <span className="text-xl font-black text-emerald-600">
+                    {formatRupiah(saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0))}
+                  </span>
                 </div>
-              </div>
 
-              <button
-                onClick={() => {
-                  const nominal = parseInt(inputSaldoReal.replace(/\./g, '')) || 0;
-                  if (nominal <= 0) return;
-                  props.onUpdateSaldoReal?.(nominal, inputSaldoRealKeterangan);
-                  setInputSaldoReal('');
-                  setInputSaldoRealKeterangan('');
-                  setShowSaldoRealModal(false);
-                }}
-                disabled={props.isSaving || !inputSaldoReal}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all active:scale-[0.98] disabled:opacity-50 mt-2 flex justify-center items-center gap-2"
-              >
-                {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN SALDO</>}
-              </button>
+                <button
+                  onClick={() => {
+                    const finalRows = saldoRealRows
+                      .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan }))
+                      .filter(r => r.nominal > 0);
+                      
+                    if (finalRows.length === 0) return;
+                    
+                    const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
+                    const currentSelisih = totalNominal - currentSaldoBank;
+                    
+                    if (currentSelisih < 0 && !confirmSelisih) {
+                      setConfirmSelisih(true);
+                      setSelisihNotification({ show: true, selisih: currentSelisih });
+                      setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
+                      return;
+                    }
+                    
+                    props.onUpdateSaldoReal?.(finalRows);
+                    setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+                    setShowSaldoRealModal(false);
+                    setConfirmSelisih(false);
+                  }}
+                  disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
+                  className={cn("w-full text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2", confirmSelisih ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/30 hover:shadow-rose-500/40" : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/30 hover:shadow-emerald-500/40")}
+                >
+                  {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : confirmSelisih ? <><i className="fa-solid fa-triangle-exclamation text-lg"></i> TETAP SIMPAN</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN TOTAL SALDO</>}
+                </button>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SELISIH NOTIFICATION FLOAT */}
+      {selisihNotification.show && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none animate-in fade-in zoom-in duration-300">
+          <div className="bg-rose-600/95 backdrop-blur-md rounded-[2rem] p-6 max-w-sm w-full shadow-2xl shadow-rose-600/50 border-2 border-rose-400 text-center pointer-events-auto">
+            <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce shadow-inner">
+              <i className="fa-solid fa-triangle-exclamation text-rose-600 text-3xl"></i>
+            </div>
+            <h2 className="text-xl font-black text-white uppercase tracking-widest mb-1 shadow-black drop-shadow-sm">STATUS: SELISIH</h2>
+            <p className="text-rose-100 text-[11px] font-bold uppercase tracking-wider mb-4">Saldo di HP lebih kecil (Uang kurang)</p>
+            
+            <div className="bg-white/20 rounded-2xl py-3 px-4 mb-5 border border-white/30 backdrop-blur-sm">
+              <span className="text-3xl font-black text-white drop-shadow-md">
+                {formatRupiah(selisihNotification.selisih)}
+              </span>
+            </div>
+            
+            <p className="text-white text-xs font-black uppercase tracking-widest leading-relaxed">
+              ⚠️ SILAHKAN PERIKSA KEMBALI PEMBUKUAN KAMU
+            </p>
+            
+            <button 
+              onClick={() => setSelisihNotification({show: false, selisih: 0})}
+              className="mt-6 w-full py-3 rounded-xl bg-white text-rose-700 font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-rose-50"
+            >
+              OK, SAYA PERIKSA
+            </button>
           </div>
         </div>
       )}

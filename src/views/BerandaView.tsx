@@ -659,6 +659,7 @@ const CatatanPanel: React.FC<{
   const STORAGE_KEY = 'alphaPro_global_catatanOwner';
   const [catatanList, setCatatanList] = useState<Catatan[]>([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   
   const [judul, setJudul] = useState('');
   const [isi, setIsi] = useState('');
@@ -683,19 +684,40 @@ const CatatanPanel: React.FC<{
     if (!judul.trim() || !isi.trim()) {
       return showToast('Judul dan isi catatan harus diisi!');
     }
-    const baru: Catatan = {
-      id: Date.now().toString(),
-      judul: judul.trim(),
-      isi: isi.trim(),
-      kategori,
-      tanggal: new Date().toISOString(),
-      selesai: false
-    };
-    saveToStorage([baru, ...catatanList]);
+    
+    if (editId) {
+      const updated = catatanList.map(c => 
+        c.id === editId 
+          ? { ...c, judul: judul.trim(), isi: isi.trim(), kategori }
+          : c
+      );
+      saveToStorage(updated);
+      showToast('Catatan berhasil diperbarui');
+    } else {
+      const baru: Catatan = {
+        id: Date.now().toString(),
+        judul: judul.trim(),
+        isi: isi.trim(),
+        kategori,
+        tanggal: new Date().toISOString(),
+        selesai: false
+      };
+      saveToStorage([baru, ...catatanList]);
+      showToast('Catatan berhasil disimpan');
+    }
+    
     setJudul('');
     setIsi('');
+    setEditId(null);
     setFormOpen(false);
-    showToast('Catatan berhasil disimpan');
+  };
+
+  const handleEdit = (c: Catatan) => {
+    setJudul(c.judul);
+    setIsi(c.isi);
+    setKategori(c.kategori);
+    setEditId(c.id);
+    setFormOpen(true);
   };
 
   const hapusCatatan = (id: string) => {
@@ -743,7 +765,13 @@ const CatatanPanel: React.FC<{
       {!formOpen ? (
         <>
           <button
-            onClick={() => setFormOpen(true)}
+            onClick={() => {
+              setJudul('');
+              setIsi('');
+              setKategori('Penting');
+              setEditId(null);
+              setFormOpen(true);
+            }}
             className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-orange-200/50 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             <i className="fa-solid fa-plus"></i> Buat Catatan Baru
@@ -784,6 +812,9 @@ const CatatanPanel: React.FC<{
                       <button onClick={() => copyCatatan(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 active:scale-90 transition-all">
                         <i className="fa-regular fa-copy"></i>
                       </button>
+                      <button onClick={() => handleEdit(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-amber-50 text-amber-500 active:scale-90 transition-all">
+                        <i className="fa-solid fa-pen"></i>
+                      </button>
                       <button onClick={() => hapusCatatan(c.id)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500 active:scale-90 transition-all">
                         <i className="fa-solid fa-trash-can"></i>
                       </button>
@@ -809,8 +840,8 @@ const CatatanPanel: React.FC<{
       ) : (
         <div className="bg-white border border-orange-100 rounded-[2rem] p-5 shadow-sm animate-in fade-in duration-200">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-black text-orange-600 text-[13px] tracking-widest uppercase">CATATAN BARU</h3>
-            <button onClick={() => setFormOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90">
+            <h3 className="font-black text-orange-600 text-[13px] tracking-widest uppercase">{editId ? 'EDIT CATATAN' : 'CATATAN BARU'}</h3>
+            <button onClick={() => { setFormOpen(false); setEditId(null); setJudul(''); setIsi(''); setKategori('Penting'); }} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90">
               <i className="fa-solid fa-xmark"></i>
             </button>
           </div>
@@ -970,6 +1001,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
   const [catatanIzin, setCatatanIzin] = useState<any[]>([])
   const STORAGE_KEY_IZIN = `alphaPro_${currentTargetStoreId}_catatanIzin`
+  const [expandedMonthIzin, setExpandedMonthIzin] = useState<string | null>(null)
 
   // Pantau State
 
@@ -2301,24 +2333,67 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Riwayat Izin ({catatanIzin.length})</p>
-                      {catatanIzin.map((item: any, index: number) => (
-                        <div key={index} className="p-3 border border-gray-100 rounded-2xl bg-gray-50/50 flex justify-between items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-black text-gray-800">{item.nama}</p>
-                            <p className="text-[9px] text-orange-600 font-bold mt-0.5">
-                              <i className="fa-regular fa-calendar-alt mr-1"></i>
-                              {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                            </p>
-                            <p className="text-[10px] text-gray-600 mt-1 leading-snug">{item.alasan}</p>
-                          </div>
-                          <button 
-                            onClick={() => hapusIzin(index)} 
-                            className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 hover:bg-red-200 transition-all"
-                          >
-                            <i className="fa-solid fa-trash text-[10px]"></i>
-                          </button>
-                        </div>
-                      ))}
+                      {(() => {
+                        const izinWithIndex = catatanIzin.map((item, originalIndex) => ({ ...item, originalIndex }));
+                        const groupedIzin: Record<string, typeof izinWithIndex> = {};
+                        izinWithIndex.forEach(item => {
+                          const dateObj = parseLocalISO(item.tanggal);
+                          const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                          if (!groupedIzin[monthKey]) groupedIzin[monthKey] = [];
+                          groupedIzin[monthKey].push(item);
+                        });
+                        
+                        const sortedMonths = Object.keys(groupedIzin).sort((a,b) => b.localeCompare(a));
+                        
+                        return sortedMonths.map(monthKey => {
+                          const [y, m] = monthKey.split('-');
+                          const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+                          const monthName = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                          const isExpanded = expandedMonthIzin === monthKey;
+                          const items = groupedIzin[monthKey];
+                          
+                          return (
+                            <div key={monthKey} className="border border-gray-100 rounded-2xl bg-white overflow-hidden shadow-sm">
+                              <div 
+                                onClick={() => setExpandedMonthIzin(isExpanded ? null : monthKey)}
+                                className="p-3 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <i className={`fa-solid ${isExpanded ? 'fa-folder-open text-orange-500' : 'fa-folder text-orange-400'} text-lg`}></i>
+                                  <div>
+                                    <p className="text-xs font-black text-gray-800">{monthName}</p>
+                                    <p className="text-[9px] text-gray-500 font-bold">{items.length} catatan</p>
+                                  </div>
+                                </div>
+                                <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 text-[10px]`}></i>
+                              </div>
+                              
+                              {isExpanded && (
+                                <div className="p-2 space-y-2 bg-white/50 border-t border-gray-100">
+                                  {items.map((item: any) => (
+                                    <div key={item.originalIndex} className="p-3 border border-gray-100 rounded-xl bg-white flex justify-between items-start gap-2 shadow-sm">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-black text-gray-800">{item.nama}</p>
+                                        <p className="text-[9px] text-orange-600 font-bold mt-0.5">
+                                          <i className="fa-regular fa-calendar-alt mr-1"></i>
+                                          {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </p>
+                                        <p className="text-[10px] text-gray-600 mt-1 leading-snug">{item.alasan}</p>
+                                      </div>
+                                      <button 
+                                        onClick={() => hapusIzin(item.originalIndex)} 
+                                        className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 hover:bg-red-200 transition-all"
+                                      >
+                                        <i className="fa-solid fa-trash text-[10px]"></i>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                 </div>

@@ -185,6 +185,7 @@ const App: React.FC = () => {
     localStorage.setItem('alphaPro_username', username)
     localStorage.setItem('alphaPro_name', account.name)
     localStorage.setItem('alphaPro_role', account.role)
+    localStorage.setItem('alphaPro_login_date', getLocalDateString())
     setIsLoggedIn(true)
     setCurrentUsername(username)
     setCurrentAccount(account)
@@ -210,6 +211,7 @@ const App: React.FC = () => {
       localStorage.setItem('alphaPro_username', 'owner')
       localStorage.setItem('alphaPro_name', 'Owner')
       localStorage.setItem('alphaPro_role', 'owner')
+      localStorage.setItem('alphaPro_login_date', getLocalDateString())
       setIsLoggedIn(true)
       setCurrentUsername('owner')
       setCurrentAccount({ name: 'Owner', role: 'owner', pin: '' })
@@ -275,6 +277,35 @@ const App: React.FC = () => {
     window.location.hash = '#/beranda'
     await supabase.auth.signOut()
   }
+
+  // ── Auto Logout at Midnight ──
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    
+    // Ensure login_date is set for legacy sessions
+    const loginDateStr = localStorage.getItem('alphaPro_login_date');
+    if (!loginDateStr) {
+      localStorage.setItem('alphaPro_login_date', getLocalDateString());
+    }
+
+    const checkDate = () => {
+      const todayStr = getLocalDateString();
+      const storedDate = localStorage.getItem('alphaPro_login_date');
+      if (storedDate && storedDate !== todayStr) {
+        if (selectedRole === 'owner') {
+          handleExitStore();
+        } else {
+          handleLogoutCashierOnly();
+        }
+        localStorage.removeItem('alphaPro_login_date');
+      }
+    };
+
+    const intervalId = setInterval(checkDate, 60000); // 1 minute
+    checkDate();
+
+    return () => clearInterval(intervalId);
+  }, [isLoggedIn, selectedRole]);
 
   // ── Show loading if checking auth ──
   if (isCheckingAuth) {
@@ -1515,46 +1546,47 @@ const MainApp: React.FC<MainAppProps> = ({
     })
   }
 
-  const handleSimpanSaldoRealAplikasi = (nominal: number, keterangan: string) => {
-    if (isSaving) return
-    if (nominal < 0) return showToast('Nominal tidak valid!')
+  const handleSimpanSaldoRealAplikasi = (rows: { nominal: number, keterangan: string }[]) => {
+    if (isSaving || rows.length === 0) return
+    const validRows = rows.filter(r => r.nominal > 0)
+    if (validRows.length === 0) return showToast('Nominal tidak valid!')
 
     setIsSaving(true)
 
-    const id = Date.now().toString()
     const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
     if (!finalStoreId) {
       setIsSaving(false)
       return showToast('Pilih cabang (toko) terlebih dahulu!')
     }
-    const newTx = {
-      id,
+    
+    const newTxs = validRows.map((row, index) => ({
+      id: Date.now().toString() + '-' + index,
       user_id: googleUid,
       kasir_id: username,
       kategori: 'Isi Saldo Real Aplikasi',
-      nominal,
+      nominal: row.nominal,
       admin_fee: 0,
-      keterangan: keterangan || 'Update Saldo Real HP',
+      keterangan: row.keterangan || 'Update Saldo Real HP',
       timestamp: getLocalISOString(),
       store_id: finalStoreId
-    }
+    }))
 
-    supabase.from('transactions').insert(newTx).then(({ error }) => {
+    supabase.from('transactions').insert(newTxs).then(({ error }) => {
       setIsSaving(false)
       if (error) {
         showToast('Gagal update: ' + error.message)
       } else {
-        const optimisticTx: Transaction = {
-          id: newTx.id,
-          kategori: newTx.kategori,
-          nominal: newTx.nominal,
-          adminFee: newTx.admin_fee,
-          keterangan: newTx.keterangan,
-          timestamp: newTx.timestamp,
-          kasir_id: newTx.kasir_id,
-          store_id: newTx.store_id || undefined
-        }
-        setTransactions(prev => [optimisticTx, ...prev])
+        const optimisticTxs: Transaction[] = newTxs.map(tx => ({
+          id: tx.id,
+          kategori: tx.kategori,
+          nominal: tx.nominal,
+          adminFee: tx.admin_fee,
+          keterangan: tx.keterangan,
+          timestamp: tx.timestamp,
+          kasir_id: tx.kasir_id,
+          store_id: tx.store_id || undefined
+        }))
+        setTransactions(prev => [...optimisticTxs, ...prev])
         showToast('Saldo Real Aplikasi Diperbarui!')
       }
     })

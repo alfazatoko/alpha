@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { getLocalDateString } from '../lib/utils'
 
 export interface KasirAccount {
   pin: string
@@ -38,6 +39,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
   const [isShaking, setIsShaking] = useState(false)
   const [isPinEnabled, setIsPinEnabled] = useState(true)
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  const [hasAbsenToday, setHasAbsenToday] = useState(false)
+  const [isAbsenChecked, setIsAbsenChecked] = useState(false)
+
+  useEffect(() => {
+    if (selectedUser && kasirList[selectedUser]?.role !== 'owner') {
+      const today = getLocalDateString()
+      const absens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+      if (absens[selectedUser]?.date === today) {
+        setHasAbsenToday(true)
+      } else {
+        setHasAbsenToday(false)
+      }
+      setIsAbsenChecked(false)
+    }
+  }, [selectedUser, kasirList])
 
   useEffect(() => {
     if (kasirListOverride) {
@@ -74,6 +90,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
       return
     }
 
+    if (account.role !== 'owner' && !hasAbsenToday && !isAbsenChecked) {
+      setError('Harap centang Absen Masuk untuk hari ini.')
+      triggerShake()
+      return
+    }
+
     // Only validate PIN if enabled
     if (isPinEnabled) {
       if (!pin) {
@@ -91,6 +113,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
     }
 
     // Success
+    if (account.role !== 'owner' && !hasAbsenToday && isAbsenChecked) {
+       const today = getLocalDateString()
+       const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+       const absens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+       absens[selectedUser] = { date: today, time }
+       localStorage.setItem('alphaPro_absen_harian', JSON.stringify(absens))
+    }
+
     onLogin(selectedUser, account)
   }
 
@@ -135,6 +165,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
               <i className="fa-solid fa-chevron-down login-select-icon"></i>
             </div>
           </div>
+
+          {/* Absen Checkbox */}
+          {selectedUser && kasirList[selectedUser]?.role !== 'owner' && !hasAbsenToday && (
+            <div className="login-field" style={{ marginBottom: '1rem' }}>
+               <label className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors shadow-sm">
+                  <input type="checkbox" checked={isAbsenChecked} onChange={e => { setIsAbsenChecked(e.target.checked); setError(''); }} className="w-5 h-5 accent-amber-500 rounded" />
+                  <span className="text-xs font-black text-amber-700 uppercase tracking-widest flex-1">
+                     ABSEN MASUK
+                     <div className="text-[9px] text-amber-600 font-bold mt-0.5 tracking-normal">Jam {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div>
+                  </span>
+                  <i className="fa-solid fa-clock text-amber-400 text-lg"></i>
+               </label>
+            </div>
+          )}
 
           {/* PIN Input (Hidden if PIN is disabled) */}
           {isPinEnabled && (
