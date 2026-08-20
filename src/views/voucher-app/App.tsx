@@ -634,11 +634,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const handleAddProduct = (newProductData: Omit<VoucherProduct, 'id'>) => {
     const newProduct: VoucherProduct = {
       ...newProductData,
-      id: `prod-${Date.now()}`
+      id: `prod-${Date.now()}-${Math.floor(Math.random() * 100000)}`
     };
 
     const newTransaction: Transaction = {
-      id: `trx-${Date.now()}`,
+      id: `trx-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
       type: 'TAMBAH_STOK',
       productId: newProduct.id,
       productName: newProduct.name,
@@ -649,18 +649,58 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       notes: 'Pendaftaran voucher baru'
     };
 
-    const updatedProducts = [newProduct, ...products];
-    const updatedTransactions = [newTransaction, ...transactions];
-    
-    const updatedNotifs = pushNotification(
+    // Use functional updater to avoid stale closure issues
+    setProducts(prev => [newProduct, ...prev]);
+    setTransactions(prev => [newTransaction, ...prev]);
+
+    pushNotification(
       'success',
       'Voucher Terdaftar',
       `Voucher "${newProduct.name}" berhasil dimasukkan ke sistem.`,
       notifications
     );
+  };
 
-    setProducts(updatedProducts);
-    setTransactions(updatedTransactions);
+  /**
+   * handleBulkAddProducts — Menambahkan banyak produk sekaligus dalam SATU setState call.
+   * Ini solusi untuk bug di mana forEach + onAddProduct hanya menyimpan produk terakhir
+   * karena React mem-batch update state dan setiap call closure membaca state lama (stale closure).
+   */
+  const handleBulkAddProducts = (productsData: Omit<VoucherProduct, 'id'>[]) => {
+    if (!productsData || productsData.length === 0) return;
+
+    const now = Date.now();
+    const cashierName = activeCashier.name;
+
+    // Buat semua produk baru dengan ID unik
+    const newProducts: VoucherProduct[] = productsData.map((data, index) => ({
+      ...data,
+      id: `prod-${now}-${index}-${Math.floor(Math.random() * 100000)}`
+    }));
+
+    // Buat semua transaksi log sekaligus
+    const newTransactions: Transaction[] = newProducts.map((p, index) => ({
+      id: `trx-${now}-${index}-${Math.floor(Math.random() * 100000)}`,
+      type: 'TAMBAH_STOK' as const,
+      productId: p.id,
+      productName: p.name,
+      quantity: p.currentStock,
+      amount: p.costPrice * p.currentStock,
+      cashierName,
+      timestamp: new Date().toISOString(),
+      notes: 'Ditambahkan via upload massal'
+    }));
+
+    // Satu atomic setState call — tidak ada stale closure, semua produk tersimpan
+    setProducts(prev => [...newProducts, ...prev]);
+    setTransactions(prev => [...newTransactions, ...prev]);
+
+    pushNotification(
+      'success',
+      `${newProducts.length} Voucher Ditambahkan`,
+      `Berhasil mendaftarkan ${newProducts.length} produk voucher baru ke sistem secara massal.`,
+      notifications
+    );
   };
 
   const handleUpdateProduct = (updatedProduct: VoucherProduct) => {
@@ -1093,6 +1133,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       userRole={currentUserRole}
                       theme={theme}
                       onAddProduct={handleAddProduct}
+                      onBulkAddProducts={handleBulkAddProducts}
                       onUpdateProduct={handleUpdateProduct}
                       onDeleteProduct={handleDeleteProduct}
                       onSelectProduct={setSelectedProduct}

@@ -32,6 +32,8 @@ interface ProductsTabProps {
   userRole: UserRole;
   theme?: 'dark' | 'light';
   onAddProduct: (product: Omit<VoucherProduct, 'id'>) => void;
+  /** Menambahkan banyak produk sekaligus (batch) — solusi untuk stale closure bug pada upload massal */
+  onBulkAddProducts?: (products: Omit<VoucherProduct, 'id'>[]) => void;
   onUpdateProduct: (product: VoucherProduct) => void;
   onDeleteProduct: (productId: string) => void;
   onSelectProduct: (product: VoucherProduct) => void;
@@ -45,6 +47,7 @@ export default function ProductsTab({
   userRole,
   theme = 'dark',
   onAddProduct,
+  onBulkAddProducts,
   onUpdateProduct,
   onDeleteProduct,
   onSelectProduct,
@@ -242,20 +245,31 @@ export default function ProductsTab({
   };
 
   const handleSaveBulk = () => {
-    bulkParsedProducts.forEach(p => {
-      onAddProduct({
-        name: p.name || 'Produk Baru',
-        category: 'Paket Data',
-        operator: operatorsList.includes(p.operator) ? p.operator : 'Lainnya',
-        costPrice: Number(p.costPrice) || 0,
-        sellingPrice: Number(p.sellingPrice) || 0,
-        currentStock: Number(p.stock) || 0,
-        minStockLevel: Number(p.minStockLevel) || 4,
-        description: 'Ditambahkan otomatis via massal',
-        barcode: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
-        sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      });
-    });
+    if (bulkParsedProducts.length === 0) return;
+
+    // Siapkan semua produk sekaligus sebagai array
+    const productsToAdd: Omit<VoucherProduct, 'id'>[] = bulkParsedProducts.map(p => ({
+      name: p.name || 'Produk Baru',
+      category: 'Paket Data' as const,
+      operator: operatorsList.includes(p.operator) ? p.operator : 'Lainnya',
+      costPrice: Number(p.costPrice) || 0,
+      sellingPrice: Number(p.sellingPrice) || 0,
+      currentStock: Number(p.stock) || 0,
+      minStockLevel: Number(p.minStockLevel) || 4,
+      description: 'Ditambahkan otomatis via massal',
+      barcode: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
+      sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+    }));
+
+    // Gunakan onBulkAddProducts jika tersedia (atomic batch — tidak stale closure)
+    // Fallback ke loop onAddProduct jika prop belum disediakan
+    if (onBulkAddProducts) {
+      onBulkAddProducts(productsToAdd);
+    } else {
+      // Legacy fallback (tidak disarankan untuk batch besar)
+      productsToAdd.forEach(p => onAddProduct(p));
+    }
+
     setBulkParsedProducts([]);
     setBulkAIText('');
     setIsAddingBulkAI(false);

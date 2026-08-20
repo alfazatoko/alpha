@@ -83,20 +83,29 @@ export default function RiwayatTab({
   // Aggregate totals for the selected date
   const daySummary = useMemo(() => {
     const recordsForDay = handoverRecords.filter((rec) => rec.date === selectedDate);
-    const totalSales = recordsForDay.reduce((sum, r) => sum + r.totalSalesAmount, 0);
-    const totalCash = recordsForDay.reduce((sum, r) => sum + r.cashPhysical, 0);
-    const totalQris = recordsForDay.reduce((sum, r) => sum + r.qrisAmount, 0);
-    const totalSoldPcs = recordsForDay.reduce((sum, r) => sum + r.totalSoldPcs, 0);
+    const totalTrx      = recordsForDay.reduce((sum, r) => sum + r.totalSoldPcs, 0);
+    const totalUangMasuk = recordsForDay.reduce((sum, r) => sum + r.totalSalesAmount, 0);
+    const totalTarikTunai = recordsForDay.reduce((sum, r) => sum + r.cashPhysical, 0);
+    const totalAdmin    = recordsForDay.reduce((sum, r) => sum + r.cashExpected, 0);
+    const totalQris     = recordsForDay.reduce((sum, r) => sum + r.qrisAmount, 0);
     const completedShifts = recordsForDay.length;
 
     return {
-      totalSales,
-      totalCash,
+      totalTrx,
+      totalUangMasuk,
+      totalTarikTunai,
+      totalAdmin,
       totalQris,
-      totalSoldPcs,
       completedShifts
     };
   }, [handoverRecords, selectedDate]);
+
+  // Helper: format currency compact (e.g. 16.071.688 → 16,07 Jt)
+  const fmtCompact = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2).replace('.', ',')} Jt`;
+    if (n >= 1_000)    return `${(n / 1_000).toFixed(1).replace('.', ',')} Rb`;
+    return n.toLocaleString('id-ID');
+  };
 
   // Format date helper: "17 Agustus 2026"
   const formatDateLabel = (dateStr: string) => {
@@ -257,34 +266,78 @@ export default function RiwayatTab({
               </button>
             </div>
 
-            {/* REKAP TOTAL HARIAN (Executive Summary Card) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-slate-200 dark:border-slate-800/80">
-              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3">
-                <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wide block">Total Penjualan</span>
-                <div className="text-base font-bold font-mono text-slate-100 mt-0.5">
-                  Rp{daySummary.totalSales.toLocaleString('id-ID')}
+            {/* ─────────────────────────────────────────────────────────────
+                REKAP TOTAL HARIAN — 4 Kolom: TRX | Uang Masuk | Tarik Tunai | Admin
+            ───────────────────────────────────────────────────────────────── */}
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
+
+              {/* Row 1: TRX + Shift */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* TRX */}
+                <div className="bg-gradient-to-br from-indigo-950/60 to-indigo-900/30 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] uppercase font-black text-indigo-400 tracking-widest block">TRX</span>
+                    <div className="text-2xl font-black font-mono text-white mt-0.5 leading-none">
+                      {daySummary.totalTrx}
+                    </div>
+                    <span className="text-[9px] text-indigo-400 font-bold">Voucher Terjual</span>
+                  </div>
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                    <Receipt className="w-4 h-4 text-indigo-400" />
+                  </div>
                 </div>
-                <span className="text-[10px] text-slate-600 dark:text-slate-400">{daySummary.totalSoldPcs} Pcs</span>
+
+                {/* Shift Selesai */}
+                <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/30 border border-slate-600/30 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">Shift</span>
+                    <div className="text-2xl font-black font-mono text-white mt-0.5 leading-none">
+                      {daySummary.completedShifts}
+                    </div>
+                    <span className="text-[9px] text-slate-400 font-bold">Selesai Hari Ini</span>
+                  </div>
+                  <div className="w-9 h-9 rounded-xl bg-slate-600/20 border border-slate-600/30 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3">
-                <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wide block">Total Uang Tunai</span>
-                <div className="text-base font-bold font-mono text-emerald-500 font-black dark:text-emerald-400 mt-0.5">
-                  Rp{daySummary.totalCash.toLocaleString('id-ID')}
+              {/* Row 2: Uang Masuk + Tarik Tunai + Admin — 3 equal cols */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Uang Masuk */}
+                <div className="bg-slate-950/50 border border-emerald-500/20 rounded-xl p-2.5 space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-black text-emerald-400 tracking-widest">Uang Masuk</span>
+                    <Banknote className="w-3 h-3 text-emerald-500/60" />
+                  </div>
+                  <div className="font-mono font-black text-emerald-400 text-sm leading-tight">
+                    Rp {fmtCompact(daySummary.totalUangMasuk)}
+                  </div>
+                  <div className="text-[8px] text-emerald-500/60 font-bold">Total Omset</div>
                 </div>
-              </div>
 
-              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3">
-                <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wide block">Total QRIS / TF</span>
-                <div className="text-base font-bold font-mono text-cyan-400 mt-0.5">
-                  Rp{daySummary.totalQris.toLocaleString('id-ID')}
+                {/* Tarik Tunai */}
+                <div className="bg-slate-950/50 border border-cyan-500/20 rounded-xl p-2.5 space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-black text-cyan-400 tracking-widest">Tarik Tunai</span>
+                    <Banknote className="w-3 h-3 text-cyan-500/60" />
+                  </div>
+                  <div className="font-mono font-black text-cyan-400 text-sm leading-tight">
+                    Rp {fmtCompact(daySummary.totalTarikTunai)}
+                  </div>
+                  <div className="text-[8px] text-cyan-500/60 font-bold">Kas Fisik</div>
                 </div>
-              </div>
 
-              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3">
-                <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wide block">Shift Selesai</span>
-                <div className="text-base font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">
-                  {daySummary.completedShifts} Shift
+                {/* Admin */}
+                <div className="bg-slate-950/50 border border-amber-500/20 rounded-xl p-2.5 space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-black text-amber-400 tracking-widest">Admin</span>
+                    <QrCode className="w-3 h-3 text-amber-500/60" />
+                  </div>
+                  <div className="font-mono font-black text-amber-400 text-sm leading-tight">
+                    Rp {fmtCompact(daySummary.totalAdmin)}
+                  </div>
+                  <div className="text-[8px] text-amber-500/60 font-bold">Kas Ekspektasi</div>
                 </div>
               </div>
             </div>
@@ -375,63 +428,68 @@ export default function RiwayatTab({
                         </div>
                       </div>
 
-                      {/* SUMMARY STATS GRID */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        
-                        {/* 1. Stok Fisik Ringkasan */}
-                        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60 space-y-1">
-                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] uppercase font-bold tracking-tight">
-                            <span>Voucher</span>
-                            <Package className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                      {/* ───────────────────────────────────────────────────────────
+                          SUMMARY STATS — 5 kolom mini: TRX | Uang Masuk | Tarik Tunai | Admin | Status
+                      ─────────────────────────────────────────────────────────── */}
+                      <div className="grid grid-cols-5 gap-1.5 text-xs">
+
+                        {/* 1. TRX */}
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-indigo-400 tracking-widest">TRX</div>
+                          <div className="font-mono font-black text-indigo-300 text-base leading-none">
+                            {record.totalSoldPcs}
                           </div>
-                          <div className="font-mono font-black text-slate-100 text-xs">
-                            {record.totalInitialStock} ➔ {record.totalFinalStock} Pcs
-                          </div>
-                          <div className="text-[9px] text-emerald-500 font-black dark:text-emerald-400 font-bold uppercase">
-                            Laku: {record.totalSoldPcs} Pcs
-                          </div>
+                          <div className="text-[8px] text-indigo-400/70 font-bold">Pcs Laku</div>
                         </div>
 
-                        {/* 2. Total Penjualan */}
-                        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60 space-y-1">
-                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] uppercase font-bold tracking-tight">
-                            <span>Omset</span>
-                            <Receipt className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                        {/* 2. Uang Masuk */}
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-emerald-400 tracking-widest">Masuk</div>
+                          <div className="font-mono font-black text-emerald-400 text-[11px] leading-tight">
+                            {fmtCompact(record.totalSalesAmount)}
                           </div>
-                          <div className="font-mono font-black text-slate-100 text-xs">
-                            Rp{record.totalSalesAmount.toLocaleString('id-ID')}
-                          </div>
-                          <div className="text-[9px] text-slate-600 dark:text-slate-400 uppercase font-bold">
-                            Total Penjualan
-                          </div>
+                          <div className="text-[8px] text-emerald-400/70 font-bold">Omset</div>
                         </div>
 
-                        {/* 3. Pembayaran Tunai & QRIS */}
-                        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60 space-y-1">
-                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] uppercase font-bold tracking-tight">
-                            <span>Tunai / QRIS</span>
-                            <Banknote className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                        {/* 3. Tarik Tunai */}
+                        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-cyan-400 tracking-widest">Tunai</div>
+                          <div className="font-mono font-black text-cyan-400 text-[11px] leading-tight">
+                            {fmtCompact(record.cashPhysical)}
                           </div>
-                          <div className="font-mono font-black text-emerald-500 font-black dark:text-emerald-400 text-xs">
-                            T: Rp{record.cashPhysical.toLocaleString('id-ID')}
-                          </div>
-                          <div className="text-[9px] text-cyan-400 font-bold uppercase">
-                            N: Rp{record.qrisAmount.toLocaleString('id-ID')}
-                          </div>
+                          <div className="text-[8px] text-cyan-400/70 font-bold">Kas Fisik</div>
                         </div>
 
-                        {/* 4. Status Kas & Catatan */}
-                        <div className="bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800/60 space-y-1">
-                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 text-[10px] uppercase font-bold tracking-tight">
-                            <span>Status Kas</span>
-                            {isCashMatched ? (
-                              <CheckCircle2 className="w-3 h-3 text-emerald-500 font-black dark:text-emerald-400" />
-                            ) : (
-                              <AlertCircle className="w-3 h-3 text-amber-500 font-black dark:text-amber-400" />
-                            )}
+                        {/* 4. Admin */}
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-amber-400 tracking-widest">Admin</div>
+                          <div className="font-mono font-black text-amber-400 text-[11px] leading-tight">
+                            {fmtCompact(record.cashExpected)}
                           </div>
-                          <div className={`font-mono font-black text-[11px] ${isCashMatched ? 'text-emerald-500 font-black dark:text-emerald-400' : 'text-amber-500 font-black dark:text-amber-400'}`}>
-                            {isCashMatched ? 'PAS (Sesuai)' : `Selisih Rp${Math.abs(record.cashDifference).toLocaleString('id-ID')}`}
+                          <div className="text-[8px] text-amber-400/70 font-bold">Ekspektasi</div>
+                        </div>
+
+                        {/* 5. Status Kas */}
+                        <div className={`rounded-xl p-2 space-y-0.5 col-span-1 border ${
+                          isCashMatched
+                            ? 'bg-emerald-500/10 border-emerald-500/20'
+                            : 'bg-rose-500/10 border-rose-500/20'
+                        }`}>
+                          <div className={`text-[8px] uppercase font-black tracking-widest ${
+                            isCashMatched ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>Kas</div>
+                          <div className={`flex items-center justify-center pt-0.5 ${
+                            isCashMatched ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {isCashMatched
+                              ? <CheckCircle2 className="w-5 h-5" />
+                              : <AlertCircle className="w-5 h-5" />
+                            }
+                          </div>
+                          <div className={`text-[7px] font-black text-center ${
+                            isCashMatched ? 'text-emerald-400/80' : 'text-rose-400/80'
+                          }`}>
+                            {isCashMatched ? 'PAS' : `Selisih`}
                           </div>
                         </div>
                       </div>

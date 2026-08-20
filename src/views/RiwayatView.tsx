@@ -106,6 +106,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   // Summary untuk Kartu Atas (Total Hari/Rentang yang dipilih)
   // DISINKRONKAN: Mengeluarkan [KHUSUS] dan [NON_TUNAI] agar cocok dengan saldo laci di Dashboard
   const todayCount = dateFilteredTransactions.length
+  const todayTarikTunai = dateFilteredTransactions
+    .filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0)
+  const todayUangMasuk = dateFilteredTransactions
+    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0)
   const todayVolume = dateFilteredTransactions
     .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0)
@@ -894,23 +900,46 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         </div>
 
-        {/* SUMMARY CARDS */}
-        <div className="grid grid-cols-3 gap-1.5 mb-4">
-          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">TRX</div>
-            <div className="text-[14px] font-black text-blue-600 leading-none">{todayCount}</div>
+        {/* SUMMARY CARDS — 2x2 grid: TRX | Admin / Uang Masuk | Tarik Tunai */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {/* Baris 1 kiri: TRX */}
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-md shadow-blue-200">
+            <div className="text-[9px] font-black text-blue-200 uppercase tracking-widest">TRX Hari Ini</div>
+            <div className="text-3xl font-black text-white leading-none mt-1">{todayCount}</div>
+            <div className="text-[8px] font-bold text-blue-300 mt-1">Jumlah Transaksi</div>
           </div>
-          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">NOMINAL</div>
-            <div className="text-[12px] font-black text-slate-800 leading-none truncate w-full text-center px-1">
-              {formatRupiah(todayVolume).replace(',00', '').replace('Rp ', '')}
+
+          {/* Baris 1 kanan: Admin */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+            <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Admin Fee</div>
+            <div className="text-base font-black text-emerald-700 leading-tight mt-1 truncate">
+              {formatRupiah(todayAdmin).replace(',00', '')}
             </div>
+            <div className="text-[8px] font-bold text-emerald-500 mt-1">Total Admin Fee</div>
           </div>
-          <div className="bg-white rounded-lg py-1.5 px-1 border border-slate-100 flex flex-col items-center justify-center">
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">ADMIN</div>
-            <div className="text-[12px] font-black text-emerald-600 leading-none truncate w-full text-center px-1">
-              {formatRupiah(todayAdmin).replace(',00', '').replace('Rp ', '')}
+
+          {/* Baris 2 kiri: Uang Masuk */}
+          <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-violet-500"></div>
+              <div className="text-[9px] font-black text-violet-600 uppercase tracking-widest">Uang Masuk</div>
             </div>
+            <div className="text-sm font-black text-violet-800 leading-tight mt-1 truncate">
+              {formatRupiah(todayUangMasuk).replace(',00', '')}
+            </div>
+            <div className="text-[8px] font-bold text-violet-400 mt-0.5">Penjualan → Laci</div>
+          </div>
+
+          {/* Baris 2 kanan: Tarik Tunai */}
+          <div className="bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+              <div className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Tarik Tunai</div>
+            </div>
+            <div className="text-sm font-black text-rose-700 leading-tight mt-1 truncate">
+              {todayTarikTunai > 0 ? formatRupiah(todayTarikTunai).replace(',00', '') : <span className="text-rose-300">—</span>}
+            </div>
+            <div className="text-[8px] font-bold text-rose-400 mt-0.5">Laci → Pembeli</div>
           </div>
         </div>
 
@@ -933,19 +962,24 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             )}
           </div>
 
-          {/* FOOTER TOTAL (Single Line with Dividers) */}
-          <div className="flex items-center justify-center gap-2 py-4 border-t border-slate-100 bg-white shadow-sm rounded-b-2xl">
-            <div className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">
+          {/* FOOTER TOTAL (4 kolom: Items | Uang Masuk | Tarik Tunai | Admin) */}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-3.5 border-t border-slate-100 bg-white shadow-sm rounded-b-2xl px-3">
+            <div className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap">
               {filteredTransactions.length} Items
             </div>
             <div className="w-px h-2.5 bg-slate-200"></div>
-            <div className="text-blue-600 font-black text-[10px] whitespace-nowrap uppercase flex items-center gap-1">
-              <span className="text-[8px] opacity-60">NOM:</span>
-              {formatRupiah(totalNominal).replace(',00', '')}
+            <div className="text-violet-600 font-black text-[9px] whitespace-nowrap uppercase flex items-center gap-1">
+              <span className="text-[7px] opacity-70">MASUK:</span>
+              {formatRupiah(filteredTransactions.filter(t => t.kategori !== 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)).replace(',00', '')}
             </div>
             <div className="w-px h-2.5 bg-slate-200"></div>
-            <div className="text-emerald-600 font-black text-[10px] whitespace-nowrap uppercase flex items-center gap-1">
-              <span className="text-[8px] opacity-60">ADM:</span>
+            <div className="text-rose-600 font-black text-[9px] whitespace-nowrap uppercase flex items-center gap-1">
+              <span className="text-[7px] opacity-70">TARIK:</span>
+              {formatRupiah(filteredTransactions.filter(t => t.kategori === 'Tarik Tunai').reduce((s, t) => s + t.nominal, 0)).replace(',00', '')}
+            </div>
+            <div className="w-px h-2.5 bg-slate-200"></div>
+            <div className="text-emerald-600 font-black text-[9px] whitespace-nowrap uppercase flex items-center gap-1">
+              <span className="text-[7px] opacity-70">ADM:</span>
               {formatRupiah(totalAdmin).replace(',00', '')}
             </div>
           </div>
