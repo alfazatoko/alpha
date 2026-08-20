@@ -211,9 +211,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     return () => window.removeEventListener('alphaSyncUpdate', handleSync)
   }, [])
 
-  const { totalQtyLaku, totalUangKeseluruhan, totalUangQris } = useMemo(() => {
+  const { totalQtyLaku, totalUangKeseluruhan, totalUangQris, totalProfitVoucher } = useMemo(() => {
     if (!props.activeStoreId) {
-      return { totalQtyLaku: 0, totalUangKeseluruhan: 0, totalUangQris: 0 }
+      return { totalQtyLaku: 0, totalUangKeseluruhan: 0, totalUangQris: 0, totalProfitVoucher: 0 }
     }
     const savedV = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_voucher_${props.filterTanggal}`)
     const dataVoucher = savedV ? JSON.parse(savedV) : initialDataVoucher
@@ -224,12 +224,16 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     let qty = 0
     let uang = 0
     let qris = 0
+    let profit = 0
     
     Object.values(dataVoucher).forEach((items: any) => {
       items.forEach((item: any) => {
         const laku = Math.max(0, item.awal - item.akhir)
         qty += laku
         uang += laku * item.price
+        if (item.modal) {
+          profit += laku * (item.price - item.modal)
+        }
       });
     });
     
@@ -240,7 +244,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     return { 
       totalQtyLaku: qty, 
       totalUangKeseluruhan: uang, 
-      totalUangQris: qris
+      totalUangQris: qris,
+      totalProfitVoucher: profit
     }
   }, [props.activeStoreId, props.filterTanggal, syncTrigger])
 
@@ -817,12 +822,40 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             {/* Tanggal Laporan */}
             <div className="flex flex-col">
               <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Tanggal Laporan</span>
-              <input 
-                type="date"
-                value={props.filterTanggal}
-                onChange={(e) => props.setFilterTanggal(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
-              />
+              <div className="flex items-center gap-1.5">
+                <button 
+                  onClick={() => {
+                    if (!props.filterTanggal) return;
+                    const d = new Date(props.filterTanggal);
+                    if (!isNaN(d.getTime())) {
+                      d.setDate(d.getDate() - 1);
+                      props.setFilterTanggal(d.toISOString().split('T')[0]);
+                    }
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-chevron-left text-[10px]"></i>
+                </button>
+                <input 
+                  type="date"
+                  value={props.filterTanggal}
+                  onChange={(e) => props.setFilterTanggal(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-1.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 w-[95px] text-center"
+                />
+                <button 
+                  onClick={() => {
+                    if (!props.filterTanggal) return;
+                    const d = new Date(props.filterTanggal);
+                    if (!isNaN(d.getTime())) {
+                      d.setDate(d.getDate() + 1);
+                      props.setFilterTanggal(d.toISOString().split('T')[0]);
+                    }
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-chevron-right text-[10px]"></i>
+                </button>
+              </div>
             </div>
 
             {/* Pantau Kasir (Owner Only) */}
@@ -1457,13 +1490,39 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
         <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between gap-2">
           <span className="text-[10px] font-bold text-white uppercase tracking-wider flex-shrink-0"><i className="fa-solid fa-calendar-day mr-1"></i> Tanggal Laporan:</span>
-          <div className="flex items-center gap-2 flex-grow">
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => {
+                if (!props.filterTanggal) return;
+                const d = new Date(props.filterTanggal);
+                if (!isNaN(d.getTime())) {
+                  d.setDate(d.getDate() - 1);
+                  props.setFilterTanggal(d.toISOString().split('T')[0]);
+                }
+              }}
+              className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+            >
+              <i className="fa-solid fa-chevron-left text-[9px]"></i>
+            </button>
             <input 
               type="date"
               value={props.filterTanggal}
               onChange={(e) => props.setFilterTanggal(e.target.value)}
-              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-2 py-1 outline-none border-none flex-grow"
+              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-1 py-1 outline-none border-none w-[90px] text-center"
             />
+            <button 
+              onClick={() => {
+                if (!props.filterTanggal) return;
+                const d = new Date(props.filterTanggal);
+                if (!isNaN(d.getTime())) {
+                  d.setDate(d.getDate() + 1);
+                  props.setFilterTanggal(d.toISOString().split('T')[0]);
+                }
+              }}
+              className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+            >
+              <i className="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
           </div>
         </div>
       </div>
@@ -1622,6 +1681,25 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
             </div>
           </div>
+
+          {/* Estimasi Keuntungan (Hanya untuk Owner) */}
+          {props.kasirRole === 'owner' && (
+            <div className="relative mt-7 mb-5">
+              <div className="absolute -top-3 left-0 w-full flex justify-center z-10">
+                <h4 className="bg-gray-50 px-3 text-[11px] font-black text-amber-600 tracking-widest uppercase whitespace-nowrap">
+                  Estimasi Keuntungan
+                </h4>
+              </div>
+              <div className="border border-amber-500/30 bg-amber-50/50 rounded-[1.5rem] pt-5 pb-4 px-4 flex flex-col items-center justify-center shadow-sm">
+                <span className="text-xl font-black text-amber-600 font-mono">
+                  {formatRupiah(totalProfitVoucher)}
+                </span>
+                <span className="text-[9px] font-bold text-amber-700/60 mt-1 uppercase tracking-widest">
+                  Laba Bersih Voucher Laporan Ini
+                </span>
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="mb-2">

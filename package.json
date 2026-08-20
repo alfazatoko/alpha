@@ -27,6 +27,7 @@
     "jspdf": "^4.2.1",
     "lines-and-columns": "^2.0.4",
     "lucide-react": "^1.14.0",
+    "motion": "^13.1.0",
     "postcss": "^8.4.49",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -3152,7 +3152,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             keterangan={props.formKeterangan}
             setKeterangan={props.setFormKeterangan}
             onSave={props.handleSimpanTransaksi}
+            isSaving={props.isSaving}
             presets={props.presets}
+            onOpenVoucherJualCepat={() => {
+              props.setActiveView('view-stok-voucher');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
+              }, 100);
+            }}
           />
         </div>
       )}

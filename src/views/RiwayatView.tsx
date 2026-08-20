@@ -307,36 +307,59 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
         {/* HORIZONTAL FILTER BAR */}
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-wrap gap-4 items-end mb-6">
-          {/* Dari Tanggal */}
-          <div className="flex-1 min-w-[140px] relative">
-            <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Dari Tanggal</label>
-            <div className="relative">
-              <input 
-                type="date"
-                value={props.filterTanggalMulai}
-                onChange={(e) => {
-                  props.setFilterTanggalMulai(e.target.value);
-                  setCurrentPage(1);
+          {/* Rentang Tanggal dengan Tombol Navigasi */}
+          <div className="flex-1 min-w-[320px]">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Rentang Tanggal</label>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => {
+                  const tMulai = new Date(props.filterTanggalMulai);
+                  const tAkhir = new Date(props.filterTanggalAkhir);
+                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                    tMulai.setDate(tMulai.getDate() - 1);
+                    tAkhir.setDate(tAkhir.getDate() - 1);
+                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                    setCurrentPage(1);
+                  }
                 }}
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
-              />
-              <i className="fa-solid fa-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs"></i>
-            </div>
-          </div>
-          {/* Ke Tanggal */}
-          <div className="flex-1 min-w-[140px] relative">
-            <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Ke Tanggal</label>
-            <div className="relative">
-              <input 
-                type="date"
-                value={props.filterTanggalAkhir}
-                onChange={(e) => {
-                  props.setFilterTanggalAkhir(e.target.value);
-                  setCurrentPage(1);
+                className="w-10 h-10 shrink-0 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+              
+              <div className="flex items-center gap-2 flex-1">
+                <input 
+                  type="date"
+                  value={props.filterTanggalMulai}
+                  onChange={(e) => { props.setFilterTanggalMulai(e.target.value); setCurrentPage(1); }}
+                  className="w-full bg-blue-50/50 dark:bg-blue-900/10 border-2 border-blue-100 dark:border-blue-900/30 rounded-xl px-4 py-2.5 text-sm font-bold text-blue-800 dark:text-blue-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-center"
+                />
+                <span className="text-slate-400 font-black text-xs">-</span>
+                <input 
+                  type="date"
+                  value={props.filterTanggalAkhir}
+                  onChange={(e) => { props.setFilterTanggalAkhir(e.target.value); setCurrentPage(1); }}
+                  className="w-full bg-blue-50/50 dark:bg-blue-900/10 border-2 border-blue-100 dark:border-blue-900/30 rounded-xl px-4 py-2.5 text-sm font-bold text-blue-800 dark:text-blue-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-center"
+                />
+              </div>
+
+              <button 
+                onClick={() => {
+                  const tMulai = new Date(props.filterTanggalMulai);
+                  const tAkhir = new Date(props.filterTanggalAkhir);
+                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                    tMulai.setDate(tMulai.getDate() + 1);
+                    tAkhir.setDate(tAkhir.getDate() + 1);
+                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                    setCurrentPage(1);
+                  }
                 }}
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20"
-              />
-              <i className="fa-solid fa-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs"></i>
+                className="w-10 h-10 shrink-0 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-right text-xs"></i>
+              </button>
             </div>
           </div>
 
@@ -805,23 +828,70 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       <div className="px-1.5 pb-20 pt-3">
         {/* FILTER BARU (Filter Transaksi) - COMPACT MOBILE */}
         <div className="mb-3">
-          <button 
-            onClick={() => setIsFilterOpen(true)}
-            className="w-full bg-slate-50 border border-slate-200 hover:border-violet-500 rounded-lg px-2.5 py-1.5 flex justify-between items-center shadow-sm active:scale-[0.99] transition-all"
-          >
-            <div className="flex items-center gap-2 text-left w-full overflow-hidden">
-              <i className="fa-solid fa-sliders text-[9px] text-violet-600 shrink-0"></i>
-              <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-slate-800 uppercase tracking-wider shrink-0">Filter:</span>
-                <span className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter truncate">
-                  {props.filterKategori.includes('Semua') ? 'Semua Kategori' : props.filterKategori.join(', ')}
+          <div className="w-full bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-xl px-2 py-2 flex justify-between items-center shadow-sm transition-all">
+            <div 
+              className="flex items-center gap-2.5 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
+              onClick={() => setIsFilterOpen(true)}
+            >
+              <i className="fa-solid fa-sliders text-[12px] text-blue-600 shrink-0"></i>
+              <div className="min-w-0 flex-1 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-blue-900 uppercase tracking-wider shrink-0 leading-tight">Filter Riwayat</span>
+                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter truncate mt-0.5">
+                  {props.filterKategori.includes('Semua') ? 'Semua' : props.filterKategori.join(', ')}
                   {props.filterPencarian ? ` • "${props.filterPencarian}"` : ''}
                   {` • ${props.filterTanggalMulai === props.filterTanggalAkhir ? props.filterTanggalMulai : `${props.filterTanggalMulai} - ${props.filterTanggalAkhir}`}`}
                 </span>
               </div>
             </div>
-            <i className="fa-solid fa-chevron-down text-[8px] text-slate-400 ml-1 shrink-0"></i>
-          </button>
+            
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const tMulai = new Date(props.filterTanggalMulai);
+                  const tAkhir = new Date(props.filterTanggalAkhir);
+                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                    tMulai.setDate(tMulai.getDate() - 1);
+                    tAkhir.setDate(tAkhir.getDate() - 1);
+                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                    setCurrentPage(1);
+                  }
+                }}
+                className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-left text-[11px]"></i>
+              </button>
+
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const tMulai = new Date(props.filterTanggalMulai);
+                  const tAkhir = new Date(props.filterTanggalAkhir);
+                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                    tMulai.setDate(tMulai.getDate() + 1);
+                    tAkhir.setDate(tAkhir.getDate() + 1);
+                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                    setCurrentPage(1);
+                  }
+                }}
+                className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-right text-[11px]"></i>
+              </button>
+              
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsFilterOpen(true);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-down text-[12px]"></i>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* SUMMARY CARDS */}

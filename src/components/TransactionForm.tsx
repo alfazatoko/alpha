@@ -13,10 +13,11 @@ interface TransactionFormProps {
   onSave: (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
   isSaving?: boolean
   presets?: any[]
+  onOpenVoucherJualCepat?: () => void
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = []
+  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat
 }) => {
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS'>('DIGITAL')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
@@ -145,7 +146,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {[
           { id: 'DIGITAL', label: 'TRANSFER', icon: 'fa-paper-plane', ref: btnDigitalRef },
           { id: 'TARIK', label: 'TARIK TUNAI', icon: 'fa-money-bill-transfer', ref: btnTarikRef },
-          { id: 'AKSESORIS', label: 'AKSESORIS', icon: 'fa-headset', ref: btnAksesorisRef }
+          { id: 'AKSESORIS', label: 'AKSESORIS', icon: 'fa-headset', ref: btnAksesorisRef },
+          { id: 'VOUCHER', label: 'JUAL VOUCHER', icon: 'fa-ticket', ref: useRef<HTMLButtonElement>(null) }
         ].map((mode) => {
           let activeStyles = "";
           let hoverStyles = "";
@@ -158,6 +160,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
              activeStyles = "bg-gradient-to-br from-red-500 to-red-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(239,68,68,0.6)] scale-[1.02] z-10";
              hoverStyles = "hover:bg-red-50 hover:border-red-200 text-gray-600";
              iconColor = activeMode === mode.id ? "text-white" : "text-red-500";
+          } else if (mode.id === 'VOUCHER') {
+             activeStyles = "bg-gradient-to-br from-orange-500 to-orange-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(249,115,22,0.6)] scale-[1.02] z-10";
+             hoverStyles = "hover:bg-orange-50 hover:border-orange-200 text-gray-600";
+             iconColor = activeMode === mode.id ? "text-white" : "text-orange-500";
           } else {
              activeStyles = "bg-gradient-to-br from-emerald-500 to-emerald-700 border-transparent text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.6)] scale-[1.02] z-10";
              hoverStyles = "hover:bg-emerald-50 hover:border-emerald-200 text-gray-600";
@@ -169,6 +175,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               key={mode.id}
               ref={mode.ref}
               onClick={() => {
+                if (mode.id === 'VOUCHER') {
+                  if (onOpenVoucherJualCepat) onOpenVoucherJualCepat();
+                  return;
+                }
                 setActiveMode(mode.id as any)
                 if (mode.id === 'TARIK') setKategori('Tarik Tunai')
                 else if (mode.id === 'AKSESORIS') setKategori('Aksesoris')

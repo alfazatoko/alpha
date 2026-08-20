@@ -970,7 +970,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
     // Realtime Subscription
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`schema-db-changes-${Date.now()}-${Math.random()}`)
       .on(
         'postgres_changes',
         {
@@ -1069,7 +1069,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
     // Realtime attendance updates
     const channel = supabase
-      .channel('absensi-changes')
+      .channel(`absensi-changes-${Date.now()}-${Math.random()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi', filter: `user_id=eq.${googleUid}` }, () => {
         manageAbsensi()
       })
@@ -1377,7 +1377,7 @@ const MainApp: React.FC<MainAppProps> = ({
     setConfirmDialog({ show: true, title, message, onConfirm })
   }
 
-  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => {
+  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }, bypassDuplicateCheck = false) => {
     if (isSaving) return
     const nominal = parseNominal(formNominal)
     const admin = parseNominal(formAdmin)
@@ -1385,8 +1385,6 @@ const MainApp: React.FC<MainAppProps> = ({
     if (!formKategori) return showToast('Pilih kategori transaksi!')
     if (nominal <= 0) return showToast('Masukkan nominal yang valid!')
 
-    setIsSaving(true)
-    
     let finalKeterangan = formKeterangan || '-';
     if (options) {
       if (options.isAdminNonTunai) finalKeterangan += ' [ADMIN_DALAM]';
@@ -1403,6 +1401,29 @@ const MainApp: React.FC<MainAppProps> = ({
       finalAdmin = admin - nominal;
       finalNominal = nominal;
     }
+
+    // Pengecekan Transaksi Ganda (Dalam 5 Menit Terakhir)
+    if (!bypassDuplicateCheck) {
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).getTime();
+      const duplicateTx = transactions.find(t => {
+        const txTime = new Date(t.timestamp).getTime();
+        return t.kategori === formKategori && 
+               t.nominal === finalNominal && 
+               t.kasir_id === username &&
+               txTime >= fiveMinsAgo;
+      });
+
+      if (duplicateTx) {
+        handleConfirm(
+          '⚠️ Indikasi Transaksi Ganda',
+          `Kamu baru saja mencatat transaksi ${formKategori} sebesar Rp ${finalNominal.toLocaleString('id-ID')} beberapa menit yang lalu.\n\nApakah ini transaksi yang baru (berbeda pembeli), atau tidak sengaja tercatat 2x?\n\nTekan Lanjutkan jika ini transaksi baru.`,
+          () => handleSimpanTransaksi(options, true)
+        );
+        return;
+      }
+    }
+
+    setIsSaving(true)
 
     // Proses simpan ke Supabase
     const id = Date.now().toString()
@@ -1493,11 +1514,32 @@ const MainApp: React.FC<MainAppProps> = ({
     })
   }
 
-  const handleSimpanIsiSaldo = () => {
+  const handleSimpanIsiSaldo = (bypassDuplicateCheck = false) => {
     if (isSaving) return
     const nominal = parseNominal(isiNominal)
     if (!isiJenis) return showToast('Pilih jenis saldo!')
     if (nominal <= 0) return showToast('Nominal tidak valid!')
+
+    // Pengecekan Transaksi Ganda
+    if (!bypassDuplicateCheck) {
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).getTime();
+      const duplicateTx = transactions.find(t => {
+        const txTime = new Date(t.timestamp).getTime();
+        return t.kategori === ('Isi ' + isiJenis) && 
+               t.nominal === nominal && 
+               t.kasir_id === username &&
+               txTime >= fiveMinsAgo;
+      });
+
+      if (duplicateTx) {
+        handleConfirm(
+          '⚠️ Indikasi Pencatatan Ganda',
+          `Kamu baru saja mencatat pengisian saldo ${isiJenis} sebesar Rp ${nominal.toLocaleString('id-ID')} beberapa menit yang lalu.\n\nApakah ini pengisian yang baru, atau pencatatan ganda?\n\nTekan Lanjutkan jika ini memang isi saldo baru.`,
+          () => handleSimpanIsiSaldo(true)
+        );
+        return;
+      }
+    }
 
     setIsSaving(true)
 
