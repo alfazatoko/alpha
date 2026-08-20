@@ -230,75 +230,75 @@ export default function LogAktivitasTab({
           </div>
         </div>
 
-        {/* 4 Large Summary Columns / Stat Boxes */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-2">
-          {/* Kolom 1: Total Log */}
-          <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/5'
+        {/* 4 Large Summary Columns / Stat Boxes (2x2 Buttons) */}
+        <div className="grid grid-cols-2 gap-2.5 pt-2">
+          {/* Tombol 1: Total Log */}
+          <button 
+            onClick={() => { setSelectedType('all'); setShowHighRiskOnly(false); }}
+            className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 ${
+            isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800 border-slate-200 dark:border-white/10'
           }`}>
-            <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-              Total Log Hari Ini
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+              Total Log
             </span>
-            <div className="flex flex-col mt-1.5">
-              <span className={`text-xl sm:text-2xl font-black leading-none ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                {stats.todayCount}
-              </span>
-              <span className={`text-[8px] sm:text-[9px] font-semibold mt-1 uppercase tracking-widest ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                dari {stats.total} total
-              </span>
-            </div>
-          </div>
+            <span className={`text-2xl font-black leading-none ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+              {stats.todayCount}
+            </span>
+            <span className={`text-[8px] font-semibold uppercase tracking-widest ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+              dari {stats.total} total
+            </span>
+          </button>
 
-          {/* Kolom 2: Peringatan & Risiko */}
-          <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-            isLight ? 'bg-rose-50/80 border-rose-200' : 'bg-rose-500/10 border-rose-500/20'
+          {/* Tombol 2: Peringatan & Risiko */}
+          <button 
+            onClick={() => { setSelectedType('warning'); setShowHighRiskOnly(true); }}
+            className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 ${
+            isLight ? 'bg-rose-50/80 hover:bg-rose-100 border-rose-200' : 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20'
           }`}>
-            <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-rose-700' : 'text-rose-500 font-black dark:text-rose-400'}`}>
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-rose-700' : 'text-rose-500 font-black dark:text-rose-400'}`}>
               Peringatan Stok
             </span>
-            <div className="flex flex-col mt-1.5">
-              <span className={`text-xl sm:text-2xl font-black leading-none ${isLight ? 'text-rose-700' : 'text-rose-500 font-black dark:text-rose-400'}`}>
-                {stats.highRisk}
-              </span>
-              <span className={`text-[8px] sm:text-[9px] font-semibold mt-1 uppercase tracking-widest ${isLight ? 'text-rose-500 font-black dark:text-rose-400' : 'text-rose-500 font-black dark:text-rose-400/80'}`}>
-                Perlu Restock
-              </span>
-            </div>
-          </div>
+            <span className={`text-2xl font-black leading-none ${isLight ? 'text-rose-700' : 'text-rose-500 font-black dark:text-rose-400'}`}>
+              {stats.highRisk}
+            </span>
+            <span className={`text-[8px] font-semibold uppercase tracking-widest ${isLight ? 'text-rose-500 font-black dark:text-rose-400' : 'text-rose-500 font-black dark:text-rose-400/80'}`}>
+              Perlu Restock
+            </span>
+          </button>
 
-          {/* Kolom 3: Belum Dibaca */}
-          <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-            isLight ? 'bg-blue-50/80 border-blue-200' : 'bg-cyan-500/10 border-cyan-500/20'
+          {/* Tombol 3: Belum Dibaca */}
+          <button 
+            onClick={() => setSelectedType('all')}
+            className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 ${
+            isLight ? 'bg-blue-50/80 hover:bg-blue-100 border-blue-200' : 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/20'
           }`}>
-            <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>
               Belum Dibaca
             </span>
-            <div className="flex flex-col mt-1.5">
-              <span className={`text-xl sm:text-2xl font-black leading-none ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>
-                {stats.unread}
-              </span>
-              <span className={`text-[8px] sm:text-[9px] font-semibold mt-1 uppercase tracking-widest ${isLight ? 'text-blue-600' : 'text-cyan-400/80'}`}>
-                Notif Baru
-              </span>
-            </div>
-          </div>
+            <span className={`text-2xl font-black leading-none ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>
+              {stats.unread}
+            </span>
+            <span className={`text-[8px] font-semibold uppercase tracking-widest ${isLight ? 'text-blue-600' : 'text-cyan-400/80'}`}>
+              Notif Baru
+            </span>
+          </button>
 
-          {/* Kolom 4: Nilai Selisih Audit */}
-          <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${
-            isLight ? 'bg-amber-50/80 border-amber-200' : 'bg-amber-500/10 border-amber-500/20'
+          {/* Tombol 4: Nilai Selisih Audit */}
+          <button 
+            onClick={() => setSelectedType('all')}
+            className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all active:scale-95 ${
+            isLight ? 'bg-amber-50/80 hover:bg-amber-100 border-amber-200' : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/20'
           }`}>
-            <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-amber-700' : 'text-amber-500 font-black dark:text-amber-400'}`}>
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-amber-700' : 'text-amber-500 font-black dark:text-amber-400'}`}>
               Selisih Audit
             </span>
-            <div className="flex flex-col mt-1.5">
-              <span className={`text-lg sm:text-xl font-black font-mono leading-none ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>
-                Rp{stats.potentialLoss.toLocaleString('id-ID')}
-              </span>
-              <span className={`text-[8px] sm:text-[9px] font-semibold mt-1 uppercase tracking-widest ${isLight ? 'text-amber-600' : 'text-amber-500 font-black dark:text-amber-400/80'}`}>
-                Barang Hilang
-              </span>
-            </div>
-          </div>
+            <span className={`text-lg font-black font-mono leading-none ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>
+              Rp{stats.potentialLoss.toLocaleString('id-ID')}
+            </span>
+            <span className={`text-[8px] font-semibold uppercase tracking-widest ${isLight ? 'text-amber-600' : 'text-amber-500 font-black dark:text-amber-400/80'}`}>
+              Barang Hilang
+            </span>
+          </button>
         </div>
       </div>
 

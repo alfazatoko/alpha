@@ -112,7 +112,14 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         setActiveCashierIndex(idx);
       } else {
         // Add new cashier if not exists
-        const newCashier: Cashier = { id: `c${cashiers.length + 1}`, name: externalCashierName, role: 'kasir', totalSales: 0 };
+        const newCashier: Cashier = { 
+          id: `c${cashiers.length + 1}`, 
+          name: externalCashierName, 
+          role: 'Kasir Shift', 
+          email: `${externalCashierName.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+          avatar: 'https://ui-avatars.com/api/?name=' + externalCashierName,
+          isOnline: true 
+        };
         setCashiers(prev => [...prev, newCashier]);
         setActiveCashierIndex(cashiers.length);
       }
@@ -137,7 +144,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const handleOpenQuickSaleEvent = () => {
       setSaleSearchQuery('');
       setSaleSelectedOperator('SEMUA');
-      setFormPaymentMethod('NON TUNAI'); // default to NON TUNAI as requested by user
+      setFormPaymentMethod('NON_TUNAI'); // default to NON TUNAI as requested by user
       setFormQuantity(1);
       setFormNote('');
       setShowQuickSale(true);
@@ -483,7 +490,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const nextCashier = cashiers[activeCashierIndex === 0 ? 1 : 0] || cashiers[1];
 
   // Manual & quick stock modifier
-  const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' = 'TUNAI') => {
+  const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
     let updatedNotifs = [...notifications];
     const targetProduct = products.find(p => p.id === productId);
     
@@ -1028,7 +1035,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       onOpenQuickSale={() => {
                         setSaleSearchQuery('');
                         setSaleSelectedOperator('SEMUA');
-                        setFormPaymentMethod('NON TUNAI');
+                        setFormPaymentMethod('NON_TUNAI');
                         if (products.length > 0) setFormProductId(products[0].id);
                         setFormQuantity(1);
                         setFormNote('');
@@ -1144,7 +1151,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         const now = new Date();
                         const dateStr = now.toISOString().split('T')[0];
                         const shiftNum = activeCashier.id === 'cashier-1' ? 1 : 2;
-                        const shiftTitle = `Shift ${shiftNum} (${activeCashier.shift})`;
+                        const shiftTitle = `Shift ${shiftNum} (${activeCashier.name})`;
 
                         const newDetailedRecord: DetailedHandoverRecord = {
                           id: `rec-${Date.now()}`,
@@ -1804,7 +1811,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     )}
 
                     {/* Quantity Field with Quick Steppers */}
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Jumlah Voucher Masuk (Pcs)</label>
                         <div className="flex gap-1">
@@ -1815,7 +1822,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                               onClick={() => setFormQuantity(qty)}
                               className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition border ${
                                 formQuantity === qty 
-                                  ? 'bg-indigo-600 text-slate-900 dark:text-white border-indigo-500' 
+                                  ? 'bg-indigo-600 text-white border-indigo-500' 
                                   : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'
                               }`}
                             >
@@ -1824,15 +1831,33 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           ))}
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={formQuantity}
-                        onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
-                      />
+                      {/* Stepper Row */}
+                      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormQuantity(q => Math.max(1, q - 1))}
+                          className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95 flex-shrink-0"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={formQuantity}
+                          onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
+                          className="flex-1 text-center bg-transparent border-none text-slate-900 dark:text-white text-xl font-black focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormQuantity(q => q + 1)}
+                          className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95 flex-shrink-0"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
+
 
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Supplier / Catatan Restock</label>

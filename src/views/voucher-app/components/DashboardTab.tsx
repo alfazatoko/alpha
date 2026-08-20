@@ -971,23 +971,14 @@ export default function DashboardTab({
         )}
       </div>
 
-      {/* 3 Stats Grid */}
-      <div className={`grid ${userRole === 'owner' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`} id="dashboard-stats-grid">
+      {/* 2 Stats Grid (Kasir View) */}
+      <div className="grid grid-cols-2 gap-2" id="dashboard-stats-grid">
         {/* Total Stock */}
         <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border border-slate-200 dark:border-white/10 rounded-2xl p-3 text-center flex flex-col justify-between" id="stat-total-stock">
           <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide line-clamp-1">Total Stok</span>
           <div className="text-xl font-black text-slate-900 dark:text-white my-1">{totalStock.toLocaleString('id-ID')}</div>
           <span className="text-[8px] text-slate-600 dark:text-slate-400 font-bold">Voucher</span>
         </div>
-
-        {/* Nilai Inventaris */}
-        {userRole === 'owner' && (
-          <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border border-slate-200 dark:border-white/10 rounded-2xl p-3 text-center flex flex-col justify-between" id="stat-inventory-value">
-            <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide line-clamp-1">Nilai Inventaris</span>
-            <div className="text-xl font-black text-emerald-500 font-black dark:text-emerald-400 my-1">{formatIDRCompact(totalValue)}</div>
-            <span className="text-[8px] text-slate-600 dark:text-slate-400 font-bold">Rp (Modal)</span>
-          </div>
-        )}
 
         {/* Penjualan Hari Ini */}
         <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border border-slate-200 dark:border-white/10 rounded-2xl p-3 text-center flex flex-col justify-between" id="stat-sales-today">

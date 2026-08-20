@@ -19,7 +19,7 @@ interface TransactionFormProps {
 const TransactionForm: React.FC<TransactionFormProps> = ({
   kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat
 }) => {
-  const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS'>('DIGITAL')
+  const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
   const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
   const [isKetAuto, setIsKetAuto] = useState(true)
