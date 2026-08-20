@@ -1831,30 +1831,32 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           ))}
                         </div>
                       </div>
-                      {/* Stepper Row */}
-                      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => setFormQuantity(q => Math.max(1, q - 1))}
-                          className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95 flex-shrink-0"
-                        >
-                          −
-                        </button>
+                      {/* Stepper Row: number left, buttons right */}
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2">
                         <input
                           type="number"
                           min="1"
                           required
                           value={formQuantity}
                           onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                          className="flex-1 text-center bg-transparent border-none text-slate-900 dark:text-white text-xl font-black focus:outline-none"
+                          className="w-20 bg-transparent border-none text-slate-900 dark:text-white text-xl font-black focus:outline-none"
                         />
-                        <button
-                          type="button"
-                          onClick={() => setFormQuantity(q => q + 1)}
-                          className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95 flex-shrink-0"
-                        >
-                          +
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setFormQuantity(q => Math.max(1, q - 1))}
+                            className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95"
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormQuantity(q => q + 1)}
+                            className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     </div>
 
