@@ -236,15 +236,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Audio Context reference
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // Load state from localStorage on mount
+  // Load state from localStorage on mount & when cashier changes
   useEffect(() => {
-    const cachedProducts = localStorage.getItem('v_products');
-    const cachedTransactions = localStorage.getItem('v_transactions');
-    const cachedNotifications = localStorage.getItem('v_notifications');
-    const cachedHandovers = localStorage.getItem('v_handovers');
-    const cachedDetailedHandovers = localStorage.getItem('v_detailed_handovers');
-    const cachedCashierIdx = localStorage.getItem('v_cashier_idx');
-    const cachedLastResetDate = localStorage.getItem('v_last_reset_date');
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    const prefix = `v_${storeKey}_${cashierId}`;
+
+    const cachedProducts = localStorage.getItem(`${prefix}_products`);
+    const cachedTransactions = localStorage.getItem(`${prefix}_transactions`);
+    const cachedNotifications = localStorage.getItem(`${prefix}_notifications`);
+    const cachedHandovers = localStorage.getItem(`${prefix}_handovers`);
+    const cachedDetailedHandovers = localStorage.getItem(`${prefix}_detailed_handovers`);
+    const cachedCashierIdx = localStorage.getItem(`v_${storeKey}_cashier_idx`);
+    const cachedLastResetDate = localStorage.getItem(`v_${storeKey}_last_reset_date`);
     const cachedTheme = localStorage.getItem('v_theme') as 'dark' | 'light' | null;
 
     let loadedProducts = cachedProducts ? JSON.parse(cachedProducts) : INITIAL_PRODUCTS;
@@ -252,14 +256,10 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     let loadedNotifications = cachedNotifications ? JSON.parse(cachedNotifications) : INITIAL_NOTIFICATIONS;
     let loadedHandovers = cachedHandovers ? JSON.parse(cachedHandovers) : [];
     let loadedDetailedHandovers = cachedDetailedHandovers ? JSON.parse(cachedDetailedHandovers) : INITIAL_DETAILED_HANDOVERS;
-    let loadedCashierIdx = cachedCashierIdx ? parseInt(cachedCashierIdx) : 0;
-
-    // Daily Reset Check
+    
+    // Daily Reset Check (Store wide, not just per cashier)
     const today = new Date().toLocaleDateString('id-ID');
     if (cachedLastResetDate && cachedLastResetDate !== today) {
-      // It's a new day! 
-      // 1. Clear current transactions and notifications for a fresh start (0 balance)
-      // Note: Handovers and Detailed Records are preserved as history
       loadedTransactions = []; 
       loadedNotifications = [
         {
@@ -272,11 +272,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         }
       ];
       
-      localStorage.setItem('v_transactions', JSON.stringify([]));
-      localStorage.setItem('v_notifications', JSON.stringify(loadedNotifications));
-      localStorage.setItem('v_last_reset_date', today);
+      localStorage.setItem(`${prefix}_transactions`, JSON.stringify([]));
+      localStorage.setItem(`${prefix}_notifications`, JSON.stringify(loadedNotifications));
+      localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
     } else if (!cachedLastResetDate) {
-      localStorage.setItem('v_last_reset_date', today);
+      localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
     }
 
     setProducts(loadedProducts);
@@ -284,55 +284,72 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setNotifications(loadedNotifications);
     setShiftHandovers(loadedHandovers);
     setDetailedHandovers(loadedDetailedHandovers);
-    setActiveCashierIndex(loadedCashierIdx);
     if (cachedTheme) setTheme(cachedTheme);
 
-    // If online mode is active (Supabase store ID provided), fetch from cloud and overwrite local
+    // If online mode is active, fetch from cloud
     if (activeStoreId) {
       supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
         if (data && data.voucher_app_data) {
-          const vData = data.voucher_app_data;
-          if (vData.products) setProducts(vData.products);
-          if (vData.transactions) setTransactions(vData.transactions);
-          if (vData.notifications) setNotifications(vData.notifications);
-          if (vData.handovers) setShiftHandovers(vData.handovers);
-          if (vData.detailedHandovers) setDetailedHandovers(vData.detailedHandovers);
+          // Data is stored per-cashier in the cloud JSON
+          const cashierData = data.voucher_app_data[cashierId];
+          if (cashierData) {
+            if (cashierData.products) setProducts(cashierData.products);
+            if (cashierData.transactions) setTransactions(cashierData.transactions);
+            if (cashierData.notifications) setNotifications(cashierData.notifications);
+            if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
+            if (cashierData.detailedHandovers) setDetailedHandovers(cashierData.detailedHandovers);
+          } else if (!cachedProducts && data.voucher_app_data.products) {
+            // Migration fallback for old data structure (before per-cashier separation)
+            setProducts(data.voucher_app_data.products);
+          }
         }
       });
     }
-  }, [activeStoreId]);
+  }, [activeStoreId, activeCashierIndex]);
 
   // Push to Supabase on every change (Debounced)
   useEffect(() => {
-    if (!activeStoreId) return;
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    const prefix = `v_${storeKey}_${cashierId}`;
     
-    // Save locally as fallback
-    localStorage.setItem('v_products', JSON.stringify(products));
-    localStorage.setItem('v_transactions', JSON.stringify(transactions));
-    localStorage.setItem('v_notifications', JSON.stringify(notifications));
-    localStorage.setItem('v_handovers', JSON.stringify(shiftHandovers));
-    localStorage.setItem('v_detailed_handovers', JSON.stringify(detailedHandovers));
+    // Save locally per-store & per-cashier
+    localStorage.setItem(`${prefix}_products`, JSON.stringify(products));
+    localStorage.setItem(`${prefix}_transactions`, JSON.stringify(transactions));
+    localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
+    localStorage.setItem(`${prefix}_handovers`, JSON.stringify(shiftHandovers));
+    localStorage.setItem(`${prefix}_detailed_handovers`, JSON.stringify(detailedHandovers));
 
-    // Debounced save to Supabase to prevent spamming the database
+    if (!activeStoreId) return;
+
+    // Debounced save to Supabase
     const timeout = setTimeout(() => {
-      const voucher_app_data = {
-        products,
-        transactions,
-        notifications,
-        handovers: shiftHandovers,
-        detailedHandovers
-      };
-      
-      supabase.from('store_settings').upsert({
-        store_id: activeStoreId,
-        voucher_app_data
-      }, { onConflict: 'store_id' }).then(({ error }) => {
-        if (error) console.error("Error syncing voucher app data to supabase", error);
+      // Fetch existing cloud data first so we don't overwrite other cashiers' data
+      supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+        const existingData = data?.voucher_app_data || {};
+        
+        const newData = {
+          ...existingData,
+          [cashierId]: {
+            products,
+            transactions,
+            notifications,
+            handovers: shiftHandovers,
+            detailedHandovers
+          }
+        };
+        
+        supabase.from('store_settings').upsert({
+          store_id: activeStoreId,
+          voucher_app_data: newData
+        }, { onConflict: 'store_id' }).then(({ error }) => {
+          if (error) console.error("Error syncing voucher app data to supabase", error);
+        });
       });
-    }, 2000);
+    }, 2500);
     
     return () => clearTimeout(timeout);
-  }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId]);
+  }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex]);
 
   // Watch for day change while app is open
   useEffect(() => {
@@ -747,7 +764,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     );
 
     setActiveCashierIndex(newIndex);
-    localStorage.setItem('v_cashier_idx', newIndex.toString());
+    const storeKey = activeStoreId || 'default';
+    localStorage.setItem(`v_${storeKey}_cashier_idx`, newIndex.toString());
     
     setShiftHandovers(updatedHandovers);
     setTransactions(updatedTrx);
@@ -805,12 +823,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setShiftHandovers([]);
     setActiveCashierIndex(0);
     
-    localStorage.removeItem('v_products');
-    localStorage.removeItem('v_transactions');
-    localStorage.removeItem('v_notifications');
-    localStorage.removeItem('v_handovers');
-    localStorage.removeItem('v_cashier_idx');
-    localStorage.setItem('v_cashier_idx', '0');
+    const storeKey = activeStoreId || 'default';
+    localStorage.removeItem(`v_${storeKey}_c1_products`);
+    localStorage.removeItem(`v_${storeKey}_c1_transactions`);
+    localStorage.removeItem(`v_${storeKey}_c1_notifications`);
+    localStorage.removeItem(`v_${storeKey}_c1_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c1_detailed_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c2_products`);
+    localStorage.removeItem(`v_${storeKey}_c2_transactions`);
+    localStorage.removeItem(`v_${storeKey}_c2_notifications`);
+    localStorage.removeItem(`v_${storeKey}_c2_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c2_detailed_handovers`);
+    localStorage.removeItem(`v_${storeKey}_cashier_idx`);
+    localStorage.setItem(`v_${storeKey}_cashier_idx`, '0');
 
     // Also clear from Supabase if online
     if (activeStoreId) {
@@ -1336,12 +1361,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             const selectedProduct = products.find(p => p.id === activeSelectedId) || null;
 
             return (
-              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-end justify-center p-3" id="quick-sale-modal">
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3" id="quick-sale-modal">
                 <motion.div 
-                  initial={{ y: 150, opacity: 0 }}
+                  initial={{ y: 50, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 150, opacity: 0 }}
-                  className={`w-full rounded-3xl p-5 shadow-2xl relative space-y-3 text-xs max-h-[90vh] overflow-y-auto border ${
+                  exit={{ y: 50, opacity: 0 }}
+                  className={`w-full rounded-3xl p-4 shadow-2xl relative space-y-2 text-xs max-h-[88vh] overflow-y-auto border ${
                     isLight 
                       ? 'bg-white border-slate-200 text-slate-900' 
                       : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 border-slate-200 dark:border-white/15 text-slate-900 dark:text-white'
@@ -1368,159 +1393,139 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     className="space-y-3"
                   >
                     {/* Filter Operator & Kolom Cari */}
-                    <div className="space-y-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 flex items-center gap-1.5 ml-0.5 mb-1">
-                          Filter Provider
-                        </label>
-                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar -mx-0.5 px-0.5" id="sale-provider-filter">
-                          {OPERATOR_CHIPS.map((chip) => {
-                            const isSelected = saleSelectedOperator === chip.opValue;
-                            const opName = chip.opValue === 'TELKOMSEL' ? 'Telkomsel' : chip.opValue.charAt(0) + chip.opValue.slice(1).toLowerCase();
-                            const opStyle = OPERATOR_STYLES[opName] || { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-200 dark:border-white/10', logoBg: 'bg-slate-500' };
-                            
-                            return (
-                              <button
-                                key={chip.id}
-                                type="button"
-                                onClick={() => setSaleSelectedOperator(chip.opValue)}
-                                className={`flex flex-col items-center gap-1.5 p-1.5 rounded-2xl min-w-[56px] transition-all border ${
-                                  isSelected
-                                    ? `bg-slate-100 dark:bg-white/10 ${opStyle.border} shadow-lg ring-1 ring-white/10 scale-105`
-                                    : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 hover:border-indigo-400 hover:shadow-md'
-                                }`}
-                              >
-                                <div className={`w-8 h-8 rounded-xl ${opStyle.bg} border ${opStyle.border} flex items-center justify-center overflow-hidden shadow-inner`}>
-                                  <div className={`w-full h-full ${opStyle.logoBg} flex items-center justify-center font-black text-[10px] text-slate-900 dark:text-white`}>
-                                    {chip.label.substring(0, 3)}
-                                  </div>
-                                </div>
-                                <span className={`text-[8px] font-black uppercase tracking-tighter ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
-                                  {chip.label}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                    <div className="space-y-1.5">
+                      {/* Provider chips - compact horizontal scroll */}
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" id="sale-provider-filter">
+                        {OPERATOR_CHIPS.map((chip) => {
+                          const isSelected = saleSelectedOperator === chip.opValue;
+                          const opName = chip.opValue === 'TELKOMSEL' ? 'Telkomsel' : chip.opValue.charAt(0) + chip.opValue.slice(1).toLowerCase();
+                          const opStyle = OPERATOR_STYLES[opName] || { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-200 dark:border-white/10', logoBg: 'bg-slate-500' };
+                          return (
+                            <button
+                              key={chip.id}
+                              type="button"
+                              onClick={() => setSaleSelectedOperator(chip.opValue)}
+                              className={`flex items-center gap-1 px-2 py-1 rounded-xl text-[9px] font-black whitespace-nowrap transition-all border ${
+                                isSelected
+                                  ? `bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-sm`
+                                  : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-emerald-400'
+                              }`}
+                            >
+                              <span className={`text-[8px] font-black uppercase ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>{chip.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                            <Search className="w-3.5 h-3.5 text-emerald-500 font-black dark:text-emerald-400" />
-                            Cari & Pilih Voucher
-                          </label>
-                          {(saleSearchQuery || saleSelectedOperator !== 'SEMUA') && (
-                            <span className="text-[9px] font-bold text-emerald-500 font-black dark:text-emerald-400">
-                              {filteredSaleProducts.length} hasil
-                            </span>
-                          )}
+                      {/* Search input — label as placeholder */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={saleSearchQuery}
+                          onChange={(e) => setSaleSearchQuery(e.target.value)}
+                          placeholder="🔍 Cari & Pilih Voucher..."
+                          className={`w-full border rounded-xl pl-9 pr-16 py-2 text-xs focus:outline-none transition shadow-inner ${
+                            isLight 
+                              ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-500 focus:border-emerald-500' 
+                              : 'bg-white border-slate-200 dark:bg-slate-950 dark:border-white/15 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 focus:border-emerald-500'
+                          }`}
+                          autoFocus={false}
+                        />
+                        {(saleSearchQuery || saleSelectedOperator !== 'SEMUA') && (
+                          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[9px] font-bold text-emerald-500 dark:text-emerald-400 pointer-events-none">
+                            {filteredSaleProducts.length}
+                          </span>
+                        )}
+                        {saleSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSaleSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                         </div>
 
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={saleSearchQuery}
-                            onChange={(e) => setSaleSearchQuery(e.target.value)}
-                            placeholder="Ketik nama produk untuk mencari..."
-                            className={`w-full border rounded-xl pl-9 pr-8 py-2 text-xs focus:outline-none transition shadow-inner ${
-                              isLight 
-                                ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-600 dark:text-slate-400 focus:border-emerald-500' 
-                                : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-white/15 text-slate-900 dark:text-white placeholder:text-slate-600 dark:text-slate-400 focus:border-emerald-500'
-                            }`}
-                            autoFocus={false}
-                          />
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 dark:text-slate-400 pointer-events-none" />
-                          {saleSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setSaleSearchQuery('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white p-1"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Filtered Result Product List */}
-                        <div className={`max-h-36 overflow-y-auto space-y-1 rounded-xl border p-1.5 no-scrollbar ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border-slate-200 dark:border-white/10'}`}>
-                          {filteredSaleProducts.length === 0 ? (
-                            <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
-                              {saleSelectedOperator !== 'SEMUA' 
-                                ? `Tidak ada voucher ${saleSelectedOperator} yang cocok`
-                                : `Tidak ada voucher yang cocok dengan "${saleSearchQuery}"`
-                              }
-                            </div>
-                          ) : (
-                            filteredSaleProducts.map((p) => {
-                              const isSelected = activeSelectedId === p.id;
-                              const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
-                              return (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => setFormProductId(p.id)}
-                                  className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-emerald-500/20 border-emerald-500 text-slate-900 dark:text-white shadow-sm' 
-                                      : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} ${isLight ? 'bg-slate-100' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900'} shrink-0`}>
-                                      {p.operator}
-                                    </span>
-                                    <div className="min-w-0">
-                                      <p className={`text-[11px] font-bold ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'} truncate leading-tight`}>{p.name}</p>
-                                      <p className={`text-[9px] ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'} mt-0.5`}>
-                                        Stok: <span className={p.currentStock <= p.minStockLevel ? 'text-amber-500 font-black dark:text-amber-400 font-bold' : 'text-slate-600 dark:text-slate-300'}>{p.currentStock} pcs</span>
-                                      </p>
-                                    </div>
+                      {/* Filtered Result Product List */}
+                      <div className={`max-h-28 overflow-y-auto space-y-1 rounded-xl border p-1 no-scrollbar ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border-slate-200 dark:border-white/10'}`}>
+                        {filteredSaleProducts.length === 0 ? (
+                          <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
+                            {saleSelectedOperator !== 'SEMUA' 
+                              ? `Tidak ada voucher ${saleSelectedOperator} yang cocok`
+                              : `Tidak ada voucher yang cocok dengan "${saleSearchQuery}"`
+                            }
+                          </div>
+                        ) : (
+                          filteredSaleProducts.map((p) => {
+                            const isSelected = activeSelectedId === p.id;
+                            const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setFormProductId(p.id)}
+                                className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-emerald-500/20 border-emerald-500 text-slate-900 dark:text-white shadow-sm' 
+                                    : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} ${isLight ? 'bg-slate-100' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900'} shrink-0`}>
+                                    {p.operator}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className={`text-[11px] font-bold ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'} truncate leading-tight`}>{p.name}</p>
+                                    <p className={`text-[9px] ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'} mt-0.5`}>
+                                      Stok: <span className={p.currentStock <= p.minStockLevel ? 'text-amber-500 font-black dark:text-amber-400 font-bold' : 'text-slate-600 dark:text-slate-300'}>{p.currentStock} pcs</span>
+                                    </p>
                                   </div>
-                                  <div className="text-right shrink-0 ml-2">
-                                    <span className={`text-[11px] font-extrabold ${isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400'} block`}>
-                                      Rp {p.sellingPrice.toLocaleString('id-ID')}
-                                    </span>
-                                    {isSelected && (
-                                      <span className={`text-[8px] font-bold ${isLight ? 'text-emerald-700 bg-emerald-100' : 'text-emerald-300 bg-emerald-500/30'} px-1 rounded uppercase`}>Dipilih</span>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
+                                </div>
+                                <div className="text-right shrink-0 ml-2">
+                                  <span className={`text-[11px] font-extrabold ${isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400'} block`}>
+                                    Rp {p.sellingPrice.toLocaleString('id-ID')}
+                                  </span>
+                                  {isSelected && (
+                                    <span className={`text-[8px] font-bold ${isLight ? 'text-emerald-700 bg-emerald-100' : 'text-emerald-300 bg-emerald-500/30'} px-1 rounded uppercase`}>Dipilih</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
 
-                    {/* Selected Product Highlight Banner */}
+                    {/* Selected Product Highlight Banner — compact inline */}
                     {selectedProduct && (
                       <motion.div 
                         key={selectedProduct.id}
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        className="bg-amber-400 border-2 border-white shadow-[0_0_20px_rgba(251,191,36,0.4)] rounded-2xl p-3 flex items-center justify-between"
+                        className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between"
                       >
-                        <div>
-                          <span className="text-[10px] uppercase font-black text-amber-950 flex items-center gap-1">
-                            <ArrowUpRight className="w-3 h-3" />
-                            Voucher Terpilih:
+                        <div className="min-w-0">
+                          <span className="text-[9px] uppercase font-black text-amber-950 flex items-center gap-0.5">
+                            <ArrowUpRight className="w-3 h-3 shrink-0" />
+                            Dipilih:
                           </span>
-                          <h4 className="text-[13px] font-black text-black leading-tight">{selectedProduct.name}</h4>
+                          <h4 className="text-[12px] font-black text-black leading-tight truncate">{selectedProduct.name}</h4>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[9px] font-bold text-amber-900 uppercase">Harga Satuan</span>
-                          <p className="text-sm font-black text-amber-950">
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-[8px] font-bold text-amber-900 uppercase">Harga</span>
+                          <p className="text-xs font-black text-amber-950">
                             Rp {selectedProduct.sellingPrice.toLocaleString('id-ID')}
                           </p>
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Quantity Field with Quick Steppers */}
-                    <div className="space-y-2">
+                    {/* Quantity Field with Quick Steppers — compact */}
+                    <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <label className={`text-xs font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>Jumlah Jual (Pcs)</label>
+                        <label className={`text-[10px] font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>Jumlah Jual (Pcs)</label>
                         <div className="flex gap-1">
                           {[1, 2, 5, 10].map((qty) => (
                             <button
@@ -1529,8 +1534,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                               onClick={() => setFormQuantity(qty)}
                               className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition border ${
                                 formQuantity === qty 
-                                  ? 'bg-emerald-600 text-slate-900 dark:text-white border-emerald-500' 
-                                  : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
+                                  ? 'bg-emerald-600 text-white border-emerald-500' 
+                                  : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
                               }`}
                             >
                               +{qty}
@@ -1538,14 +1543,13 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           ))}
                         </div>
                       </div>
-                      
                       <div className="flex items-center">
                         <button
                           type="button"
                           onClick={() => setFormQuantity(Math.max(1, formQuantity - 1))}
-                          className={`w-12 h-12 flex items-center justify-center rounded-l-xl border-y border-l transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-white border-slate-200 shadow-sm dark:bg-slate-800'}`}
+                          className={`w-10 h-10 flex items-center justify-center rounded-l-xl border-y border-l transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-800 dark:hover:bg-slate-800'}`}
                         >
-                          <Minus className="w-5 h-5" />
+                          <Minus className="w-4 h-4" />
                         </button>
                         <input
                           type="number"
@@ -1554,63 +1558,61 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           required
                           value={formQuantity}
                           onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                          className={`flex-1 w-full border-y px-4 py-3 font-black text-xl text-center focus:outline-none focus:border-emerald-500 transition appearance-none ${isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'}`}
+                          className={`flex-1 w-full border-y px-4 py-2.5 font-black text-lg text-center focus:outline-none focus:border-emerald-500 transition appearance-none ${isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'}`}
                           style={{ MozAppearance: 'textfield' }}
                         />
                         <button
                           type="button"
                           onClick={() => setFormQuantity(Math.min(selectedProduct?.currentStock || 1, formQuantity + 1))}
-                          className={`w-12 h-12 flex items-center justify-center rounded-r-xl border-y border-r transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-white border-slate-200 shadow-sm dark:bg-slate-800'}`}
+                          className={`w-10 h-10 flex items-center justify-center rounded-r-xl border-y border-r transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-800 dark:hover:bg-slate-800'}`}
                         >
-                          <Plus className="w-5 h-5" />
+                          <Plus className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Payment Method & Optional Note */}
-                    <div className="space-y-2 pt-1">
-                      <label className="text-xs font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
-                      <div className="grid grid-cols-2 gap-2">
+                    {/* Payment Method & Optional Note — compact */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
+                      <div className="grid grid-cols-2 gap-1.5">
                         <button
                           type="button"
                           onClick={() => setFormPaymentMethod('TUNAI')}
-                          className={`py-3 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-2 ${
+                          className={`py-2 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
                             formPaymentMethod === 'TUNAI'
-                              ? 'bg-emerald-500 border-emerald-400 text-slate-900 dark:text-white shadow-lg shadow-emerald-500/20'
-                              : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
+                              ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20'
+                              : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
                           }`}
                         >
-                          <Banknote className="w-4 h-4" />
-                          TUNAI CASH
+                          <Banknote className="w-3.5 h-3.5" />
+                          TUNAI
                         </button>
                         <button
                           type="button"
                           onClick={() => setFormPaymentMethod('NON_TUNAI')}
-                          className={`py-3 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-2 ${
+                          className={`py-2 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
                             formPaymentMethod === 'NON_TUNAI'
-                              ? 'bg-indigo-500 border-indigo-400 text-slate-900 dark:text-white shadow-lg shadow-indigo-500/20'
-                              : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10'
+                              ? 'bg-indigo-500 border-indigo-400 text-white shadow-lg shadow-indigo-500/20'
+                              : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10'
                           }`}
                         >
-                          <QrCode className="w-4 h-4" />
+                          <QrCode className="w-3.5 h-3.5" />
                           NON TUNAI
                         </button>
                       </div>
-                      <div className="pt-1">
-                        <input
-                          type="text"
-                          placeholder="Keterangan tambahan (Opsional)"
-                          value={formNote}
-                          onChange={(e) => setFormNote(e.target.value)}
-                          className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        placeholder="Keterangan tambahan (Opsional)"
+                        value={formNote}
+                        onChange={(e) => setFormNote(e.target.value)}
+                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
+                      />
                     </div>
 
                     {selectedProduct && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 rounded-xl flex justify-between items-center mt-2">
-                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Total Harga Jual:</span>
-                        <span className="font-black text-emerald-500 font-black dark:text-emerald-400 text-lg">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Total Jual:</span>
+                        <span className="font-black text-emerald-500 dark:text-emerald-400 text-base">
                           Rp {(selectedProduct.sellingPrice * formQuantity).toLocaleString('id-ID')}
                         </span>
                       </div>
@@ -1649,12 +1651,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             const selectedProduct = products.find(p => p.id === activeSelectedId) || null;
 
             return (
-              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-end justify-center p-3" id="quick-restock-modal">
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3" id="quick-restock-modal">
                 <motion.div 
-                  initial={{ y: 150, opacity: 0 }}
+                  initial={{ y: 50, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 150, opacity: 0 }}
-                  className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-white/15 w-full rounded-3xl p-5 shadow-2xl relative space-y-3 text-xs max-h-[90vh] overflow-y-auto"
+                  exit={{ y: 50, opacity: 0 }}
+                  className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-white/15 w-full rounded-3xl p-4 shadow-2xl relative space-y-2 text-xs max-h-[88vh] overflow-y-auto"
                 >
                   <button 
                     onClick={() => setShowQuickRestock(false)}
@@ -1678,142 +1680,130 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     className="space-y-3"
                   >
                     {/* Filter Operator & Kolom Cari */}
-                    <div className="space-y-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-400 flex items-center gap-1.5 ml-0.5">
-                          Filter Operator
-                        </label>
-                        <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar -mx-0.5 px-0.5">
-                          {OPERATOR_CHIPS.map((chip) => (
-                            <button
-                              key={chip.id}
-                              type="button"
-                              onClick={() => setRestockSelectedOperator(chip.opValue)}
-                              className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black whitespace-nowrap transition-all border ${
-                                restockSelectedOperator === chip.opValue
-                                  ? 'bg-indigo-500 border-indigo-400 text-slate-900 dark:text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]'
-                                  : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10'
-                              }`}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                        </div>
+                    <div className="space-y-1.5">
+                      {/* Operator chips - compact pill style */}
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        {OPERATOR_CHIPS.map((chip) => (
+                          <button
+                            key={chip.id}
+                            type="button"
+                            onClick={() => setRestockSelectedOperator(chip.opValue)}
+                            className={`px-2 py-1 rounded-xl text-[9px] font-black whitespace-nowrap transition-all border ${
+                              restockSelectedOperator === chip.opValue
+                                ? 'bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-sm'
+                                : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-indigo-400'
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
                       </div>
 
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-extrabold uppercase text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                            <Search className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                            Cari & Pilih Voucher
-                          </label>
-                          {(restockSearchQuery || restockSelectedOperator !== 'SEMUA') && (
-                            <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
-                              {filteredRestockProducts.length} hasil
-                            </span>
-                          )}
-                        </div>
+                      {/* Search input — label as placeholder */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={restockSearchQuery}
+                          onChange={(e) => setRestockSearchQuery(e.target.value)}
+                          placeholder="🔍 Cari & Pilih Voucher..."
+                          className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/15 focus:border-indigo-500 rounded-xl pl-9 pr-16 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 focus:outline-none transition shadow-inner"
+                          autoFocus={false}
+                        />
+                        {(restockSearchQuery || restockSelectedOperator !== 'SEMUA') && (
+                          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-500 dark:text-indigo-400 pointer-events-none">
+                            {filteredRestockProducts.length}
+                          </span>
+                        )}
+                        {restockSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setRestockSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
 
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={restockSearchQuery}
-                            onChange={(e) => setRestockSearchQuery(e.target.value)}
-                            placeholder="Ketik nama produk untuk mencari..."
-                            className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/15 focus:border-indigo-500 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-600 dark:text-slate-400 focus:outline-none transition shadow-inner"
-                            autoFocus={false}
-                          />
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 dark:text-slate-400 pointer-events-none" />
-                          {restockSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setRestockSearchQuery('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white p-1"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Filtered Result Product List */}
-                        <div className="max-h-36 overflow-y-auto space-y-1 rounded-xl bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border border-slate-200 dark:border-white/10 p-1.5 no-scrollbar">
-                          {filteredRestockProducts.length === 0 ? (
-                            <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
-                              {restockSelectedOperator !== 'SEMUA' 
-                                ? `Tidak ada voucher ${restockSelectedOperator} yang cocok`
-                                : `Tidak ada voucher yang cocok dengan "${restockSearchQuery}"`
-                              }
-                            </div>
-                          ) : (
-                            filteredRestockProducts.map((p) => {
-                              const isSelected = activeSelectedId === p.id;
-                              const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
-                              return (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => setFormProductId(p.id)}
-                                  className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-indigo-500/20 border-indigo-500 text-slate-900 dark:text-white shadow-sm' 
-                                      : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} bg-white border-slate-200 shadow-sm dark:bg-slate-900 shrink-0`}>
-                                      {p.operator}
-                                    </span>
-                                    <div className="min-w-0">
-                                      <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
-                                      <p className="text-[9px] text-slate-600 dark:text-slate-400 mt-0.5">
-                                        Stok saat ini: <span className="text-slate-800 dark:text-slate-300 font-bold">{p.currentStock} pcs</span>
-                                      </p>
-                                    </div>
+                      {/* Filtered Result Product List */}
+                      <div className="max-h-28 overflow-y-auto space-y-1 rounded-xl bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border border-slate-200 dark:border-white/10 p-1 no-scrollbar">
+                        {filteredRestockProducts.length === 0 ? (
+                          <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
+                            {restockSelectedOperator !== 'SEMUA' 
+                              ? `Tidak ada voucher ${restockSelectedOperator} yang cocok`
+                              : `Tidak ada voucher yang cocok dengan "${restockSearchQuery}"`
+                            }
+                          </div>
+                        ) : (
+                          filteredRestockProducts.map((p) => {
+                            const isSelected = activeSelectedId === p.id;
+                            const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setFormProductId(p.id)}
+                                className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-indigo-500/20 border-indigo-500 text-slate-900 dark:text-white shadow-sm' 
+                                    : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} bg-white border-slate-200 shadow-sm dark:bg-slate-900 shrink-0`}>
+                                    {p.operator}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
+                                    <p className="text-[9px] text-slate-600 dark:text-slate-400 mt-0.5">
+                                      Stok saat ini: <span className="text-slate-800 dark:text-slate-300 font-bold">{p.currentStock} pcs</span>
+                                    </p>
                                   </div>
-                                  <div className="text-right shrink-0 ml-2">
-                                    <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 block">
-                                      Rp {p.costPrice.toLocaleString('id-ID')}
-                                    </span>
-                                    {isSelected && (
-                                      <span className="text-[8px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/30 px-1 rounded uppercase">Dipilih</span>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
+                                </div>
+                                <div className="text-right shrink-0 ml-2">
+                                  <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 block">
+                                    Rp {p.costPrice.toLocaleString('id-ID')}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[8px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/30 px-1 rounded uppercase">Dipilih</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
 
-                    {/* Selected Product Highlight Banner */}
+                    {/* Selected Product Highlight Banner — compact */}
                     {selectedProduct && (
                       <motion.div 
                         key={selectedProduct.id}
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        className="bg-amber-400 border-2 border-white shadow-[0_0_20px_rgba(251,191,36,0.4)] rounded-2xl p-3 flex items-center justify-between"
+                        className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between"
                       >
-                        <div>
-                          <span className="text-[10px] uppercase font-black text-amber-950 flex items-center gap-1">
-                            <ArrowDownLeft className="w-3 h-3" />
-                            Voucher Terpilih:
+                        <div className="min-w-0">
+                          <span className="text-[9px] uppercase font-black text-amber-950 flex items-center gap-0.5">
+                            <ArrowDownLeft className="w-3 h-3 shrink-0" />
+                            Dipilih:
                           </span>
-                          <h4 className="text-[13px] font-black text-black leading-tight">{selectedProduct.name}</h4>
+                          <h4 className="text-[12px] font-black text-black leading-tight truncate">{selectedProduct.name}</h4>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[9px] font-bold text-amber-900 uppercase">Harga Modal</span>
-                          <p className="text-sm font-black text-amber-950">
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-[8px] font-bold text-amber-900 uppercase">Modal</span>
+                          <p className="text-xs font-black text-amber-950">
                             Rp {selectedProduct.costPrice.toLocaleString('id-ID')}
                           </p>
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Quantity Field with Quick Steppers */}
-                    <div className="space-y-2">
+                    {/* Quantity Field with Quick Steppers — compact */}
+                    <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Jumlah Voucher Masuk (Pcs)</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Jumlah Masuk (Pcs)</label>
                         <div className="flex gap-1">
                           {[1, 5, 10, 20].map((qty) => (
                             <button
@@ -1823,7 +1813,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                               className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition border ${
                                 formQuantity === qty 
                                   ? 'bg-indigo-600 text-white border-indigo-500' 
-                                  : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'
+                                  : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'
                               }`}
                             >
                               +{qty}
@@ -1831,28 +1821,28 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           ))}
                         </div>
                       </div>
-                      {/* Stepper Row: number left, buttons right */}
-                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2">
+                      {/* Stepper Row */}
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5">
                         <input
                           type="number"
                           min="1"
                           required
                           value={formQuantity}
                           onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                          className="w-20 bg-transparent border-none text-slate-900 dark:text-white text-xl font-black focus:outline-none"
+                          className="w-20 bg-transparent border-none text-slate-900 dark:text-white text-lg font-black focus:outline-none"
                         />
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setFormQuantity(q => Math.max(1, q - 1))}
-                            className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95"
+                            className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-base hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95"
                           >
                             −
                           </button>
                           <button
                             type="button"
                             onClick={() => setFormQuantity(q => q + 1)}
-                            className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-lg hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95"
+                            className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-base hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95"
                           >
                             +
                           </button>
@@ -1860,22 +1850,21 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       </div>
                     </div>
 
-
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Supplier / Catatan Restock</label>
+                      <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Supplier / Catatan</label>
                       <input
                         type="text"
                         placeholder="Contoh: PT. Sumber Voucher, Sales Distributor"
                         value={formNote}
                         onChange={(e) => setFormNote(e.target.value)}
-                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
                       />
                     </div>
 
                     {selectedProduct && (
-                      <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-xl flex justify-between items-center">
-                        <span className="font-bold text-slate-600 dark:text-slate-300">Total Harga Modal:</span>
-                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                      <div className="bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl flex justify-between items-center">
+                        <span className="font-bold text-slate-600 dark:text-slate-300 text-[10px]">Total Modal:</span>
+                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-base">
                           Rp {(selectedProduct.costPrice * formQuantity).toLocaleString('id-ID')}
                         </span>
                       </div>
