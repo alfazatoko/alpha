@@ -14,6 +14,8 @@ interface VoucherViewProps {
   googleUid?: string
   currentUsername?: string
   kasirList?: Record<string, { name?: string; role?: string; pin?: string }>
+  externalSearchQuery?: string
+  externalTab?: string
 }
 
 export const VoucherView: React.FC<VoucherViewProps> = (props) => {
@@ -28,6 +30,9 @@ export const VoucherView: React.FC<VoucherViewProps> = (props) => {
         externalCashierName={props.kasirName} 
         activeStoreId={props.activeStoreId}
         googleUid={props.googleUid}
+        kasirList={props.kasirList}
+        externalSearchQuery={props.externalSearchQuery}
+        externalTab={props.externalTab}
       />
     </div>
   )

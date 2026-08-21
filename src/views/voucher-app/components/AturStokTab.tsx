@@ -43,6 +43,8 @@ interface AturStokTabProps {
   products: VoucherProduct[];
   activeCashier: Cashier;
   nextCashier: Cashier;
+  allCashiers?: Cashier[];
+  sessionKey: string; // key unik per kasir+toko untuk localStorage
   transactions: Transaction[];
   userRole: UserRole;
   theme?: 'dark' | 'light';
@@ -124,6 +126,8 @@ export default function AturStokTab({
   products,
   activeCashier,
   nextCashier,
+  allCashiers,
+  sessionKey,
   transactions,
   userRole,
   theme = 'dark',
@@ -134,12 +138,57 @@ export default function AturStokTab({
   onBackToDashboard
 }: AturStokTabProps) {
 
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
-  const [items, setItems] = useState<StockAuditItem[]>([]);
-  const [isInitialLocked, setIsInitialLocked] = useState(false);
+  // ─── SESSION PERSISTENCE KEY ───────────────────────────────────────────────
+  // Dibaca satu kali saat mount; fallback ke key generik jika prop belum ada
+  const SK = sessionKey || `audit_session_default`;
+
+  // ─── LOAD SESSION DARI LOCALSTORAGE (sekali saat mount) ────────────────────
+  const loadedSession = (() => {
+    try {
+      const raw = localStorage.getItem(SK);
+      if (!raw) return null;
+      return JSON.parse(raw) as {
+        currentStep: 1 | 2 | 3 | 4;
+        items: StockAuditItem[];
+        isInitialLocked: boolean;
+        showIncomingStock: boolean;
+        showStatusColumn: boolean;
+        cashPhysical: string;
+        catatanSelisih: string;
+        selectedToCashierId: string;
+        sessionStartedAt: string;
+      };
+    } catch { return null; }
+  })();
+
+  const [isRestoredSession] = useState(!!loadedSession);
+
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(loadedSession?.currentStep ?? 1);
+  const [items, setItems] = useState<StockAuditItem[]>(loadedSession?.items ?? []);
+  const [isInitialLocked, setIsInitialLocked] = useState(loadedSession?.isInitialLocked ?? false);
   const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
-  const [showIncomingStock, setShowIncomingStock] = useState(false);
-  const [showStatusColumn, setShowStatusColumn] = useState(false);
+  const [showIncomingStock, setShowIncomingStock] = useState(loadedSession?.showIncomingStock ?? false);
+  const [showStatusColumn, setShowStatusColumn] = useState(loadedSession?.showStatusColumn ?? false);
+  const [selectedOperator, setSelectedOperator] = useState<string>('SEMUA');
+
+  const filteredItems = useMemo(() => {
+    if (selectedOperator === 'SEMUA') return items;
+    return items.filter(item => {
+      const brand = item.productName.split(' ')[0].toLowerCase();
+      const op = selectedOperator.toLowerCase();
+      
+      if (op === 'indosat' || op === 'im3') {
+        return brand.includes('indosat') || brand.includes('im3') || brand.includes('isat');
+      }
+      if (op === 'tsel' || op === 'telkomsel') {
+        return brand.includes('telkomsel') || brand.includes('tsel');
+      }
+      if (op === 'three' || op === '3') {
+        return brand.includes('three') || brand.includes('3');
+      }
+      return brand.includes(op);
+    });
+  }, [items, selectedOperator]);
 
   // Global Keyboard Shortcuts for Edit Modal
   useEffect(() => {
@@ -155,35 +204,65 @@ export default function AturStokTab({
         return;
       }
       
-      const currentIdx = items.findIndex(i => i.productId === activeEditingRow.productId);
+      const currentIdx = filteredItems.findIndex(i => i.productId === activeEditingRow.productId);
       const hasPrev = currentIdx > 0;
-      const hasNext = currentIdx < items.length - 1;
+      const hasNext = currentIdx < filteredItems.length - 1;
 
       if (e.key === 'Enter') {
         e.preventDefault();
         setActiveEditingRow(prev => ({ ...prev, productId: null }));
       } else if (e.key === 'ArrowLeft' && hasPrev) {
         e.preventDefault();
-        setActiveEditingRow(prev => ({ ...prev, productId: items[currentIdx - 1].productId }));
+        setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx - 1].productId }));
       } else if (e.key === 'ArrowRight' && hasNext) {
         e.preventDefault();
-        setActiveEditingRow(prev => ({ ...prev, productId: items[currentIdx + 1].productId }));
+        setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx + 1].productId }));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeEditingRow, items]);
+  }, [activeEditingRow, filteredItems]);
 
   // Step 3 Cash States
-  const [cashPhysical, setCashPhysical] = useState('');
-  const [catatanSelisih, setCatatanSelisih] = useState('');
+  const [cashPhysical, setCashPhysical] = useState(loadedSession?.cashPhysical ?? '');
+  const [catatanSelisih, setCatatanSelisih] = useState(loadedSession?.catatanSelisih ?? '');
   const [isHandoverSuccess, setIsHandoverSuccess] = useState(false);
+
+  // Kasir penerima serah terima (bisa dipilih dari daftar)
+  const [selectedToCashierId, setSelectedToCashierId] = useState<string>(loadedSession?.selectedToCashierId ?? nextCashier.id);
+
+  // Daftar kasir yang bisa dipilih (semua kecuali kasir aktif)
+  const availableToCashiers = (allCashiers || [nextCashier]).filter(c => c.id !== activeCashier.id);
+  const selectedToCashier = availableToCashiers.find(c => c.id === selectedToCashierId) || nextCashier;
 
   const isLight = theme === 'light';
 
-  // Initialize items from products
+  // ─── AUTO-SAVE SESI KE LOCALSTORAGE ────────────────────────────────────────
+  // Simpan setiap kali ada perubahan state penting.
+  // isHandoverSuccess dikecualikan — sesi hanya dihapus saat selesai.
   useEffect(() => {
+    if (isHandoverSuccess) return; // Jangan simpan state "sudah selesai"
+    const session = {
+      currentStep,
+      items,
+      isInitialLocked,
+      showIncomingStock,
+      showStatusColumn,
+      cashPhysical,
+      catatanSelisih,
+      selectedToCashierId,
+      sessionStartedAt: loadedSession?.sessionStartedAt ?? new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(SK, JSON.stringify(session));
+    } catch { /* storage penuh atau private mode */ }
+  }, [currentStep, items, isInitialLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess]);
+
+
+  // Initialize items from products — hanya jika TIDAK ada sesi yang di-restore
+  useEffect(() => {
+    if (isRestoredSession) return; // Sesi lama sudah di-load, jangan overwrite
     if (items.length === 0 && products.length > 0) {
       const initialItems = products.map(p => ({
         productId: p.id,
@@ -197,7 +276,7 @@ export default function AturStokTab({
       }));
       setItems(initialItems);
     }
-  }, [products]);
+  }, [products, isRestoredSession]);
 
   // Find current shift transactions
   const currentShiftTransactions = useMemo(() => {
@@ -343,6 +422,8 @@ export default function AturStokTab({
   };
 
   const handleCompleteHandover = () => {
+    // Hapus sesi dari localStorage — serah terima sudah selesai
+    try { localStorage.removeItem(SK); } catch { }
     setIsHandoverSuccess(true);
     onRecordHandover({
       initialStock: totalInitialStock,
@@ -356,6 +437,8 @@ export default function AturStokTab({
       cashPhysical: physicalCashValue,
       cashDiff: cashDifference,
       note: catatanSelisih,
+      toCashierId: selectedToCashier.id,
+      toCashierName: selectedToCashier.name,
       items: items.map(i => ({
         productId: i.productId,
         name: i.productName,
@@ -369,6 +452,7 @@ export default function AturStokTab({
   };
 
   const handleFinishAndSwitch = () => {
+    try { localStorage.removeItem(SK); } catch { }
     onSwitchCashier();
     onBackToDashboard();
   };
@@ -376,6 +460,42 @@ export default function AturStokTab({
   return (
     <div className={`w-full space-y-3 font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-700 dark:text-slate-200'}`} id="atur-stok-container">
       
+      {/* BANNER: Sesi Dilanjutkan (jika restore dari localStorage) */}
+      {isRestoredSession && !isHandoverSuccess && (
+        <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${
+          isLight
+            ? 'bg-amber-50 border-amber-300 text-amber-800'
+            : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+        }`}>
+          <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Melanjutkan Sesi Sebelumnya</p>
+            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
+              Step {currentStep}/4 tersimpan
+              {loadedSession?.sessionStartedAt ? ` · Dimulai ${new Date(loadedSession.sessionStartedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Reset dan mulai audit baru dari awal?')) {
+                try { localStorage.removeItem(SK); } catch { }
+                window.location.reload();
+              }
+            }}
+            className={`text-[9px] font-black px-2 py-1 rounded-lg border cursor-pointer transition ${
+              isLight ? 'border-amber-400 text-amber-700 hover:bg-amber-100' : 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'
+            }`}
+          >
+            Reset
+          </button>
+        </div>
+      )}
+
       {/* 1. TOP CARD: KELOLA STOK & TUTUP SHIFT */}
       <div className={`rounded-xl p-3 shadow-xs relative overflow-hidden border ${
         isLight 
@@ -387,6 +507,7 @@ export default function AturStokTab({
         )}
         
         <div className="flex items-center justify-between gap-2 relative z-10">
+          {/* Kiri: Icon + judul + badge role */}
           <div className="flex items-center gap-2.5">
             <div className={`w-10 h-10 rounded-xl p-[1px] shadow-xs shrink-0 ${
               isLight 
@@ -415,19 +536,45 @@ export default function AturStokTab({
             </div>
           </div>
           
-          <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1 border ${
+          {/* Kanan: Kasir Aktif → Penerima */}
+          <div className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 border ${
             isLight 
               ? 'bg-slate-50 border-slate-200' 
               : 'bg-slate-50 dark:bg-slate-800/80 border-blue-500/15'
           }`}>
-            <div className="flex flex-col text-right">
-              <span className={`text-[8px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Kasir Aktif</span>
-              <span className={`text-[11px] font-bold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{activeCashier.name}</span>
+            {/* Kasir Aktif */}
+            <div className="flex flex-col items-center gap-0.5">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black border ${
+                isLight ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-blue-600/30 border-blue-500/40 text-blue-300'
+              }`}>
+                {activeCashier.name.charAt(0).toUpperCase()}
+              </div>
+              <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Aktif</span>
+              <span className={`text-[9px] font-black leading-none max-w-[52px] truncate text-center ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>{activeCashier.name}</span>
             </div>
-            <div className={`w-[1px] h-5 ${isLight ? 'bg-slate-200' : 'bg-slate-700/50'}`} />
-            <div className="flex flex-col">
-              <span className={`text-[8px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Penerima</span>
-              <span className={`text-[11px] font-bold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{nextCashier.name}</span>
+
+            {/* Arrow */}
+            <svg className={`w-3 h-3 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+
+            {/* Kasir Penerima */}
+            <div className="flex flex-col items-center gap-0.5">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black border ${
+                currentStep >= 4
+                  ? (isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/40 text-emerald-300')
+                  : (isLight ? 'bg-slate-100 border-slate-300 text-slate-500' : 'bg-slate-700 border-slate-600 text-slate-400')
+              }`}>
+                {currentStep >= 4 ? selectedToCashier.name.charAt(0).toUpperCase() : '?'}
+              </div>
+              <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Penerima</span>
+              <span className={`text-[9px] font-black leading-none max-w-[52px] truncate text-center ${
+                currentStep >= 4
+                  ? (isLight ? 'text-emerald-700' : 'text-emerald-400')
+                  : (isLight ? 'text-slate-400' : 'text-slate-500')
+              }`}>
+                {currentStep >= 4 ? selectedToCashier.name : 'Pilih di\u00a0Step\u00a04'}
+              </span>
             </div>
           </div>
         </div>
@@ -625,6 +772,27 @@ export default function AturStokTab({
             </button>
           </div>
 
+          {/* Operator Filter Chips */}
+          <div className="flex gap-1 overflow-x-auto pb-1.5 pt-1 px-0.5 custom-scrollbar">
+            {['SEMUA', 'AXIS', 'XL', 'TSEL', 'INDOSAT', 'THREE', 'SMARTFREN'].map(op => {
+              const isActive = selectedOperator === op;
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setSelectedOperator(op)}
+                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-850 hover:bg-slate-750 text-slate-300')
+                  }`}
+                >
+                  {op === 'TSEL' ? 'TELKOMSEL' : op === 'THREE' ? '3' : op}
+                </button>
+              );
+            })}
+          </div>
+
           {/* VOUCHER TABLE - STRICTLY 100% FIT IN 1 SCREEN (NO HORIZONTAL SCROLL) */}
           <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
             isLight 
@@ -688,7 +856,7 @@ export default function AturStokTab({
               <tbody className={`text-xs divide-y ${
                 isLight ? 'divide-slate-100 bg-white' : 'divide-blue-900/20'
               }`}>
-                {items.map((item) => {
+                {filteredItems.map((item) => {
                   const expectedInitial = item.previousStock + item.incomingStock;
                   const isMatched = item.initialStock === expectedInitial;
                   const diffWithExpected = item.initialStock - expectedInitial;
@@ -996,6 +1164,27 @@ export default function AturStokTab({
             </div>
           </div>
 
+          {/* Operator Filter Chips */}
+          <div className="flex gap-1 overflow-x-auto pb-1.5 pt-1 px-0.5 custom-scrollbar">
+            {['SEMUA', 'AXIS', 'XL', 'TSEL', 'INDOSAT', 'THREE', 'SMARTFREN'].map(op => {
+              const isActive = selectedOperator === op;
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setSelectedOperator(op)}
+                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-850 hover:bg-slate-750 text-slate-300')
+                  }`}
+                >
+                  {op === 'TSEL' ? 'TELKOMSEL' : op === 'THREE' ? '3' : op}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Table: Strictly 100% Fit in 1 Screen without Horizontal Scroll */}
           <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
             isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-900/40 shadow-md'
@@ -1015,7 +1204,7 @@ export default function AturStokTab({
               <tbody className={`text-xs divide-y ${
                 isLight ? 'divide-slate-100 bg-white' : 'divide-blue-900/20'
               }`}>
-                {items.map((item) => {
+                {filteredItems.map((item) => {
                   const isEditingFinal = activeEditingRow.step === 2 && 
                                          activeEditingRow.type === 'final' && 
                                          activeEditingRow.productId === item.productId;
@@ -1333,7 +1522,7 @@ export default function AturStokTab({
                   Serah Terima Kasir
                 </h3>
                 <p className={`text-xs mt-0.5 leading-snug ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                  Rangkuman pergantian shift antara {activeCashier.name} dan {nextCashier.name}.
+                  Shift {activeCashier.name} selesai — pilih kasir penerima stok.
                 </p>
               </div>
             </div>
@@ -1359,7 +1548,7 @@ export default function AturStokTab({
               isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/20 text-slate-900 dark:text-white'
             }`}>
               <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>2. Uang Tunai Laci</span>
-              <div className={`text-base sm:text-lg font-black font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+              <div className={`text-base sm:text-lg font-black font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-500 dark:text-emerald-400'}`}>
                 Rp{physicalCashValue.toLocaleString('id-ID')}
               </div>
               <div className={`text-xs ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
@@ -1378,33 +1567,92 @@ export default function AturStokTab({
             </div>
           </div>
 
-          {/* Kasir Handover Flow Box */}
+          {/* ===== PILIH KASIR PENERIMA ===== */}
+          <div className={`rounded-xl p-3.5 space-y-2.5 border shadow-xs ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-indigo-500/20'
+          }`}>
+            <div className="flex items-center gap-2">
+              <div className={`w-1.5 h-4 rounded-full ${isLight ? 'bg-indigo-500' : 'bg-indigo-400'}`} />
+              <span className={`text-xs font-black uppercase tracking-wide ${isLight ? 'text-slate-800' : 'text-slate-900 dark:text-white'}`}>
+                Pilih Kasir Penerima
+              </span>
+            </div>
+
+            {availableToCashiers.length === 0 ? (
+              <p className={`text-xs text-center py-2 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Tidak ada kasir lain tersedia.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {availableToCashiers.map((cashier) => {
+                  const isSelected = selectedToCashierId === cashier.id;
+                  return (
+                    <button
+                      key={cashier.id}
+                      type="button"
+                      onClick={() => setSelectedToCashierId(cashier.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer text-left ${
+                        isSelected
+                          ? (isLight ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-emerald-500 bg-emerald-500/10')
+                          : (isLight ? 'border-slate-200 bg-slate-50 hover:border-indigo-300' : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50')
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 border-2 ${
+                        isSelected
+                          ? 'bg-emerald-500 border-emerald-400 text-white'
+                          : (isLight ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300')
+                      }`}>
+                        {cashier.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold truncate ${
+                          isSelected
+                            ? (isLight ? 'text-emerald-800' : 'text-emerald-300')
+                            : (isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white')
+                        }`}>{cashier.name}</p>
+                        <p className={`text-[10px] font-medium ${
+                          isSelected
+                            ? (isLight ? 'text-emerald-600' : 'text-emerald-400')
+                            : (isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400')
+                        }`}>{cashier.role}</p>
+                      </div>
+                      {isSelected && (
+                        <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Flow Arrow Summary */}
           <div className={`rounded-xl p-3 flex items-center justify-between gap-2 text-xs border shadow-xs ${
-            isLight ? 'bg-white border-slate-200' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
+            isLight ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-slate-200' : 'bg-gradient-to-r from-blue-500/5 to-emerald-500/5 border-slate-700'
           }`}>
             <div className="flex items-center gap-2.5">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border ${
-                isLight ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-blue-600/30 border-blue-500/40 text-blue-300'
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
+                isLight ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-blue-600/30 border-blue-500/50 text-blue-300'
               }`}>
                 {activeCashier.name.charAt(0)}
               </div>
               <div>
-                <span className={`text-[8px] font-semibold uppercase block ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Menyerahkan</span>
-                <span className={`font-bold text-xs ${isLight ? 'text-slate-900' : 'text-slate-700 dark:text-slate-200'}`}>{activeCashier.name}</span>
+                <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Menyerahkan</span>
+                <span className={`font-black text-xs ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>{activeCashier.name}</span>
               </div>
             </div>
-
-            <ArrowRight className={`w-4 h-4 ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600'}`} />
-
+            <ArrowRight className={`w-5 h-5 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
             <div className="flex items-center gap-2.5">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border ${
-                isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/40 text-emerald-300'
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
+                isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/50 text-emerald-300'
               }`}>
-                {nextCashier.name.charAt(0)}
+                {selectedToCashier.name.charAt(0)}
               </div>
               <div>
-                <span className={`text-[8px] font-semibold uppercase block ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Menerima</span>
-                <span className={`font-bold text-xs ${isLight ? 'text-slate-900' : 'text-slate-700 dark:text-slate-200'}`}>{nextCashier.name}</span>
+                <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Menerima</span>
+                <span className={`font-black text-xs ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>{selectedToCashier.name}</span>
               </div>
             </div>
           </div>
@@ -1418,8 +1666,8 @@ export default function AturStokTab({
               onClick={() => setCurrentStep(3)}
               className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
                 isLight 
-                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
+                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50' 
+                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200'
               }`}
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Cek Uang
@@ -1428,9 +1676,10 @@ export default function AturStokTab({
             <button
               type="button"
               onClick={handleCompleteHandover}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+              disabled={availableToCashiers.length === 0}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
-              <Handshake className="w-4 h-4" /> Selesaikan & Serahkan Shift
+              <Handshake className="w-4 h-4" /> Serahkan ke {selectedToCashier.name}
             </button>
           </div>
         </motion.div>
@@ -1488,9 +1737,9 @@ export default function AturStokTab({
             {(() => {
               const item = items.find(i => i.productId === activeEditingRow.productId);
               if (!item) return null;
-              const currentIdx = items.findIndex(i => i.productId === activeEditingRow.productId);
+              const currentIdx = filteredItems.findIndex(i => i.productId === activeEditingRow.productId);
               const hasPrev = currentIdx > 0;
-              const hasNext = currentIdx < items.length - 1;
+              const hasNext = currentIdx < filteredItems.length - 1;
               const productDetails = products.find(p => p.id === item.productId);
               const nameParts = item.productName.split(' ');
               const brandTitle = nameParts[0];
@@ -1519,7 +1768,7 @@ export default function AturStokTab({
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         isLight ? 'bg-slate-100 text-slate-700' : 'bg-blue-950 text-blue-300 border border-blue-800/40'
                       }`}>
-                        Item {currentIdx + 1} dari {items.length}
+                        Item {currentIdx + 1} dari {filteredItems.length}
                       </span>
                       <span className={`text-[11px] font-bold ${
                         isStep1 ? (isLight ? 'text-blue-600' : 'text-blue-400') : (isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400')
@@ -1775,7 +2024,7 @@ export default function AturStokTab({
                         disabled={!hasPrev}
                         onClick={() => {
                           if (hasPrev) {
-                            setActiveEditingRow(prev => ({ ...prev, productId: items[currentIdx - 1].productId }));
+                            setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx - 1].productId }));
                           }
                         }}
                         className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition cursor-pointer ${
@@ -1791,7 +2040,7 @@ export default function AturStokTab({
                         disabled={!hasNext}
                         onClick={() => {
                           if (hasNext) {
-                            setActiveEditingRow(prev => ({ ...prev, productId: items[currentIdx + 1].productId }));
+                            setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx + 1].productId }));
                           }
                         }}
                         className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition cursor-pointer ${

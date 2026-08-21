@@ -1750,6 +1750,23 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   </div>
                 ) : (
                   <>
+                    {/* Shortcut to HR & Payroll */}
+                    <button 
+                      onClick={() => props.setActiveView('view-akun-karyawan')}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-2xl flex items-center justify-between shadow-sm active:scale-95 transition-all mb-6"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                          <i className="fa-solid fa-users-gear text-sm"></i>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Manajemen SDM & Gaji Lengkap</p>
+                          <p className="text-[9px] font-bold text-indigo-200 mt-1">Bonus, Riwayat Pembayaran & Foto Profil</p>
+                        </div>
+                      </div>
+                      <i className="fa-solid fa-chevron-right text-xs"></i>
+                    </button>
+
                     {/* Add Kasir Form */}
                     <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                       <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>

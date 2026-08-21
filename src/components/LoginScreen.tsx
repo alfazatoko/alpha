@@ -5,6 +5,14 @@ export interface KasirAccount {
   pin: string
   role: 'owner' | 'kasir'
   name: string
+  alamat?: string
+  tempatLahir?: string
+  tanggalLahir?: string
+  tanggalJoin?: string
+  gajiPokok?: number
+  totalOffBulanIni?: number
+  avatar?: string
+  paymentHistory?: any[]
 }
 
 export const getDefaultKasirAccounts = (): Record<string, KasirAccount> => ({

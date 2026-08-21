@@ -26,6 +26,14 @@ export interface Cashier {
   email: string;
   avatar: string;
   isOnline: boolean;
+  pin?: string;
+  // Profil & HRIS Fields
+  alamat?: string;
+  tempatLahir?: string;
+  tanggalLahir?: string;
+  tanggalJoin?: string;
+  gajiPokok?: number;
+  totalOffBulanIni?: number;
 }
 
 export interface HandoverProductDetail {

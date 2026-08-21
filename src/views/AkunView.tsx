@@ -27,9 +27,93 @@ interface AkunViewProps {
   onConfirm?: (title: string, message: string, onConfirm: () => void) => void
   currentUsername?: string
   kasirList?: Record<string, any>
-  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string }) => Promise<void>
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => Promise<void>
   activeStoreId?: string | 'all'
   transactions?: any[]
+  forceTab?: string
+  absensiList?: any[]
+}
+
+function calculateTenure(joinDateStr: string) {
+  if (!joinDateStr) return null;
+  const joinDate = new Date(joinDateStr);
+  const today = new Date();
+  
+  if (isNaN(joinDate.getTime())) return null;
+
+  let months = (today.getFullYear() - joinDate.getFullYear()) * 12;
+  months -= joinDate.getMonth();
+  months += today.getMonth();
+
+  let days = today.getDate() - joinDate.getDate();
+  if (days < 0) {
+    months--;
+    const tempDate = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += tempDate.getDate();
+  }
+
+  return { months, days, totalMonths: months };
+}
+
+function calculateAttendanceStats(username: string, cashierName: string, joinDateStr: string, absensiList: any[], activeStoreId: string) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth(); // 0-indexed
+  const todayDate = today.getDate();
+
+  // Read izin list from localStorage
+  let izinList: any[] = [];
+  try {
+    const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`);
+    if (saved) {
+      izinList = JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Failed to parse izin', e);
+  }
+
+  let hadir = 0;
+  let izin = 0;
+  let tidakAbsen = 0;
+
+  // Loop from day 1 to todayDate of the current month
+  for (let day = 1; day <= todayDate; day++) {
+    const date = new Date(currentYear, currentMonth, day);
+    const dateStr = date.toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+    // If they joined after this date, skip
+    if (joinDateStr) {
+      const joinDate = new Date(joinDateStr);
+      joinDate.setHours(0,0,0,0);
+      const testDate = new Date(date);
+      testDate.setHours(0,0,0,0);
+      if (testDate < joinDate) {
+        continue;
+      }
+    }
+
+    // Check check-in
+    const hasAbsen = (absensiList || []).some(
+      a => a.username === username && a.tanggal === dateStr && a.waktu_masuk
+    );
+
+    if (hasAbsen) {
+      hadir++;
+    } else {
+      // Check if they had izin
+      const hasIzin = izinList.some(
+        iz => (iz.nama === username || iz.nama === cashierName) && iz.tanggal === dateStr
+      );
+
+      if (hasIzin) {
+        izin++;
+      } else {
+        tidakAbsen++;
+      }
+    }
+  }
+
+  return { hadir, izin, tidakAbsen };
 }
 
 const AkunView: React.FC<AkunViewProps> = (props) => {
@@ -45,10 +129,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   const [activeTab, setActiveTab] = useState(props.kasirRole === 'owner' ? 'profil' : 'kasirSelf')
+  const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   useEffect(() => {
-    setActiveTab(props.kasirRole === 'owner' ? 'profil' : 'kasirSelf')
-  }, [props.kasirRole])
+    if (props.forceTab) {
+      setActiveTab(props.forceTab)
+      setOpenCategory(props.forceTab)
+    } else {
+      setActiveTab(props.kasirRole === 'owner' ? 'profil' : 'kasirSelf')
+    }
+  }, [props.kasirRole, props.forceTab])
 
   const getTabColorClasses = (color: string, isActive: boolean) => {
     if (isActive) return "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-md"
@@ -72,14 +162,29 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     setIsPinEnabled(localStorage.getItem(storageKeyPin) !== 'false')
   }, [storageKeyPin])
 
-  const [openCategory, setOpenCategory] = useState<string | null>('profil')
+  // removed duplicated openCategory
   const [savedStatus, setSavedStatus] = useState(false)
   const [isCloudLoading, setIsCloudLoading] = useState(false)
 
   // State for cashier self-edit
   const [editKasirName, setEditKasirName] = useState('')
   const [editKasirPin, setEditKasirPin] = useState('')
+  const [editKasirAlamat, setEditKasirAlamat] = useState('')
+  const [editKasirTempatLahir, setEditKasirTempatLahir] = useState('')
+  const [editKasirTanggalLahir, setEditKasirTanggalLahir] = useState('')
+  const [editKasirAvatar, setEditKasirAvatar] = useState('')
   const [showKasirPin, setShowKasirPin] = useState(false)
+
+  // State for owner managing karyawans
+  const [selectedKaryawan, setSelectedKaryawan] = useState<string | null>(null)
+  const [editKaryawanGaji, setEditKaryawanGaji] = useState('')
+  const [editKaryawanJoin, setEditKaryawanJoin] = useState('')
+  const [editKaryawanOff, setEditKaryawanOff] = useState('')
+  const [editKaryawanCatatan, setEditKaryawanCatatan] = useState('')
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [paymentType, setPaymentType] = useState<'gaji' | 'bonus'>('gaji')
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentNote, setPaymentNote] = useState('')
 
   // State untuk API Key Gemini (Lokal Perangkat)
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '')
@@ -222,8 +327,13 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   useEffect(() => {
     if (props.currentUsername && props.kasirList && props.kasirList[props.currentUsername]) {
-      setEditKasirName(props.kasirList[props.currentUsername].name || '')
-      setEditKasirPin(props.kasirList[props.currentUsername].pin || '')
+      const data = props.kasirList[props.currentUsername];
+      setEditKasirName(data.name || '')
+      setEditKasirPin(data.pin || '')
+      setEditKasirAlamat(data.alamat || '')
+      setEditKasirTempatLahir(data.tempatLahir || '')
+      setEditKasirTanggalLahir(data.tanggalLahir || '')
+      setEditKasirAvatar(data.avatar || '')
     }
   }, [props.currentUsername, props.kasirList])
 
@@ -396,6 +506,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     const tabs = props.kasirRole === 'owner' ? [
       { id: 'profil', label: 'Profil Toko', icon: 'fa-user-pen', color: 'emerald' },
       { id: 'keamanan', label: 'Keamanan & Akses', icon: 'fa-shield-halved', color: 'blue' },
+      { id: 'karyawan', label: 'Manajemen Kasir & SDM', icon: 'fa-users-gear', color: 'indigo' },
       { id: 'promo', label: 'Tampilan & Promo', icon: 'fa-bullhorn', color: 'orange' },
       { id: 'pantau', label: 'Pantau Dashboard', icon: 'fa-eye', color: 'indigo' },
       { id: 'printer', label: 'Printer & Hardware', icon: 'fa-print', color: 'slate' },
@@ -717,6 +828,365 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'karyawan' && props.kasirRole === 'owner' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {props.activeStoreId === 'all' && (
+                    <div className="p-4 bg-amber-50 text-amber-800 rounded-2xl border border-amber-200 text-xs font-bold text-center uppercase tracking-widest">
+                      <i className="fa-solid fa-circle-info mr-2"></i> Pilih toko spesifik untuk mengelola karyawan.
+                    </div>
+                  )}
+                  {props.activeStoreId !== 'all' && (
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm min-h-[500px] flex gap-8">
+                      {/* Left: Karyawan List */}
+                      <div className="w-1/3 border-r border-slate-100 dark:border-slate-700 pr-6 overflow-y-auto">
+                        <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-4">Daftar Karyawan</h3>
+                        <div className="space-y-3">
+                          {Object.entries(props.kasirList || {}).filter(([kId]) => kId !== 'owner').map(([kId, kData]) => (
+                            <button
+                              key={kId}
+                              onClick={() => {
+                                setSelectedKaryawan(kId);
+                                setEditKaryawanGaji(String(kData.gajiPokok || ''));
+                                setEditKaryawanJoin(kData.tanggalJoin || '');
+                                const stats = calculateAttendanceStats(kId, kData.name || '', kData.tanggalJoin, props.absensiList || [], props.activeStoreId || '');
+                                setEditKaryawanOff(String(kData.totalOffBulanIni !== undefined && kData.totalOffBulanIni !== null ? kData.totalOffBulanIni : stats.tidakAbsen));
+                                setEditKaryawanCatatan(kData.catatanAwalKerja || '');
+                              }}
+                              className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center gap-4 ${
+                                selectedKaryawan === kId
+                                  ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800'
+                                  : 'bg-slate-50 border-slate-100 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800/80'
+                              }`}
+                            >
+                              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center shrink-0 overflow-hidden">
+                                {kData.avatar ? (
+                                  <img src={kData.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                ) : (
+                                  <i className="fa-solid fa-user"></i>
+                                )}
+                              </div>
+                              <div>
+                                <p className={`text-xs font-black ${selectedKaryawan === kId ? 'text-indigo-900 dark:text-indigo-100' : 'text-slate-800 dark:text-slate-200'}`}>
+                                  {kData.name || kId}
+                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 mt-0.5">
+                                  {kData.role}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                          {Object.entries(props.kasirList || {}).filter(([kId]) => kId !== 'owner').length === 0 && (
+                            <p className="text-[10px] text-slate-400 font-bold text-center mt-10">Belum ada karyawan.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: Karyawan Detail & Edit */}
+                      <div className="flex-1">
+                        {selectedKaryawan && props.kasirList?.[selectedKaryawan] ? (
+                          <div className="animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex items-center gap-5 mb-8 pb-6 border-b border-slate-100 dark:border-slate-700">
+                              <div className="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+                                {props.kasirList[selectedKaryawan].avatar ? (
+                                  <img src={props.kasirList[selectedKaryawan].avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                ) : (
+                                  <i className="fa-solid fa-user text-3xl text-slate-300 dark:text-slate-600"></i>
+                                )}
+                              </div>
+                              <div>
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-wider">{props.kasirList[selectedKaryawan].name}</h2>
+                                <p className="text-xs font-bold text-indigo-500 mt-1 uppercase tracking-widest">{props.kasirList[selectedKaryawan].role} • ID: {selectedKaryawan}</p>
+                              </div>
+                            </div>
+
+                            {(() => {
+                              const kData = props.kasirList[selectedKaryawan];
+                              const tenure = kData ? calculateTenure(kData.tanggalJoin) : null;
+                              const isBonus = tenure && tenure.totalMonths > 0 && tenure.totalMonths % 6 === 0;
+                              const stats = calculateAttendanceStats(selectedKaryawan, kData?.name || '', kData?.tanggalJoin || '', props.absensiList || [], props.activeStoreId || '');
+                              
+                              return (
+                                <div className="space-y-6">
+                                  {tenure && (
+                                    <div className={`p-5 rounded-2xl border ${isBonus ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-indigo-50 border-indigo-100 text-indigo-900'} flex items-center justify-between`}>
+                                      <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Masa Kerja (Terhitung dr tgl join)</p>
+                                        <p className="text-lg font-black">{tenure.months} Bulan {tenure.days} Hari</p>
+                                        {isBonus && <p className="text-xs font-bold text-amber-600 mt-1"><i className="fa-solid fa-gift mr-1 animate-bounce"></i> Waktunya Bonus 6 Bulanan!</p>}
+                                      </div>
+                                      <button onClick={() => setShowPaymentForm(!showPaymentForm)} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm active:scale-95 transition-all flex items-center gap-2 ${isBonus ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                        <i className={showPaymentForm ? "fa-solid fa-xmark" : "fa-solid fa-money-bills"}></i>
+                                        {showPaymentForm ? 'Batal' : 'Catat Pembayaran'}
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Data yang diisi oleh Kasir */}
+                                  <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+                                    <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 flex items-center gap-2">
+                                      <i className="fa-solid fa-user-gear text-indigo-600 dark:text-indigo-400"></i>
+                                      Profil Kasir (Diisi oleh Kasir)
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-xs">
+                                      <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nama Lengkap</p>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{kData.name || '-'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PIN Aplikasi</p>
+                                        <p className="font-mono font-bold text-slate-800 dark:text-slate-200 bg-slate-200/60 dark:bg-slate-800 px-2 py-0.5 rounded w-max mt-0.5">{kData.pin || '-'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Alamat Domisili</p>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{kData.alamat || '-'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tempat, Tanggal Lahir</p>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                                          {kData.tempatLahir || kData.tanggalLahir ? (
+                                            `${kData.tempatLahir || '-'}${kData.tanggalLahir ? `, ${new Date(kData.tanggalLahir).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}` : ''}`
+                                          ) : '-'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Rekap Kehadiran Bulan Ini */}
+                                  <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl p-5 space-y-3">
+                                    <div className="flex items-center justify-between text-indigo-900 dark:text-indigo-300 border-b border-indigo-100 dark:border-indigo-900/30 pb-2">
+                                      <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                                        <i className="fa-solid fa-fingerprint text-indigo-600 dark:text-indigo-400"></i>
+                                        Kehadiran Bulan Ini (Absensi)
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-4 text-center">
+                                      <div className="bg-white dark:bg-slate-800 border border-indigo-50 dark:border-indigo-950/30 rounded-xl p-3">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hadir</p>
+                                        <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.hadir} Hari</p>
+                                      </div>
+                                      <div className="bg-white dark:bg-slate-800 border border-indigo-50 dark:border-indigo-950/30 rounded-xl p-3">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Izin / Cuti</p>
+                                        <p className="text-sm font-black text-amber-600 dark:text-amber-400 mt-1">{stats.izin} Hari</p>
+                                      </div>
+                                      <div className="bg-white dark:bg-slate-800 border border-indigo-50 dark:border-indigo-950/30 rounded-xl p-3">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tidak Absen</p>
+                                        <p className="text-sm font-black text-rose-600 dark:text-rose-400 mt-1">{stats.tidakAbsen} Hari</p>
+                                      </div>
+                                    </div>
+                                    <p className="text-[9px] font-bold text-indigo-500/70 dark:text-indigo-400/70 text-center mt-1 uppercase tracking-widest">
+                                      * Hari tidak absen dianggap sebagai Libur/Off Karyawan
+                                    </p>
+                                  </div>
+
+                                  {/* Pengaturan Owner */}
+                                  <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-5 space-y-5">
+                                    <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center gap-2">
+                                      <i className="fa-solid fa-user-lock text-indigo-600 dark:text-indigo-400"></i>
+                                      Kelola HR & Catatan Kerja (Diatur oleh Owner)
+                                    </h4>
+                                    
+                                    <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                                      <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Tanggal Join</label>
+                                        <input
+                                          type="date"
+                                          value={editKaryawanJoin}
+                                          onChange={e => setEditKaryawanJoin(e.target.value)}
+                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Gaji Pokok (Rp)</label>
+                                        <input
+                                          type="number"
+                                          value={editKaryawanGaji}
+                                          onChange={e => setEditKaryawanGaji(e.target.value)}
+                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Libur Bulan Ini (Hari)</label>
+                                          <button 
+                                            onClick={() => setEditKaryawanOff(String(stats.tidakAbsen))}
+                                            className="text-[8px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                          >
+                                            <i className="fa-solid fa-sync text-[7px]"></i> Gunakan Absensi ({stats.tidakAbsen} Hari)
+                                          </button>
+                                        </div>
+                                        <input
+                                          type="number"
+                                          value={editKaryawanOff}
+                                          onChange={e => setEditKaryawanOff(e.target.value)}
+                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div className="col-span-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Catatan Awal Kerja / Catatan Owner</label>
+                                        <textarea
+                                          value={editKaryawanCatatan}
+                                          onChange={e => setEditKaryawanCatatan(e.target.value)}
+                                          placeholder="Contoh: Mulai bekerja shift pagi, jaminan ijazah asli, performa awal baik, dll"
+                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500 min-h-[80px] resize-y"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex gap-4">
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            if (props.onSaveCashierSelf) {
+                                              await props.onSaveCashierSelf(selectedKaryawan, {
+                                                ...props.kasirList![selectedKaryawan],
+                                                gajiPokok: Number(editKaryawanGaji) || 0,
+                                                tanggalJoin: editKaryawanJoin,
+                                                totalOffBulanIni: Number(editKaryawanOff) || 0,
+                                                catatanAwalKerja: editKaryawanCatatan
+                                              });
+                                              setSavedStatus(true);
+                                              setTimeout(() => setSavedStatus(false), 2000);
+                                            }
+                                          } catch (err: any) {
+                                            alert(err.message || "Gagal menyimpan HR kasir");
+                                          }
+                                        }}
+                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                                        style={{ color: '#ffffff' }}
+                                      >
+                                        <i className="fa-solid fa-floppy-disk"></i>
+                                        Simpan Data Karyawan
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Payment Section */}
+                            {showPaymentForm ? (
+                              <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 animate-in fade-in duration-200">
+                                <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-widest mb-4">Form Pembayaran</h4>
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                  <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Jenis Pembayaran</label>
+                                    <select
+                                      value={paymentType}
+                                      onChange={e => setPaymentType(e.target.value as 'gaji' | 'bonus')}
+                                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
+                                      style={{ color: '#000000' }}
+                                    >
+                                      <option value="gaji">Gaji Bulanan</option>
+                                      <option value="bonus">Bonus 6 Bulanan</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nominal (Rp)</label>
+                                    <input
+                                      type="number"
+                                      value={paymentAmount}
+                                      onChange={e => setPaymentAmount(e.target.value)}
+                                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
+                                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mb-4">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Keterangan / Catatan</label>
+                                  <input
+                                    type="text"
+                                    value={paymentNote}
+                                    onChange={e => setPaymentNote(e.target.value)}
+                                    placeholder="Contoh: Gaji bulan Agustus, Bonus kinerja, dll"
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
+                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                  />
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!paymentAmount) return alert("Masukkan nominal!");
+                                    try {
+                                      const kData = props.kasirList![selectedKaryawan];
+                                      const history = kData.paymentHistory || [];
+                                      const newEntry = {
+                                        id: Date.now().toString(),
+                                        date: new Date().toISOString(),
+                                        type: paymentType,
+                                        amount: Number(paymentAmount),
+                                        note: paymentNote
+                                      };
+                                      if (props.onSaveCashierSelf) {
+                                        await props.onSaveCashierSelf(selectedKaryawan, {
+                                          ...kData,
+                                          paymentHistory: [newEntry, ...history]
+                                        });
+                                        setPaymentAmount('');
+                                        setPaymentNote('');
+                                        setShowPaymentForm(false);
+                                        setSavedStatus(true);
+                                        setTimeout(() => setSavedStatus(false), 2000);
+                                      }
+                                    } catch (e: any) {
+                                      alert(e.message || "Gagal mencatat pembayaran");
+                                    }
+                                  }}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                                  style={{ color: '#ffffff' }}
+                                >
+                                  Catat ke Riwayat
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden animate-in fade-in duration-200">
+                                <div className="bg-slate-50 dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700">
+                                  <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Riwayat Pembayaran Karyawan</h4>
+                                </div>
+                                <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-60 overflow-y-auto">
+                                  {props.kasirList[selectedKaryawan].paymentHistory?.length ? (
+                                    props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => (
+                                      <div key={ph.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${ph.type === 'bonus' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                            <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'}`}></i>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">{ph.type}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 mt-0.5">{new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-sm font-black text-slate-800 dark:text-slate-200">Rp {ph.amount.toLocaleString('id-ID')}</p>
+                                          {ph.note && <p className="text-[9px] font-bold text-slate-400 mt-0.5 max-w-[120px] truncate">{ph.note}</p>}
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="p-8 text-center text-slate-400">
+                                      <i className="fa-solid fa-clock-rotate-left text-2xl mb-2 opacity-50"></i>
+                                      <p className="text-[9px] font-bold uppercase tracking-widest">Belum ada riwayat pembayaran</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-700">
+                            <i className="fa-solid fa-id-card-clip text-6xl mb-4"></i>
+                            <p className="text-xs font-bold uppercase tracking-widest">Pilih karyawan untuk melihat detail</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1053,39 +1523,110 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm max-w-xl">
                     <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Pengaturan Profil Kasir</h3>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-6 font-bold uppercase">Edit nama panggilan operasional Anda dan kode PIN pengaman kasir</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-6 font-bold uppercase">Lengkapi biodata dan atur PIN pengaman kasir Anda</p>
 
                     <div className="space-y-4">
-                      <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Nama Kasir / Petugas</label>
-                        <input
-                          type="text"
-                          value={editKasirName}
-                          onChange={e => setEditKasirName(e.target.value)}
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800"
-                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                        />
+                      {/* Avatar Upload */}
+                      <div className="flex justify-center mb-6">
+                        <div className="relative group">
+                          <div className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+                            {editKasirAvatar ? (
+                              <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                              <i className="fa-solid fa-user text-3xl text-slate-300 dark:text-slate-600"></i>
+                            )}
+                          </div>
+                          <label className="absolute inset-0 bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity backdrop-blur-sm">
+                            <i className="fa-solid fa-camera mb-1"></i>
+                            <span className="text-[9px] font-bold">UBAH</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const base64 = await compressImage(file, 400, 400, 0.7);
+                                    setEditKasirAvatar(base64);
+                                  } catch (err) {
+                                    alert("Gagal memproses foto");
+                                  }
+                                }
+                              }} 
+                            />
+                          </label>
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Keamanan Kasir (Minimal 4 Angka)</label>
-                        <div className="relative">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Nama Kasir / Petugas</label>
                           <input
-                            type={showKasirPin ? "text" : "password"}
-                            inputMode="numeric"
-                            maxLength={8}
-                            value={editKasirPin}
-                            onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
+                            type="text"
+                            value={editKasirName}
+                            onChange={e => setEditKasirName(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800"
                             style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => setShowKasirPin(!showKasirPin)}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                          >
-                            <i className={showKasirPin ? "fa-solid fa-eye-slash text-sm" : "fa-solid fa-eye text-sm"}></i>
-                          </button>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Keamanan Kasir (Minimal 4 Angka)</label>
+                          <div className="relative">
+                            <input
+                              type={showKasirPin ? "text" : "password"}
+                              inputMode="numeric"
+                              maxLength={8}
+                              value={editKasirPin}
+                              onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowKasirPin(!showKasirPin)}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                            >
+                              <i className={showKasirPin ? "fa-solid fa-eye-slash text-sm" : "fa-solid fa-eye text-sm"}></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Alamat Domisili</label>
+                          <input
+                            type="text"
+                            value={editKasirAlamat}
+                            onChange={e => setEditKasirAlamat(e.target.value)}
+                            placeholder="Opsional"
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800"
+                            style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                          />
+                        </div>
+
+                        <div className="flex gap-4">
+                          <div className="flex-1">
+                            <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Tempat Lahir</label>
+                            <input
+                              type="text"
+                              value={editKasirTempatLahir}
+                              onChange={e => setEditKasirTempatLahir(e.target.value)}
+                              placeholder="Opsional"
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Tanggal Lahir</label>
+                            <input
+                              type="date"
+                              value={editKasirTanggalLahir}
+                              onChange={e => setEditKasirTanggalLahir(e.target.value)}
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -1103,7 +1644,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             if (props.onSaveCashierSelf && props.currentUsername) {
                               await props.onSaveCashierSelf(props.currentUsername, {
                                 name: editKasirName.trim(),
-                                pin: editKasirPin
+                                pin: editKasirPin,
+                                alamat: editKasirAlamat,
+                                tempatLahir: editKasirTempatLahir,
+                                tanggalLahir: editKasirTanggalLahir,
+                                avatar: editKasirAvatar
                               });
                               setSavedStatus(true);
                               setTimeout(() => setSavedStatus(false), 2000);
@@ -1398,6 +1943,344 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
               </div>
+
+              {/* Kategori: Manajemen Karyawan */}
+              {props.kasirRole === 'owner' && (
+                <div className="group">
+                  <button
+                    onClick={() => setOpenCategory(openCategory === 'karyawan' ? null : 'karyawan')}
+                    className={cn(
+                      "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
+                      openCategory === 'karyawan' ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                        openCategory === 'karyawan' ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-600"
+                      )}>
+                        <i className="fa-solid fa-users-gear text-xs"></i>
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-widest">Manajemen Kasir</span>
+                    </div>
+                    <i className={cn(
+                      "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
+                      openCategory === 'karyawan' && "rotate-180"
+                    )}></i>
+                  </button>
+
+                  {openCategory === 'karyawan' && (
+                    <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                      {props.activeStoreId === 'all' ? (
+                        <div className="p-4 bg-amber-50 text-amber-800 rounded-2xl border border-amber-200 text-[10px] font-bold text-center uppercase tracking-widest">
+                          <i className="fa-solid fa-circle-info block text-xl mb-2"></i> Pilih toko spesifik di atas untuk melihat karyawan
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-900 border-b border-indigo-100 pb-2">Pilih Karyawan</h4>
+                          <div className="flex overflow-x-auto gap-3 pb-2 hide-scrollbar snap-x">
+                            {Object.entries(props.kasirList || {}).filter(([kId]) => kId !== 'owner').map(([kId, kData]) => (
+                              <button
+                                key={kId}
+                                onClick={() => {
+                                  setSelectedKaryawan(kId);
+                                  setEditKaryawanGaji(String(kData.gajiPokok || ''));
+                                  setEditKaryawanJoin(kData.tanggalJoin || '');
+                                  const stats = calculateAttendanceStats(kId, kData.name || '', kData.tanggalJoin, props.absensiList || [], props.activeStoreId || '');
+                                  setEditKaryawanOff(String(kData.totalOffBulanIni !== undefined && kData.totalOffBulanIni !== null ? kData.totalOffBulanIni : stats.tidakAbsen));
+                                  setEditKaryawanCatatan(kData.catatanAwalKerja || '');
+                                }}
+                                className={cn(
+                                  "flex flex-col items-center gap-2 p-3 min-w-[80px] rounded-2xl border snap-center shrink-0 transition-all",
+                                  selectedKaryawan === kId ? "bg-indigo-600 border-indigo-600 text-white shadow-md" : "bg-white border-indigo-100 text-slate-700"
+                                )}
+                              >
+                                <div className="w-10 h-10 rounded-full overflow-hidden bg-indigo-100 text-indigo-400 flex items-center justify-center">
+                                  {kData.avatar ? (
+                                    <img src={kData.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <i className="fa-solid fa-user"></i>
+                                  )}
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest truncate w-full text-center">{kData.name || kId}</span>
+                              </button>
+                            ))}
+                            {Object.entries(props.kasirList || {}).filter(([kId]) => kId !== 'owner').length === 0 && (
+                              <p className="text-[9px] text-slate-400 font-bold">Belum ada karyawan.</p>
+                            )}
+                          </div>
+
+                          {selectedKaryawan && props.kasirList?.[selectedKaryawan] && (
+                            <div className="bg-white rounded-2xl p-4 border border-indigo-100 shadow-sm mt-4 animate-in fade-in duration-300 space-y-4">
+                              {(() => {
+                                const kData = props.kasirList[selectedKaryawan];
+                                const tenure = kData ? calculateTenure(kData.tanggalJoin) : null;
+                                const isBonus = tenure && tenure.totalMonths > 0 && tenure.totalMonths % 6 === 0;
+                                const stats = calculateAttendanceStats(selectedKaryawan, kData?.name || '', kData?.tanggalJoin || '', props.absensiList || [], props.activeStoreId || '');
+
+                                return (
+                                  <div className="space-y-4">
+                                    {tenure && (
+                                      <div className={`p-4 rounded-xl border ${isBonus ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-100'} flex flex-col gap-2`}>
+                                        <div className="flex justify-between items-center">
+                                          <div>
+                                            <p className={`text-[8px] font-black uppercase tracking-widest ${isBonus ? 'text-amber-700/70' : 'text-indigo-900/70'}`}>Masa Kerja</p>
+                                            <p className={`text-sm font-black ${isBonus ? 'text-amber-900' : 'text-indigo-900'}`}>{tenure.months} Bln {tenure.days} Hr</p>
+                                          </div>
+                                          <button onClick={() => setShowPaymentForm(!showPaymentForm)} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest text-white shadow-sm active:scale-95 transition-all flex items-center gap-1.5 ${isBonus ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                            <i className={showPaymentForm ? "fa-solid fa-xmark" : "fa-solid fa-money-bills"}></i>
+                                            {showPaymentForm ? 'Batal' : 'Bayar'}
+                                          </button>
+                                        </div>
+                                        {isBonus && <p className="text-[10px] font-bold text-amber-600"><i className="fa-solid fa-gift mr-1 animate-bounce"></i> Waktunya Bonus 6 Bulanan!</p>}
+                                      </div>
+                                    )}
+
+                                    {/* Data yang diisi oleh Kasir */}
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                                      <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+                                        <i className="fa-solid fa-user-gear text-indigo-600"></i>
+                                        Profil Kasir (Diisi oleh Kasir)
+                                      </h4>
+                                      <div className="grid grid-cols-2 gap-3 text-[10px]">
+                                        <div>
+                                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Nama Lengkap</p>
+                                          <p className="font-bold text-slate-800 mt-0.5">{kData.name || '-'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">PIN Aplikasi</p>
+                                          <p className="font-mono font-bold text-slate-800 bg-slate-200/60 px-1.5 py-0.5 rounded w-max mt-0.5">{kData.pin || '-'}</p>
+                                        </div>
+                                        <div className="col-span-2">
+                                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Alamat Domisili</p>
+                                          <p className="font-bold text-slate-800 mt-0.5">{kData.alamat || '-'}</p>
+                                        </div>
+                                        <div className="col-span-2">
+                                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tempat, Tanggal Lahir</p>
+                                          <p className="font-bold text-slate-800 mt-0.5">
+                                            {kData.tempatLahir || kData.tanggalLahir ? (
+                                              `${kData.tempatLahir || '-'}${kData.tanggalLahir ? `, ${new Date(kData.tanggalLahir).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}` : ''}`
+                                            ) : '-'}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Rekap Kehadiran Bulan Ini */}
+                                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 space-y-2.5">
+                                      <div className="flex items-center justify-between text-indigo-900 border-b border-indigo-100 pb-1.5">
+                                        <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                          <i className="fa-solid fa-fingerprint text-indigo-600"></i>
+                                          Kehadiran (Absensi)
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div className="bg-white border border-indigo-50 rounded-lg p-2">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Hadir</p>
+                                          <p className="text-[11px] font-black text-emerald-600 mt-0.5">{stats.hadir} Hr</p>
+                                        </div>
+                                        <div className="bg-white border border-indigo-50 rounded-lg p-2">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Izin</p>
+                                          <p className="text-[11px] font-black text-amber-600 mt-0.5">{stats.izin} Hr</p>
+                                        </div>
+                                        <div className="bg-white border border-indigo-50 rounded-lg p-2">
+                                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Absen</p>
+                                          <p className="text-[11px] font-black text-rose-600 mt-0.5">{stats.tidakAbsen} Hr</p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Pengaturan Owner */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                      <div>
+                                        <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tgl Masuk Kerja</label>
+                                        <input
+                                          type="date"
+                                          value={editKaryawanJoin}
+                                          onChange={e => setEditKaryawanJoin(e.target.value)}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Gaji Pokok (Rp)</label>
+                                        <input
+                                          type="number"
+                                          value={editKaryawanGaji}
+                                          onChange={e => setEditKaryawanGaji(e.target.value)}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                          <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block">Libur Bulan Ini (Hari)</label>
+                                          <button 
+                                            onClick={() => setEditKaryawanOff(String(stats.tidakAbsen))}
+                                            className="text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:underline flex items-center gap-0.5"
+                                          >
+                                            <i className="fa-solid fa-sync text-[7px]"></i> Gunakan Absen ({stats.tidakAbsen} Hr)
+                                          </button>
+                                        </div>
+                                        <input
+                                          type="number"
+                                          value={editKaryawanOff}
+                                          onChange={e => setEditKaryawanOff(e.target.value)}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Catatan Awal Kerja</label>
+                                        <textarea
+                                          value={editKaryawanCatatan}
+                                          onChange={e => setEditKaryawanCatatan(e.target.value)}
+                                          placeholder="Catatan dari owner..."
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500 min-h-[60px] resize-y"
+                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                        />
+                                      </div>
+                                      
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            if (props.onSaveCashierSelf) {
+                                              await props.onSaveCashierSelf(selectedKaryawan, {
+                                                ...props.kasirList![selectedKaryawan],
+                                                gajiPokok: Number(editKaryawanGaji) || 0,
+                                                tanggalJoin: editKaryawanJoin,
+                                                totalOffBulanIni: Number(editKaryawanOff) || 0,
+                                                catatanAwalKerja: editKaryawanCatatan
+                                              });
+                                              setSavedStatus(true);
+                                              setTimeout(() => setSavedStatus(false), 2000);
+                                            }
+                                          } catch (err: any) {
+                                            alert(err.message || "Gagal menyimpan HR kasir");
+                                          }
+                                        }}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+                                        style={{ color: '#ffffff' }}
+                                      >
+                                        <i className="fa-solid fa-floppy-disk"></i>
+                                        Simpan Data
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Payment Section Mobile */}
+                              {showPaymentForm ? (
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mt-4 animate-in fade-in duration-200 space-y-3">
+                                  <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-2">Form Pembayaran</h4>
+                                  <div>
+                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Jenis Pembayaran</label>
+                                    <select
+                                      value={paymentType}
+                                      onChange={e => setPaymentType(e.target.value as 'gaji' | 'bonus')}
+                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 outline-none"
+                                      style={{ color: '#000000' }}
+                                    >
+                                      <option value="gaji">Gaji Bulanan</option>
+                                      <option value="bonus">Bonus 6 Bulanan</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Nominal (Rp)</label>
+                                    <input
+                                      type="number"
+                                      value={paymentAmount}
+                                      onChange={e => setPaymentAmount(e.target.value)}
+                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 outline-none"
+                                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Keterangan / Catatan</label>
+                                    <input
+                                      type="text"
+                                      value={paymentNote}
+                                      onChange={e => setPaymentNote(e.target.value)}
+                                      placeholder="Opsional"
+                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 outline-none"
+                                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      if (!paymentAmount) return alert("Masukkan nominal!");
+                                      try {
+                                        const kData = props.kasirList![selectedKaryawan];
+                                        const history = kData.paymentHistory || [];
+                                        const newEntry = {
+                                          id: Date.now().toString(),
+                                          date: new Date().toISOString(),
+                                          type: paymentType,
+                                          amount: Number(paymentAmount),
+                                          note: paymentNote
+                                        };
+                                        if (props.onSaveCashierSelf) {
+                                          await props.onSaveCashierSelf(selectedKaryawan, {
+                                            ...kData,
+                                            paymentHistory: [newEntry, ...history]
+                                          });
+                                          setPaymentAmount('');
+                                          setPaymentNote('');
+                                          setShowPaymentForm(false);
+                                          setSavedStatus(true);
+                                          setTimeout(() => setSavedStatus(false), 2000);
+                                        }
+                                      } catch (e: any) {
+                                        alert(e.message || "Gagal mencatat pembayaran");
+                                      }
+                                    }}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 rounded-lg text-[9px] uppercase tracking-widest transition-all active:scale-95 shadow-sm mt-1"
+                                    style={{ color: '#ffffff' }}
+                                  >
+                                    Simpan ke Riwayat
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="border border-slate-100 rounded-xl overflow-hidden mt-4 animate-in fade-in duration-200">
+                                  <div className="bg-slate-50 p-3 border-b border-slate-100">
+                                    <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Riwayat Pembayaran</h4>
+                                  </div>
+                                  <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                                    {props.kasirList[selectedKaryawan].paymentHistory?.length ? (
+                                      props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => (
+                                        <div key={ph.id} className="p-3 flex items-center justify-between bg-white">
+                                          <div className="flex items-center gap-2">
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${ph.type === 'bonus' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                              <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'}`}></i>
+                                            </div>
+                                            <div>
+                                              <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{ph.type}</p>
+                                              <p className="text-[8px] font-bold text-slate-400 mt-0.5">{new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: '2-digit'})}</p>
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="text-xs font-black text-slate-800">Rp {ph.amount.toLocaleString('id-ID')}</p>
+                                            {ph.note && <p className="text-[8px] font-bold text-slate-400 mt-0.5 max-w-[80px] truncate">{ph.note}</p>}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="p-4 text-center text-slate-400 bg-white">
+                                        <p className="text-[8px] font-bold uppercase tracking-widest">Belum ada riwayat</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Kategori: Tampilan & Promo */}
               <div className="group">
@@ -1908,13 +2791,47 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
               {openCategory === 'kasirSelf' && (
                 <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
+                  
+                  {/* Avatar Upload */}
+                  <div className="flex justify-center mb-4">
+                    <div className="relative group">
+                      <div className="w-20 h-20 rounded-full border-4 border-white shadow-sm overflow-hidden bg-indigo-100 flex items-center justify-center">
+                        {editKasirAvatar ? (
+                          <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                          <i className="fa-solid fa-user text-2xl text-indigo-300"></i>
+                        )}
+                      </div>
+                      <label className="absolute inset-0 bg-black/40 text-white rounded-full flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm">
+                        <i className="fa-solid fa-camera mb-1 text-[10px]"></i>
+                        <span className="text-[8px] font-bold">UBAH</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const base64 = await compressImage(file, 400, 400, 0.7);
+                                setEditKasirAvatar(base64);
+                              } catch (err) {
+                                alert("Gagal memproses foto");
+                              }
+                            }
+                          }} 
+                        />
+                      </label>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Nama Kasir</label>
                     <input
                       type="text"
                       value={editKasirName}
                       onChange={e => setEditKasirName(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-500 font-bold"
+                      className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
                       style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                     />
                   </div>
@@ -1928,7 +2845,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         maxLength={8}
                         value={editKasirPin}
                         onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-500 font-bold tracking-widest"
+                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold tracking-widest"
                         style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                       />
                       <button
@@ -1938,6 +2855,42 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       >
                         <i className={showKasirPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
                       </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Alamat Domisili</label>
+                    <input
+                      type="text"
+                      value={editKasirAlamat}
+                      onChange={e => setEditKasirAlamat(e.target.value)}
+                      placeholder="Opsional"
+                      className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tempat Lahir</label>
+                      <input
+                        type="text"
+                        value={editKasirTempatLahir}
+                        onChange={e => setEditKasirTempatLahir(e.target.value)}
+                        placeholder="Opsional"
+                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tanggal Lahir</label>
+                      <input
+                        type="date"
+                        value={editKasirTanggalLahir}
+                        onChange={e => setEditKasirTanggalLahir(e.target.value)}
+                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
                     </div>
                   </div>
 
@@ -1955,7 +2908,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         if (props.onSaveCashierSelf && props.currentUsername) {
                           await props.onSaveCashierSelf(props.currentUsername, {
                             name: editKasirName.trim(),
-                            pin: editKasirPin
+                            pin: editKasirPin,
+                            alamat: editKasirAlamat,
+                            tempatLahir: editKasirTempatLahir,
+                            tanggalLahir: editKasirTanggalLahir,
+                            avatar: editKasirAvatar
                           });
                           setSavedStatus(true);
                           setTimeout(() => setSavedStatus(false), 2000);
@@ -1964,11 +2921,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         alert(err.message || "Gagal menyimpan perubahan kasir");
                       }
                     }}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
                     style={{ color: '#ffffff' }}
                   >
                     <i className="fa-solid fa-circle-check"></i>
-                    Simpan PIN & Nama
+                    Simpan Perubahan
                   </button>
                 </div>
               )}

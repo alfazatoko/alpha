@@ -28,6 +28,8 @@ import {
   Home,
   History,
   Menu,
+  ShoppingCart,
+  ClipboardList,
   ShieldCheck,
   Lock,
   Unlock,
@@ -70,9 +72,12 @@ interface VoucherAppProps {
   externalCashierName?: string;
   activeStoreId?: string;
   googleUid?: string;
+  kasirList?: Record<string, { name?: string; role?: string; pin?: string }>;
+  externalSearchQuery?: string;
+  externalTab?: string;
 }
 
-export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid }: VoucherAppProps = {}) {
+export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab }: VoucherAppProps = {}) {
   // Navigation tabs (Home, Catalog, Search, Reports, Profile/Settings, Atur Stok, Riwayat)
   const [activeTab, setActiveTab] = useState<'beranda' | 'produk' | 'pencarian' | 'laporan' | 'profil' | 'stok' | 'riwayat' | 'notif'>('beranda');
   
@@ -95,6 +100,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Role & Access Control States
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(externalRole || 'kasir');
   const [showRoleSidebar, setShowRoleSidebar] = useState(false);
+
+  useEffect(() => {
+    if (externalTab) {
+      setActiveTab(externalTab as any);
+    }
+  }, [externalTab]);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSaleSearchQuery(externalSearchQuery);
+      setRestockSearchQuery(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -963,52 +981,55 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
         {/* Dynamic Application Header (Logo VS BERANDA, bells, alerts) - shown on tabs other than 'produk' */}
         {activeTab !== 'produk' && !selectedProduct && (
-          <header className="h-14 bg-white dark:bg-slate-900/90 border-b border-slate-200 dark:border-white/5 px-5 flex items-center justify-between sticky top-0 z-30 backdrop-blur-md shrink-0">
+          <header className="h-14 bg-[#00529C] border-b border-[#003d75] px-5 flex items-center justify-between sticky top-0 z-30 shadow-md shrink-0">
             <div className="flex items-center gap-3">
-              {onExit && (
-                <button 
-                  onClick={onExit}
-                  className="p-1.5 bg-slate-100 dark:bg-white/10 hover:bg-rose-500/20 rounded-lg text-slate-600 dark:text-slate-300 hover:text-rose-500 font-black dark:text-rose-400 transition-colors cursor-pointer"
-                  title="Keluar dari Sistem Voucher"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              )}
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-slate-200 dark:border-white/10">
-                <Package className="w-4 h-4 text-slate-900 dark:text-white" />
+              <button 
+                onClick={() => {
+                  if (activeTab !== 'beranda') {
+                    setActiveTab('beranda');
+                  } else if (onExit) {
+                    onExit();
+                  }
+                }}
+                className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer"
+                title="Kembali"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-lg">
+                <Package className="w-4 h-4 text-[#00529C]" />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-[10px] font-black tracking-widest text-slate-900 dark:text-white uppercase leading-none mb-0.5">
-                  {activeTab === 'beranda' ? 'BERANDA' : activeTab === 'pencarian' ? 'CARI VOUCHER' : activeTab === 'laporan' ? 'LAPORAN' : activeTab === 'profil' ? 'PROFIL' : activeTab === 'stok' ? 'ATUR STOK' : activeTab === 'riwayat' ? 'RIWAYAT' : 'LOG AUDIT'}
+                <h1 className="text-[10px] font-black tracking-widest text-white uppercase leading-none mb-0.5">
+                  {activeTab === 'beranda' ? 'BERANDA VOUCHER' : activeTab === 'pencarian' ? 'CARI VOUCHER' : activeTab === 'laporan' ? 'LAPORAN' : activeTab === 'profil' ? 'PROFIL' : activeTab === 'stok' ? 'ATUR STOK' : activeTab === 'riwayat' ? 'RIWAYAT' : 'LOG AUDIT'}
                 </h1>
                 <div className="flex items-center gap-1">
                   {currentUserRole === 'owner' ? (
-                    <span className="flex items-center gap-1 text-[7px] font-black text-amber-500 font-black dark:text-amber-400 uppercase tracking-tighter">
+                    <span className="flex items-center gap-1 text-[7px] font-black text-amber-300 uppercase tracking-tighter">
                       <ShieldCheck className="w-1.5 h-1.5" /> Owner
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-[7px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-tighter">
-                      <User className="w-1.5 h-1.5" /> Kasir
+                    <span className="flex items-center gap-1.5 text-[9px] font-black text-blue-100 tracking-tight">
+                      <User className="w-2.5 h-2.5" />
+                      <span className="max-w-[90px] truncate">{activeCashier.name}</span>
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
+            {/* KASIR AKTIF BADGE - info utama di header */}
+
             <div className="flex items-center gap-2">
+
               {/* Theme Toggle Button */}
               <button
                 onClick={() => handleThemeChange(theme === 'dark' ? 'light' : 'dark')}
-                className="p-1 hover:bg-slate-100 dark:bg-white/10 rounded-lg text-slate-600 dark:text-slate-400 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:border-white/10"
+                className="p-1 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer border border-transparent"
                 title={`Beralih ke tema ${theme === 'dark' ? 'Terang' : 'Gelap'}`}
               >
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
-
-              {/* Live cashier shift badge */}
-              <span className="text-[7px] font-bold text-emerald-500 font-black dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md uppercase">
-                Shift {activeCashierIndex + 1}
-              </span>
 
               {/* Notification bell drop */}
               <div className="relative">
@@ -1017,10 +1038,10 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     setSelectedProduct(null);
                     setActiveTab('notif');
                   }}
-                  className={`p-1.5 transition relative cursor-pointer rounded-lg border flex items-center justify-center ${
+                  className={`p-1.5 transition relative cursor-pointer rounded-lg flex items-center justify-center ${
                     activeTab === 'notif' 
-                      ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-700 dark:text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]' 
-                      : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-white/10'
+                      ? 'bg-white text-[#00529C]' 
+                      : 'bg-white/10 hover:bg-white/20 text-white'
                   }`}
                 >
                   <Bell className={`h-4 w-4 ${activeTab === 'notif' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
@@ -1065,7 +1086,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         </AnimatePresence>
 
         {/* CORE APP TAB VIEW CONTENT (Encapsulated screen) */}
-        <div className={`flex-1 overflow-y-auto ${activeTab === 'stok' ? 'p-4 sm:p-6' : 'p-4 sm:p-6'} z-10`} id="main-scroll-pane">
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'stok' ? 'p-4 sm:p-6' : 'p-4 sm:p-6'} pb-20 z-10`} id="main-scroll-pane">
           <AnimatePresence mode="wait">
             <motion.div
               key={selectedProduct ? 'details' : activeTab}
@@ -1096,6 +1117,13 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       nextCashier={nextCashier}
                       userRole={currentUserRole}
                       theme={theme}
+                      kasirList={kasirList}
+                      hasActiveAuditSession={(() => {
+                        try {
+                          return !!localStorage.getItem(`audit_${activeStoreId || 'default'}_${activeCashier.id}`);
+                        } catch { return false; }
+                      })()}
+                      onResumeAudit={() => setActiveTab('stok')}
                       onNavigate={setActiveTab}
                       onOpenQuickSale={() => {
                         setSaleSearchQuery('');
@@ -1178,6 +1206,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       products={products}
                       activeCashier={activeCashier}
                       nextCashier={nextCashier}
+                      allCashiers={cashiers}
+                      sessionKey={`audit_${activeStoreId || 'default'}_${activeCashier.id}`}
                       transactions={transactions}
                       userRole={currentUserRole}
                       theme={theme}
@@ -1308,91 +1338,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
           </AnimatePresence>
         </div>
 
-        {/* NATIVE-STYLE FROSTED GLASS BOTTOM TAB BAR NAVIGATION matching Photo 2 */}
-        <footer className="bg-white dark:bg-slate-900 backdrop-blur-2xl border-t border-slate-200 dark:border-white/10 py-2 px-4 shrink-0 z-20 select-none relative overflow-hidden">
-          {/* Subtle center ambient reflection glow like in Photo 2 */}
-          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-48 h-8 bg-cyan-500/20 blur-xl rounded-full pointer-events-none" />
-
-          <div className="flex justify-around items-center relative z-10">
-            {/* Beranda Button (Home) */}
-            <button 
-              onClick={() => {
-                setSelectedProduct(null);
-                setActiveTab('beranda');
-              }}
-              className={`flex flex-col items-center p-1.5 transition-all cursor-pointer ${activeTab === 'beranda' && !selectedProduct ? 'text-cyan-700 dark:text-cyan-300 scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'text-slate-900 font-black dark:text-slate-400 hover:text-black dark:hover:text-slate-300'}`}
-              title="Beranda"
-            >
-              <Home className="h-5 w-5 stroke-[1.8]" />
-              <span className="text-[9px] font-black mt-0.5 uppercase tracking-wider">Beranda</span>
-            </button>
-
-            {/* Produk / Transaksi Button */}
-            <button 
-              onClick={() => {
-                setSelectedProduct(null);
-                setActiveTab('produk');
-              }}
-              className={`flex flex-col items-center p-1.5 transition-all cursor-pointer ${activeTab === 'produk' && !selectedProduct ? 'text-cyan-700 dark:text-cyan-300 scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'text-slate-900 font-black dark:text-slate-400 hover:text-black dark:hover:text-slate-300'}`}
-              title="Daftar Produk"
-            >
-              <Layers className="h-5 w-5 stroke-[1.8]" />
-              <span className="text-[9px] font-black mt-0.5 uppercase tracking-wider">Produk</span>
-            </button>
-
-            {/* JUAL CEPAT Button (Center Highlighted Tab) */}
-            <button 
-              onClick={() => {
-                setSelectedProduct(null);
-                setSaleSearchQuery('');
-                setSaleSelectedOperator('SEMUA');
-                setFormPaymentMethod('NON_TUNAI');
-                if (products.length > 0) setFormProductId(products[0].id);
-                setFormQuantity(1);
-                setFormNote('');
-                setShowQuickSale(true);
-              }}
-              className={`flex flex-col items-center p-1.5 transition-all cursor-pointer ${showQuickSale ? 'text-orange-600 dark:text-orange-400 scale-110 drop-shadow-[0_0_12px_rgba(249,115,22,0.8)] font-black' : 'text-orange-500 dark:text-orange-400 hover:text-orange-600 dark:hover:text-orange-300'}`}
-              title="Jual Cepat"
-            >
-              <div className={`p-1.5 rounded-xl transition ${showQuickSale ? 'bg-orange-500/25 border border-orange-500/50 shadow-lg shadow-orange-500/30' : 'bg-orange-500/15 border border-orange-500/30 text-orange-500'}`}>
-                <Zap className="h-5 w-5 stroke-[2.5]" />
-              </div>
-              <span className="text-[9px] font-extrabold mt-0.5 uppercase tracking-wider text-orange-500 dark:text-orange-400">Jual Cepat</span>
-            </button>
-
-            {/* ATUR STOK Button */}
-            <button 
-              onClick={() => {
-                setSelectedProduct(null);
-                setActiveTab('stok');
-              }}
-              className={`flex flex-col items-center p-1.5 transition-all cursor-pointer ${activeTab === 'stok' && !selectedProduct ? 'text-cyan-700 dark:text-cyan-300 scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'text-slate-900 font-black dark:text-slate-400 hover:text-black dark:hover:text-slate-300'}`}
-              title="Kontrol Stok & Serah Terima"
-            >
-              <PackageOpen className="h-5 w-5 stroke-[1.8]" />
-              <span className="text-[9px] font-black mt-0.5 uppercase tracking-wider">Atur Stok</span>
-            </button>
-
-            {/* Laporan Button - ONLY FOR OWNER */}
-            {currentUserRole === 'owner' && (
-              <button 
-                onClick={() => {
-                  setSelectedProduct(null);
-                  setActiveTab('laporan');
-                }}
-                className={`flex flex-col items-center p-1.5 transition-all cursor-pointer ${activeTab === 'laporan' && !selectedProduct ? 'text-cyan-700 dark:text-cyan-300 scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'text-slate-900 font-black dark:text-slate-400 hover:text-black dark:hover:text-slate-300'}`}
-                title="Laporan & Log"
-              >
-                <Activity className="h-5 w-5 stroke-[1.8]" />
-                <span className="text-[9px] font-black mt-0.5 uppercase tracking-wider">Laporan</span>
-              </button>
-            )}
-          </div>
-
-          {/* Virtual iOS / Android curved home indicator swipe bar */}
-          <div className="w-28 h-1 bg-white/20 rounded-full mx-auto mt-2 pointer-events-none"></div>
-        </footer>
 
         {/* DIALOG MODAL: QUICK SALE */}
         <AnimatePresence>
@@ -1407,7 +1352,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                   initial={{ y: 50, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: 50, opacity: 0 }}
-                  className={`w-full rounded-3xl p-4 shadow-2xl relative space-y-2 text-xs max-h-[88vh] overflow-y-auto border ${
+                  className={`w-full rounded-3xl p-3 shadow-2xl relative space-y-1.5 text-xs max-h-[90vh] overflow-y-auto border flex flex-col ${
                     isLight 
                       ? 'bg-white border-slate-200 text-slate-900' 
                       : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 border-slate-200 dark:border-white/15 text-slate-900 dark:text-white'
@@ -1431,16 +1376,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       }
                       handleQuickSaleSubmit(e);
                     }} 
-                    className="space-y-3"
+                    className="space-y-2 flex-1 flex flex-col"
                   >
-                    {/* Filter Operator & Kolom Cari */}
-                    <div className="space-y-1.5">
-                      {/* Provider chips - compact horizontal scroll */}
-                      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar" id="sale-provider-filter">
+                    <div className="space-y-1">
+                      <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar" id="sale-provider-filter">
                         {OPERATOR_CHIPS.map((chip) => {
                           const isSelected = saleSelectedOperator === chip.opValue;
-                          const opName = chip.opValue === 'TELKOMSEL' ? 'Telkomsel' : chip.opValue.charAt(0) + chip.opValue.slice(1).toLowerCase();
-                          const opStyle = OPERATOR_STYLES[opName] || { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-200 dark:border-white/10', logoBg: 'bg-slate-500' };
                           return (
                             <button
                               key={chip.id}
@@ -1458,7 +1399,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         })}
                       </div>
 
-                      {/* Search input — label as placeholder */}
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                         <input
@@ -1471,7 +1411,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                               ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-500 focus:border-emerald-500' 
                               : 'bg-white border-slate-200 dark:bg-slate-950 dark:border-white/15 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 focus:border-emerald-500'
                           }`}
-                          autoFocus={false}
                         />
                         {(saleSearchQuery || saleSelectedOperator !== 'SEMUA') && (
                           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[9px] font-bold text-emerald-500 dark:text-emerald-400 pointer-events-none">
@@ -1489,8 +1428,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         )}
                         </div>
 
-                      {/* Filtered Result Product List */}
-                      <div className={`max-h-28 overflow-y-auto space-y-1 rounded-xl border p-1 no-scrollbar ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border-slate-200 dark:border-white/10'}`}>
+                      <div className="h-28 overflow-y-auto space-y-1 pr-1 border border-slate-200 dark:border-white/5 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/30" id="sale-product-list">
                         {filteredSaleProducts.length === 0 ? (
                           <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
                             {saleSelectedOperator !== 'SEMUA' 
@@ -1501,36 +1439,28 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         ) : (
                           filteredSaleProducts.map((p) => {
                             const isSelected = activeSelectedId === p.id;
-                            const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
                             return (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => setFormProductId(p.id)}
-                                className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                                className={`w-full text-left px-2 py-1.5 rounded-lg border transition-all flex justify-between items-center ${
                                   isSelected 
-                                    ? 'bg-emerald-500/20 border-emerald-500 text-slate-900 dark:text-white shadow-sm' 
-                                    : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
+                                    ? `bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm dark:bg-emerald-500/10 dark:text-emerald-300` 
+                                    : `bg-white hover:bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-white/10 dark:hover:bg-slate-800 ${isLight ? 'text-slate-700' : 'text-slate-300'}`
                                 }`}
                               >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} ${isLight ? 'bg-slate-100' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900'} shrink-0`}>
-                                    {p.operator}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <p className={`text-[11px] font-bold ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'} truncate leading-tight`}>{p.name}</p>
-                                    <p className={`text-[9px] ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'} mt-0.5`}>
-                                      Stok: <span className={p.currentStock <= p.minStockLevel ? 'text-amber-500 font-black dark:text-amber-400 font-bold' : 'text-slate-600 dark:text-slate-300'}>{p.currentStock} pcs</span>
-                                    </p>
+                                <div className="min-w-0 flex-1 pr-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className={`w-1 h-3 rounded-full ${isSelected ? 'bg-emerald-500' : (p.currentStock <= p.minStockLevel ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
+                                    <h4 className="text-[10px] font-black truncate">{p.name}</h4>
                                   </div>
                                 </div>
-                                <div className="text-right shrink-0 ml-2">
-                                  <span className={`text-[11px] font-extrabold ${isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400'} block`}>
-                                    Rp {p.sellingPrice.toLocaleString('id-ID')}
-                                  </span>
-                                  {isSelected && (
-                                    <span className={`text-[8px] font-bold ${isLight ? 'text-emerald-700 bg-emerald-100' : 'text-emerald-300 bg-emerald-500/30'} px-1 rounded uppercase`}>Dipilih</span>
-                                  )}
+                                <div className="text-right shrink-0">
+                                  <div className="text-[11px] font-black">Rp {p.sellingPrice.toLocaleString('id-ID')}</div>
+                                  <div className={`text-[8px] font-bold ${p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-slate-500'}`}>
+                                    Stok: {p.currentStock}
+                                  </div>
                                 </div>
                               </button>
                             );
@@ -1539,14 +1469,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       </div>
                     </div>
 
-                    {/* Selected Product Highlight Banner — compact inline */}
                     {selectedProduct && (
-                      <motion.div 
-                        key={selectedProduct.id}
-                        initial={{ scale: 0.95, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between"
-                      >
+                      <div className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between">
                         <div className="min-w-0">
                           <span className="text-[9px] uppercase font-black text-amber-950 flex items-center gap-0.5">
                             <ArrowUpRight className="w-3 h-3 shrink-0" />
@@ -1560,10 +1484,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                             Rp {selectedProduct.sellingPrice.toLocaleString('id-ID')}
                           </p>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
 
-                    {/* Quantity Field with Quick Steppers — compact */}
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
                         <label className={`text-[10px] font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>Jumlah Jual (Pcs)</label>
@@ -1612,7 +1535,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       </div>
                     </div>
 
-                    {/* Payment Method & Optional Note — compact */}
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
                       <div className="grid grid-cols-2 gap-1.5">
@@ -1651,20 +1573,20 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     </div>
 
                     {selectedProduct && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Total Jual:</span>
-                        <span className="font-black text-emerald-500 dark:text-emerald-400 text-base">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded-xl flex justify-between items-center mt-1">
+                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Total Jual:</span>
+                        <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
                           Rp {(selectedProduct.sellingPrice * formQuantity).toLocaleString('id-ID')}
                         </span>
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-1.5">
+                    <div className="flex gap-2 pt-1 mt-auto">
                       <button
                         type="button"
                         id="btn-cancel-quick-sale"
                         onClick={() => setShowQuickSale(false)}
-                        className="flex-1 py-2.5 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition cursor-pointer"
+                        className="flex-1 py-2 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition cursor-pointer"
                       >
                         Batal
                       </button>
@@ -1672,7 +1594,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         type="submit"
                         id="btn-confirm-quick-sale"
                         disabled={!selectedProduct}
-                        className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-slate-900 dark:text-white font-bold rounded-xl transition cursor-pointer shadow-lg shadow-emerald-950/50"
+                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl transition cursor-pointer shadow-lg shadow-emerald-950/50"
                       >
                         Konfirmasi Jual
                       </button>
@@ -1862,15 +1784,15 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           ))}
                         </div>
                       </div>
-                      {/* Stepper Row */}
-                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5">
+                      {/* Stepper Row: number left, buttons right */}
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-2 py-1.5">
                         <input
                           type="number"
                           min="1"
                           required
                           value={formQuantity}
                           onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                          className="w-20 bg-transparent border-none text-slate-900 dark:text-white text-lg font-black focus:outline-none"
+                          className="w-16 bg-transparent border-none text-slate-900 dark:text-white text-lg font-black focus:outline-none"
                         />
                         <div className="flex items-center gap-1.5">
                           <button
@@ -2249,6 +2171,64 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             </div>
           )}
         </AnimatePresence>
+
+        {/* VOUCHER BOTTOM NAVIGATION */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-white/10 px-2 py-1 z-[150] shadow-[0_-4px_20px_rgba(0,0,0,0.03)] pb-safe">
+          <ul className="flex justify-around items-center max-w-lg mx-auto">
+            <li className="flex-1" onClick={() => onExit?.()}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className="transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+                  <ArrowLeft className="w-5 h-5 stroke-[2px]" />
+                </div>
+                <span className="text-[9px] font-black tracking-tight text-slate-500 transition-colors duration-300">Utama</span>
+              </div>
+            </li>
+            
+            <li className="flex-1" onClick={() => { setActiveTab('beranda'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className={activeTab === 'beranda' && !selectedProduct ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                  <Home className={activeTab === 'beranda' && !selectedProduct ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
+                </div>
+                <span className={activeTab === 'beranda' && !selectedProduct ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Beranda</span>
+              </div>
+            </li>
+
+            <li className="flex-1" onClick={() => {
+              setSaleSearchQuery('');
+              setSaleSelectedOperator('SEMUA');
+              setFormPaymentMethod('NON_TUNAI');
+              if (products.length > 0) setFormProductId(products[0].id);
+              setFormQuantity(1);
+              setFormNote('');
+              setShowQuickSale(true);
+            }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1 relative">
+                <div className="absolute -top-3 bg-rose-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg shadow-rose-500/40 border-2 border-white dark:border-slate-900 group-active:scale-95 transition-transform">
+                  <ShoppingCart className="w-4 h-4 stroke-[2.5px]" />
+                </div>
+                <span className="text-[9px] font-black tracking-tight text-slate-500 transition-colors duration-300 mt-5">Jual</span>
+              </div>
+            </li>
+
+            <li className="flex-1" onClick={() => { setActiveTab('produk'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className={activeTab === 'produk' || selectedProduct ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                  <Package className={activeTab === 'produk' || selectedProduct ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
+                </div>
+                <span className={activeTab === 'produk' || selectedProduct ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Produk</span>
+              </div>
+            </li>
+
+            <li className="flex-1" onClick={() => { setActiveTab('riwayat'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className={activeTab === 'riwayat' ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                  <History className={activeTab === 'riwayat' ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
+                </div>
+                <span className={activeTab === 'riwayat' ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Riwayat</span>
+              </div>
+            </li>
+          </ul>
+        </nav>
 
       </div> {/* Closing smartphone frame */}
     </div>

@@ -8,6 +8,7 @@ import type { Transaction } from './types'
 
 // Components
 import Navigation from './components/Navigation'
+import AssistantBot from './components/AssistantBot'
 import SidePanel from './components/SidePanel'
 import SidebarPC from './components/SidebarPC'
 import TransactionForm from './components/TransactionForm'
@@ -169,10 +170,22 @@ const App: React.FC = () => {
           setKasirList(cList)
           localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(cList))
         } else {
-          setKasirList({})
+          try {
+            const storedList = localStorage.getItem(`alphaPro_${activeStoreId}_kasir_list`)
+            if (storedList) setKasirList(JSON.parse(storedList))
+            else setKasirList({})
+          } catch {
+            setKasirList({})
+          }
         }
       } catch (err) {
         console.error('Error fetching store settings:', err)
+        try {
+          const storedList = localStorage.getItem(`alphaPro_${activeStoreId}_kasir_list`)
+          if (storedList) setKasirList(JSON.parse(storedList))
+        } catch {
+          // Fallback ignore
+        }
       }
     }
 
@@ -206,6 +219,18 @@ const App: React.FC = () => {
 
     window.location.hash = '#/beranda'
 
+    // ── ISOLASI KASIRLIST PER-TOKO ──
+    // Reset kasirList dulu, lalu load dari localStorage toko yang dipilih.
+    setKasirList({})
+    if (storeId && storeId !== 'all') {
+      try {
+        const storedList = localStorage.getItem(`alphaPro_${storeId}_kasir_list`)
+        if (storedList) setKasirList(JSON.parse(storedList))
+      } catch(e) {
+        console.error('Gagal load kasirList dari localStorage:', e)
+      }
+    }
+
     if (role === 'owner') {
       localStorage.setItem('alphaPro_loggedIn', 'true')
       localStorage.setItem('alphaPro_username', 'owner')
@@ -223,18 +248,6 @@ const App: React.FC = () => {
       setIsLoggedIn(false)
       setCurrentUsername('')
       setCurrentAccount(null)
-      // ── ISOLASI KASIRLIST PER-TOKO ──
-      // Reset kasirList dulu, lalu load dari localStorage toko yang dipilih.
-      // Ini mencegah nama kasir toko lain bocor ke LoginScreen kasir.
-      setKasirList({})
-      if (storeId && storeId !== 'all') {
-        try {
-          const storedList = localStorage.getItem(`alphaPro_${storeId}_kasir_list`)
-          if (storedList) setKasirList(JSON.parse(storedList))
-        } catch(e) {
-          console.error('Gagal load kasirList dari localStorage:', e)
-        }
-      }
     }
   }
 
@@ -414,11 +427,44 @@ const MainApp: React.FC<MainAppProps> = ({
 
   // Navigation State
   const [activeView, setActiveView] = useState('view-beranda')
+  const [botSearchQuery, setBotSearchQuery] = useState<string | undefined>(undefined)
+  const [botActiveTab, setBotActiveTab] = useState<string | undefined>(undefined)
+  const [groqApiKey, setGroqApiKey] = useState<string>(() => localStorage.getItem('alphaPro_groq_api_key') || '')
 
   // ── Multi-Store States & Derived Store Info ──
   const [pantauStoreId, setPantauStoreId] = useState<string | 'all'>(activeStoreId)
   const [stores, setStores] = useState<Store[]>([])
   const targetStoreId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+
+  // Fetch store settings / cashiers when targetStoreId changes
+  useEffect(() => {
+    if (!googleUid) return
+    const effectiveStoreId = targetStoreId && targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null);
+    if (!effectiveStoreId) return;
+
+    const fetchStoreCashiers = async () => {
+      try {
+        const { data } = await supabase
+          .from('store_settings')
+          .select('*')
+          .eq('store_id', effectiveStoreId)
+          .maybeSingle();
+
+        if (data && data.cashiers && Object.keys(data.cashiers).length > 0) {
+          setKasirList(data.cashiers);
+          localStorage.setItem(`alphaPro_${effectiveStoreId}_kasir_list`, JSON.stringify(data.cashiers));
+        } else {
+          const stored = localStorage.getItem(`alphaPro_${effectiveStoreId}_kasir_list`);
+          if (stored) setKasirList(JSON.parse(stored));
+        }
+      } catch (err) {
+        const stored = localStorage.getItem(`alphaPro_${effectiveStoreId}_kasir_list`);
+        if (stored) setKasirList(JSON.parse(stored));
+      }
+    };
+
+    fetchStoreCashiers();
+  }, [targetStoreId, activeStoreId, googleUid]);
 
   // Sync activeView with URL Hash
   useEffect(() => {
@@ -576,6 +622,7 @@ const MainApp: React.FC<MainAppProps> = ({
       running_texts: runningTexts,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
+      groq_api_key: groqApiKey || null,
       updated_at: new Date().toISOString()
     })
     
@@ -586,14 +633,47 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  const handleSaveCashierSelf = async (username: string, updatedAccount: { name: string, pin: string }) => {
+  // ── Simpan Groq API Key ke localStorage + Supabase ──
+  const handleSaveGroqKey = async (key: string) => {
+    const trimmedKey = key.trim()
+    localStorage.setItem('alphaPro_groq_api_key', trimmedKey)
+    setGroqApiKey(trimmedKey)
+    const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
+    if (!effectiveStoreId) return
+    const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
+    const { error } = await supabase.from('store_settings').upsert({
+      store_id: effectiveStoreId,
+      cashiers: kasirList,
+      presets,
+      running_texts: runningTexts,
+      main_announcement: mainAnnouncement,
+      is_pin_enabled: isPin,
+      groq_api_key: trimmedKey || null,
+      updated_at: new Date().toISOString()
+    })
+    if (error) console.error('Gagal simpan Groq key ke cloud:', error.message)
+    else showToast('GROQ KEY DISIMPAN & DISINKRONKAN!')
+  }
+
+  const handleSaveGroqKeyClear = async () => {
+    localStorage.removeItem('alphaPro_groq_api_key')
+    setGroqApiKey('')
+    const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
+    if (!effectiveStoreId) return
+    await supabase.from('store_settings').upsert({
+      store_id: effectiveStoreId,
+      groq_api_key: null,
+      updated_at: new Date().toISOString()
+    })
+  }
+
+  const handleSaveCashierSelf = async (username: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
     if (activeStoreId === 'all') return
     const updatedList = {
       ...kasirList,
       [username]: {
         ...kasirList[username],
-        name: updatedAccount.name,
-        pin: updatedAccount.pin
+        ...updatedAccount
       }
     }
     setKasirList(updatedList)
@@ -682,6 +762,16 @@ const MainApp: React.FC<MainAppProps> = ({
         const remoteStr = String(data.is_pin_enabled)
         if (local !== remoteStr) {
           localStorage.setItem(`alphaPro_${targetStoreId}_isPinEnabled`, remoteStr)
+          changed = true
+        }
+      }
+
+      // Sync Groq API Key
+      if (data.groq_api_key) {
+        const local = localStorage.getItem('alphaPro_groq_api_key')
+        if (local !== data.groq_api_key) {
+          localStorage.setItem('alphaPro_groq_api_key', data.groq_api_key)
+          setGroqApiKey(data.groq_api_key)
           changed = true
         }
       }
@@ -1989,6 +2079,7 @@ const MainApp: React.FC<MainAppProps> = ({
                     />
                   );
                 case 'view-akun':
+                case 'view-akun-karyawan':
                   return (
                     <AkunView
                       active={true}
@@ -2019,6 +2110,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       onSaveCashierSelf={handleSaveCashierSelf}
                       activeStoreId={targetStoreId}
                       transactions={transactions}
+                      forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
+                      absensiList={absensi}
                     />
                   );
                 case 'view-isi-saldo':
@@ -2049,7 +2142,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 case 'view-kontak':
                   return <KontakView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />;
                 case 'view-stok-voucher':
-                  return <VoucherView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} />;
+                  return <VoucherView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} kasirList={kasirList} externalSearchQuery={botSearchQuery} externalTab={botActiveTab} />;
                 case 'view-kalender':
                   return <KalenderView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
                 case 'view-nota':
@@ -2282,7 +2375,7 @@ const MainApp: React.FC<MainAppProps> = ({
           />
 
           <AkunView 
-            active={activeView === 'view-akun'} 
+            active={activeView === 'view-akun' || activeView === 'view-akun-karyawan'} 
             setActiveView={setActiveView}
             kasirName={account.name}
             kasirRole={account.role}
@@ -2309,6 +2402,8 @@ const MainApp: React.FC<MainAppProps> = ({
             onSaveCashierSelf={handleSaveCashierSelf}
             activeStoreId={targetStoreId}
             transactions={transactions}
+            forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
+            absensiList={absensi}
           />
 
           <IsiSaldoView 
@@ -2333,7 +2428,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
           <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
           <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
-          <VoucherView active={activeView === 'view-stok-voucher'} isPc={false} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} />
+          <VoucherView active={activeView === 'view-stok-voucher'} isPc={false} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={account.role} kasirName={account.name} googleUid={googleUid} currentUsername={username} kasirList={kasirList} externalSearchQuery={botSearchQuery} externalTab={botActiveTab} />
           <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
           <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
           <OtomatisView 
@@ -2364,7 +2459,9 @@ const MainApp: React.FC<MainAppProps> = ({
             targetStoreId={targetStoreId}
           />
 
-          <Navigation activeView={activeView} setActiveView={setActiveView} />
+          {activeView !== 'view-stok-voucher' && (
+            <Navigation activeView={activeView} setActiveView={setActiveView} />
+          )}
         </>
       )}
 
@@ -2619,6 +2716,21 @@ const MainApp: React.FC<MainAppProps> = ({
           </div>
         </div>
       )}
+
+      {/* ── Asisten Bot Floating ── */}
+      <AssistantBot
+        activeView={activeView}
+        setActiveView={setActiveView}
+        setBotSearchQuery={setBotSearchQuery}
+        setBotActiveTab={setBotActiveTab}
+        activeStoreId={targetStoreId !== 'all' ? targetStoreId : activeStoreId}
+        currentUsername={username}
+        kasirRole={account.role}
+        groqApiKey={groqApiKey}
+        onSaveGroqKey={handleSaveGroqKey}
+        onClearGroqKey={handleSaveGroqKeyClear}
+      />
+
     </div>
   )
 }

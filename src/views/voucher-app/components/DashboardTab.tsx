@@ -59,7 +59,10 @@ interface DashboardTabProps {
   nextCashier: Cashier;
   userRole: UserRole;
   theme?: 'dark' | 'light';
+  hasActiveAuditSession?: boolean;
+  kasirList?: Record<string, { name?: string; role?: string; pin?: string }>;
   onNavigate: (tab: 'beranda' | 'produk' | 'pencarian' | 'laporan' | 'profil' | 'stok' | 'riwayat' | 'notif') => void;
+  onResumeAudit?: () => void;
   onOpenQuickSale: () => void;
   onOpenQuickRestock: () => void;
   onOpenHandoverModal: () => void;
@@ -77,7 +80,10 @@ export default function DashboardTab({
   nextCashier,
   userRole,
   theme = 'dark',
+  kasirList,
+  hasActiveAuditSession = false,
   onNavigate,
+  onResumeAudit,
   onOpenQuickSale,
   onOpenQuickRestock,
   onOpenHandoverModal,
@@ -171,10 +177,16 @@ export default function DashboardTab({
   }, [products, transactions, ownerFilterCashier]);
 
   const uniqueCashiersToday = React.useMemo(() => {
+    if (kasirList && Object.keys(kasirList).length > 0) {
+      return Object.values(kasirList)
+        .filter(k => k && k.role !== 'owner' && k.name && k.name.toLowerCase() !== 'owner')
+        .map(k => k.name)
+        .filter(Boolean) as string[];
+    }
     const today = new Date().toISOString().split('T')[0];
     const todayTxs = transactions.filter(t => t.timestamp.startsWith(today));
     return Array.from(new Set(todayTxs.map(t => t.cashierName))).filter(Boolean);
-  }, [transactions]);
+  }, [transactions, kasirList]);
 
   const trendingProducts = React.useMemo(() => {
     // Filter sales transactions for the selected date
@@ -386,54 +398,26 @@ export default function DashboardTab({
             </button>
           </div>
 
-          <div className={`grid grid-cols-5 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`}>
+          <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`}>
             <button onClick={onOpenQuickSale} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-orange-500/20"><ShoppingCart className="w-5 h-5 sm:w-5 sm:h-5" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Jual Cepat</span>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30"><ShoppingCart className="w-6 h-6 sm:w-7 sm:h-7" /></div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Jual Cepat</span>
             </button>
             <button onClick={() => onNavigate('pencarian')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-fuchsia-500/20"><Search className="w-5 h-5 sm:w-5 sm:h-5" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Pencarian</span>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30"><Search className="w-6 h-6 sm:w-7 sm:h-7" /></div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Pencarian</span>
             </button>
             <button onClick={() => onNavigate('laporan')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-blue-500/20"><BarChart3 className="w-5 h-5 sm:w-5 sm:h-5" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Laporan</span>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-blue-500/30"><BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" /></div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Laporan</span>
             </button>
-            <button onClick={() => onNavigate('notif')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer" id="btn-owner-notifikasi">
-              <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-red-500/20">
-                <Bell className="w-5 h-5 sm:w-5 sm:h-5" />
-                {unreadNotificationsCount > 0 && (
-                  <span className="absolute top-0 right-0 h-3 w-3 bg-red-600 border border-white rounded-full text-[7px] flex items-center justify-center text-white font-black">{unreadNotificationsCount}</span>
-                )}
+            <button onClick={() => onNavigate('profil')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer" id="btn-owner-sistem">
+              <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
+                <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Notifikasi</span>
-            </button>
-            <button onClick={() => onNavigate('profil')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-slate-600/20"><User className="w-5 h-5 sm:w-5 sm:h-5" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Akun</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Sistem</span>
             </button>
           </div>
-        </div>
-
-        {/* Owner Quick Access (Harga, Audit, Laporan, Sistem) - Moved Up */}
-        <div className="grid grid-cols-4 gap-2">
-           {[
-             { label: 'Harga', icon: Settings, tab: 'produk', color: 'violet' },
-             { label: 'Audit', icon: Activity, tab: 'riwayat', color: 'rose' },
-             { label: 'Laporan', icon: FileText, tab: 'laporan', color: 'blue' },
-             { label: 'Sistem', icon: ShieldCheck, tab: 'profil', color: 'slate' }
-           ].map((btn) => (
-             <button 
-               key={btn.label}
-               onClick={() => onNavigate(btn.tab as any)} 
-               className={`flex-1 flex flex-col items-center gap-2 p-2 rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`}
-             >
-               <div className={`w-8 h-8 rounded-full bg-${btn.color}-500 flex items-center justify-center text-white group-hover:scale-105 transition-transform shadow-md shadow-${btn.color}-500/20`}>
-                 <btn.icon className="w-4 h-4" />
-               </div>
-               <span className={`text-[7px] font-black uppercase tracking-widest ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>{btn.label}</span>
-             </button>
-           ))}
         </div>
 
         
@@ -753,6 +737,33 @@ export default function DashboardTab({
     <div className="space-y-4" id="dashboard-tab-container">
       {/* Quick Action Buttons Section */}
       <div className="space-y-4" id="dashboard-quick-actions-panel">
+
+        {/* BANNER: Sesi Audit Aktif */}
+        {hasActiveAuditSession && (
+          <button
+            type="button"
+            onClick={() => onResumeAudit ? onResumeAudit() : onNavigate('stok')}
+            className={`w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${
+              isLight
+                ? 'bg-amber-50 border-amber-400 hover:bg-amber-100'
+                : 'bg-amber-500/10 border-amber-500/50 hover:bg-amber-500/15'
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center shrink-0 shadow-md shadow-amber-500/30">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            </div>
+            <div className="flex-1 text-left">
+              <p className={`text-xs font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Sesi Atur Stok Belum Selesai</p>
+              <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>Ketuk untuk melanjutkan audit shift yang masih aktif</p>
+            </div>
+            <svg className={`w-4 h-4 shrink-0 ${isLight ? 'text-amber-600' : 'text-amber-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
+
         {/* ROW 1: 4 Large Priority Action Buttons (PRODUK, ATUR STOK, RESTOK, RIWAYAT) */}
         <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-priority-actions-bar">
           {/* 1. PRODUK */}
@@ -816,8 +827,8 @@ export default function DashboardTab({
           </button>
         </div>
 
-        {/* ROW 2: 5 Standard Compact Buttons (Jual Cepat, Pencarian, Laporan, Notifikasi, Akun) */}
-        <div className={`grid grid-cols-5 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-secondary-actions-bar">
+        {/* ROW 2: 4 Standard Compact Buttons (Jual Cepat, Pencarian, Laporan, Sistem) */}
+        <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-secondary-actions-bar">
           {/* 1. Jual Cepat */}
           <button
             type="button"
@@ -825,10 +836,10 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-jual"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-orange-500/20">
-              <ShoppingCart className="w-5 h-5 sm:w-5 sm:h-5" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30">
+              <ShoppingCart className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+            <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
               Jual Cepat
             </span>
           </button>
@@ -840,10 +851,10 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-pencarian"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-fuchsia-500/20">
-              <Search className="w-5 h-5 sm:w-5 sm:h-5" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30">
+              <Search className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+            <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
               Pencarian
             </span>
           </button>
@@ -855,49 +866,26 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-laporan"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-blue-500/20">
-              <BarChart3 className="w-5 h-5 sm:w-5 sm:h-5" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-blue-500/30">
+              <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+            <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
               Laporan
             </span>
           </button>
 
-          {/* 4. Notifikasi */}
-          <button
-            type="button"
-            onClick={() => onNavigate('notif')}
-            className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
-            id="btn-quick-notifikasi"
-          >
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-red-500/20">
-              <Bell className="w-5 h-5 sm:w-5 sm:h-5" />
-              {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 sm:h-4 sm:w-4">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 sm:h-4 sm:w-4 bg-red-500 text-[8px] sm:text-[9px] font-black text-slate-900 dark:text-white items-center justify-center leading-none">
-                    {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
-                  </span>
-                </span>
-              )}
-            </div>
-            <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-              Notifikasi
-            </span>
-          </button>
-
-          {/* 5. Akun */}
+          {/* 4. Sistem */}
           <button
             type="button"
             onClick={() => onNavigate('profil')}
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-profil"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-md shadow-slate-600/20">
-              <User className="w-5 h-5 sm:w-5 sm:h-5" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
+              <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <span className={`text-[9px] sm:text-[10px] font-bold mt-1.5 leading-tight text-center ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
-              Akun
+            <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+              Sistem
             </span>
           </button>
         </div>

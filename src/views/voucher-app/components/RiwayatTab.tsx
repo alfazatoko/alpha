@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -146,9 +146,9 @@ export default function RiwayatTab({
               <History className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                 <span>{viewMode === 'daily' ? 'Riwayat Serah Terima' : 'Arsip Audit Lengkap'}</span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-500 font-black dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" /> Arsip Terkunci
                 </span>
               </h2>
@@ -305,36 +305,36 @@ export default function RiwayatTab({
               {/* Row 2: Uang Masuk + Tarik Tunai + Admin — 3 equal cols */}
               <div className="grid grid-cols-3 gap-2">
                 {/* Uang Masuk */}
-                <div className="bg-slate-950/50 border border-emerald-500/20 rounded-xl p-2.5 space-y-0.5">
+                <div className="bg-emerald-50 dark:bg-slate-950/50 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-emerald-400 tracking-widest">Uang Masuk</span>
+                    <span className="text-[9px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">Uang Masuk</span>
                     <Banknote className="w-3 h-3 text-emerald-500/60" />
                   </div>
-                  <div className="font-mono font-black text-emerald-400 text-sm leading-tight">
+                  <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalUangMasuk)}
                   </div>
                   <div className="text-[8px] text-emerald-500/60 font-bold">Total Omset</div>
                 </div>
 
                 {/* Tarik Tunai */}
-                <div className="bg-slate-950/50 border border-cyan-500/20 rounded-xl p-2.5 space-y-0.5">
+                <div className="bg-cyan-50 dark:bg-slate-950/50 border border-cyan-200 dark:border-cyan-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-cyan-400 tracking-widest">Tarik Tunai</span>
+                    <span className="text-[9px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">Tarik Tunai</span>
                     <Banknote className="w-3 h-3 text-cyan-500/60" />
                   </div>
-                  <div className="font-mono font-black text-cyan-400 text-sm leading-tight">
+                  <div className="font-mono font-black text-cyan-700 dark:text-cyan-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalTarikTunai)}
                   </div>
                   <div className="text-[8px] text-cyan-500/60 font-bold">Kas Fisik</div>
                 </div>
 
                 {/* Admin */}
-                <div className="bg-slate-950/50 border border-amber-500/20 rounded-xl p-2.5 space-y-0.5">
+                <div className="bg-amber-50 dark:bg-slate-950/50 border border-amber-200 dark:border-amber-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-amber-400 tracking-widest">Admin</span>
+                    <span className="text-[9px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">Admin</span>
                     <QrCode className="w-3 h-3 text-amber-500/60" />
                   </div>
-                  <div className="font-mono font-black text-amber-400 text-sm leading-tight">
+                  <div className="font-mono font-black text-amber-700 dark:text-amber-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalAdmin)}
                   </div>
                   <div className="text-[8px] text-amber-500/60 font-bold">Kas Ekspektasi</div>
@@ -404,7 +404,7 @@ export default function RiwayatTab({
                           </span>
                           <div>
                             <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-bold text-slate-100">{record.shiftName}</h3>
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-white">{record.shiftName}</h3>
                               <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-700 flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-slate-600 dark:text-slate-400" /> {timeFormatted}
                               </span>
@@ -434,26 +434,26 @@ export default function RiwayatTab({
                       <div className="grid grid-cols-5 gap-1.5 text-xs">
 
                         {/* 1. TRX */}
-                        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-indigo-400 tracking-widest">TRX</div>
-                          <div className="font-mono font-black text-indigo-300 text-base leading-none">
+                        <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-widest">TRX</div>
+                          <div className="font-mono font-black text-indigo-800 dark:text-indigo-300 text-base leading-none">
                             {record.totalSoldPcs}
                           </div>
                           <div className="text-[8px] text-indigo-400/70 font-bold">Pcs Laku</div>
                         </div>
 
                         {/* 2. Uang Masuk */}
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-emerald-400 tracking-widest">Masuk</div>
-                          <div className="font-mono font-black text-emerald-400 text-[11px] leading-tight">
+                        <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">Masuk</div>
+                          <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-[11px] leading-tight">
                             {fmtCompact(record.totalSalesAmount)}
                           </div>
                           <div className="text-[8px] text-emerald-400/70 font-bold">Omset</div>
                         </div>
 
                         {/* 3. Tarik Tunai */}
-                        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-cyan-400 tracking-widest">Tunai</div>
+                        <div className="bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">Tunai</div>
                           <div className="font-mono font-black text-cyan-400 text-[11px] leading-tight">
                             {fmtCompact(record.cashPhysical)}
                           </div>
@@ -461,8 +461,8 @@ export default function RiwayatTab({
                         </div>
 
                         {/* 4. Admin */}
-                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-amber-400 tracking-widest">Admin</div>
+                        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
+                          <div className="text-[8px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">Admin</div>
                           <div className="font-mono font-black text-amber-400 text-[11px] leading-tight">
                             {fmtCompact(record.cashExpected)}
                           </div>
@@ -472,14 +472,14 @@ export default function RiwayatTab({
                         {/* 5. Status Kas */}
                         <div className={`rounded-xl p-2 space-y-0.5 col-span-1 border ${
                           isCashMatched
-                            ? 'bg-emerald-500/10 border-emerald-500/20'
-                            : 'bg-rose-500/10 border-rose-500/20'
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20'
+                            : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20'
                         }`}>
                           <div className={`text-[8px] uppercase font-black tracking-widest ${
-                            isCashMatched ? 'text-emerald-400' : 'text-rose-400'
+                            isCashMatched ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                           }`}>Kas</div>
                           <div className={`flex items-center justify-center pt-0.5 ${
-                            isCashMatched ? 'text-emerald-400' : 'text-rose-400'
+                            isCashMatched ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                           }`}>
                             {isCashMatched
                               ? <CheckCircle2 className="w-5 h-5" />
@@ -487,7 +487,7 @@ export default function RiwayatTab({
                             }
                           </div>
                           <div className={`text-[7px] font-black text-center ${
-                            isCashMatched ? 'text-emerald-400/80' : 'text-rose-400/80'
+                            isCashMatched ? 'text-emerald-600 dark:text-emerald-400/80' : 'text-rose-600 dark:text-rose-400/80'
                           }`}>
                             {isCashMatched ? 'PAS' : `Selisih`}
                           </div>
@@ -529,18 +529,18 @@ export default function RiwayatTab({
                                   <th className="py-2 px-2">Nama Voucher</th>
                                   <th className="py-2 px-1 text-center">Awal</th>
                                   <th className="py-2 px-1 text-center">Akhir</th>
-                                  <th className="py-2 px-1 text-center text-emerald-500 font-black dark:text-emerald-400">Laku</th>
+                                  <th className="py-2 px-1 text-center text-emerald-700 dark:text-emerald-400">Laku</th>
                                   <th className="py-2 px-2 text-right">Total</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-800/60 font-mono">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-mono">
                                 {displayedProducts.map((p, idx) => (
-                                  <tr key={p.productId || idx} className="hover:bg-slate-800/30 transition">
-                                    <td className="py-1.5 px-2 font-sans font-bold text-slate-700 dark:text-slate-200">{p.productName}</td>
-                                    <td className="py-1.5 px-1 text-center text-slate-600 dark:text-slate-400">{p.initialStock}</td>
-                                    <td className="py-1.5 px-1 text-center text-slate-600 dark:text-slate-400">{p.finalStock}</td>
-                                    <td className="py-1.5 px-1 text-center font-black text-emerald-500 font-black dark:text-emerald-400">{p.soldStock}</td>
-                                    <td className="py-1.5 px-2 text-right font-bold text-slate-700 dark:text-slate-200">
+                                  <tr key={p.productId || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                                    <td className="py-2 px-2 font-sans font-bold text-slate-800 dark:text-slate-200">{p.productName}</td>
+                                    <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.initialStock}</td>
+                                    <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.finalStock}</td>
+                                    <td className="py-2 px-1 text-center font-black text-emerald-700 dark:text-emerald-400">{p.soldStock}</td>
+                                    <td className="py-2 px-2 text-right font-bold text-slate-800 dark:text-slate-200">
                                       {(p.soldStock * p.price).toLocaleString('id-ID')}
                                     </td>
                                   </tr>
@@ -595,7 +595,7 @@ export default function RiwayatTab({
                         <Layers className="w-3 h-3" /> {stats.count} Audit
                       </span>
                       <span className="text-slate-700">•</span>
-                      <span className="text-[10px] font-bold text-emerald-500 font-black dark:text-emerald-400 flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                         <Sparkles className="w-3 h-3" /> Rp{stats.sales.toLocaleString('id-ID')}
                       </span>
                     </div>
