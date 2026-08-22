@@ -186,9 +186,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
 
-  // State untuk API Key Gemini (Lokal Perangkat)
-  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '')
-
 
 
   // State untuk edit PIN Owner
@@ -2688,59 +2685,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             )}
           </div>
-
-          {/* Kategori: Pengaturan AI & Kamera */}
-          {props.kasirRole === 'owner' && (
-            <div className="group">
-              <button
-                onClick={() => setOpenCategory(openCategory === 'ai_setting' ? null : 'ai_setting')}
-                className={cn(
-                  "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                  openCategory === 'ai_setting' ? "bg-pink-600 text-white border-pink-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                    openCategory === 'ai_setting' ? "bg-white/20 text-white" : "bg-pink-50 text-pink-600"
-                  )}>
-                    <i className="fa-solid fa-microchip text-xs"></i>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[11px] font-black uppercase tracking-widest block text-black">PENGATURAN AI</span>
-                    <span className="text-[8px] font-bold opacity-80 text-gray-500">Konfigurasi Gemini & Kamera</span>
-                  </div>
-                </div>
-                <i className={cn(
-                  "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                  openCategory === 'ai_setting' && "rotate-180"
-                )}></i>
-              </button>
-
-              {openCategory === 'ai_setting' && (
-                <div className="mt-2 p-5 bg-pink-50 border border-pink-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
-                  <div>
-                    <label className="text-[9px] font-black text-pink-800 uppercase tracking-widest block mb-2">API Key Gemini (Google AI)</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: AIzaSyBxxxx..."
-                      value={geminiApiKey}
-                      onChange={(e) => {
-                        setGeminiApiKey(e.target.value);
-                        localStorage.setItem('gemini_api_key', e.target.value);
-                      }}
-                      className="w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-800 outline-none focus:ring-4 focus:ring-pink-100 transition-all"
-                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                    />
-                    <p className="text-[8px] font-bold text-pink-600 mt-2 px-1">
-                      <i className="fa-solid fa-info-circle mr-1"></i>
-                      Jika kuota API habis, Anda bisa menggantinya di sini tanpa perlu install ulang APK.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Kategori: Teks Otomatis (Setting Keterangan) */}
           <div className="group">

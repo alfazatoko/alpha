@@ -322,11 +322,9 @@ const App: React.FC = () => {
 
     // Delay first check by 2 seconds to ensure login_date is properly persisted
     const firstCheckTimer = setTimeout(checkDate, 2000);
-    const intervalId = setInterval(checkDate, 60000); // 1 minute
 
     return () => {
       clearTimeout(firstCheckTimer);
-      clearInterval(intervalId);
     };
   }, [isLoggedIn]);
 
