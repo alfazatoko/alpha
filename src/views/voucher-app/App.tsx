@@ -75,9 +75,11 @@ interface VoucherAppProps {
   kasirList?: Record<string, { name?: string; role?: string; pin?: string }>;
   externalSearchQuery?: string;
   externalTab?: string;
+  onClearExternalTab?: () => void;
+  onClearExternalSearchQuery?: () => void;
 }
 
-export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab }: VoucherAppProps = {}) {
+export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab, onClearExternalTab, onClearExternalSearchQuery }: VoucherAppProps = {}) {
   // Navigation tabs (Home, Catalog, Search, Reports, Profile/Settings, Atur Stok, Riwayat)
   const [activeTab, setActiveTab] = useState<'beranda' | 'produk' | 'pencarian' | 'laporan' | 'profil' | 'stok' | 'riwayat' | 'notif'>('beranda');
   
@@ -112,15 +114,17 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   useEffect(() => {
     if (externalTab) {
       setActiveTab(externalTab as any);
+      if (onClearExternalTab) onClearExternalTab();
     }
-  }, [externalTab]);
+  }, [externalTab, onClearExternalTab]);
 
   useEffect(() => {
     if (externalSearchQuery !== undefined) {
       setSaleSearchQuery(externalSearchQuery);
       setRestockSearchQuery(externalSearchQuery);
+      if (onClearExternalSearchQuery) onClearExternalSearchQuery();
     }
-  }, [externalSearchQuery]);
+  }, [externalSearchQuery, onClearExternalSearchQuery]);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -1346,6 +1350,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         setFormNote('');
                         setShowQuickSale(true);
                       }}
+                      activeStoreId={activeStoreId}
+                      googleUid={googleUid}
+                      cashiers={cashiers}
                     />
                   )}
 

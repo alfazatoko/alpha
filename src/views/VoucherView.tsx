@@ -16,6 +16,8 @@ interface VoucherViewProps {
   kasirList?: Record<string, { name?: string; role?: string; pin?: string }>
   externalSearchQuery?: string
   externalTab?: string
+  onClearExternalTab?: () => void
+  onClearExternalSearchQuery?: () => void
 }
 
 export const VoucherView: React.FC<VoucherViewProps> = (props) => {
@@ -33,6 +35,8 @@ export const VoucherView: React.FC<VoucherViewProps> = (props) => {
         kasirList={props.kasirList}
         externalSearchQuery={props.externalSearchQuery}
         externalTab={props.externalTab}
+        onClearExternalTab={props.onClearExternalTab}
+        onClearExternalSearchQuery={props.onClearExternalSearchQuery}
       />
     </div>
   )

@@ -28,7 +28,7 @@ export const VIEW_MAP: Record<string, { view: string; label: string; keywords: s
 
 // ── App Intent ────────────────────────────────────────────────────────────────
 export type AppIntent =
-  | { type: 'navigate'; view: string; label: string }
+  | { type: 'navigate'; view: string; label: string; tab?: string }
   | { type: 'edit_stok'; query: string }
   | { type: 'tanya_stok'; query: string }
   | { type: 'none' }
@@ -38,7 +38,15 @@ export function parseAppIntent(text: string): AppIntent {
   
   // 1. Cek Navigasi Langsung (Prioritas Tinggi)
   const directNavKeywords = [
-    { view: 'view-stok-voucher', keywords: ['atur stok', 'stok voucher', 'stok vcr', 'daftar voucher', 'stok kuota', 'stok paket', 'stok produk', 'tabel stok'] },
+    // Voucher specific tabs (sub-halaman)
+    { view: 'view-stok-voucher', tab: 'stok', keywords: ['atur stok', 'stok voucher', 'stok vcr', 'stok kuota', 'stok paket', 'stok produk', 'tabel stok', 'edit stok', 'tambah voucher'] },
+    { view: 'view-stok-voucher', tab: 'riwayat', keywords: ['riwayat voucher', 'riwayat serah terima', 'serah terima voucher', 'arsip audit', 'audit voucher'] },
+    { view: 'view-stok-voucher', tab: 'produk', keywords: ['katalog voucher', 'daftar voucher', 'lihat voucher', 'produk voucher'] },
+    { view: 'view-stok-voucher', tab: 'laporan', keywords: ['laporan voucher', 'keuntungan voucher', 'omset voucher', 'rekap voucher'] },
+    { view: 'view-stok-voucher', tab: 'notif', keywords: ['log aktivitas voucher', 'notifikasi voucher', 'pemberitahuan voucher', 'log voucher'] },
+    { view: 'view-stok-voucher', tab: 'beranda', keywords: ['dashboard voucher', 'menu voucher', 'voucher app', 'halaman voucher'] },
+    
+    // Normal views
     { view: 'view-owner-gaji', keywords: ['gaji kasir', 'penggajian', 'bayar gaji', 'gaji karyawan', 'slip gaji'] },
     { view: 'view-owner-absen', keywords: ['absen karyawan', 'monitor absensi', 'kehadiran kasir', 'kehadiran karyawan', 'log absen'] },
     { view: 'view-owner-izin', keywords: ['izin kasir', 'izin karyawan', 'persetujuan izin', 'cuti karyawan', 'cuti kasir'] },
@@ -53,6 +61,7 @@ export function parseAppIntent(text: string): AppIntent {
     { view: 'view-isi-saldo', keywords: ['isi saldo', 'topup', 'top up', 'tambah saldo', 'deposit'] },
     { view: 'view-kasbon', keywords: ['kasbon', 'bon', 'utang', 'piutang', 'hutang'] },
     { view: 'view-kontak', keywords: ['kontak', 'contact', 'pelanggan', 'customer'] },
+    { view: 'view-stok-voucher', keywords: ['voucher', 'stok kuota', 'stok paket'] },
     { view: 'view-kalender', keywords: ['kalender', 'calendar', 'jadwal', 'shift'] },
     { view: 'view-nota', keywords: ['nota', 'struk', 'kwitansi', 'invoice', 'print nota', 'cetak nota'] },
     { view: 'view-otomatis', keywords: ['otomatis', 'preset', 'auto', 'template'] }
@@ -60,9 +69,22 @@ export function parseAppIntent(text: string): AppIntent {
 
   for (const item of directNavKeywords) {
     for (const kw of item.keywords) {
-      if (c === kw || c === `buka ${kw}` || c === `ke ${kw}` || c === `halaman ${kw}` || c === `buka halaman ${kw}` || c === `pindah ke ${kw}` || c === `pindah halaman ${kw}`) {
+      if (
+        c === kw || 
+        c === `buka ${kw}` || 
+        c === `ke ${kw}` || 
+        c === `halaman ${kw}` || 
+        c === `buka halaman ${kw}` || 
+        c === `pindah ke ${kw}` || 
+        c === `pindah halaman ${kw}` ||
+        c.includes(`buka ${kw}`) ||
+        c.includes(`ke ${kw}`) ||
+        c.includes(`halaman ${kw}`) ||
+        c.includes(`pindah ${kw}`) ||
+        (kw.split(' ').length > 1 && c.includes(kw))
+      ) {
         const label = VIEW_MAP[Object.keys(VIEW_MAP).find(k => VIEW_MAP[k].view === item.view) || '']?.label || kw
-        return { type: 'navigate', view: item.view, label }
+        return { type: 'navigate', view: item.view, label, tab: item.tab }
       }
     }
   }

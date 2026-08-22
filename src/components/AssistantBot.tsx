@@ -158,10 +158,23 @@ const AssistantBot: React.FC<Props> = ({
     // ① Coba App Intent dulu
     const intent = parseAppIntent(text)
     if (intent.type === 'navigate') {
-      setBotSearchQuery(undefined); setBotActiveTab(undefined)
+      setBotSearchQuery(undefined)
+      setBotActiveTab(intent.tab)
       setActiveView(intent.view)
       setIsTyping(false)
-      addMessage('bot', `✅ Pindah ke halaman **${intent.label}**.`, 'app')
+      const tabLabels: Record<string, string> = {
+        stok: 'Atur Stok',
+        riwayat: 'Riwayat Serah Terima',
+        produk: 'Daftar Voucher',
+        laporan: 'Laporan Finansial',
+        beranda: 'Menu Utama',
+        notif: 'Log Aktivitas'
+      }
+      const tabName = intent.tab ? tabLabels[intent.tab] || intent.tab : ''
+      const msg = intent.tab 
+        ? `✅ Pindah ke halaman **${intent.label}** di bagian **${tabName}**.`
+        : `✅ Pindah ke halaman **${intent.label}**.`
+      addMessage('bot', msg, 'app')
       setSuggestions(getDynamicSuggestions())
       return
     }
