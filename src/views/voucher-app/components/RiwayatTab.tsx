@@ -300,16 +300,16 @@ export default function RiwayatTab({
               {/* Row 1: TRX + Shift */}
               <div className="grid grid-cols-2 gap-2">
                 {/* TRX */}
-                <div className="bg-gradient-to-br from-indigo-950/60 to-indigo-900/30 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between">
+                <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/60 dark:to-indigo-900/30 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-3 flex items-center justify-between">
                   <div>
-                    <span className="text-[9px] uppercase font-black text-indigo-400 tracking-widest block">TRX</span>
-                    <div className="text-2xl font-black font-mono text-white mt-0.5 leading-none">
+                    <span className="text-[9px] uppercase font-black text-indigo-600 dark:text-indigo-400 tracking-widest block">TRX</span>
+                    <div className="text-2xl font-black font-mono text-indigo-900 dark:text-white mt-0.5 leading-none">
                       {daySummary.totalTrx}
                     </div>
-                    <span className="text-[9px] text-indigo-400 font-bold">Voucher Terjual</span>
+                    <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold">Voucher Terjual</span>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-                    <Receipt className="w-4 h-4 text-indigo-400" />
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100/50 dark:bg-indigo-500/20 border border-indigo-200/50 dark:border-indigo-500/30 flex items-center justify-center">
+                    <Receipt className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                   </div>
                 </div>
 
