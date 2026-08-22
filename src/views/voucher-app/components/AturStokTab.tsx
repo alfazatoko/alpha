@@ -1720,7 +1720,7 @@ export default function AturStokTab({
               onClick={handleFinishAndSwitch}
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
-              <ArrowRight className="w-3.5 h-3.5" /> Beralih Shift & Masuk Beranda
+              <ArrowRight className="w-3.5 h-3.5" /> Selesai &amp; Kembali ke Beranda
             </button>
           </div>
         </motion.div>
