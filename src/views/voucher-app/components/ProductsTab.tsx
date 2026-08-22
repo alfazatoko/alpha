@@ -20,11 +20,16 @@ import {
   Minus,
   ListPlus,
   Loader2,
-  Bot
+  Bot,
+  Copy,
+  Store,
+  ChevronDown,
+  CheckCircle2
 } from 'lucide-react';
-import type { VoucherProduct, UserRole } from '../types';
+import type { VoucherProduct, UserRole, Cashier } from '../types';
 import { OPERATOR_STYLES } from '../data';
 import ProviderLogo from './ProviderLogo';
+import { supabase } from '../../../lib/supabase';
 
 interface ProductsTabProps {
   products: VoucherProduct[];
@@ -39,6 +44,11 @@ interface ProductsTabProps {
   onSelectProduct: (product: VoucherProduct) => void;
   onBack?: () => void;
   onOpenQuickSale?: (productId?: string) => void;
+  /** Props baru untuk fitur salin produk antar toko */
+  activeStoreId?: string;
+  googleUid?: string;
+  cashiers?: Cashier[];
+  storeList?: Array<{ id: string; name: string; subtext?: string }>;
 }
 
 export default function ProductsTab({
@@ -52,7 +62,11 @@ export default function ProductsTab({
   onDeleteProduct,
   onSelectProduct,
   onBack,
-  onOpenQuickSale
+  onOpenQuickSale,
+  activeStoreId,
+  googleUid,
+  cashiers = [],
+  storeList = []
 }: ProductsTabProps) {
   const isLight = theme === 'light';
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +126,143 @@ export default function ProductsTab({
   const [bulkAIText, setBulkAIText] = useState('');
   const [isParsingAI, setIsParsingAI] = useState(false);
   const [bulkParsedProducts, setBulkParsedProducts] = useState<any[]>([]);
+
+  // ====================================================
+  // STATE: Modal Salin Produk ke Toko Lain
+  // ====================================================
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyTargetStoreId, setCopyTargetStoreId] = useState('');
+  const [copyTargetCashierId, setCopyTargetCashierId] = useState('all');
+  // 'catalog' = salin nama+harga saja (stok=0) | 'withStock' = salin beserta jumlah stok
+  const [copyMode, setCopyMode] = useState<'catalog' | 'withStock'>('catalog');
+  // 'overwrite' = timpa semua | 'merge' = tambahkan yang belum ada
+  const [copyConflict, setCopyConflict] = useState<'overwrite' | 'merge'>('overwrite');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [copyStatusMsg, setCopyStatusMsg] = useState('');
+  const [targetStoreCashiers, setTargetStoreCashiers] = useState<Array<{id: string; name: string}>>([]);
+  const [isLoadingTargetCashiers, setIsLoadingTargetCashiers] = useState(false);
+
+  // Toko-toko lain (selain toko aktif saat ini) yang bisa jadi tujuan salin
+  const otherStores = storeList.filter(s => s.id !== activeStoreId);
+
+  // Muat daftar kasir dari toko tujuan saat pilihan toko berubah
+  useEffect(() => {
+    if (!copyTargetStoreId) {
+      setTargetStoreCashiers([]);
+      setCopyTargetCashierId('all');
+      return;
+    }
+    setIsLoadingTargetCashiers(true);
+    const kasirKey = `alphaPro_${copyTargetStoreId}_kasir_list`;
+    try {
+      const raw = localStorage.getItem(kasirKey);
+      if (raw) {
+        const kList: Record<string, { name?: string; role?: string }> = JSON.parse(raw);
+        const kasirs = Object.entries(kList)
+          .filter(([_, d]) => d.role !== 'owner')
+          .map(([username, d]) => ({ id: `c_${username}`, name: d.name || username }));
+        setTargetStoreCashiers(kasirs);
+      } else {
+        setTargetStoreCashiers([]);
+      }
+    } catch {
+      setTargetStoreCashiers([]);
+    }
+    setCopyTargetCashierId('all');
+    setIsLoadingTargetCashiers(false);
+  }, [copyTargetStoreId]);
+
+  /**
+   * handleCopyProducts—Salin produk dari toko aktif ke toko tujuan
+   * - Menulis ke localStorage setiap kasir di toko tujuan (atau satu kasir tertentu)
+   * - Sync ke Supabase jika googleUid tersedia
+   */
+  const handleCopyProducts = async () => {
+    if (!copyTargetStoreId) return;
+    setCopyStatus('loading');
+    setCopyStatusMsg('');
+    try {
+      const targetStoreKey = copyTargetStoreId;
+
+      // Siapkan produk yang akan disalin
+      const productsToCopy: VoucherProduct[] = products.map(p => ({
+        ...p,
+        id: `${p.id}_copy_${Date.now()}`,
+        currentStock: copyMode === 'withStock' ? p.currentStock : 0,
+      }));
+
+      // Tentukan kasir tujuan
+      const targetCashierIds: string[] = copyTargetCashierId === 'all'
+        ? (targetStoreCashiers.length > 0
+            ? targetStoreCashiers.map(c => c.id)
+            : ['c1']) // fallback jika tidak ada kasir terdaftar
+        : [copyTargetCashierId];
+
+      // Tulis ke localStorage tiap kasir tujuan
+      for (const cashierId of targetCashierIds) {
+        const prefix = `v_${targetStoreKey}_${cashierId}`;
+        let finalProducts: VoucherProduct[];
+
+        if (copyConflict === 'merge') {
+          // Merge: tambah produk yang ID-nya belum ada
+          const existingRaw = localStorage.getItem(`${prefix}_products`);
+          const existing: VoucherProduct[] = existingRaw ? JSON.parse(existingRaw) : [];
+          const existingNames = new Set(existing.map(p => p.name.toLowerCase()));
+          const newOnes = productsToCopy.filter(p => !existingNames.has(p.name.toLowerCase()));
+          finalProducts = [...existing, ...newOnes];
+        } else {
+          // Overwrite: timpa semua
+          finalProducts = productsToCopy;
+        }
+        localStorage.setItem(`${prefix}_products`, JSON.stringify(finalProducts));
+      }
+
+      // Sync ke Supabase jika online
+      if (googleUid && copyTargetStoreId) {
+        const { data: existingData } = await supabase
+          .from('store_settings')
+          .select('voucher_app_data')
+          .eq('store_id', copyTargetStoreId)
+          .maybeSingle();
+
+        const existingCloud = existingData?.voucher_app_data || {};
+        const updatedCloud: Record<string, any> = { ...existingCloud };
+
+        for (const cashierId of targetCashierIds) {
+          const prefix = `v_${targetStoreKey}_${cashierId}`;
+          const raw = localStorage.getItem(`${prefix}_products`);
+          const finalProducts: VoucherProduct[] = raw ? JSON.parse(raw) : [];
+          updatedCloud[cashierId] = {
+            ...(existingCloud[cashierId] || {}),
+            products: finalProducts
+          };
+        }
+
+        await supabase.from('store_settings').upsert({
+          store_id: copyTargetStoreId,
+          voucher_app_data: updatedCloud
+        }, { onConflict: 'store_id' });
+      }
+
+      const targetStoreName = storeList.find(s => s.id === copyTargetStoreId)?.name || copyTargetStoreId;
+      const modeLabel = copyMode === 'catalog' ? 'katalog (stok=0)' : 'beserta stok';
+      setCopyStatus('success');
+      setCopyStatusMsg(`Berhasil menyalin ${productsToCopy.length} produk (${modeLabel}) ke ${targetStoreName}!`);
+    } catch (err: any) {
+      setCopyStatus('error');
+      setCopyStatusMsg('Gagal menyalin produk: ' + (err?.message || String(err)));
+    }
+  };
+
+  const handleCloseCopyModal = () => {
+    setShowCopyModal(false);
+    setCopyTargetStoreId('');
+    setCopyTargetCashierId('all');
+    setCopyMode('catalog');
+    setCopyConflict('overwrite');
+    setCopyStatus('idle');
+    setCopyStatusMsg('');
+  };
 
   // Form inputs
   const [formName, setFormName] = useState('');
@@ -361,6 +512,19 @@ export default function ProductsTab({
           {userRole === 'owner' && (
             <div className={`flex rounded-2xl p-1 border shadow-inner relative ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10'}`}>
               <div className="absolute -top-1 -right-1 w-6 h-6 bg-cyan-400/20 rounded-full blur-md pointer-events-none" />
+              {/* Salin ke Toko Lain - hanya tampil jika ada toko lain */}
+              {otherStores.length > 0 && (
+                <>
+                  <button
+                    onClick={() => { setShowCopyModal(true); setCopyStatus('idle'); }}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-violet-100 text-violet-600' : 'hover:bg-violet-500/20 text-violet-400 hover:text-violet-300'}`}
+                    title="Salin Daftar Produk ke Toko Lain"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <div className={`w-px mx-0.5 my-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-100 dark:bg-white/10'}`} />
+                </>
+              )}
               <button 
                 onClick={() => setIsAddingBulkAI(true)}
                 className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-amber-500/20 text-amber-500 font-black dark:text-amber-400 hover:text-amber-300'}`}
@@ -906,6 +1070,239 @@ export default function ProductsTab({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================
+          MODAL: SALIN PRODUK KE TOKO LAIN
+          Hanya Owner, hanya tampil jika ada store lain
+      ============================================================ */}
+      <AnimatePresence>
+        {showCopyModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              className="bg-white dark:bg-slate-900 border border-violet-500/20 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-[0_0_60px_rgba(139,92,246,0.15)] relative overflow-hidden"
+            >
+              {/* Header gradient strip */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500 rounded-t-3xl" />
+
+              <div className="p-5 space-y-4">
+                {/* Title */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
+                      <Copy className="w-5 h-5 text-violet-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white">Salin Produk ke Toko Lain</h3>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{products.length} produk dari toko ini akan disalin</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseCopyModal}
+                    className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 flex items-center justify-center text-slate-500 dark:text-slate-400 transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Status: success / error */}
+                {copyStatus === 'success' && (
+                  <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/25 rounded-2xl">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Berhasil!</p>
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{copyStatusMsg}</p>
+                    </div>
+                  </div>
+                )}
+                {copyStatus === 'error' && (
+                  <div className="flex items-start gap-3 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/25 rounded-2xl">
+                    <AlertTriangle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400">{copyStatusMsg}</p>
+                  </div>
+                )}
+
+                {copyStatus !== 'success' && (
+                  <div className="space-y-3">
+                    {/* Pilih Toko Tujuan */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Store className="w-3 h-3" /> Toko Tujuan
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={copyTargetStoreId}
+                          onChange={e => setCopyTargetStoreId(e.target.value)}
+                          className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 pr-8 py-2.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-violet-500 transition cursor-pointer"
+                        >
+                          <option value="">— Pilih Toko Tujuan —</option>
+                          {otherStores.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}{s.subtext ? ` (${s.subtext})` : ''}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* Pilih Kasir di Toko Tujuan */}
+                    {copyTargetStoreId && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">
+                          Kasir Tujuan
+                        </label>
+                        {isLoadingTargetCashiers ? (
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Memuat kasir...
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={copyTargetCashierId}
+                              onChange={e => setCopyTargetCashierId(e.target.value)}
+                              className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 pr-8 py-2.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-violet-500 transition cursor-pointer"
+                            >
+                              <option value="all">Semua Kasir di Toko Ini</option>
+                              {targetStoreCashiers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Mode Salin */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Mode Salin</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCopyMode('catalog')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                            copyMode === 'catalog'
+                              ? 'bg-violet-50 dark:bg-violet-500/15 border-violet-400/50 ring-1 ring-violet-400/30'
+                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-violet-400/40'
+                          }`}
+                        >
+                          <div className="text-[11px] font-black text-slate-900 dark:text-white">Katalog Saja</div>
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">Stok = 0 di toko tujuan</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCopyMode('withStock')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                            copyMode === 'withStock'
+                              ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-400/50 ring-1 ring-emerald-400/30'
+                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400/40'
+                          }`}
+                        >
+                          <div className="text-[11px] font-black text-slate-900 dark:text-white">Beserta Stok</div>
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">Salin jumlah stok juga</div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Mode Konflik */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Jika Sudah Ada Produk</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCopyConflict('overwrite')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                            copyConflict === 'overwrite'
+                              ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-400/50 ring-1 ring-rose-400/30'
+                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-rose-400/40'
+                          }`}
+                        >
+                          <div className="text-[11px] font-black text-slate-900 dark:text-white">Timpa Semua</div>
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">Ganti seluruh daftar lama</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCopyConflict('merge')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                            copyConflict === 'merge'
+                              ? 'bg-cyan-50 dark:bg-cyan-500/15 border-cyan-400/50 ring-1 ring-cyan-400/30'
+                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-cyan-400/40'
+                          }`}
+                        >
+                          <div className="text-[11px] font-black text-slate-900 dark:text-white">Gabungkan</div>
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">Tambah yang belum ada</div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Preview */}
+                    {copyTargetStoreId && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200 dark:border-slate-700/50 space-y-1">
+                        <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Ringkasan</p>
+                        <div className="space-y-0.5 text-[11px]">
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Dari Toko:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">{storeList.find(s => s.id === activeStoreId)?.name || activeStoreId || 'Toko Ini'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Ke Toko:</span>
+                            <span className="font-bold text-violet-600 dark:text-violet-400">{storeList.find(s => s.id === copyTargetStoreId)?.name}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Jumlah Produk:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">{products.length} produk</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Mode Stok:</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{copyMode === 'catalog' ? 'Stok = 0' : 'Salin Stok Asli'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleCloseCopyModal}
+                        className="flex-1 py-3 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyProducts}
+                        disabled={!copyTargetStoreId || copyStatus === 'loading'}
+                        className="flex-1 py-3 text-xs font-black text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 rounded-xl transition cursor-pointer shadow-lg shadow-violet-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {copyStatus === 'loading' ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Menyalin...</>
+                        ) : (
+                          <><Copy className="w-4 h-4" /> Salin Sekarang</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tombol tutup setelah sukses */}
+                {copyStatus === 'success' && (
+                  <button
+                    type="button"
+                    onClick={handleCloseCopyModal}
+                    className="w-full py-3 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Selesai
+                  </button>
+                )}
+              </div>
             </motion.div>
           </div>
         )}

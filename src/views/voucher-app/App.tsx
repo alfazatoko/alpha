@@ -77,9 +77,11 @@ interface VoucherAppProps {
   externalTab?: string;
   onClearExternalTab?: () => void;
   onClearExternalSearchQuery?: () => void;
+  /** Daftar semua toko milik user — untuk fitur salin produk antar toko */
+  storeList?: Array<{ id: string; name: string; subtext?: string }>;
 }
 
-export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab, onClearExternalTab, onClearExternalSearchQuery }: VoucherAppProps = {}) {
+export default function App({ onExit, externalRole, externalCashierName, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab, onClearExternalTab, onClearExternalSearchQuery, storeList }: VoucherAppProps = {}) {
   // Navigation tabs (Home, Catalog, Search, Reports, Profile/Settings, Atur Stok, Riwayat)
   const [activeTab, setActiveTab] = useState<'beranda' | 'produk' | 'pencarian' | 'laporan' | 'profil' | 'stok' | 'riwayat' | 'notif'>('beranda');
   
@@ -1353,6 +1355,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       activeStoreId={activeStoreId}
                       googleUid={googleUid}
                       cashiers={cashiers}
+                      storeList={storeList}
                     />
                   )}
 

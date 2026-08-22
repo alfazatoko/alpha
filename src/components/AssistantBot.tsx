@@ -178,6 +178,12 @@ const AssistantBot: React.FC<Props> = ({
       setSuggestions(getDynamicSuggestions())
       return
     }
+    if (intent.type === 'ambiguous') {
+      setIsTyping(false)
+      addMessage('bot', intent.message, 'app')
+      setSuggestions(intent.suggestions)
+      return
+    }
     if (intent.type === 'edit_stok') {
       setBotSearchQuery(intent.query); setBotActiveTab('stok')
       setActiveView('view-stok-voucher')

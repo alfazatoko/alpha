@@ -31,10 +31,31 @@ export type AppIntent =
   | { type: 'navigate'; view: string; label: string; tab?: string }
   | { type: 'edit_stok'; query: string }
   | { type: 'tanya_stok'; query: string }
+  | { type: 'ambiguous'; message: string; suggestions: string[] }
   | { type: 'none' }
 
 export function parseAppIntent(text: string): AppIntent {
   const c = text.toLowerCase().trim()
+  
+  // 0. Deteksi Ambigu / Butuh Klarifikasi
+  const ambiguousKeywords = [
+    {
+      match: ['riwayat', 'buka riwayat', 'ke riwayat', 'halaman riwayat', 'pindah ke riwayat', 'lihat riwayat'],
+      message: 'Ada beberapa halaman riwayat. Silakan pilih riwayat mana yang ingin dibuka:',
+      suggestions: ['Riwayat Transaksi Utama', 'Riwayat Voucher']
+    },
+    {
+      match: ['laporan', 'buka laporan', 'ke laporan', 'halaman laporan', 'pindah ke laporan', 'lihat laporan'],
+      message: 'Ada beberapa jenis laporan. Laporan mana yang ingin dibuka?',
+      suggestions: ['Laporan Utama', 'Laporan Voucher']
+    }
+  ]
+
+  for (const amb of ambiguousKeywords) {
+    if (amb.match.includes(c)) {
+      return { type: 'ambiguous', message: amb.message, suggestions: amb.suggestions }
+    }
+  }
   
   // 1. Cek Navigasi Langsung (Prioritas Tinggi)
   const directNavKeywords = [
@@ -55,8 +76,8 @@ export function parseAppIntent(text: string): AppIntent {
     { view: 'view-owner-grafik', keywords: ['grafik', 'analitik', 'analisa penjualan', 'chart'] },
     { view: 'view-owner-backup', keywords: ['backup', 'restore', 'cadangkan data'] },
     { view: 'view-beranda', keywords: ['beranda', 'dashboard', 'home', 'halaman utama', 'depan'] },
-    { view: 'view-transaksi', keywords: ['transaksi', 'riwayat', 'riwayat transaksi', 'history', 'histori'] },
-    { view: 'view-laporan', keywords: ['laporan', 'report', 'rekap', 'omset', 'keuntungan'] },
+    { view: 'view-transaksi', keywords: ['transaksi', 'riwayat transaksi', 'riwayat transaksi utama', 'history', 'histori'] },
+    { view: 'view-laporan', keywords: ['laporan', 'report', 'rekap', 'omset', 'keuntungan', 'laporan utama'] },
     { view: 'view-akun', keywords: ['akun', 'profil', 'profile', 'pengaturan', 'setting', 'manajemen kasir', 'kelola kasir', 'data kasir', 'karyawan', 'akun kasir'] },
     { view: 'view-isi-saldo', keywords: ['isi saldo', 'topup', 'top up', 'tambah saldo', 'deposit'] },
     { view: 'view-kasbon', keywords: ['kasbon', 'bon', 'utang', 'piutang', 'hutang'] },
