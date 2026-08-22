@@ -1402,12 +1402,7 @@ const MainApp: React.FC<MainAppProps> = ({
         showToast(`HARI BARU: ${today}`);
         
         // Otomatis logout ketika berganti hari
-        const currentRole = localStorage.getItem('alphaPro_active_role');
-        if (currentRole === 'owner') {
-          handleExitStore();
-        } else {
-          handleLogoutCashierOnly();
-        }
+        onLogout();
       }
       localStorage.setItem(`alphaPro_${googleUid}_${username}_last_reset_date`, today)
     }
@@ -1415,7 +1410,7 @@ const MainApp: React.FC<MainAppProps> = ({
     checkReset()
     const interval = setInterval(checkReset, 60000)
     return () => clearInterval(interval)
-  }, [googleUid, username, handleExitStore, handleLogoutCashierOnly])
+  }, [googleUid, username, onLogout])
 
   // Handlers
   const showToast = (msg: string) => {
