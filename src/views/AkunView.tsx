@@ -183,6 +183,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [isDraggingEditor, setIsDraggingEditor] = useState(false)
   const [dragStartEditor, setDragStartEditor] = useState({ x: 0, y: 0 })
 
+  // State untuk perbesar avatar karyawan di sisi Owner
+  const [showKaryawanAvatarZoom, setShowKaryawanAvatarZoom] = useState(false)
+  const [karyawanAvatarZoomSrc, setKaryawanAvatarZoomSrc] = useState('')
+
   const handlePointerDown = (e: React.PointerEvent) => {
     setIsDraggingEditor(true)
     setDragStartEditor({ x: e.clientX - editorOffset.x, y: e.clientY - editorOffset.y })
@@ -242,6 +246,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [editKaryawanOff, setEditKaryawanOff] = useState('')
   const [editKaryawanCatatan, setEditKaryawanCatatan] = useState('')
   const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [isEditingJoinDate, setIsEditingJoinDate] = useState(false)
   const [paymentType, setPaymentType] = useState<'gaji' | 'bonus'>('gaji')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
@@ -906,6 +911,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               key={kId}
                               onClick={() => {
                                 setSelectedKaryawan(kId);
+                                setIsEditingJoinDate(false);
                                 setEditKaryawanGaji(String(kData.gajiPokok || ''));
                                 setEditKaryawanJoin(kData.tanggalJoin || '');
                                 const stats = calculateAttendanceStats(kId, kData.name || '', kData.tanggalJoin, props.absensiList || [], props.activeStoreId || '');
@@ -946,7 +952,18 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         {selectedKaryawan && props.kasirList?.[selectedKaryawan] ? (
                           <div className="animate-in fade-in zoom-in-95 duration-200">
                             <div className="flex items-center gap-5 mb-8 pb-6 border-b border-slate-100 dark:border-slate-700">
-                              <div className="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+                              <div 
+                                onClick={() => {
+                                  if (props.kasirList?.[selectedKaryawan]?.avatar) {
+                                    setKaryawanAvatarZoomSrc(props.kasirList[selectedKaryawan].avatar);
+                                    setShowKaryawanAvatarZoom(true);
+                                  }
+                                }}
+                                className={cn(
+                                  "w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center shadow-sm shrink-0",
+                                  props.kasirList?.[selectedKaryawan]?.avatar && "cursor-pointer hover:opacity-90 active:scale-95 transition-all"
+                                )}
+                              >
                                 {props.kasirList[selectedKaryawan].avatar ? (
                                   <img src={props.kasirList[selectedKaryawan].avatar} alt="Avatar" className="w-full h-full object-cover" />
                                 ) : (
@@ -1045,46 +1062,31 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                       Kelola HR & Catatan Kerja (Diatur oleh Owner)
                                     </h4>
                                     
-                                    <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                                    <div className="space-y-4">
                                       <div>
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Tanggal Join</label>
+                                        <div className="flex justify-between items-center mb-1">
+                                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Tanggal Masuk Kerja (Join)</label>
+                                          {(!isEditingJoinDate && !!editKaryawanJoin) && (
+                                            <button 
+                                              type="button"
+                                              onClick={() => setIsEditingJoinDate(true)}
+                                              className="text-[8px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                            >
+                                              <i className="fa-solid fa-pen text-[7px]"></i> Edit Tanggal
+                                            </button>
+                                          )}
+                                        </div>
                                         <input
                                           type="date"
                                           value={editKaryawanJoin}
                                           onChange={e => setEditKaryawanJoin(e.target.value)}
-                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                                          disabled={!isEditingJoinDate && !!editKaryawanJoin}
+                                          className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                                           style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                                         />
                                       </div>
+
                                       <div>
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Gaji Pokok (Rp)</label>
-                                        <input
-                                          type="number"
-                                          value={editKaryawanGaji}
-                                          onChange={e => setEditKaryawanGaji(e.target.value)}
-                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Libur Bulan Ini (Hari)</label>
-                                          <button 
-                                            onClick={() => setEditKaryawanOff(String(stats.tidakAbsen))}
-                                            className="text-[8px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                                          >
-                                            <i className="fa-solid fa-sync text-[7px]"></i> Gunakan Absensi ({stats.tidakAbsen} Hari)
-                                          </button>
-                                        </div>
-                                        <input
-                                          type="number"
-                                          value={editKaryawanOff}
-                                          onChange={e => setEditKaryawanOff(e.target.value)}
-                                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
-                                      </div>
-                                      <div className="col-span-2">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Catatan Awal Kerja / Catatan Owner</label>
                                         <textarea
                                           value={editKaryawanCatatan}
@@ -1103,11 +1105,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             if (props.onSaveCashierSelf) {
                                               await props.onSaveCashierSelf(selectedKaryawan, {
                                                 ...props.kasirList![selectedKaryawan],
-                                                gajiPokok: Number(editKaryawanGaji) || 0,
                                                 tanggalJoin: editKaryawanJoin,
-                                                totalOffBulanIni: Number(editKaryawanOff) || 0,
                                                 catatanAwalKerja: editKaryawanCatatan
                                               });
+                                              setIsEditingJoinDate(false); // Kunci kembali setelah berhasil disimpan
                                               setSavedStatus(true);
                                               setTimeout(() => setSavedStatus(false), 2000);
                                             }
@@ -1115,11 +1116,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             alert(err.message || "Gagal menyimpan HR kasir");
                                           }
                                         }}
-                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                                        className={cn(
+                                          "flex-1 font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2",
+                                          savedStatus
+                                            ? "bg-emerald-600 text-white scale-[0.98]"
+                                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                        )}
                                         style={{ color: '#ffffff' }}
                                       >
-                                        <i className="fa-solid fa-floppy-disk"></i>
-                                        Simpan Data Karyawan
+                                        {savedStatus ? (
+                                          <>
+                                            <i className="fa-solid fa-circle-check animate-bounce"></i>
+                                            Berhasil Disimpan!
+                                          </>
+                                        ) : (
+                                          <>
+                                            <i className="fa-solid fa-floppy-disk"></i>
+                                            Simpan Data Karyawan
+                                          </>
+                                        )}
                                       </button>
                                     </div>
                                   </div>
@@ -2027,6 +2042,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                 key={kId}
                                 onClick={() => {
                                   setSelectedKaryawan(kId);
+                                  setIsEditingJoinDate(false);
                                   setEditKaryawanGaji(String(kData.gajiPokok || ''));
                                   setEditKaryawanJoin(kData.tanggalJoin || '');
                                   const stats = calculateAttendanceStats(kId, kData.name || '', kData.tanggalJoin, props.absensiList || [], props.activeStoreId || '');
@@ -3070,6 +3086,32 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Karyawan Avatar Zoom Lightbox ── */}
+      {showKaryawanAvatarZoom && (
+        <div 
+          onClick={() => setShowKaryawanAvatarZoom(false)}
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center z-[1000] p-4 animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            className="relative max-w-xs w-full flex flex-col items-center animate-in zoom-in-95 duration-200"
+          >
+            {/* Round Avatar Zoom */}
+            <div className="w-64 h-64 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-slate-900 flex items-center justify-center mb-6">
+              <img src={karyawanAvatarZoomSrc} alt="Avatar Zoom" className="w-full h-full object-cover" />
+            </div>
+
+            {/* Tutup Button */}
+            <button 
+              onClick={() => setShowKaryawanAvatarZoom(false)}
+              className="py-3 px-8 bg-white/10 hover:bg-white/20 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-white/20 backdrop-blur-sm shadow-md"
+            >
+              Tutup
+            </button>
           </div>
         </div>
       )}

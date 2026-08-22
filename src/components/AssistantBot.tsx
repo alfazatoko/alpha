@@ -287,7 +287,11 @@ const AssistantBot: React.FC<Props> = ({
     if (kbAnswer) {
       setIsTyping(false)
       addMessage('bot', kbAnswer, 'kb')
-      setSuggestions(getDynamicSuggestions())
+      if (kbAnswer.includes('tidak ditemukan')) {
+        setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
+      } else {
+        setSuggestions(getDynamicSuggestions())
+      }
       return
     }
 

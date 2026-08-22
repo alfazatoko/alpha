@@ -78,7 +78,7 @@ export function parseAppIntent(text: string): AppIntent {
     { view: 'view-beranda', keywords: ['beranda', 'dashboard', 'home', 'halaman utama', 'depan'] },
     { view: 'view-transaksi', keywords: ['transaksi', 'riwayat transaksi', 'riwayat transaksi utama', 'history', 'histori'] },
     { view: 'view-laporan', keywords: ['laporan', 'report', 'rekap', 'omset', 'keuntungan', 'laporan utama'] },
-    { view: 'view-akun', keywords: ['akun', 'profil', 'profile', 'pengaturan', 'setting', 'manajemen kasir', 'kelola kasir', 'data kasir', 'karyawan', 'akun kasir'] },
+    { view: 'view-akun', keywords: ['akun', 'profil', 'profile', 'pengaturan', 'setting', 'manajemen kasir', 'management kasir', 'kelola kasir', 'data kasir', 'karyawan', 'akun kasir'] },
     { view: 'view-isi-saldo', keywords: ['isi saldo', 'topup', 'top up', 'tambah saldo', 'deposit'] },
     { view: 'view-kasbon', keywords: ['kasbon', 'bon', 'utang', 'piutang', 'hutang'] },
     { view: 'view-kontak', keywords: ['kontak', 'contact', 'pelanggan', 'customer'] },

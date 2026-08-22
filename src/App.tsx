@@ -617,21 +617,23 @@ const MainApp: React.FC<MainAppProps> = ({
     })
   }
 
-  const handleSaveCashierSelf = async (username: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
+  const handleSaveCashierSelf = async (targetUsername: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
     if (activeStoreId === 'all') return
     const updatedList = {
       ...kasirList,
-      [username]: {
-        ...kasirList[username],
+      [targetUsername]: {
+        ...kasirList[targetUsername],
         ...updatedAccount
       }
     }
     setKasirList(updatedList)
     localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(updatedList))
     
-    // Update active session locally via callback
-    onUpdateActiveCashier(username, updatedList[username])
-    localStorage.setItem('alphaPro_name', updatedAccount.name)
+    // Update active session locally only if we are modifying the currently logged-in cashier
+    if (targetUsername === username) {
+      onUpdateActiveCashier(targetUsername, updatedList[targetUsername])
+      localStorage.setItem('alphaPro_name', updatedAccount.name)
+    }
 
     // Sync directly to cloud
     const isPin = localStorage.getItem(`alphaPro_${activeStoreId}_isPinEnabled`) !== 'false'
