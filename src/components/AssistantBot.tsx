@@ -132,7 +132,31 @@ const AssistantBot: React.FC<Props> = ({
   const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis'])
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const groqHistory = useRef<ChatMessage[]>([])
+
+  // Drag to scroll logic for suggestions
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragMoved, setDragMoved] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [scrollLeftPos, setScrollLeftPos] = useState(0)
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true)
+    setDragMoved(false)
+    setStartX(e.pageX - (scrollRef.current?.offsetLeft || 0))
+    setScrollLeftPos(scrollRef.current?.scrollLeft || 0)
+  }
+  const handleMouseLeave = () => setIsDragging(false)
+  const handleMouseUp = () => setIsDragging(false)
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollRef.current) return
+    e.preventDefault()
+    const x = e.pageX - scrollRef.current.offsetLeft
+    const walk = (x - startX) * 1.5 // multiplier
+    scrollRef.current.scrollLeft = scrollLeftPos - walk
+    if (Math.abs(walk) > 5) setDragMoved(true)
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -334,14 +358,14 @@ const AssistantBot: React.FC<Props> = ({
         onClick={() => { setIsOpen(p=>!p); setShowSettings(false) }}
         title="Asisten Bot Alpha"
         style={{ backdropFilter:'blur(12px)' }}
-        className={`fixed top-16 right-3 z-[998] w-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 py-1.5 shadow-lg transition-all duration-300 active:scale-90 ${isOpen ? 'bg-indigo-700 shadow-indigo-600/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:scale-110 shadow-indigo-500/40'}`}
+        className={`fixed top-16 right-3 z-[998] w-10 rounded-2xl flex flex-col items-center justify-center gap-0.5 py-1 shadow-lg transition-all duration-300 active:scale-90 ${isOpen ? 'bg-indigo-700 shadow-indigo-600/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:scale-110 shadow-indigo-500/40'}`}
       >
         {isOpen ? (
-          <span className="text-base font-black text-white leading-none">✕</span>
+          <span className="text-sm font-black text-white leading-none">✕</span>
         ) : (
           <>
-            <BotIcon size={22} className="text-white"/>
-            <span className="text-white font-black leading-none select-none" style={{ fontSize: '7px', letterSpacing: '0.15em' }}>ALPHA</span>
+            <BotIcon size={18} className="text-white"/>
+            <span className="text-white font-black leading-none select-none" style={{ fontSize: '6px', letterSpacing: '0.15em' }}>ALPHA</span>
           </>
         )}
         {!isOpen && <span className="absolute inset-0 rounded-2xl bg-indigo-400 opacity-30 animate-ping pointer-events-none"/>}
@@ -515,9 +539,21 @@ const AssistantBot: React.FC<Props> = ({
             </div>
 
             {/* Dynamic Suggestions */}
-            <div className="px-3 pb-1.5 flex gap-1.5 overflow-x-auto shrink-0" style={{scrollbarWidth:'none'}}>
+            <div 
+              ref={scrollRef}
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeave}
+              onMouseUp={handleMouseUp}
+              onMouseMove={handleMouseMove}
+              className={`px-3 pb-1.5 flex gap-1.5 overflow-x-auto shrink-0 cursor-grab ${isDragging ? 'cursor-grabbing select-none' : ''}`} 
+              style={{scrollbarWidth:'none'}}
+            >
               {suggestions.map(s => (
-                <button key={s} onClick={()=>handleSend(s)} className="shrink-0 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[9.5px] font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-all active:scale-90 whitespace-nowrap">
+                <button 
+                  key={s} 
+                  onClick={() => { if (!dragMoved) handleSend(s) }} 
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[9.5px] font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-all active:scale-90 whitespace-nowrap"
+                >
                   {s}
                 </button>
               ))}

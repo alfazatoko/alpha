@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
   Lock, 
@@ -66,6 +67,9 @@ export default function ProfileTab({
   
   // Section expanders for clean mobile feel
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
+  // Avatar zoom lightbox
+  const [showAvatarZoom, setShowAvatarZoom] = useState(false);
 
   // Status message
   const [backupMsg, setBackupMsg] = useState('');
@@ -145,14 +149,25 @@ export default function ProfileTab({
         {/* Glow accent */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
         
-        {/* Profile Avatar */}
+        {/* Profile Avatar — klik untuk zoom */}
         <div className="relative shrink-0">
-          <img 
-            src={activeCashier.avatar} 
-            alt={activeCashier.name} 
-            className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500/30 shadow-lg"
-          />
-          <span className="absolute bottom-0 right-0 bg-emerald-500 border-2 border-slate-950 w-4 h-4 rounded-full flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => setShowAvatarZoom(true)}
+            className="relative group cursor-pointer focus:outline-none"
+            title="Klik untuk perbesar foto"
+          >
+            <img 
+              src={activeCashier.avatar} 
+              alt={activeCashier.name} 
+              className="w-20 h-20 rounded-full object-cover border-2 border-indigo-500/30 shadow-lg transition-all duration-200 group-hover:border-indigo-400/70 group-hover:scale-105 group-hover:shadow-indigo-500/20 group-hover:shadow-xl"
+            />
+            {/* Hover overlay hint */}
+            <span className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition-all duration-200 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100">
+              <span className="text-[7px] font-black text-white uppercase tracking-widest bg-black/50 px-1.5 py-0.5 rounded-full">Zoom</span>
+            </span>
+          </button>
+          <span className="absolute bottom-0.5 right-0.5 bg-emerald-500 border-2 border-slate-950 w-4 h-4 rounded-full flex items-center justify-center">
             <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 opacity-75" />
           </span>
         </div>
@@ -428,6 +443,48 @@ export default function ProfileTab({
         )}
       </div>
 
+      {/* Avatar Zoom Lightbox */}
+      <AnimatePresence>
+        {showAvatarZoom && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md"
+            onClick={() => setShowAvatarZoom(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.7, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className="relative flex flex-col items-center gap-3"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Photo */}
+              <img
+                src={activeCashier.avatar}
+                alt={activeCashier.name}
+                className="w-52 h-52 rounded-3xl object-cover shadow-2xl border-4 border-white/20"
+              />
+              {/* Name badge */}
+              <div className="text-center">
+                <p className="text-white font-black text-base tracking-tight">{activeCashier.name}</p>
+                <p className="text-indigo-300 text-[11px] font-bold uppercase tracking-widest mt-0.5">{activeCashier.role}</p>
+              </div>
+              {/* Close hint */}
+              <button
+                type="button"
+                onClick={() => setShowAvatarZoom(false)}
+                className="mt-1 px-5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-black transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
