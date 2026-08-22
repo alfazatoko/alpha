@@ -1,5 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGroqAPI, type ChatMessage } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGroqAPI, VIEW_MAP, type ChatMessage } from '../lib/botEngine'
+import { supabase } from '../lib/supabase'
+
+export type CustomIntent = {
+  question: string;
+  type: 'navigate' | 'text';
+  target: string;
+};
 
 // ── Bot SVG Icon ──────────────────────────────────────────────────────────────
 const BotIcon: React.FC<{ size?: number; className?: string }> = ({ size = 22, className = '' }) => (
@@ -106,6 +113,13 @@ const AssistantBot: React.FC<Props> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  
+  // Custom Intent Learning States
+  const [customIntents, setCustomIntents] = useState<CustomIntent[]>([])
+  const [showTeachModal, setShowTeachModal] = useState(false)
+  const [teachQuestion, setTeachQuestion] = useState('')
+  const [teachType, setTeachType] = useState<'navigate' | 'text'>('text')
+  const [teachTarget, setTeachTarget] = useState('')
   const [messages, setMessages] = useState<BotMessage[]>([{
     id: 'welcome', from: 'bot', mode: 'kb',
     text: '👋 Halo! Aku **Bot Alpha**.\n\nAku bisa bantu navigasi, cek stok, kalkulator bisnis, info operator, dan banyak lagi!\n\nKetik *bantuan* untuk panduan lengkap. 😊',
@@ -123,9 +137,25 @@ const AssistantBot: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
-      if (!showSettings) setTimeout(() => inputRef.current?.focus(), 120)
+      if (!showSettings && !showTeachModal) setTimeout(() => inputRef.current?.focus(), 120)
     }
-  }, [isOpen, messages, showSettings])
+  }, [isOpen, messages, showSettings, showTeachModal])
+
+  // Load Custom Intents
+  useEffect(() => {
+    if (!activeStoreId) return
+    try {
+      const loc = localStorage.getItem(`alphaPro_${activeStoreId}_bot_knowledge`)
+      if (loc) setCustomIntents(JSON.parse(loc))
+    } catch (e) {}
+    
+    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+      if (data?.voucher_app_data?.bot_knowledge) {
+        setCustomIntents(data.voucher_app_data.bot_knowledge)
+        localStorage.setItem(`alphaPro_${activeStoreId}_bot_knowledge`, JSON.stringify(data.voucher_app_data.bot_knowledge))
+      }
+    })
+  }, [activeStoreId])
 
   // Load initial suggestions
   useEffect(() => {
@@ -140,6 +170,14 @@ const AssistantBot: React.FC<Props> = ({
     const text = (rawText ?? input).trim()
     if (!text || isTyping) return
     setInput('')
+    
+    if (text.toLowerCase() === 'ajari bot') {
+      const lastUserMsg = [...messages].reverse().find(m => m.from === 'user' && m.text.toLowerCase() !== 'ajari bot')
+      setTeachQuestion(lastUserMsg ? lastUserMsg.text : '')
+      setShowTeachModal(true)
+      return
+    }
+
     addMessage('user', text)
     setIsTyping(true)
 
@@ -153,6 +191,24 @@ const AssistantBot: React.FC<Props> = ({
         hist[queryLower] = (hist[queryLower] || 0) + 1
         localStorage.setItem('alphaPro_bot_query_history', JSON.stringify(hist))
       } catch (e) {}
+    }
+
+    // ⓪ Cek Custom Intent (Learned by Bot)
+    const customMatch = customIntents.find(ci => queryLower.includes(ci.question.toLowerCase()))
+    if (customMatch) {
+      setIsTyping(false)
+      if (customMatch.type === 'navigate') {
+        const viewInfo = VIEW_MAP[customMatch.target]
+        if (viewInfo) {
+          setBotSearchQuery(undefined); setBotActiveTab(undefined)
+          setActiveView(viewInfo.view)
+          addMessage('bot', `✅ Sesuai yang diajarkan, pindah ke **${viewInfo.label}**.`, 'app')
+        }
+      } else {
+        addMessage('bot', customMatch.target, 'app')
+      }
+      setSuggestions(getDynamicSuggestions())
+      return
     }
 
     // ① Coba App Intent dulu
@@ -229,9 +285,9 @@ const AssistantBot: React.FC<Props> = ({
 
     // ④ Fallback
     setIsTyping(false)
-    addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\n**Coba:**\n• Ketik *bantuan* untuk panduan\n• Set **Groq API Key** di ⚙️ Settings agar aku bisa jawab pertanyaan bebas`, 'kb')
-    setSuggestions(getDynamicSuggestions())
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey, kasirList, transactions, absensiList])
+    addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
+    setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey, kasirList, transactions, absensiList, customIntents, messages])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key==='Enter') handleSend() }
 
@@ -245,6 +301,27 @@ const AssistantBot: React.FC<Props> = ({
     setTimeout(() => { setGroqStatus('idle'); setGroqKeyInput(''); setShowSettings(false) }, 1500)
   }
   const handleClearGroqKey = async () => { await onClearGroqKey(); setGroqKeyInput(''); setGroqStatus('idle') }
+
+  const handleSaveTeach = async () => {
+    const newIntent: CustomIntent = { question: teachQuestion.trim(), type: teachType, target: teachTarget.trim() }
+    const updated = [...customIntents, newIntent]
+    setCustomIntents(updated)
+    localStorage.setItem(`alphaPro_${activeStoreId}_bot_knowledge`, JSON.stringify(updated))
+    setShowTeachModal(false)
+    addMessage('bot', `✅ Mantap! Aku sudah belajar cara merespons **"${newIntent.question}"**.\nPengetahuan ini sudah tersimpan online untuk semua akun kasir toko ini!`, 'app')
+    setTeachQuestion('')
+    setTeachTarget('')
+    
+    // Background sync
+    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+      const existingData = data?.voucher_app_data || {}
+      const newData = { ...existingData, bot_knowledge: updated }
+      supabase.from('store_settings').upsert({
+        store_id: activeStoreId,
+        voucher_app_data: newData
+      }, { onConflict: 'store_id' }).then()
+    })
+  }
 
   const effectiveGroqKey = groqApiKey || localStorage.getItem(GROQ_KEY) || ''
   const hasGroqKey = !!effectiveGroqKey
@@ -290,10 +367,10 @@ const AssistantBot: React.FC<Props> = ({
               {hasGroqKey ? '🌐 Groq AI + Offline KB' : '📚 Mode Offline — Set Groq key di ⚙️'}
             </p>
           </div>
-          <button onClick={()=>setShowSettings(p=>!p)} title="Settings" className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-90 ${showSettings?'bg-white/30 text-white':'bg-white/15 hover:bg-white/25 text-white/70'}`}>
+          <button onClick={()=>{setShowSettings(p=>!p);setShowTeachModal(false)}} title="Settings" className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-90 ${showSettings?'bg-white/30 text-white':'bg-white/15 hover:bg-white/25 text-white/70'}`}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
           </button>
-          <button onClick={()=>{setIsOpen(false);setShowSettings(false)}} className="w-7 h-7 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-all shrink-0 active:scale-90 ml-0.5">
+          <button onClick={()=>{setIsOpen(false);setShowSettings(false);setShowTeachModal(false)}} className="w-7 h-7 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-all shrink-0 active:scale-90 ml-0.5">
             <span className="text-[11px] font-black">✕</span>
           </button>
         </div>
@@ -334,8 +411,79 @@ const AssistantBot: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Teach Bot Panel */}
+        {showTeachModal && (
+          <div className="px-4 py-3 border-b border-white/10 shrink-0 space-y-3" style={{ background:'rgba(255,255,255,0.04)' }}>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-bold text-emerald-400 flex items-center gap-1">🎓 Ajari Bot Alpha</h3>
+            </div>
+            
+            <div className="text-[10px] text-slate-300">
+              Ajari bot merespons perintah khusus. Tersimpan online.
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Jika ditanya:</label>
+                <input 
+                  value={teachQuestion} 
+                  onChange={e => setTeachQuestion(e.target.value)}
+                  placeholder="Misal: izin kasir"
+                  className="bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/60 transition-all"
+                />
+              </div>
+              
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Tindakan Bot:</label>
+                <select 
+                  value={teachType} 
+                  onChange={e => setTeachType(e.target.value as any)}
+                  className="bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/60 transition-all appearance-none"
+                >
+                  <option value="text">Jawab dengan Teks</option>
+                  <option value="navigate">Pindah ke Halaman</option>
+                </select>
+              </div>
+
+              {teachType === 'navigate' ? (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Pilih Halaman:</label>
+                  <select 
+                    value={teachTarget} 
+                    onChange={e => setTeachTarget(e.target.value)}
+                    className="bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-[10px] text-white outline-none focus:border-emerald-500/60 transition-all appearance-none"
+                  >
+                    <option value="">-- Pilih Halaman --</option>
+                    {Object.entries(VIEW_MAP).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Jawaban Bot:</label>
+                  <textarea 
+                    value={teachTarget} 
+                    onChange={e => setTeachTarget(e.target.value)}
+                    placeholder="Misal: Untuk izin, silakan WA Owner..."
+                    className="bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-[10px] text-white resize-none h-14 outline-none focus:border-emerald-500/60 transition-all"
+                  />
+                </div>
+              )}
+              
+              <button 
+                onClick={handleSaveTeach} 
+                disabled={!teachQuestion.trim() || !teachTarget.trim()} 
+                className="mt-1 w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[10px] uppercase tracking-widest font-black py-2.5 rounded-xl transition-all active:scale-95"
+              >
+                Simpan Pengetahuan
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Messages */}
-        {!showSettings && (
+        {!showSettings && !showTeachModal && (
           <>
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5" style={{ minHeight:'180px', maxHeight:'340px' }}>
               {messages.map(msg => (
