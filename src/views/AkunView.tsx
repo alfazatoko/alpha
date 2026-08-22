@@ -175,6 +175,66 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [editKasirAvatar, setEditKasirAvatar] = useState('')
   const [showKasirPin, setShowKasirPin] = useState(false)
 
+  // State untuk Zoom, Drag & Crop Avatar
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false)
+  const [avatarEditorSrc, setAvatarEditorSrc] = useState('')
+  const [editorZoom, setEditorZoom] = useState(1)
+  const [editorOffset, setEditorOffset] = useState({ x: 0, y: 0 })
+  const [isDraggingEditor, setIsDraggingEditor] = useState(false)
+  const [dragStartEditor, setDragStartEditor] = useState({ x: 0, y: 0 })
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    setIsDraggingEditor(true)
+    setDragStartEditor({ x: e.clientX - editorOffset.x, y: e.clientY - editorOffset.y })
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDraggingEditor) return
+    const newX = e.clientX - dragStartEditor.x
+    const newY = e.clientY - dragStartEditor.y
+    setEditorOffset({ x: newX, y: newY })
+  }
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    setIsDraggingEditor(false)
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch (err) {}
+  }
+
+  const handleSaveCroppedImage = () => {
+    if (!avatarEditorSrc) return
+    const img = new Image()
+    img.src = avatarEditorSrc
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 400
+      canvas.height = 400
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.clearRect(0, 0, 400, 400)
+        ctx.beginPath()
+        ctx.arc(200, 200, 200, 0, Math.PI * 2)
+        ctx.clip()
+
+        // Wadah preview adalah 256x256. Kita konversi ke canvas 400x400
+        const scaleFactor = 400 / 256
+        // Tarik gambar dengan transform zoom & offset
+        // Center dari canvas adalah 200, 200. Center dari preview adalah 128, 128
+        const cx = 200 + (editorOffset.x * scaleFactor)
+        const cy = 200 + (editorOffset.y * scaleFactor)
+        const size = 400 * editorZoom
+        
+        ctx.drawImage(img, cx - size/2, cy - size/2, size, size)
+        
+        const base64 = canvas.toDataURL('image/jpeg', 0.85)
+        setEditKasirAvatar(base64)
+        setShowAvatarEditor(false)
+      }
+    }
+  }
+
   // State for owner managing karyawans
   const [selectedKaryawan, setSelectedKaryawan] = useState<string | null>(null)
   const [editKaryawanGaji, setEditKaryawanGaji] = useState('')
@@ -1525,34 +1585,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     <div className="space-y-4">
                       {/* Avatar Upload */}
                       <div className="flex justify-center mb-6">
-                        <div className="relative group">
-                          <div className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
-                            {editKasirAvatar ? (
-                              <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
-                            ) : (
-                              <i className="fa-solid fa-user text-3xl text-slate-300 dark:text-slate-600"></i>
-                            )}
-                          </div>
-                          <label className="absolute inset-0 bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity backdrop-blur-sm">
-                            <i className="fa-solid fa-camera mb-1"></i>
-                            <span className="text-[9px] font-bold">UBAH</span>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  try {
-                                    const base64 = await compressImage(file, 400, 400, 0.7);
-                                    setEditKasirAvatar(base64);
-                                  } catch (err) {
-                                    alert("Gagal memproses foto");
-                                  }
-                                }
-                              }} 
-                            />
-                          </label>
+                        <div 
+                          onClick={() => {
+                            setAvatarEditorSrc(editKasirAvatar || '');
+                            setEditorZoom(1);
+                            setEditorOffset({ x: 0, y: 0 });
+                            setShowAvatarEditor(true);
+                          }}
+                          className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm"
+                        >
+                          {editKasirAvatar ? (
+                            <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            <i className="fa-solid fa-user text-3xl text-slate-300 dark:text-slate-600"></i>
+                          )}
                         </div>
                       </div>
 
@@ -2738,34 +2784,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   
                   {/* Avatar Upload */}
                   <div className="flex justify-center mb-4">
-                    <div className="relative group">
-                      <div className="w-20 h-20 rounded-full border-4 border-white shadow-sm overflow-hidden bg-indigo-100 flex items-center justify-center">
-                        {editKasirAvatar ? (
-                          <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
-                        ) : (
-                          <i className="fa-solid fa-user text-2xl text-indigo-300"></i>
-                        )}
-                      </div>
-                      <label className="absolute inset-0 bg-black/40 text-white rounded-full flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm">
-                        <i className="fa-solid fa-camera mb-1 text-[10px]"></i>
-                        <span className="text-[8px] font-bold">UBAH</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              try {
-                                const base64 = await compressImage(file, 400, 400, 0.7);
-                                setEditKasirAvatar(base64);
-                              } catch (err) {
-                                alert("Gagal memproses foto");
-                              }
-                            }
-                          }} 
-                        />
-                      </label>
+                    <div 
+                      onClick={() => {
+                        setAvatarEditorSrc(editKasirAvatar || '');
+                        setEditorZoom(1);
+                        setEditorOffset({ x: 0, y: 0 });
+                        setShowAvatarEditor(true);
+                      }}
+                      className="w-20 h-20 rounded-full border-4 border-white shadow-sm overflow-hidden bg-indigo-100 flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95 transition-all"
+                    >
+                      {editKasirAvatar ? (
+                        <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <i className="fa-solid fa-user text-2xl text-indigo-300"></i>
+                      )}
                     </div>
                   </div>
 
@@ -2933,6 +2965,114 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
         <p className="text-center text-[10px] text-gray-300 mt-10">Versi 1.2.0 (Production)</p>
       </div>
+
+      {/* ── Avatar Crop & Detail Modal ── */}
+      {showAvatarEditor && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center z-[999] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-6 max-w-sm w-full shadow-2xl border border-slate-100 dark:border-slate-700 flex flex-col items-center">
+            <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Foto Profil Kasir</h3>
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-6">Geser & Zoom untuk memposisikan foto</p>
+
+            {/* Crop Area Container */}
+            <div className="relative w-64 h-64 rounded-full border-4 border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-900 shadow-inner flex items-center justify-center mb-6">
+              {avatarEditorSrc ? (
+                <div 
+                  className="w-full h-full relative overflow-hidden select-none touch-none"
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                  style={{ cursor: isDraggingEditor ? 'grabbing' : 'grab' }}
+                >
+                  <img 
+                    src={avatarEditorSrc} 
+                    alt="Editor Preview" 
+                    className="absolute max-w-none pointer-events-none select-none"
+                    style={{
+                      width: '256px',
+                      height: '256px',
+                      objectFit: 'cover',
+                      left: '0px',
+                      top: '0px',
+                      transform: `translate(${editorOffset.x}px, ${editorOffset.y}px) scale(${editorZoom})`,
+                      transformOrigin: 'center'
+                    }}
+                  />
+                </div>
+              ) : (
+                <i className="fa-solid fa-user text-5xl text-slate-300 dark:text-slate-700"></i>
+              )}
+            </div>
+
+            {/* Slider Zoom */}
+            {avatarEditorSrc && (
+              <div className="w-full px-6 mb-6">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <span>Zoom</span>
+                  <span>{Math.round(editorZoom * 100)}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="3" 
+                  step="0.05"
+                  value={editorZoom} 
+                  onChange={(e) => setEditorZoom(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setShowAvatarEditor(false)}
+                className="flex-1 py-3 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
+              >
+                Batal
+              </button>
+              
+              {/* Hidden File Input */}
+              <input 
+                type="file" 
+                id="avatar-editor-file-input"
+                accept="image/*" 
+                className="hidden" 
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    try {
+                      // Compress to base64 first
+                      const base64 = await compressImage(file, 800, 800, 0.85);
+                      setAvatarEditorSrc(base64);
+                      setEditorZoom(1);
+                      setEditorOffset({ x: 0, y: 0 });
+                    } catch (err) {
+                      alert("Gagal memproses foto");
+                    }
+                  }
+                }} 
+              />
+              <button 
+                onClick={() => document.getElementById('avatar-editor-file-input')?.click()}
+                className="flex-1 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <i className="fa-solid fa-camera"></i> Ganti Foto
+              </button>
+
+              {avatarEditorSrc && (
+                <button 
+                  onClick={handleSaveCroppedImage}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-1.5"
+                  style={{ color: '#ffffff' }}
+                >
+                  <i className="fa-solid fa-check"></i> Simpan
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

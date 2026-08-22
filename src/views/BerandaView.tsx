@@ -1266,7 +1266,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
           <div className="flex-1 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              {props.storePhoto ? (
+              {props.kasirList?.[props.username]?.avatar ? (
+                <img src={props.kasirList[props.username].avatar} alt="Profile" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
+              ) : props.storePhoto ? (
                 <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
               ) : (
                 <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
