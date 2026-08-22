@@ -143,7 +143,7 @@ export default function RiwayatTab({
     <div className="space-y-4 max-w-5xl mx-auto pb-12 text-slate-700 dark:text-slate-200" id="riwayat-serah-terima-container">
       
       {/* HEADER SECTION: Clean & Minimalist */}
-      <div className="bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-md">
+      <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm backdrop-blur-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-600 dark:text-slate-300">
@@ -165,7 +165,7 @@ export default function RiwayatTab({
           </div>
 
           {/* Mode Switcher */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950/60 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setViewMode('daily')}
               className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${viewMode === 'daily' ? 'bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-600 dark:text-slate-300'}`}
@@ -206,7 +206,7 @@ export default function RiwayatTab({
               </div>
 
               {/* Quick Date Buttons */}
-              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 dark:bg-slate-950/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 dark:bg-slate-950/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => handleSetQuickDate('today')}
@@ -242,7 +242,7 @@ export default function RiwayatTab({
                   <select
                     value={selectedCashierFilter}
                     onChange={(e) => setSelectedCashierFilter(e.target.value)}
-                    className="appearance-none bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-900 dark:text-white rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
+                    className="appearance-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-900 dark:text-white rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                   >
                     <option value="all">Semua Kasir</option>
                     {allCashiers.map(c => (
@@ -314,16 +314,16 @@ export default function RiwayatTab({
                 </div>
 
                 {/* Shift Selesai */}
-                <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/30 border border-slate-600/30 rounded-xl p-3 flex items-center justify-between">
+                <div className="bg-gradient-to-br from-white to-slate-50/50 dark:from-slate-900/60 dark:to-slate-800/30 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3 flex items-center justify-between">
                   <div>
-                    <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">Shift</span>
-                    <div className="text-2xl font-black font-mono text-white mt-0.5 leading-none">
+                    <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 tracking-widest block">Shift</span>
+                    <div className="text-2xl font-black font-mono text-slate-800 dark:text-white mt-0.5 leading-none">
                       {daySummary.completedShifts}
                     </div>
-                    <span className="text-[9px] text-slate-400 font-bold">Selesai Hari Ini</span>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400 font-bold">Selesai Hari Ini</span>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-slate-600/20 border border-slate-600/30 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-600/20 border border-slate-200 dark:border-slate-600/30 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   </div>
                 </div>
               </div>
@@ -372,7 +372,7 @@ export default function RiwayatTab({
           {/* LIST OF SHIFT HANDOVER CARDS FOR THE SELECTED DATE */}
           <div className="space-y-3">
             {filteredRecords.length === 0 ? (
-              <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-3">
+              <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-3">
                 <div className="w-12 h-12 mx-auto rounded-2xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
                   <History className="w-6 h-6" />
                 </div>
@@ -528,7 +528,7 @@ export default function RiwayatTab({
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 p-3 space-y-3"
+                          className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-3 space-y-3"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -548,10 +548,10 @@ export default function RiwayatTab({
                           </div>
 
                           {/* Product Detail Table */}
-                          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 no-scrollbar">
+                          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 no-scrollbar">
                             <table className="w-full text-left text-[10px] border-collapse">
                               <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-black uppercase tracking-tighter bg-slate-50 dark:bg-slate-900/80">
+                                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-black uppercase tracking-tighter bg-white dark:bg-slate-900/80">
                                   <th className="py-2 px-2">Nama Voucher</th>
                                   <th className="py-2 px-1 text-center">Awal</th>
                                   <th className="py-2 px-1 text-center">Akhir</th>
@@ -561,7 +561,7 @@ export default function RiwayatTab({
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-mono">
                                 {displayedProducts.map((p, idx) => (
-                                  <tr key={p.productId || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                                  <tr key={p.productId || idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition">
                                     <td className="py-2 px-2 font-sans font-bold text-slate-800 dark:text-slate-200">{p.productName}</td>
                                     <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.initialStock}</td>
                                     <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.finalStock}</td>
@@ -586,7 +586,7 @@ export default function RiwayatTab({
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {archivedDates.length === 0 ? (
-            <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-4">
+            <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-4">
               <div className="w-16 h-16 mx-auto rounded-3xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 shadow-inner">
                 <FileSpreadsheet className="w-8 h-8" />
               </div>

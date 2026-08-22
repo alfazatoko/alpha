@@ -97,6 +97,14 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const [shiftHandovers, setShiftHandovers] = useState<ShiftHandover[]>([]);
   const [detailedHandovers, setDetailedHandovers] = useState<DetailedHandoverRecord[]>([]);
 
+  // ✅ SOLUSI 3: State banner "Stok Diterima" saat kasir penerima login
+  const [pendingHandoverInfo, setPendingHandoverInfo] = useState<{
+    fromCashierName: string;
+    toCashierName: string;
+    totalStockTransferred: number;
+    timestamp: string;
+  } | null>(null);
+
   // Role & Access Control States
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(externalRole || 'kasir');
   const [showRoleSidebar, setShowRoleSidebar] = useState(false);
@@ -164,6 +172,28 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       });
     }
   }, [externalRole, externalCashierName, kasirList]);
+
+  // ✅ SOLUSI 3: Cek flag pending_handover saat kasir aktif berubah
+  // Jika ada flag, tampilkan banner sekali lalu hapus flag tersebut
+  useEffect(() => {
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id;
+    if (!cashierId) return;
+    const flagKey = `v_${storeKey}_${cashierId}_pending_handover`;
+    try {
+      const raw = localStorage.getItem(flagKey);
+      if (raw) {
+        const flag = JSON.parse(raw);
+        setPendingHandoverInfo(flag);
+        // Hapus flag agar tidak muncul lagi saat refresh
+        localStorage.removeItem(flagKey);
+      } else {
+        setPendingHandoverInfo(null);
+      }
+    } catch {
+      setPendingHandoverInfo(null);
+    }
+  }, [activeCashierIndex, cashiers, activeStoreId]);
 
   // Detail view context routing state
   const [selectedProduct, setSelectedProduct] = useState<VoucherProduct | null>(null);
@@ -280,13 +310,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const storeKey = activeStoreId || 'default';
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
     const prefix = `v_${storeKey}_${cashierId}`;
+    // ✅ SOLUSI 1: detailedHandovers kini GLOBAL per-toko (bukan per-kasir)
+    // Key: v_${storeKey}_all_detailed_handovers
+    // Semua kasir dalam satu toko berbagi riwayat serah terima yang sama
+    const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
 
     const cachedProducts = localStorage.getItem(`${prefix}_products`);
     const cachedTransactions = localStorage.getItem(`${prefix}_transactions`);
     const cachedNotifications = localStorage.getItem(`${prefix}_notifications`);
     const cachedHandovers = localStorage.getItem(`${prefix}_handovers`);
-    const cachedDetailedHandovers = localStorage.getItem(`${prefix}_detailed_handovers`);
-    const cachedCashierIdx = localStorage.getItem(`v_${storeKey}_cashier_idx`);
+    // Baca dari global key; fallback ke per-cashier key lama (migrasi data lama)
+    const cachedDetailedHandovers =
+      localStorage.getItem(globalDetailedHandoversKey) ||
+      localStorage.getItem(`${prefix}_detailed_handovers`);
     const cachedLastResetDate = localStorage.getItem(`v_${storeKey}_last_reset_date`);
     const cachedTheme = localStorage.getItem('v_theme') as 'dark' | 'light' | null;
 
@@ -295,11 +331,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     let loadedNotifications = cachedNotifications ? JSON.parse(cachedNotifications) : INITIAL_NOTIFICATIONS;
     let loadedHandovers = cachedHandovers ? JSON.parse(cachedHandovers) : [];
     let loadedDetailedHandovers = cachedDetailedHandovers ? JSON.parse(cachedDetailedHandovers) : INITIAL_DETAILED_HANDOVERS;
-    
+
     // Daily Reset Check (Store wide, not just per cashier)
     const today = new Date().toLocaleDateString('id-ID');
     if (cachedLastResetDate && cachedLastResetDate !== today) {
-      loadedTransactions = []; 
+      loadedTransactions = [];
       loadedNotifications = [
         {
           id: `notif-reset-${Date.now()}`,
@@ -310,7 +346,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
           isRead: false
         }
       ];
-      
       localStorage.setItem(`${prefix}_transactions`, JSON.stringify([]));
       localStorage.setItem(`${prefix}_notifications`, JSON.stringify(loadedNotifications));
       localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
@@ -329,16 +364,17 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     if (activeStoreId) {
       supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
         if (data && data.voucher_app_data) {
-          // Data is stored per-cashier in the cloud JSON
           const cashierData = data.voucher_app_data[cashierId];
+          // ✅ SOLUSI 1: Baca all_detailed_handovers dari level toko (bukan per-kasir)
+          const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
+          if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
           if (cashierData) {
             if (cashierData.products) setProducts(cashierData.products);
             if (cashierData.transactions) setTransactions(cashierData.transactions);
             if (cashierData.notifications) setNotifications(cashierData.notifications);
             if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
-            if (cashierData.detailedHandovers) setDetailedHandovers(cashierData.detailedHandovers);
+            // detailedHandovers per-kasir lama sudah diprioritaskan ke global; skip
           } else if (!cachedProducts && data.voucher_app_data.products) {
-            // Migration fallback for old data structure (before per-cashier separation)
             setProducts(data.voucher_app_data.products);
           }
         }
@@ -351,33 +387,34 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const storeKey = activeStoreId || 'default';
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
     const prefix = `v_${storeKey}_${cashierId}`;
-    
+    const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
+
     // Save locally per-store & per-cashier
     localStorage.setItem(`${prefix}_products`, JSON.stringify(products));
     localStorage.setItem(`${prefix}_transactions`, JSON.stringify(transactions));
     localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
     localStorage.setItem(`${prefix}_handovers`, JSON.stringify(shiftHandovers));
-    localStorage.setItem(`${prefix}_detailed_handovers`, JSON.stringify(detailedHandovers));
+    // ✅ SOLUSI 1: Simpan detailedHandovers ke key GLOBAL (per-toko)
+    localStorage.setItem(globalDetailedHandoversKey, JSON.stringify(detailedHandovers));
 
     if (!activeStoreId) return;
 
     // Debounced save to Supabase
     const timeout = setTimeout(() => {
-      // Fetch existing cloud data first so we don't overwrite other cashiers' data
       supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
         const existingData = data?.voucher_app_data || {};
-        
         const newData = {
           ...existingData,
+          // ✅ SOLUSI 1: all_detailed_handovers disimpan di level toko (bukan per-kasir)
+          all_detailed_handovers: detailedHandovers,
           [cashierId]: {
             products,
             transactions,
             notifications,
-            handovers: shiftHandovers,
-            detailedHandovers
+            handovers: shiftHandovers
+            // detailedHandovers TIDAK disimpan per-kasir lagi
           }
         };
-        
         supabase.from('store_settings').upsert({
           store_id: activeStoreId,
           voucher_app_data: newData
@@ -386,7 +423,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         });
       });
     }, 2500);
-    
+
     return () => clearTimeout(timeout);
   }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex]);
 
@@ -895,6 +932,23 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     };
     localStorage.setItem(`${toPrefix}_transactions`, JSON.stringify([receiverOpeningTrx, ...existingToTrx]));
 
+    // ✅ SOLUSI 2: Reset stok kasir PENGIRIM ke 0 setelah serah terima
+    // Riwayat historis tetap aman di detailedHandovers & transactions
+    const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
+    const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
+    localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
+    setProducts(zeroedProducts);
+
+    // ✅ SOLUSI 3: Tulis flag "pending handover" ke storage kasir penerima
+    // Saat kasir penerima login, flag ini dibaca dan banner ditampilkan sekali
+    const pendingHandoverFlag = {
+      fromCashierName,
+      toCashierName,
+      totalStockTransferred,
+      timestamp: new Date().toISOString()
+    };
+    localStorage.setItem(`${toPrefix}_pending_handover`, JSON.stringify(pendingHandoverFlag));
+
     // ✅ TIDAK mengganti activeCashierIndex — kasir yang login tetap sama
     setShiftHandovers(updatedHandovers);
     setTransactions(updatedTrx);
@@ -1179,6 +1233,49 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                 />
               ) : (
                 <>
+                  {/* ✅ SOLUSI 3: Banner "Stok Diterima" — tampil sekali saat login setelah menerima serah terima */}
+                  {activeTab === 'beranda' && pendingHandoverInfo && (
+                    <div className="mx-3 mt-3 mb-0 animate-in slide-in-from-top-2 duration-300">
+                      <div className="relative flex items-start gap-3 rounded-2xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/15 to-teal-500/10 px-4 py-3 shadow-md backdrop-blur-sm overflow-hidden">
+                        {/* Decorative glow */}
+                        <div className="absolute -top-6 -right-6 w-24 h-24 bg-emerald-500/20 blur-2xl rounded-full pointer-events-none" />
+
+                        {/* Icon */}
+                        <div className="shrink-0 w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center mt-0.5">
+                          <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
+
+                        {/* Text */}
+                        <div className="flex-1 min-w-0 relative z-10">
+                          <p className="text-[11px] font-black text-emerald-300 uppercase tracking-widest leading-none mb-1">
+                            Stok Diterima — Shift Dimulai!
+                          </p>
+                          <p className="text-xs text-emerald-100 font-medium leading-snug">
+                            <span className="font-bold text-white">{pendingHandoverInfo.fromCashierName}</span> telah menyerahkan{' '}
+                            <span className="font-black text-emerald-300">{pendingHandoverInfo.totalStockTransferred} pcs</span> voucher kepada Anda.
+                          </p>
+                          <p className="text-[9px] text-emerald-400/70 font-semibold mt-1">
+                            {new Date(pendingHandoverInfo.timestamp).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB · Silakan mulai shift Anda.
+                          </p>
+                        </div>
+
+                        {/* Close Button */}
+                        <button
+                          type="button"
+                          onClick={() => setPendingHandoverInfo(null)}
+                          className="shrink-0 w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-emerald-300 transition cursor-pointer relative z-10 mt-0.5"
+                          title="Tutup notifikasi"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {activeTab === 'beranda' && (
                     <DashboardTab
                       products={products}
