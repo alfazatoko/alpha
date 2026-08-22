@@ -254,7 +254,7 @@ const App: React.FC = () => {
     }
   }
 
-  const handleExitStore = () => {
+  const handleExitStore = useCallback(() => {
     localStorage.removeItem('alphaPro_loggedIn')
     localStorage.removeItem('alphaPro_username')
     localStorage.removeItem('alphaPro_name')
@@ -269,9 +269,9 @@ const App: React.FC = () => {
     setCurrentUsername('')
     setCurrentAccount(null)
     window.location.hash = '#/beranda'
-  }
+  }, [])
 
-  const handleLogoutCashierOnly = () => {
+  const handleLogoutCashierOnly = useCallback(() => {
     localStorage.removeItem('alphaPro_loggedIn')
     localStorage.removeItem('alphaPro_username')
     localStorage.removeItem('alphaPro_name')
@@ -280,7 +280,7 @@ const App: React.FC = () => {
     setCurrentUsername('')
     setCurrentAccount(null)
     window.location.hash = '#/beranda'
-  }
+  }, [])
 
   const handleLogoutGoogle = async () => {
     localStorage.clear()
@@ -294,39 +294,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut()
   }
 
-  // ── Auto Logout at Midnight ──
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    
-    // Ensure login_date is set for legacy sessions
-    const loginDateStr = localStorage.getItem('alphaPro_login_date');
-    if (!loginDateStr) {
-      localStorage.setItem('alphaPro_login_date', getLocalDateString());
-    }
 
-    const checkDate = () => {
-      const todayStr = getLocalDateString();
-      const storedDate = localStorage.getItem('alphaPro_login_date');
-      // Only logout if storedDate is explicitly set AND differs from today
-      // Prevents false logout on first mount when login_date was just set
-      if (storedDate && storedDate !== todayStr) {
-        const currentRole = localStorage.getItem('alphaPro_active_role') as 'owner' | 'kasir' | null;
-        if (currentRole === 'owner') {
-          handleExitStore();
-        } else {
-          handleLogoutCashierOnly();
-        }
-        localStorage.removeItem('alphaPro_login_date');
-      }
-    };
-
-    // Delay first check by 2 seconds to ensure login_date is properly persisted
-    const firstCheckTimer = setTimeout(checkDate, 2000);
-
-    return () => {
-      clearTimeout(firstCheckTimer);
-    };
-  }, [isLoggedIn]);
 
   // ── Show loading if checking auth ──
   if (isCheckingAuth) {
@@ -1424,7 +1392,7 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  // Daily Reset Check (Only alerts now, balances are calculated from today's txs automatically)
+  // Daily Reset Check & Auto Logout on Day Change
   useEffect(() => {
     const checkReset = () => {
       const today = new Date().toLocaleDateString('id-ID')
@@ -1432,6 +1400,14 @@ const MainApp: React.FC<MainAppProps> = ({
 
       if (lastReset && lastReset !== today) {
         showToast(`HARI BARU: ${today}`);
+        
+        // Otomatis logout ketika berganti hari
+        const currentRole = localStorage.getItem('alphaPro_active_role');
+        if (currentRole === 'owner') {
+          handleExitStore();
+        } else {
+          handleLogoutCashierOnly();
+        }
       }
       localStorage.setItem(`alphaPro_${googleUid}_${username}_last_reset_date`, today)
     }
@@ -1439,7 +1415,7 @@ const MainApp: React.FC<MainAppProps> = ({
     checkReset()
     const interval = setInterval(checkReset, 60000)
     return () => clearInterval(interval)
-  }, [googleUid, username])
+  }, [googleUid, username, handleExitStore, handleLogoutCashierOnly])
 
   // Handlers
   const showToast = (msg: string) => {
