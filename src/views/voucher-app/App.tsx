@@ -122,27 +122,48 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const [activeCashierIndex, setActiveCashierIndex] = useState<number>(0);
 
   // Sync with external props from Host App
+  // FIXED: 'cashiers' removed from deps to prevent infinite loop
+  // Syncs `cashiers` list with `kasirList` from the host app (Owner settings)
   useEffect(() => {
     if (externalRole) setCurrentUserRole(externalRole);
-    if (externalCashierName) {
-      const idx = cashiers.findIndex(c => c.name === externalCashierName);
-      if (idx !== -1) {
-        setActiveCashierIndex(idx);
-      } else {
-        // Add new cashier if not exists
-        const newCashier: Cashier = { 
-          id: `c${cashiers.length + 1}`, 
-          name: externalCashierName, 
-          role: 'Kasir Shift', 
-          email: `${externalCashierName.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
-          avatar: 'https://ui-avatars.com/api/?name=' + externalCashierName,
-          isOnline: true 
-        };
-        setCashiers(prev => [...prev, newCashier]);
-        setActiveCashierIndex(cashiers.length);
+    if (kasirList && Object.keys(kasirList).length > 0) {
+      const newCashiers: Cashier[] = Object.entries(kasirList)
+        .filter(([_, data]) => data.role !== 'owner')
+        .map(([username, data], idx) => ({
+          id: `c_${username}`,
+          name: data.name || username,
+          role: 'Kasir Shift',
+          email: `${username.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+          avatar: 'https://ui-avatars.com/api/?name=' + encodeURIComponent(data.name || username),
+          isOnline: true
+        }));
+      setCashiers(newCashiers);
+      
+      if (externalCashierName) {
+        const idx = newCashiers.findIndex(c => c.name === externalCashierName);
+        if (idx !== -1) setActiveCashierIndex(idx);
       }
+    } else if (externalCashierName) {
+      setCashiers(prev => {
+        const idx = prev.findIndex(c => c.name === externalCashierName);
+        if (idx !== -1) {
+          setActiveCashierIndex(idx);
+          return prev;
+        } else {
+          const newCashier: Cashier = { 
+            id: `c${prev.length + 1}`, 
+            name: externalCashierName, 
+            role: 'Kasir Shift', 
+            email: `${externalCashierName.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+            avatar: 'https://ui-avatars.com/api/?name=' + externalCashierName,
+            isOnline: true 
+          };
+          setActiveCashierIndex(prev.length);
+          return [...prev, newCashier];
+        }
+      });
     }
-  }, [externalRole, externalCashierName, cashiers]);
+  }, [externalRole, externalCashierName, kasirList]);
 
   // Detail view context routing state
   const [selectedProduct, setSelectedProduct] = useState<VoucherProduct | null>(null);
@@ -372,14 +393,20 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Watch for day change while app is open
   useEffect(() => {
     const checkDayChange = setInterval(() => {
+      const storeKey = activeStoreId || 'default';
       const today = new Date().toLocaleDateString('id-ID');
-      const cachedLastResetDate = localStorage.getItem('v_last_reset_date');
+      // FIXED: Use the correct scoped key (v_${storeKey}_last_reset_date)
+      // Previously used 'v_last_reset_date' (wrong key) which could trigger
+      // unexpected reloads if stale value existed from old sessions.
+      const cachedLastResetDate = localStorage.getItem(`v_${storeKey}_last_reset_date`);
       if (cachedLastResetDate && cachedLastResetDate !== today) {
-        window.location.reload(); // Hard reload to trigger mount logic and reset states cleanly
+        // Instead of hard reload, just update state gracefully
+        setTransactions([]);
+        localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
       }
     }, 60000); // Check every minute
     return () => clearInterval(checkDayChange);
-  }, []);
+  }, [activeStoreId]);
 
   // Save states helper
   const saveState = (
@@ -775,33 +802,40 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     }
   };
 
-  // Tutup Shift / Serah Terima Otomatis
-  const handleExecuteShiftHandover = (customNotes: string) => {
-    const totalProductsCount = products.length;
-    const totalStockTransferred = products.reduce((acc, p) => acc + p.currentStock, 0);
-    const inventoryValue = products.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0);
+  // Tutup Shift / Serah Terima — TIDAK mengganti kasir aktif
+  // Hanya mencatat handover record ke riwayat & localStorage
+  const handleExecuteShiftHandover = (
+    customNotes: string,
+    toCashierIdOverride?: string,
+    toCashierNameOverride?: string,
+    finalProductsOverride?: VoucherProduct[]
+  ) => {
+    const storeKey = activeStoreId || 'default';
+    const finalProducts = finalProductsOverride || products;
+    const totalProductsCount = finalProducts.length;
+    const totalStockTransferred = finalProducts.reduce((acc, p) => acc + p.currentStock, 0);
+    const inventoryValue = finalProducts.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0);
 
     const fromCashierName = activeCashier.name;
-    const toCashierName = nextCashier.name;
+    const toCashierId = toCashierIdOverride || nextCashier.id;
+    const toCashierName = toCashierNameOverride || nextCashier.name;
 
-    const newIndex = activeCashierIndex === 0 ? 1 : 0;
-    
     const newHandover: ShiftHandover = {
       id: `handover-${Date.now()}`,
       timestamp: new Date().toISOString(),
       fromCashierId: activeCashier.id,
       fromCashierName,
-      toCashierId: nextCashier.id,
+      toCashierId,
       toCashierName,
       totalProductsCount,
       totalStockTransferred,
       inventoryValue,
       status: 'Berhasil Diserahterimakan',
-      notes: customNotes || 'Serah terima otomatis tutup kasir harian'
+      notes: customNotes || 'Serah terima tutup shift kasir'
     };
 
     const updatedHandovers = [newHandover, ...shiftHandovers];
-    
+
     const newTrx: Transaction = {
       id: `trx-handover-${Date.now()}`,
       type: 'SERAH_TERIMA',
@@ -809,7 +843,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       amount: inventoryValue,
       cashierName: fromCashierName,
       timestamp: new Date().toISOString(),
-      notes: `Serah terima otomatis ke ${toCashierName}. Notes: ${newHandover.notes}`
+      notes: `Serah terima ke ${toCashierName}. Notes: ${newHandover.notes}`
     };
 
     const updatedTrx = [newTrx, ...transactions];
@@ -817,14 +851,51 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const updatedNotifs = pushNotification(
       'transfer',
       'Serah Terima Berhasil!',
-      `Tanggung jawab ${totalStockTransferred} voucher beralih dari ${fromCashierName} ke ${toCashierName}.`,
+      `Stok ${totalStockTransferred} voucher telah diserahkan dari ${fromCashierName} ke ${toCashierName}. ${fromCashierName} tetap login.`,
       notifications
     );
 
-    setActiveCashierIndex(newIndex);
-    const storeKey = activeStoreId || 'default';
-    localStorage.setItem(`v_${storeKey}_cashier_idx`, newIndex.toString());
-    
+    // ✅ Salin produk dengan stok akhir ke storage kasir penerima
+    // Saat kasir penerima login nanti, stoknya sudah terisi otomatis
+    const toPrefix = `v_${storeKey}_${toCashierId}`;
+    // Ambil produk yang sudah ada di kasir penerima (jika ada), lalu update stoknya
+    const existingToProducts = (() => {
+      try {
+        const raw = localStorage.getItem(`${toPrefix}_products`);
+        return raw ? JSON.parse(raw) as VoucherProduct[] : null;
+      } catch { return null; }
+    })();
+
+    // Buat daftar produk kasir penerima: ambil stok dari hasil serah terima
+    const productsForReceiver: VoucherProduct[] = finalProducts.map(p => {
+      const existingP = existingToProducts?.find(ep => ep.id === p.id);
+      return existingP
+        ? { ...existingP, currentStock: p.currentStock } // update stok, pertahankan data lain
+        : { ...p }; // copy penuh jika belum ada
+    });
+
+    // Simpan produk yang sudah diupdate ke storage kasir penerima
+    localStorage.setItem(`${toPrefix}_products`, JSON.stringify(productsForReceiver));
+
+    // Catat transaksi handover di log kasir penerima juga
+    const existingToTrx = (() => {
+      try {
+        const raw = localStorage.getItem(`${toPrefix}_transactions`);
+        return raw ? JSON.parse(raw) as Transaction[] : [];
+      } catch { return []; }
+    })();
+    const receiverOpeningTrx: Transaction = {
+      id: `trx-opening-${Date.now()}`,
+      type: 'SERAH_TERIMA',
+      quantity: totalStockTransferred,
+      amount: inventoryValue,
+      cashierName: toCashierName,
+      timestamp: new Date().toISOString(),
+      notes: `Menerima serah terima stok dari ${fromCashierName}. Stok awal shift: ${totalStockTransferred} pcs.`
+    };
+    localStorage.setItem(`${toPrefix}_transactions`, JSON.stringify([receiverOpeningTrx, ...existingToTrx]));
+
+    // ✅ TIDAK mengganti activeCashierIndex — kasir yang login tetap sama
     setShiftHandovers(updatedHandovers);
     setTransactions(updatedTrx);
     setNotifications(updatedNotifs);
@@ -1243,11 +1314,32 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       }}
                       onBulkUpdateProductStock={handleBulkUpdateProductStock}
                       onRecordHandover={(handoverData) => {
-                        // Create detailed handover record for Riwayat tab
+                        // ====================================================
+                        // SERAH TERIMA — LOGIKA BARU:
+                        // 1. Catat riwayat handover di Riwayat tab
+                        // 2. Salin stok akhir ke storage kasir penerima
+                        // 3. Kasir yang login TIDAK BERUBAH
+                        // ====================================================
                         const now = new Date();
                         const dateStr = now.toISOString().split('T')[0];
-                        const shiftNum = activeCashier.id === 'cashier-1' ? 1 : 2;
+
+                        // Cari kasir penerima dari daftar cashiers berdasarkan id
+                        const toCashier = cashiers.find(c => c.id === handoverData.toCashierId) || cashiers.find(c => c.name === handoverData.toCashierName);
+                        const toCashierId = toCashier?.id || handoverData.toCashierId || 'unknown';
+                        const toCashierName = toCashier?.name || handoverData.toCashierName || 'Kasir Berikutnya';
+
+                        // Hitung shiftNumber berdasarkan urutan di hari ini
+                        const todayRecords = detailedHandovers.filter(r => r.date === dateStr);
+                        const shiftNum = todayRecords.length + 1;
                         const shiftTitle = `Shift ${shiftNum} (${activeCashier.name})`;
+
+                        // Bangun daftar produk dengan stok = finalStock dari audit
+                        // Ini yang akan disalin ke storage kasir penerima
+                        const finalProductsForReceiver: VoucherProduct[] = products.map(p => {
+                          const auditItem = (handoverData.items || []).find((i: any) => i.productId === p.id);
+                          const finalStock = auditItem ? auditItem.finalStock : p.currentStock;
+                          return { ...p, currentStock: finalStock };
+                        });
 
                         const newDetailedRecord: DetailedHandoverRecord = {
                           id: `rec-${Date.now()}`,
@@ -1257,11 +1349,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           shiftName: shiftTitle,
                           cashierFromId: activeCashier.id,
                           cashierFromName: activeCashier.name,
-                          cashierToId: nextCashier.id,
-                          cashierToName: nextCashier.name,
+                          cashierToId: toCashierId,
+                          cashierToName: toCashierName,
                           totalInitialStock: handoverData.initialStock,
                           totalIncomingStock: handoverData.incomingStock,
-                          totalFinalStock: handoverData.totalStock,
+                          totalFinalStock: handoverData.finalStock,
                           totalSoldPcs: handoverData.totalSold,
                           totalSalesAmount: handoverData.totalSales,
                           qrisAmount: handoverData.qrisAmount,
@@ -1277,15 +1369,23 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         const updatedDetailed = [newDetailedRecord, ...detailedHandovers];
                         setDetailedHandovers(updatedDetailed);
 
-                        handleExecuteShiftHandover(`Serah terima sistem: Stok fisik ${handoverData.totalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`);
+                        // Jalankan handover — menyalin stok ke kasir penerima
+                        // Kasir yang login TIDAK DIGANTI
+                        handleExecuteShiftHandover(
+                          `Serah terima: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`,
+                          toCashierId,
+                          toCashierName,
+                          finalProductsForReceiver
+                        );
                         saveState(products, transactions, notifications, shiftHandovers, updatedDetailed);
                       }}
                       onSwitchCashier={() => {
-                        setActiveCashierIndex(prev => prev === 0 ? 1 : 0);
+                        // ✅ Tidak ganti kasir — hanya notifikasi saja
+                        // Kasir penerima harus login sendiri
                         const updatedNotifs = pushNotification(
                           'success',
-                          'Shift Beralih',
-                          `Shift berhasil diserahterimakan kepada ${nextCashier.name}.`,
+                          'Serah Terima Selesai',
+                          `Stok telah diserahkan. Anda masih login sebagai ${activeCashier.name}. Kasir penerima silakan login sendiri.`,
                           notifications
                         );
                         setNotifications(updatedNotifs);
@@ -1297,6 +1397,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                   {activeTab === 'riwayat' && (
                     <RiwayatTab 
                       handoverRecords={detailedHandovers}
+                      allCashiers={cashiers}
                       onBackToDashboard={() => setActiveTab('beranda')}
                     />
                   )}

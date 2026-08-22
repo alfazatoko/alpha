@@ -453,7 +453,9 @@ export default function AturStokTab({
 
   const handleFinishAndSwitch = () => {
     try { localStorage.removeItem(SK); } catch { }
-    onSwitchCashier();
+    // ✅ Tidak ganti kasir — kasir yang login tetap
+    // Kasir penerima harus login sendiri menggunakan akunnya
+    onSwitchCashier(); // Hanya trigger notifikasi di App.tsx
     onBackToDashboard();
   };
 
@@ -1708,7 +1710,7 @@ export default function AturStokTab({
               Serah Terima Berhasil Diselesaikan!
             </h3>
             <p className={`text-[10px] sm:text-[11px] max-w-sm mx-auto ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
-              Shift {activeCashier.name} telah selesai. Stok sisa ({totalFinalStock} Pcs) dan uang kas telah diserahkan kepada <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-700 dark:text-slate-200'}`}>{nextCashier.name}</span>.
+              Shift {activeCashier.name} telah selesai. Stok sisa ({totalFinalStock} Pcs) sudah disalin ke akun <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-700 dark:text-slate-200'}`}>{selectedToCashier.name}</span>. Kasir penerima silakan login dengan akun masing-masing.
             </p>
           </div>
 

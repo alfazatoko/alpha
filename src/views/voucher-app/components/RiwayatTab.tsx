@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,10 +27,11 @@ import {
   Sparkles,
   Receipt
 } from 'lucide-react';
-import type { DetailedHandoverRecord } from '../types';
+import type { DetailedHandoverRecord, Cashier } from '../types';
 
 interface RiwayatTabProps {
   handoverRecords: DetailedHandoverRecord[];
+  allCashiers?: Cashier[];
   onSelectRecord?: (record: DetailedHandoverRecord) => void;
   onNavigateToStock?: () => void;
   onBackToDashboard?: () => void;
@@ -38,6 +39,7 @@ interface RiwayatTabProps {
 
 export default function RiwayatTab({
   handoverRecords,
+  allCashiers = [],
   onSelectRecord,
   onNavigateToStock,
   onBackToDashboard
@@ -55,6 +57,7 @@ export default function RiwayatTab({
   const [viewMode, setViewMode] = useState<'daily' | 'archive'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'all' | '1' | '2'>('all');
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('all');
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [searchVoucherQuery, setSearchVoucherQuery] = useState<string>('');
 
@@ -71,14 +74,15 @@ export default function RiwayatTab({
     return Object.entries(dates).sort((a, b) => b[0].localeCompare(a[0]));
   }, [handoverRecords]);
 
-  // Filtered records based on selected date & shift
+  // Filtered records based on selected date, shift & cashier
   const filteredRecords = useMemo(() => {
     return handoverRecords.filter((rec) => {
       const matchDate = selectedDate ? rec.date === selectedDate : true;
       const matchShift = selectedShiftFilter === 'all' ? true : String(rec.shiftNumber) === selectedShiftFilter;
-      return matchDate && matchShift;
+      const matchCashier = selectedCashierFilter === 'all' ? true : (rec.cashierFromName === selectedCashierFilter || rec.cashierToName === selectedCashierFilter);
+      return matchDate && matchShift && matchCashier;
     });
-  }, [handoverRecords, selectedDate, selectedShiftFilter]);
+  }, [handoverRecords, selectedDate, selectedShiftFilter, selectedCashierFilter]);
 
   // Aggregate totals for the selected date
   const daySummary = useMemo(() => {
@@ -228,42 +232,64 @@ export default function RiwayatTab({
               </div>
             </div>
 
-            {/* Shift Filter Pills */}
-            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200 dark:border-slate-800/40">
-              <span className="text-[11px] text-slate-600 dark:text-slate-400 mr-1">Filter Shift:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedShiftFilter('all')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  selectedShiftFilter === 'all'
-                    ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
-                    : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedShiftFilter('1')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  selectedShiftFilter === '1'
-                    ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
-                    : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                S1 (Pagi)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedShiftFilter('2')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  selectedShiftFilter === '2'
-                    ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
-                    : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                S2 (Malam)
-              </button>
+            {/* Shift & Cashier Filter Area */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-800/40">
+              {/* Cashier Filter Dropdown */}
+              <div className="flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold whitespace-nowrap">Filter Kasir:</span>
+                <div className="relative">
+                  <select
+                    value={selectedCashierFilter}
+                    onChange={(e) => setSelectedCashierFilter(e.target.value)}
+                    className="appearance-none bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-900 dark:text-white rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
+                  >
+                    <option value="all">Semua Kasir</option>
+                    {allCashiers.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Shift Filter Pills */}
+              <div className="flex items-center gap-1.5 sm:border-l sm:border-slate-200 sm:dark:border-slate-800 sm:pl-3">
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 mr-1 hidden sm:inline">Shift:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                    selectedShiftFilter === 'all'
+                      ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
+                      : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('1')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                    selectedShiftFilter === '1'
+                      ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
+                      : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  S1 (Pagi)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedShiftFilter('2')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                    selectedShiftFilter === '2'
+                      ? 'bg-slate-700 border-slate-600 text-slate-900 dark:text-white'
+                      : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  S2 (Malam)
+                </button>
+              </div>
             </div>
 
             {/* ─────────────────────────────────────────────────────────────

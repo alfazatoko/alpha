@@ -152,8 +152,11 @@ const App: React.FC = () => {
   }, [])
 
   // Fetch store settings when activeStoreId changes
+  // NOTE: Use googleSession?.user?.id (stable string) instead of googleSession object
+  // to avoid re-running this effect on every auth state change
   useEffect(() => {
-    if (!googleSession || activeStoreId === 'all') return
+    const googleUid = googleSession?.user?.id
+    if (!googleUid || activeStoreId === 'all') return
 
     const fetchStoreSettings = async () => {
       try {
@@ -190,7 +193,7 @@ const App: React.FC = () => {
     }
 
     fetchStoreSettings()
-  }, [activeStoreId, googleSession])
+  }, [activeStoreId, googleSession?.user?.id])
 
   // ── Login / Logout Handlers ──
   const handleLogin = useCallback((username: string, account: KasirAccount) => {
@@ -304,8 +307,11 @@ const App: React.FC = () => {
     const checkDate = () => {
       const todayStr = getLocalDateString();
       const storedDate = localStorage.getItem('alphaPro_login_date');
+      // Only logout if storedDate is explicitly set AND differs from today
+      // Prevents false logout on first mount when login_date was just set
       if (storedDate && storedDate !== todayStr) {
-        if (selectedRole === 'owner') {
+        const currentRole = localStorage.getItem('alphaPro_active_role') as 'owner' | 'kasir' | null;
+        if (currentRole === 'owner') {
           handleExitStore();
         } else {
           handleLogoutCashierOnly();
@@ -314,11 +320,15 @@ const App: React.FC = () => {
       }
     };
 
+    // Delay first check by 2 seconds to ensure login_date is properly persisted
+    const firstCheckTimer = setTimeout(checkDate, 2000);
     const intervalId = setInterval(checkDate, 60000); // 1 minute
-    checkDate();
 
-    return () => clearInterval(intervalId);
-  }, [isLoggedIn, selectedRole]);
+    return () => {
+      clearTimeout(firstCheckTimer);
+      clearInterval(intervalId);
+    };
+  }, [isLoggedIn]);
 
   // ── Show loading if checking auth ──
   if (isCheckingAuth) {
@@ -436,35 +446,9 @@ const MainApp: React.FC<MainAppProps> = ({
   const [stores, setStores] = useState<Store[]>([])
   const targetStoreId = activeRole === 'owner' ? pantauStoreId : activeStoreId
 
-  // Fetch store settings / cashiers when targetStoreId changes
-  useEffect(() => {
-    if (!googleUid) return
-    const effectiveStoreId = targetStoreId && targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null);
-    if (!effectiveStoreId) return;
-
-    const fetchStoreCashiers = async () => {
-      try {
-        const { data } = await supabase
-          .from('store_settings')
-          .select('*')
-          .eq('store_id', effectiveStoreId)
-          .maybeSingle();
-
-        if (data && data.cashiers && Object.keys(data.cashiers).length > 0) {
-          setKasirList(data.cashiers);
-          localStorage.setItem(`alphaPro_${effectiveStoreId}_kasir_list`, JSON.stringify(data.cashiers));
-        } else {
-          const stored = localStorage.getItem(`alphaPro_${effectiveStoreId}_kasir_list`);
-          if (stored) setKasirList(JSON.parse(stored));
-        }
-      } catch (err) {
-        const stored = localStorage.getItem(`alphaPro_${effectiveStoreId}_kasir_list`);
-        if (stored) setKasirList(JSON.parse(stored));
-      }
-    };
-
-    fetchStoreCashiers();
-  }, [targetStoreId, activeStoreId, googleUid]);
+  // NOTE: kasirList fetch is already handled in the App-level useEffect.
+  // This duplicate was removed to prevent double-fetch and state flickering
+  // that caused the app to appear to "reload".
 
   // Sync activeView with URL Hash
   useEffect(() => {
@@ -1166,7 +1150,9 @@ const MainApp: React.FC<MainAppProps> = ({
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [googleUid, isLoggedIn, username, account?.name, activeStoreId, activeRole, targetStoreId])
+  // NOTE: account?.name removed from deps - the account object reference changes every render
+  // causing an infinite re-fetch loop. We use account.name only inside the effect (stable via closure).
+  }, [googleUid, isLoggedIn, username, activeStoreId, activeRole, targetStoreId])
 
 
   // Filter State
@@ -2729,6 +2715,9 @@ const MainApp: React.FC<MainAppProps> = ({
         groqApiKey={groqApiKey}
         onSaveGroqKey={handleSaveGroqKey}
         onClearGroqKey={handleSaveGroqKeyClear}
+        kasirList={kasirList}
+        transactions={todayTransactions}
+        absensiList={absensi}
       />
 
     </div>

@@ -36,10 +36,10 @@ interface Props {
   groqApiKey: string
   onSaveGroqKey: (key: string) => Promise<void>
   onClearGroqKey: () => Promise<void>
+  kasirList?: Record<string, any>
+  transactions?: any[]
+  absensiList?: any[]
 }
-
-// ── Suggestions ───────────────────────────────────────────────────────────────
-const SUGGESTIONS = ['bantuan', 'ke laporan', 'tanya stok axis', 'modal 13rb jual 15rb', 'tips bisnis', 'jam berapa']
 
 // ── Mode Badge ────────────────────────────────────────────────────────────────
 const ModeBadge: React.FC<{ mode?: string }> = ({ mode }) => {
@@ -71,8 +71,39 @@ function renderText(text: string) {
 // ── GROQ KEY STORAGE ──────────────────────────────────────────────────────────
 const GROQ_KEY = 'alphaPro_groq_api_key'
 
+// Helper for dynamic suggestions based on user query history
+const getDynamicSuggestions = () => {
+  const histStr = localStorage.getItem('alphaPro_bot_query_history')
+  let hist: Record<string, number> = {}
+  try { if (histStr) hist = JSON.parse(histStr) } catch {}
+  
+  // Sort queries by frequency
+  const sorted = Object.entries(hist)
+    .sort((a, b) => b[1] - a[1])
+    .map(entry => entry[0])
+    .filter(q => q !== 'bantuan' && q !== 'help' && q.length > 2)
+    .slice(0, 3) // Get top 3
+  
+  const defaults = ['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis']
+  // Merge and enforce maximum of 6 suggestion chips
+  return Array.from(new Set([...sorted, ...defaults])).slice(0, 6)
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
-const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey, onSaveGroqKey, onClearGroqKey }) => {
+const AssistantBot: React.FC<Props> = ({ 
+  activeView, 
+  setActiveView, 
+  setBotSearchQuery, 
+  setBotActiveTab, 
+  activeStoreId, 
+  currentUsername, 
+  groqApiKey, 
+  onSaveGroqKey, 
+  onClearGroqKey,
+  kasirList = {},
+  transactions = [],
+  absensiList = []
+}) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [messages, setMessages] = useState<BotMessage[]>([{
@@ -84,9 +115,9 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
   const [groqKeyInput, setGroqKeyInput] = useState('')
   const [groqStatus, setGroqStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [isSavingKey, setIsSavingKey] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis'])
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  // Keep chat history for Groq context
   const groqHistory = useRef<ChatMessage[]>([])
 
   useEffect(() => {
@@ -95,6 +126,11 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
       if (!showSettings) setTimeout(() => inputRef.current?.focus(), 120)
     }
   }, [isOpen, messages, showSettings])
+
+  // Load initial suggestions
+  useEffect(() => {
+    setSuggestions(getDynamicSuggestions())
+  }, [isOpen])
 
   const addMessage = useCallback((from: 'user'|'bot', text: string, mode?: BotMessage['mode']) => {
     setMessages(prev => [...prev, { id: Date.now()+Math.random()+'', from, text, mode }])
@@ -107,6 +143,18 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
     addMessage('user', text)
     setIsTyping(true)
 
+    // Save query to history for suggestions learning
+    const queryLower = text.toLowerCase().trim()
+    if (queryLower.length > 2) {
+      try {
+        const histStr = localStorage.getItem('alphaPro_bot_query_history')
+        let hist: Record<string, number> = {}
+        if (histStr) hist = JSON.parse(histStr)
+        hist[queryLower] = (hist[queryLower] || 0) + 1
+        localStorage.setItem('alphaPro_bot_query_history', JSON.stringify(hist))
+      } catch (e) {}
+    }
+
     // ① Coba App Intent dulu
     const intent = parseAppIntent(text)
     if (intent.type === 'navigate') {
@@ -114,6 +162,7 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
       setActiveView(intent.view)
       setIsTyping(false)
       addMessage('bot', `✅ Pindah ke halaman **${intent.label}**.`, 'app')
+      setSuggestions(getDynamicSuggestions())
       return
     }
     if (intent.type === 'edit_stok') {
@@ -121,6 +170,7 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
       setActiveView('view-stok-voucher')
       setIsTyping(false)
       addMessage('bot', `🔍 Membuka **Stok Voucher** dengan filter *"${intent.query}"*.\n\nKlik tombol **Edit** pada produk yang muncul untuk ubah stok secara manual.`, 'app')
+      setSuggestions(getDynamicSuggestions())
       return
     }
     if (intent.type === 'tanya_stok') {
@@ -128,15 +178,17 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
       setIsTyping(false)
       if (r.found) addMessage('bot', `📦 Stok **${r.name}** tersisa **${r.stock} pcs**.`, 'app')
       else addMessage('bot', `❌ Voucher *"${intent.query}"* tidak ditemukan.\n\nBuka halaman Stok Voucher minimal sekali agar data tersimpan.`, 'app')
+      setSuggestions(getDynamicSuggestions())
       return
     }
 
-    // ② Coba Knowledge Base lokal
+    // ② Coba Knowledge Base lokal (offline database intelligence)
     await new Promise(r => setTimeout(r, 400))
-    const kbAnswer = answerFromKB(text)
+    const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList)
     if (kbAnswer) {
       setIsTyping(false)
       addMessage('bot', kbAnswer, 'kb')
+      setSuggestions(getDynamicSuggestions())
       return
     }
 
@@ -152,13 +204,15 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
         setIsTyping(false)
         addMessage('bot', `⚠️ **Groq Error:** ${e.message}`, 'error')
       }
+      setSuggestions(getDynamicSuggestions())
       return
     }
 
     // ④ Fallback
     setIsTyping(false)
     addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\n**Coba:**\n• Ketik *bantuan* untuk panduan\n• Set **Groq API Key** di ⚙️ Settings agar aku bisa jawab pertanyaan bebas`, 'kb')
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey])
+    setSuggestions(getDynamicSuggestions())
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey, kasirList, transactions, absensiList])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key==='Enter') handleSend() }
 
@@ -173,7 +227,6 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
   }
   const handleClearGroqKey = async () => { await onClearGroqKey(); setGroqKeyInput(''); setGroqStatus('idle') }
 
-  // Fallback: baca dari prop ATAU localStorage langsung (agar tidak stale)
   const effectiveGroqKey = groqApiKey || localStorage.getItem(GROQ_KEY) || ''
   const hasGroqKey = !!effectiveGroqKey
 
@@ -294,9 +347,9 @@ const AssistantBot: React.FC<Props> = ({ activeView, setActiveView, setBotSearch
               <div ref={endRef}/>
             </div>
 
-            {/* Suggestions */}
+            {/* Dynamic Suggestions */}
             <div className="px-3 pb-1.5 flex gap-1.5 overflow-x-auto shrink-0" style={{scrollbarWidth:'none'}}>
-              {SUGGESTIONS.map(s => (
+              {suggestions.map(s => (
                 <button key={s} onClick={()=>handleSend(s)} className="shrink-0 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[9.5px] font-bold text-indigo-200 hover:bg-indigo-600/40 hover:text-white transition-all active:scale-90 whitespace-nowrap">
                   {s}
                 </button>
