@@ -2152,40 +2152,24 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                     {/* Pengaturan Owner */}
                                     <div className="space-y-4 pt-2 border-t border-slate-100">
                                       <div>
-                                        <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tgl Masuk Kerja</label>
+                                        <div className="flex justify-between items-center mb-1">
+                                          <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block">Tgl Masuk Kerja</label>
+                                          {(!isEditingJoinDate && !!editKaryawanJoin) && (
+                                            <button 
+                                              type="button"
+                                              onClick={() => setIsEditingJoinDate(true)}
+                                              className="text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:underline flex items-center gap-0.5"
+                                            >
+                                              <i className="fa-solid fa-pen text-[7px]"></i> Edit
+                                            </button>
+                                          )}
+                                        </div>
                                         <input
                                           type="date"
                                           value={editKaryawanJoin}
                                           onChange={e => setEditKaryawanJoin(e.target.value)}
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Gaji Pokok (Rp)</label>
-                                        <input
-                                          type="number"
-                                          value={editKaryawanGaji}
-                                          onChange={e => setEditKaryawanGaji(e.target.value)}
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                          <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block">Libur Bulan Ini (Hari)</label>
-                                          <button 
-                                            onClick={() => setEditKaryawanOff(String(stats.tidakAbsen))}
-                                            className="text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:underline flex items-center gap-0.5"
-                                          >
-                                            <i className="fa-solid fa-sync text-[7px]"></i> Gunakan Absen ({stats.tidakAbsen} Hr)
-                                          </button>
-                                        </div>
-                                        <input
-                                          type="number"
-                                          value={editKaryawanOff}
-                                          onChange={e => setEditKaryawanOff(e.target.value)}
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                                          disabled={!isEditingJoinDate && !!editKaryawanJoin}
+                                          className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
                                           style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                                         />
                                       </div>
@@ -2206,11 +2190,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             if (props.onSaveCashierSelf) {
                                               await props.onSaveCashierSelf(selectedKaryawan, {
                                                 ...props.kasirList![selectedKaryawan],
-                                                gajiPokok: Number(editKaryawanGaji) || 0,
                                                 tanggalJoin: editKaryawanJoin,
-                                                totalOffBulanIni: Number(editKaryawanOff) || 0,
                                                 catatanAwalKerja: editKaryawanCatatan
                                               });
+                                              setIsEditingJoinDate(false); // Kunci kembali setelah berhasil disimpan
                                               setSavedStatus(true);
                                               setTimeout(() => setSavedStatus(false), 2000);
                                             }
@@ -2218,11 +2201,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             alert(err.message || "Gagal menyimpan HR kasir");
                                           }
                                         }}
-                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+                                        className={cn(
+                                          "w-full font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-sm flex items-center justify-center gap-2 mt-2",
+                                          savedStatus
+                                            ? "bg-emerald-600 text-white scale-[0.98]"
+                                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                        )}
                                         style={{ color: '#ffffff' }}
                                       >
-                                        <i className="fa-solid fa-floppy-disk"></i>
-                                        Simpan Data
+                                        {savedStatus ? (
+                                          <>
+                                            <i className="fa-solid fa-circle-check animate-bounce"></i>
+                                            Berhasil Disimpan!
+                                          </>
+                                        ) : (
+                                          <>
+                                            <i className="fa-solid fa-floppy-disk"></i>
+                                            Simpan Data
+                                          </>
+                                        )}
                                       </button>
                                     </div>
                                   </div>

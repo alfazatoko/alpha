@@ -408,9 +408,18 @@ const MainApp: React.FC<MainAppProps> = ({
   const [groqApiKey, setGroqApiKey] = useState<string>(() => localStorage.getItem('alphaPro_groq_api_key') || '')
 
   // ── Multi-Store States & Derived Store Info ──
-  const [pantauStoreId, setPantauStoreId] = useState<string | 'all'>(activeStoreId)
+  const [pantauStoreId, setPantauStoreId] = useState<string | 'all'>(() => {
+    const saved = localStorage.getItem('alphaPro_pantau_store_id')
+    return saved || 'all'
+  })
   const [stores, setStores] = useState<Store[]>([])
   const targetStoreId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+
+  useEffect(() => {
+    if (activeRole === 'owner') {
+      localStorage.setItem('alphaPro_pantau_store_id', pantauStoreId)
+    }
+  }, [pantauStoreId, activeRole])
 
   // NOTE: kasirList fetch is already handled in the App-level useEffect.
   // This duplicate was removed to prevent double-fetch and state flickering
@@ -2670,6 +2679,55 @@ const MainApp: React.FC<MainAppProps> = ({
             >
               <i className="fa-solid fa-rotate-right"></i> PERBARUI SEKARANG
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL PILIH TOKO MANDATORY BAGI OWNER ===== */}
+      {activeRole === 'owner' && (pantauStoreId === 'all' || !pantauStoreId) && stores.length > 0 && (
+        <div className="fixed inset-0 z-[999] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-xl shadow-2xl border border-slate-100 dark:border-slate-800 text-center animate-in zoom-in-95 duration-300 max-h-[85vh] overflow-y-auto">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-indigo-100 dark:border-indigo-900/50 shadow-inner">
+              <i className="fa-solid fa-shop text-2xl"></i>
+            </div>
+            
+            <h3 className="text-lg font-black uppercase tracking-wider text-slate-900 dark:text-white mb-2">
+              Pilih Toko Pemantauan
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-8 leading-relaxed max-w-md mx-auto">
+              Silakan pilih salah satu toko Anda untuk melihat laporan, performa kasir, absensi, dan transaksi.
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+              {stores.map((store) => (
+                <button
+                  key={store.id}
+                  onClick={() => setPantauStoreId(store.id)}
+                  className="group bg-slate-50 hover:bg-indigo-50/50 dark:bg-slate-800/50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-900 p-5 rounded-3xl text-left transition-all duration-300 transform hover:-translate-y-1 shadow-sm flex flex-col justify-between min-h-[110px]"
+                >
+                  <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-750 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors shadow-inner mb-3">
+                    <i className="fa-solid fa-store text-lg"></i>
+                  </div>
+                  <div>
+                    <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-none mb-1">
+                      {store.name}
+                    </h4>
+                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter line-clamp-1">
+                      {store.subtext || 'Pembukuan Toko'}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-6">
+              <button
+                onClick={onLogout}
+                className="text-[9px] font-black uppercase tracking-widest text-rose-600 hover:text-rose-700 transition-colors flex items-center justify-center gap-1.5 mx-auto hover:underline"
+              >
+                <i className="fa-solid fa-arrow-left-long"></i> Kembali ke Menu Awal
+              </button>
+            </div>
           </div>
         </div>
       )}
