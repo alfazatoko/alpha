@@ -139,6 +139,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const isDataLoadedRef = useRef(false);
   const [unsyncedChanges, setUnsyncedChanges] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showExitWarning, setShowExitWarning] = useState(false);
+  const [pendingExitAction, setPendingExitAction] = useState<(() => void) | null>(null);
 
   const performSyncToCloud = async () => {
     if (!activeStoreId) return;
@@ -171,6 +173,17 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     }
     setIsSyncing(false);
   };
+
+  // Auto-sync when internet reconnects
+  useEffect(() => {
+    const handleOnline = () => {
+      if (unsyncedChanges && !isSyncing) {
+        performSyncToCloud();
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [unsyncedChanges, isSyncing]);
 
   // Sync with external props from Host App
   // FIXED: 'cashiers' removed from deps to prevent infinite loop
@@ -1149,7 +1162,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                   if (activeTab !== 'beranda') {
                     setActiveTab('beranda');
                   } else if (onExit) {
-                    onExit();
+                    if (unsyncedChanges) {
+                      setPendingExitAction(() => onExit);
+                      setShowExitWarning(true);
+                    } else {
+                      onExit();
+                    }
                   }
                 }}
                 className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer"
@@ -1182,6 +1200,31 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             {/* KASIR AKTIF BADGE - info utama di header */}
 
             <div className="flex items-center gap-2">
+
+              {/* Tiny Sync Indicator */}
+              <button
+                onClick={() => {
+                  if (unsyncedChanges && !isSyncing) performSyncToCloud();
+                }}
+                className={`flex items-center justify-center p-1.5 rounded-lg transition-all ${
+                  isSyncing ? 'text-amber-300 bg-white/10' 
+                  : unsyncedChanges ? 'text-amber-400 hover:bg-white/20 hover:text-amber-300 cursor-pointer' 
+                  : 'text-emerald-400 hover:bg-white/10 cursor-default opacity-80'
+                }`}
+                title={isSyncing ? "Menyimpan ke Cloud..." : unsyncedChanges ? "Ada perubahan belum tersimpan (Klik untuk Sync)" : "Semua data tersimpan aman"}
+              >
+                {isSyncing ? (
+                  <i className="fa-solid fa-cloud-arrow-up fa-fade text-xs"></i>
+                ) : unsyncedChanges ? (
+                  <div className="relative flex items-center justify-center w-4 h-4">
+                    <i className="fa-solid fa-cloud text-xs absolute"></i>
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full"></span>
+                  </div>
+                ) : (
+                  <i className="fa-solid fa-cloud-check text-xs"></i>
+                )}
+              </button>
 
               {/* Theme Toggle Button */}
               <button
@@ -2468,26 +2511,69 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
           </ul>
         </nav>
 
-        {/* ── Unsynced Changes Warning Banner ── */}
-        {unsyncedChanges && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-amber-50 border border-amber-200 shadow-xl rounded-2xl p-4 flex flex-col items-center gap-3 z-[100] w-[90%] animate-in slide-in-from-bottom-4 duration-300 backdrop-blur-sm">
-            <div className="flex items-start gap-2.5 text-amber-900 text-[11px] font-bold text-center leading-tight">
-              <i className="fa-solid fa-triangle-exclamation text-amber-500 animate-pulse text-lg mt-0.5"></i>
-              <span>Anda memiliki catatan pembukuan/stok yang belum tersimpan ke Cloud!</span>
+        {/* ── Exit Warning Modal (Interceptor) ── */}
+        <AnimatePresence>
+          {showExitWarning && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-2xl max-w-sm w-full"
+              >
+                <div className="flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center">
+                    <i className="fa-solid fa-triangle-exclamation text-xl"></i>
+                  </div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Data Belum Tersimpan!</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Ada beberapa catatan pembukuan atau stok yang belum disinkronkan ke Cloud. 
+                    Jika Anda keluar sekarang atau menghapus memori HP, data ini bisa hilang.
+                  </p>
+                </div>
+                
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    onClick={async () => {
+                      await performSyncToCloud();
+                      setShowExitWarning(false);
+                      if (pendingExitAction) pendingExitAction();
+                      setPendingExitAction(null);
+                    }}
+                    disabled={isSyncing}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition-all text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-70 disabled:scale-100"
+                  >
+                    {isSyncing ? (
+                      <><i className="fa-solid fa-circle-notch fa-spin"></i> MENYINKRONKAN...</>
+                    ) : (
+                      <><i className="fa-solid fa-cloud-arrow-up"></i> SYNC & LANJUTKAN KELUAR</>
+                    )}
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowExitWarning(false)}
+                      disabled={isSyncing}
+                      className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] rounded-xl transition cursor-pointer"
+                    >
+                      Batal Keluar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowExitWarning(false);
+                        if (pendingExitAction) pendingExitAction();
+                        setPendingExitAction(null);
+                      }}
+                      disabled={isSyncing}
+                      className="flex-1 py-2 border border-red-200 dark:border-red-900/30 text-red-500 dark:text-red-400 font-bold text-[11px] rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition cursor-pointer"
+                    >
+                      Tetap Keluar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
             </div>
-            <button 
-              onClick={performSyncToCloud}
-              disabled={isSyncing}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 transition-all text-white font-black text-[10px] py-2.5 rounded-xl uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:scale-100"
-            >
-              {isSyncing ? (
-                <><i className="fa-solid fa-circle-notch fa-spin"></i> MENYINKRONKAN...</>
-              ) : (
-                <><i className="fa-solid fa-cloud-arrow-up"></i> SYNC SEKARANG</>
-              )}
-            </button>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
 
       </div> {/* Closing smartphone frame */}
     </div>
