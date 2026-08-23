@@ -240,6 +240,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }
 
   // State for owner managing karyawans
+  const [showProfilPanel, setShowProfilPanel] = useState(false)
   const [selectedKaryawan, setSelectedKaryawan] = useState<string | null>(null)
   const [editKaryawanGaji, setEditKaryawanGaji] = useState('')
   const [editKaryawanJoin, setEditKaryawanJoin] = useState('')
@@ -1785,44 +1786,89 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
         <div className="space-y-3">
           {/* Owner Only Settings */}
-          {props.kasirRole === 'owner' && (
-            <div className="mb-6 space-y-3">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Pengaturan Owner</p>
+          {props.kasirRole === 'owner' && (() => {
+            const ownerData = props.kasirList?.['owner'] || {};
+            const ownerName = ownerData.name || props.kasirName || 'Owner';
+            const ownerAvatar = ownerData.avatar || '';
+            const ownerJoin = ownerData.tanggalJoin || '';
+            const ownerTenure = ownerJoin ? calculateTenure(ownerJoin) : null;
+            const ownerStats = calculateAttendanceStats('owner', ownerName, ownerJoin, props.absensiList || [], props.activeStoreId || '');
+            const ownerTotal = ownerStats.hadir + ownerStats.izin + ownerStats.tidakAbsen;
+            const ownerHadirRate = ownerTotal > 0 ? (ownerStats.hadir / ownerTotal) * 100 : 100;
+            let ownerBadge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            if (ownerHadirRate >= 95) ownerBadge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            else if (ownerHadirRate >= 80) ownerBadge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+            else if (ownerHadirRate >= 60) ownerBadge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
+            return (
+            <div className="mb-4 space-y-3">
 
-              <div className="bg-white border border-gray-100 p-3.5 rounded-2xl shadow-sm mb-3 flex items-center gap-3">
+              {/* ── KARTU PROFIL OWNER ── */}
+              <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-4 shadow-lg">
+                <div className="flex items-center gap-3.5">
+                  <div className="relative shrink-0">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/20 border-2 border-white/40 flex items-center justify-center shadow-inner">
+                      {ownerAvatar ? (
+                        <img src={ownerAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl font-black text-white">{ownerName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[8px] font-black text-white/60 uppercase tracking-widest leading-none mb-0.5">PROFIL OWNER</p>
+                    <p className="text-sm font-black text-white leading-tight truncate">{ownerName}</p>
+                    <p className="text-[9px] text-blue-200 font-bold mt-0.5 truncate">{props.storeName || 'ALFAZA CELL'} · Owner</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-300/30 text-amber-200">👑 OWNER</span>
+                      <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', ownerBadge.color)}>{ownerBadge.icon} {ownerBadge.label}</span>
+                    </div>
+                  </div>
+                </div>
+                {ownerTenure && (
+                  <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-3">
+                    <div className="flex-1">
+                      <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Masa Kerja</p>
+                      <p className="text-xs font-black text-white">{ownerTenure.months} Bln {ownerTenure.days} Hr</p>
+                    </div>
+                    <div className="flex gap-3 text-center">
+                      <div><p className="text-sm font-black text-emerald-300">{ownerStats.hadir}</p><p className="text-[7px] font-black text-white/50 uppercase">Hadir</p></div>
+                      <div><p className="text-sm font-black text-amber-300">{ownerStats.izin}</p><p className="text-[7px] font-black text-white/50 uppercase">Izin</p></div>
+                      <div><p className="text-sm font-black text-rose-300">{ownerStats.tidakAbsen}</p><p className="text-[7px] font-black text-white/50 uppercase">Absen</p></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Akun Google */}
+              <div className="bg-white border border-gray-100 p-3.5 rounded-2xl shadow-sm flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
                   <i className="fa-brands fa-google text-xs"></i>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">AKUN GOOGLE TERTAUT</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-0.5">AKUN GOOGLE TERTAUT</p>
                   <p className="text-[11px] font-black text-gray-800 truncate">{props.googleEmail || 'Tidak diketahui'}</p>
                 </div>
               </div>
 
-              {/* Kategori: Edit Profil Toko */}
-              <div className="group">
+              {/* ── MENU PENGATURAN FLAT LIST ── */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-4 pt-3.5 pb-2">Pengaturan Toko</p>
+
+                {/* Edit Profil Toko */}
                 <button
                   onClick={() => setOpenCategory(openCategory === 'profil' ? null : 'profil')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'profil' ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'profil' ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600"
-                    )}>
-                      <i className="fa-solid fa-user-pen text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Edit Profil Toko</span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-user-pen text-xs"></i>
                   </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'profil' && "rotate-180"
-                  )}></i>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Edit Profil Toko</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Nama toko, logo, dan slogan utama</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'profil' && "rotate-180")} />
                 </button>
-
                 {openCategory === 'profil' && (
                   <div className="mt-2 p-5 bg-emerald-50/30 border border-emerald-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
                     {/* Photo Upload */}
@@ -1878,33 +1924,24 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </div>
                   </div>
                 )}
-              </div>
 
+                {/* Divider navy */}
+                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
 
-              {/* Kategori: Keamanan & Akses */}
-              <div className="group">
+                {/* Keamanan & Akses */}
                 <button
                   onClick={() => setOpenCategory(openCategory === 'keamanan' ? null : 'keamanan')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'keamanan' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'keamanan' ? "bg-white/20 text-white" : "bg-blue-50 text-blue-600"
-                    )}>
-                      <i className="fa-solid fa-shield-halved text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Keamanan & Akses</span>
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-shield-halved text-xs"></i>
                   </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'keamanan' && "rotate-180"
-                  )}></i>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Keamanan &amp; Akses</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">PIN login kasir dan keamanan aplikasi</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'keamanan' && "rotate-180")} />
                 </button>
-
                 {openCategory === 'keamanan' && (
                   <div className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 overflow-hidden space-y-5">
                     <div className="flex items-center justify-between">
@@ -2000,34 +2037,25 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     )}
                   </div>
                 )}
-              </div>
 
-              {/* Kategori: Manajemen Karyawan */}
-              {props.kasirRole === 'owner' && (
-                <div className="group">
-                  <button
-                    onClick={() => setOpenCategory(openCategory === 'karyawan' ? null : 'karyawan')}
-                    className={cn(
-                      "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                      openCategory === 'karyawan' ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                        openCategory === 'karyawan' ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-600"
-                      )}>
-                        <i className="fa-solid fa-users-gear text-xs"></i>
-                      </div>
-                      <span className="text-[11px] font-black uppercase tracking-widest">Manajemen Kasir</span>
-                    </div>
-                    <i className={cn(
-                      "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                      openCategory === 'karyawan' && "rotate-180"
-                    )}></i>
-                  </button>
+                {/* Divider navy */}
+                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
 
-                  {openCategory === 'karyawan' && (
+                {/* Manajemen Kasir */}
+                <button
+                  onClick={() => setOpenCategory(openCategory === 'karyawan' ? null : 'karyawan')}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-users-gear text-xs"></i>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Manajemen Kasir</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Data karyawan, masa kerja, dan absensi</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'karyawan' && "rotate-180")} />
+                </button>
+                {openCategory === 'karyawan' && (
                     <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
                       {props.activeStoreId === 'all' ? (
                         <div className="p-4 bg-amber-50 text-amber-800 rounded-2xl border border-amber-200 text-[10px] font-bold text-center uppercase tracking-widest">
@@ -2097,10 +2125,37 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                                     {/* Data yang diisi oleh Kasir */}
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-                                      <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
-                                        <i className="fa-solid fa-user-gear text-indigo-600"></i>
-                                        Profil Kasir (Diisi oleh Kasir)
-                                      </h4>
+                                      <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                                        <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                          <i className="fa-solid fa-user-gear text-indigo-600"></i>
+                                          Profil Kasir (Diisi oleh Kasir)
+                                        </h4>
+                                      </div>
+                                      
+                                      <div className="flex flex-col items-center mb-3">
+                                        <div 
+                                          onClick={() => {
+                                            if (kData.avatar) {
+                                              setKaryawanAvatarZoomSrc(kData.avatar);
+                                              setShowKaryawanAvatarZoom(true);
+                                            }
+                                          }}
+                                          className={cn(
+                                            "w-20 h-20 rounded-full border-4 border-white shadow-sm overflow-hidden bg-indigo-100 flex items-center justify-center transition-all",
+                                            kData.avatar ? "cursor-pointer hover:opacity-90 active:scale-95" : ""
+                                          )}
+                                        >
+                                          {kData.avatar ? (
+                                            <img src={kData.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                          ) : (
+                                            <i className="fa-solid fa-user text-2xl text-indigo-300"></i>
+                                          )}
+                                        </div>
+                                        {kData.avatar && (
+                                          <p className="text-[8px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest text-center">Klik foto untuk perbesar</p>
+                                        )}
+                                      </div>
+
                                       <div className="grid grid-cols-2 gap-3 text-[10px]">
                                         <div>
                                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Nama Lengkap</p>
@@ -2335,33 +2390,24 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Kategori: Tampilan & Promo */}
-              <div className="group">
+                {/* Divider navy */}
+                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+
+                {/* Tampilan & Promo */}
                 <button
                   onClick={() => setOpenCategory(openCategory === 'promo' ? null : 'promo')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'promo' ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-100" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'promo' ? "bg-white/20 text-white" : "bg-orange-50 text-orange-500"
-                    )}>
-                      <i className="fa-solid fa-bullhorn text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Tampilan & Promo</span>
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-bullhorn text-xs"></i>
                   </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'promo' && "rotate-180"
-                  )}></i>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Tampilan &amp; Promo</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Banner, running text, dan pengumuman</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'promo' && "rotate-180")} />
                 </button>
-
                 {openCategory === 'promo' && (
                   <div className="mt-2 p-5 bg-orange-50/30 border border-orange-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
                     <div>
@@ -2409,32 +2455,24 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Kategori: Opsi Pantau Dashboard */}
-              <div className="group">
+                {/* Divider navy */}
+                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+
+                {/* Pantau Dashboard */}
                 <button
                   onClick={() => setOpenCategory(openCategory === 'pantau' ? null : 'pantau')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'pantau' ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'pantau' ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-600"
-                    )}>
-                      <i className="fa-solid fa-eye text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Opsi Pantau Dashboard</span>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-eye text-xs"></i>
                   </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'pantau' && "rotate-180"
-                  )}></i>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Pantau Dashboard</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Monitor aktivitas dan filter per kasir</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'pantau' && "rotate-180")} />
                 </button>
-
                 {openCategory === 'pantau' && (
                   <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
                     <div className="flex items-center justify-between">
@@ -2471,30 +2509,23 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </p>
                   </div>
                 )}
-              </div>
 
-              {/* Kategori: Backup & Reset */}
-              <div className="group">
+                {/* Divider navy */}
+                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+
+                {/* Backup & Keamanan */}
                 <button
                   onClick={() => setOpenCategory(openCategory === 'backup' ? null : 'backup')}
-                  className={cn(
-                    "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                    openCategory === 'backup' ? "bg-red-600 text-white border-red-600 shadow-lg shadow-red-100" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                  )}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                      openCategory === 'backup' ? "bg-white/20 text-white" : "bg-red-50 text-red-600"
-                    )}>
-                      <i className="fa-solid fa-cloud-arrow-down text-xs"></i>
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-widest">Backup & Keamanan</span>
+                  <div className="w-8 h-8 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-cloud-arrow-down text-xs"></i>
                   </div>
-                  <i className={cn(
-                    "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                    openCategory === 'backup' && "rotate-180"
-                  )}></i>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Backup &amp; Keamanan</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Export data JSON/CSV dan reset sistem</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'backup' && "rotate-180")} />
                 </button>
 
                 {openCategory === 'backup' && (
@@ -2545,256 +2576,241 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
-          {/* Kategori: Sinkronisasi Cloud (Semua role: Owner & Kasir) */}
-          <div className="group">
-            <button
-              onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
-              className={cn(
-                "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                openCategory === 'cloud' ? "bg-purple-600 text-white border-purple-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                  openCategory === 'cloud' ? "bg-white/20 text-white" : "bg-purple-50 text-purple-600"
-                )}>
-                  <i className="fa-solid fa-cloud text-xs"></i>
-                </div>
-                <div className="text-left">
-                  <span className="text-[11px] font-black uppercase tracking-widest block">Sinkronisasi Cloud</span>
-                  <span className="text-[8px] font-bold opacity-80 block">Backup data & samakan setelan dengan perangkat lain</span>
-                </div>
-              </div>
-              <i className={cn(
-                "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                openCategory === 'cloud' && "rotate-180"
-              )}></i>
-            </button>
+          {/* ── PROFIL KASIR CARD (di atas Sinkronisasi Cloud) ── */}
+          {props.kasirRole === 'kasir' && (() => {
+            const myData = props.kasirList?.[props.currentUsername || ''] || {};
+            const myName = myData.name || props.kasirName || props.currentUsername || 'Kasir';
+            const myAvatar = myData.avatar || '';
+            const myJoin = myData.tanggalJoin || '';
+            const myTenure = myJoin ? calculateTenure(myJoin) : null;
+            const myStats = calculateAttendanceStats(
+              props.currentUsername || '',
+              myName,
+              myJoin,
+              props.absensiList || [],
+              props.activeStoreId || ''
+            );
+            // Hitung badge kinerja
+            const totalDays = myStats.hadir + myStats.izin + myStats.tidakAbsen;
+            const hadirRate = totalDays > 0 ? (myStats.hadir / totalDays) * 100 : 0;
+            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-500' };
+            if (hadirRate >= 95) badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
+            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
 
-            {openCategory === 'cloud' && (
-              <div className="mt-2 p-5 bg-purple-50/50 border border-purple-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-3">
-                {/* Tombol Update Sync (Upload + Download sekali klik) */}
+            return (
+              <>
+                {/* Profil Card */}
                 <button
-                  onClick={handleSyncAll}
-                  disabled={isCloudLoading}
-                  className="w-full bg-purple-600 border border-purple-600 text-white py-3.5 rounded-xl font-black text-[10px] shadow-lg shadow-purple-200 uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50"
-                  style={{ color: '#ffffff' }}
+                  onClick={() => setShowProfilPanel(true)}
+                  className="w-full bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-center gap-3.5 active:scale-[0.98] transition-all text-left hover:shadow-md"
                 >
-                  <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-arrows-rotate"}></i>
-                  {isCloudLoading ? 'Sinkronisasi...' : 'Update Sync'}
+                  {/* Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-sm">
+                      {myAvatar ? (
+                        <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    {/* Online dot */}
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">PROFIL KASIR</p>
+                    <p className="text-sm font-black text-gray-900 leading-tight truncate">{myName}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                        KASIR
+                      </span>
+                      <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
+                        {badge.icon} {badge.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Chevron */}
+                  <i className="fa-solid fa-chevron-right text-[11px] text-gray-300 shrink-0" />
                 </button>
 
-                <div className="flex gap-2">
-                  <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
-                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
-                    Upload
-                  </button>
-                  <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
-                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
-                    Download
-                  </button>
-                </div>
-
-                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-1">Update Sync = Upload lokal ke cloud, lalu download terbaru dari cloud. Gunakan untuk menyamakan data antar perangkat.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Kategori: Printer Bluetooth */}
-          <div className="group">
-            <button
-              onClick={() => setOpenCategory(openCategory === 'printer' ? null : 'printer')}
-              className={cn(
-                "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                openCategory === 'printer' ? "bg-slate-800 text-white border-slate-800 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                  openCategory === 'printer' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
-                )}>
-                  <i className="fa-solid fa-print text-xs"></i>
-                </div>
-                <div className="text-left">
-                  <span className="text-[11px] font-black uppercase tracking-widest block text-black">Printer Bluetooth</span>
-                  <span className="text-[8px] font-bold opacity-80 text-gray-500">Koneksi Hardware Thermal</span>
-                </div>
-              </div>
-              <i className={cn(
-                "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                openCategory === 'printer' && "rotate-180"
-              )}></i>
-            </button>
-
-            {openCategory === 'printer' && (
-              <div className="mt-2 p-5 bg-slate-50 border border-slate-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
-                 
-                 {/* Native Bluetooth Section (Mobile) */}
-                 <div className="p-4 bg-white border border-slate-200 rounded-xl">
-                    <div className="flex justify-between items-center mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
-                        <div>
-                          <h4 className="text-[10px] font-extrabold text-slate-800 uppercase">PRINTER NATIVE</h4>
-                          <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">
-                            {btConnected ? `TERHUBUNG (${btMacAddress})` : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
-                          </p>
-                        </div>
+                {/* Bottom Sheet: Detail Profil */}
+                {showProfilPanel && (
+                  <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowProfilPanel(false)}>
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    {/* Sheet */}
+                    <div
+                      className="relative w-full max-w-md mx-auto bg-white rounded-t-[2rem] max-h-[90dvh] overflow-y-auto pb-10 animate-in slide-in-from-bottom-4 duration-300"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {/* Handle bar */}
+                      <div className="flex justify-center pt-3 pb-1">
+                        <div className="w-10 h-1 bg-gray-200 rounded-full" />
                       </div>
-                      <button 
-                        type="button"
-                        onClick={btConnected ? disconnectBluetooth : scanBluetoothDevices}
-                        disabled={btConnecting || isScanningBt}
-                        className={`text-[8px] font-black px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm
-                          ${btConnected 
-                            ? 'bg-rose-50 border border-rose-200 text-rose-600' 
-                            : 'bg-blue-600 text-white'
-                          }
-                        `}
-                      >
-                        {btConnected ? 'PUTUSKAN' : isScanningBt ? 'MENCARI...' : 'CARI'}
-                      </button>
-                    </div>
-                    
-                    {!btConnected && pairedDevices.length > 0 && (
-                      <div className="mt-3 border-t border-slate-100 pt-2">
-                        <p className="text-[8px] font-bold text-slate-500 mb-1.5">PILIH PRINTER:</p>
-                        <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
-                          {pairedDevices.map((device) => (
-                            <button
-                              key={device.address}
-                              onClick={() => connectToBluetooth(device.address)}
-                              disabled={btConnecting}
-                              className="w-full flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg active:bg-blue-50 text-left"
-                            >
-                              <div>
-                                <p className="text-[9px] font-bold text-slate-800">{device.name || 'Unknown Device'}</p>
-                                <p className="text-[7px] font-mono text-slate-400">{device.address}</p>
-                              </div>
-                              <span className="text-[8px] font-black text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">CONNECT</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                 </div>
 
-                 <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
-                    <div className="flex items-start gap-3">
-                       <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                          <i className="fa-brands fa-bluetooth-b"></i>
-                       </div>
-                       <div>
-                          <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-0.5">Driver Printer RawBT</h4>
-                          <p className="text-[9px] text-slate-600 font-bold leading-relaxed mb-3">
-                            Aplikasi menggunakan intent. Pastikan aplikasi <strong className="text-blue-600">RawBT Print Service</strong> terinstal dari Play Store.
-                          </p>
-                          <div className="flex gap-2 flex-col">
-                            <a 
-                              href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
-                              target="_blank"
-                              rel="noreferrer"
-                              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
-                              style={{ color: '#ffffff' }}
-                            >
-                              <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
-                            </a>
-                            <button 
-                              onClick={() => {
-                                const w = 32;
-                                const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
-                                const text = center('TEST PRINT BERHASIL') + '\n'
-                                  + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
-                                  + center('berjalan normal.') + '\n'
-                                  + '-'.repeat(w) + '\n\n\n';
-                                  
-                                const btMac = localStorage.getItem('bluetooth_printer_mac');
-                                if (btMac && (window as any).bluetoothSerial) {
-                                  (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
-                                } else {
-                                  const url = `rawbt:${encodeURIComponent(text)}`;
-                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                                }
-                              }}
-                              className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
-                            >
-                              <i className="fa-solid fa-print mr-1.5"></i> Tes Print
-                            </button>
+                      {/* Header */}
+                      <div className="px-5 pt-3 pb-4 border-b border-gray-100">
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-md shrink-0">
+                            {myAvatar ? (
+                              <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-3xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
+                            )}
                           </div>
-                       </div>
-                    </div>
-                 </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                🧑‍💼 KASIR
+                              </span>
+                              <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
+                                {badge.icon} {badge.label}
+                              </span>
+                            </div>
+                          </div>
+                          <button onClick={() => setShowProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-xmark text-gray-500 text-xs" />
+                          </button>
+                        </div>
+                      </div>
 
-                 <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold uppercase mt-4">
-                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
-                       <i className="fa-solid fa-text-width text-slate-400 mb-1.5"></i>
-                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">DUKUNGAN</span>
-                       <span className="font-extrabold text-slate-700">58mm & 80mm</span>
-                    </div>
-                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
-                       <i className="fa-solid fa-bolt text-slate-400 mb-1.5"></i>
-                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">MODE</span>
-                       <span className="font-extrabold text-slate-700">ESC/POS</span>
-                    </div>
-                 </div>
-              </div>
-            )}
-          </div>
+                      <div className="px-5 pt-4 space-y-4">
 
-          {/* Kategori: Teks Otomatis (Setting Keterangan) */}
-          <div className="group">
-            <button
-              onClick={() => props.setActiveView?.('view-otomatis')}
-              className="w-full flex items-center justify-between p-4 rounded-2xl transition-all border bg-white text-gray-800 border-gray-100 shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-purple-50 text-purple-600">
-                  <i className="fa-solid fa-bolt text-xs"></i>
-                </div>
-                <div className="text-left">
-                  <span className="text-[11px] font-black uppercase tracking-widest block text-black">TEKS OTOMATIS</span>
-                  <span className="text-[8px] font-bold text-gray-400">Setting keterangan otomatis</span>
-                </div>
-              </div>
-              <i className="fa-solid fa-chevron-right text-[10px] text-gray-400"></i>
-            </button>
-          </div>
+                        {/* Statistik Kehadiran */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3">📊 Kehadiran Bulan Ini</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-white rounded-xl p-3 text-center border border-emerald-100">
+                              <p className="text-xl font-black text-emerald-600">{myStats.hadir}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">HADIR</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 text-center border border-amber-100">
+                              <p className="text-xl font-black text-amber-500">{myStats.izin}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">IZIN</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 text-center border border-rose-100">
+                              <p className="text-xl font-black text-rose-500">{myStats.tidakAbsen}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">ABSEN</p>
+                            </div>
+                          </div>
+                          {totalDays > 0 && (
+                            <div className="mt-3">
+                              <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
+                                <span>Tingkat Kehadiran</span>
+                                <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
+                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Badge Kinerja */}
+                        <div className={cn('rounded-2xl p-4 border flex items-center gap-3', badge.color.replace('text-', 'border-').replace('bg-', 'bg-') + '/40')}>
+                          <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm border', badge.color)}>
+                            {badge.icon}
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-widest opacity-70 mb-0.5">Badge Kinerja</p>
+                            <p className="font-black text-sm">{badge.label}</p>
+                            <p className="text-[9px] font-bold opacity-60 mt-0.5">
+                              {hadirRate >= 95 ? 'Kehadiran sempurna! Luar biasa.' :
+                               hadirRate >= 80 ? 'Kehadiran sangat baik, pertahankan!' :
+                               hadirRate >= 60 ? 'Kehadiran cukup baik, bisa ditingkatkan.' :
+                               totalDays > 0 ? 'Kehadiran rendah, perlu evaluasi.' : 'Belum ada data kehadiran.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Masa Kerja */}
+                        {myTenure && (
+                          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">💼 Masa Kerja</p>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                <i className="fa-solid fa-calendar-days text-indigo-500 text-sm" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900">{myTenure.months} Bulan {myTenure.days} Hari</p>
+                                <p className="text-[9px] text-gray-400 font-bold">
+                                  Mulai {myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                                </p>
+                              </div>
+                              {myTenure.totalMonths > 0 && myTenure.totalMonths % 6 === 0 && (
+                                <span className="ml-auto text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-xl animate-bounce">🎁 Bonus!</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Data Pribadi */}
+                        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-3">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">🧑 Data Pribadi</p>
+                          <div className="space-y-2.5">
+                            {[{ label: 'Nama Lengkap', value: myName, icon: 'fa-user' },
+                              { label: 'Tempat, Tgl Lahir', value: [myData.tempatLahir, myData.tanggalLahir ? new Date(myData.tanggalLahir).toLocaleDateString('id-ID') : ''].filter(Boolean).join(', ') || '-', icon: 'fa-cake-candles' },
+                              { label: 'Alamat', value: myData.alamat || '-', icon: 'fa-map-marker-alt' },
+                              { label: 'Tgl Masuk Kerja', value: myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Belum diatur', icon: 'fa-calendar-check' },
+                            ].map(({ label, value, icon }) => (
+                              <div key={label} className="flex items-start gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                                  <i className={cn('fa-solid text-slate-400 text-[10px]', icon)} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</p>
+                                  <p className="text-xs font-bold text-gray-800 leading-snug break-words">{value}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Tombol Edit Profil */}
+                        <button
+                          onClick={() => { setShowProfilPanel(false); setOpenCategory('kasirSelf'); }}
+                          className="w-full bg-indigo-600 text-white font-black py-3 rounded-2xl text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md shadow-indigo-200"
+                          style={{ color: '#ffffff' }}
+                        >
+                          <i className="fa-solid fa-pen-to-square" />
+                          Edit Profil Saya
+                        </button>
+
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Kategori: Pengaturan PIN & Nama Kasir Mandiri */}
           {props.kasirRole === 'kasir' && (
-            <div className="group">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4 mt-2">
               <button
                 onClick={() => setOpenCategory(openCategory === 'kasirSelf' ? null : 'kasirSelf')}
-                className={cn(
-                  "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
-                  openCategory === 'kasirSelf' ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" : "bg-white text-gray-800 border-gray-100 shadow-sm"
-                )}
+                className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
               >
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                    openCategory === 'kasirSelf' ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-600"
-                  )}>
-                    <i className="fa-solid fa-user-lock text-xs"></i>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[11px] font-black uppercase tracking-widest block">PIN & NAMA KASIR</span>
-                    <span className="text-[8px] font-bold opacity-80">Edit nama dan PIN kasir Anda</span>
-                  </div>
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mr-3">
+                  <i className="fa-solid fa-user-lock text-xs"></i>
                 </div>
-                <i className={cn(
-                  "fa-solid fa-chevron-down text-[10px] transition-transform duration-300",
-                  openCategory === 'kasirSelf' && "rotate-180"
-                )}></i>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-gray-900 leading-tight">PIN &amp; NAMA KASIR</p>
+                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">Edit nama dan PIN kasir Anda</p>
+                </div>
+                <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'kasirSelf' && "rotate-180")} />
               </button>
 
               {openCategory === 'kasirSelf' && (
-                <div className="mt-2 p-5 bg-indigo-50/50 border border-indigo-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-4">
-                  
+                <div className="p-5 bg-indigo-50/30 border-t border-indigo-50 animate-in slide-in-from-top-2 duration-300 space-y-4">
                   {/* Avatar Upload */}
                   <div className="flex justify-center mb-4">
                     <div 
@@ -2921,23 +2937,194 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             </div>
           )}
 
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Menu Akun</p>
+          {/* ── KELOMPOK PENGATURAN SISTEM & APLIKASI ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+            
+            {/* Sinkronisasi Cloud */}
+            <button
+              onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
+              className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mr-3">
+                <i className="fa-solid fa-cloud text-xs"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black text-gray-900 leading-tight">Sinkronisasi Cloud</p>
+                <p className="text-[9px] text-gray-400 font-medium mt-0.5">Backup data & samakan setelan dengan perangkat lain</p>
+              </div>
+              <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'cloud' && "rotate-180")} />
+            </button>
+            {openCategory === 'cloud' && (
+              <div className="p-5 bg-purple-50/50 border-t border-purple-50 animate-in slide-in-from-top-2 duration-300 space-y-3">
+                <button
+                  onClick={handleSyncAll}
+                  disabled={isCloudLoading}
+                  className="w-full bg-purple-600 border border-purple-600 text-white py-3.5 rounded-xl font-black text-[10px] shadow-lg shadow-purple-200 uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50"
+                  style={{ color: '#ffffff' }}
+                >
+                  <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-arrows-rotate"}></i>
+                  {isCloudLoading ? 'Sinkronisasi...' : 'Update Sync'}
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
+                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
+                    Upload
+                  </button>
+                  <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
+                    <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
+                    Download
+                  </button>
+                </div>
+                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-1">Update Sync = Upload lokal ke cloud, lalu download terbaru dari cloud. Gunakan untuk menyamakan data antar perangkat.</p>
+              </div>
+            )}
 
-          <button className="w-full bg-white border border-gray-100 rounded-2xl font-semibold py-4 px-5 text-sm flex items-center justify-between shadow-sm hover:bg-gray-50 transition-all">
-            <div className="flex items-center gap-3">
-              <i className="fa-solid fa-circle-question text-blue-500"></i>
-              <span>Bantuan & Support</span>
-            </div>
-            <i className="fa-solid fa-chevron-right text-[10px] text-gray-300"></i>
-          </button>
+            <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
 
-          <button className="w-full bg-white border border-gray-100 rounded-2xl font-semibold py-4 px-5 text-sm flex items-center justify-between shadow-sm hover:bg-gray-50 transition-all">
-            <div className="flex items-center gap-3">
-              <i className="fa-solid fa-shield-halved text-emerald-500"></i>
-              <span>Keamanan</span>
-            </div>
-            <i className="fa-solid fa-chevron-right text-[10px] text-gray-300"></i>
-          </button>
+            {/* Printer Bluetooth */}
+            <button
+              onClick={() => setOpenCategory(openCategory === 'printer' ? null : 'printer')}
+              className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 mr-3">
+                <i className="fa-solid fa-print text-xs"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black text-gray-900 leading-tight">Printer Bluetooth</p>
+                <p className="text-[9px] text-gray-400 font-medium mt-0.5">Koneksi Hardware Thermal</p>
+              </div>
+              <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'printer' && "rotate-180")} />
+            </button>
+            {openCategory === 'printer' && (
+              <div className="p-5 bg-slate-50 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300 space-y-4">
+                 {/* Native Bluetooth Section (Mobile) */}
+                 <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${btConnected ? 'bg-emerald-500' : btConnecting ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                        <div>
+                          <h4 className="text-[10px] font-extrabold text-slate-800 uppercase">PRINTER NATIVE</h4>
+                          <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">
+                            {btConnected ? `TERHUBUNG (${btMacAddress})` : btConnecting ? 'MENYAMBUNGKAN...' : 'DISCONNECTED'}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={btConnected ? disconnectBluetooth : scanBluetoothDevices}
+                        disabled={btConnecting || isScanningBt}
+                        className={`text-[8px] font-black px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm
+                          ${btConnected 
+                            ? 'bg-rose-50 border border-rose-200 text-rose-600' 
+                            : 'bg-blue-600 text-white'
+                          }
+                        `}
+                      >
+                        {btConnected ? 'PUTUSKAN' : isScanningBt ? 'MENCARI...' : 'CARI'}
+                      </button>
+                    </div>
+                    
+                    {!btConnected && pairedDevices.length > 0 && (
+                      <div className="mt-3 border-t border-slate-100 pt-2">
+                        <p className="text-[8px] font-bold text-slate-500 mb-1.5">PILIH PRINTER:</p>
+                        <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                          {pairedDevices.map((device) => (
+                            <button
+                              key={device.address}
+                              onClick={() => connectToBluetooth(device.address)}
+                              disabled={btConnecting}
+                              className="w-full flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg active:bg-blue-50 text-left"
+                            >
+                              <div>
+                                <p className="text-[9px] font-bold text-slate-800">{device.name || 'Unknown Device'}</p>
+                                <p className="text-[7px] font-mono text-slate-400">{device.address}</p>
+                              </div>
+                              <span className="text-[8px] font-black text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">CONNECT</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                 </div>
+
+                 <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                    <div className="flex items-start gap-3">
+                       <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                          <i className="fa-brands fa-bluetooth-b"></i>
+                       </div>
+                       <div>
+                          <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-0.5">Driver Printer RawBT</h4>
+                          <p className="text-[9px] text-slate-600 font-bold leading-relaxed mb-3">
+                            Aplikasi menggunakan intent. Pastikan aplikasi <strong className="text-blue-600">RawBT Print Service</strong> terinstal dari Play Store.
+                          </p>
+                          <div className="flex gap-2 flex-col">
+                            <a 
+                              href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
+                              style={{ color: '#ffffff' }}
+                            >
+                              <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
+                            </a>
+                            <button 
+                              onClick={() => {
+                                const w = 32;
+                                const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
+                                const text = center('TEST PRINT BERHASIL') + '\n'
+                                  + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
+                                  + center('berjalan normal.') + '\n'
+                                  + '-'.repeat(w) + '\n\n\n';
+                                  
+                                const btMac = localStorage.getItem('bluetooth_printer_mac');
+                                if (btMac && (window as any).bluetoothSerial) {
+                                  (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
+                                } else {
+                                  const url = `rawbt:${encodeURIComponent(text)}`;
+                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                }
+                              }}
+                              className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
+                            >
+                              <i className="fa-solid fa-print mr-1.5"></i> Tes Print
+                            </button>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold uppercase mt-4">
+                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
+                       <i className="fa-solid fa-text-width text-slate-400 mb-1.5"></i>
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">DUKUNGAN</span>
+                       <span className="font-extrabold text-slate-700">58mm & 80mm</span>
+                    </div>
+                    <div className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col justify-center items-center text-center">
+                       <i className="fa-solid fa-bolt text-slate-400 mb-1.5"></i>
+                       <span className="block text-[8px] text-slate-400 font-bold mb-0.5">MODE</span>
+                       <span className="font-extrabold text-slate-700">ESC/POS</span>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+
+            {/* Teks Otomatis */}
+            <button
+              onClick={() => props.setActiveView?.('view-otomatis')}
+              className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mr-3">
+                <i className="fa-solid fa-bolt text-xs"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black text-gray-900 leading-tight">Teks Otomatis</p>
+                <p className="text-[9px] text-gray-400 font-medium mt-0.5">Setting keterangan otomatis</p>
+              </div>
+              <i className="fa-solid fa-chevron-right text-[10px] text-gray-300 ml-2" />
+            </button>
+          </div>
 
           {/* Tombol Simpan Perubahan (Visual Confirmation) */}
           <button

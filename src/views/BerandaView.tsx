@@ -22,7 +22,9 @@ interface BerandaViewProps {
   formKeterangan: string
   setFormKeterangan: (v: string) => void
   handleSimpanTransaksi: () => void
+  handleSyncPast30Days?: () => void
   transactions: Transaction[]
+  allTransactions?: Transaction[]
   isSaving: boolean
   totalAdmin: number
   totalVolume: number
@@ -35,6 +37,7 @@ interface BerandaViewProps {
   kasirRole: string
   filterKasir: string
   setFilterKasir: (v: string) => void
+  setFilterTanggal?: (v: string) => void
   onLogout: () => void
   kasirList: Record<string, KasirAccount>
   refreshKasirList: (newList?: Record<string, KasirAccount>) => void
@@ -1111,49 +1114,76 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
   const [ownerSaldoKategori, setOwnerSaldoKategori] = useState('Isi Saldo Bank')
 
-  // Audit State
-  const [auditFisik, setAuditFisik] = useState('')
-  const [auditHistory, setAuditHistory] = useState<any[]>([])
-  const STORAGE_KEY_AUDIT = `alphaPro_${currentTargetStoreId}_auditHistory`
+  const [auditFilterDate, setAuditFilterDate] = useState('')
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_AUDIT)
-    if (saved) setAuditHistory(JSON.parse(saved))
-    else setAuditHistory([])
-  }, [STORAGE_KEY_AUDIT])
-
-  const handleSimpanAudit = () => {
-    const fisik = parseInt(auditFisik.replace(/[^0-9]/g, '')) || 0
-    if (fisik <= 0) return props.showToast('Masukkan uang fisik di laci!')
-    if (props.filterKasir === 'Semua') return props.showToast('Pilih salah satu kasir terlebih dahulu!')
+  const auditHistory = useMemo(() => {
+    if (!props.allTransactions) return []
     
-    const kasirName = props.kasirList[props.filterKasir || '']?.name || props.filterKasir
-    const selisih = fisik - ownerTotalLaci
-    const baru = {
-      tanggal: getLocalDateString(),
-      jam: currentTime.toLocaleTimeString('id-ID'),
-      kasirId: props.filterKasir,
-      kasirName: kasirName,
-      sistem: ownerTotalLaci,
-      fisik: fisik,
-      selisih: selisih
+    // Kelompokkan berdasarkan tanggal -> kasirId
+    const groups: Record<string, Record<string, Transaction[]>> = {}
+    
+    props.allTransactions.forEach(t => {
+      const dateStr = t.timestamp.split('T')[0]
+      const kasir = t.kasir_id || 'Unknown'
+      if (!groups[dateStr]) groups[dateStr] = {}
+      if (!groups[dateStr][kasir]) groups[dateStr][kasir] = []
+      groups[dateStr][kasir].push(t)
+    })
+
+    const results = []
+    
+    // Sort tanggal dari terbaru ke terlama
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a))
+    
+    for (const dateStr of sortedDates) {
+      for (const kasir of Object.keys(groups[dateStr])) {
+        const txs = groups[dateStr][kasir]
+        
+        // Cari transaksi closing / Isi Saldo Real
+        const saldoRealTxs = txs.filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
+        if (saldoRealTxs.length === 0) continue // Belum closing / tidak ada data
+        
+        // Asumsi saldo real diambil dari total, atau mungkin cuma 1 row saat closing
+        const saldoReal = saldoRealTxs.reduce((s, t) => s + t.nominal, 0)
+        
+        // Hitung saldo sistem
+        const isiBank = txs.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
+        const penjualanDigital = txs.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal, 0)
+        
+        const currentSaldoBank = isiBank - penjualanDigital
+        const selisih = saldoReal - currentSaldoBank
+        
+        const kasirName = props.kasirList[kasir]?.name || kasir
+        
+        // Format tanggal (misal: "22 Agustus 2026")
+        const dateObj = parseLocalISO(dateStr)
+        const tglFormatted = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+        
+        // Tambahkan konteks "Hari Ini" atau "Kemarin"
+        const today = new Date()
+        const todayStr = getLocalDateString()
+        const yesterdayDate = new Date(today)
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+        const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+        
+        let dayContext = ''
+        if (dateStr === todayStr) dayContext = 'Hari Ini'
+        else if (dateStr === yesterdayStr) dayContext = 'Kemarin'
+        else dayContext = dateObj.toLocaleDateString('id-ID', { weekday: 'long' })
+        
+        results.push({
+          tanggal: tglFormatted,
+          tanggalAsli: dateStr,
+          dayContext,
+          kasirId: kasir,
+          kasirName: kasirName,
+          selisih: selisih
+        })
+      }
     }
     
-    const updated = [baru, ...auditHistory].slice(0, 100) // Simpan 100 terakhir
-    setAuditHistory(updated)
-    localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(updated))
-    setAuditFisik('')
-    props.showToast(`Audit ${kasirName} disimpan!`)
-  }
-
-  const hapusAudit = (index: number) => {
-    props.onConfirm('HAPUS RIWAYAT', 'Hapus riwayat audit ini?', () => {
-      const updated = auditHistory.filter((_, i) => i !== index)
-      setAuditHistory(updated)
-      localStorage.setItem(STORAGE_KEY_AUDIT, JSON.stringify(updated))
-      props.showToast("Berhasil Dihapus")
-    })
-  }
+    return results
+  }, [props.allTransactions, props.kasirList])
 
 
   // Auto-close sub-panels when navigating away to any other view
@@ -1612,6 +1642,43 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         </div>
       )}
 
+      {props.kasirRole === 'owner' && (
+        <div className="px-1.5 mb-4">
+          {/* NOTIFIKASI SELISIH AUDIT (HARI INI) */}
+          {(() => {
+            const todayStr = getLocalDateString();
+            const badAudits = auditHistory.filter(h => h.tanggalAsli === todayStr && Math.abs(h.selisih) > 100000);
+            if (badAudits.length === 0) return null;
+            
+            return (
+              <div className="bg-red-50 border-l-4 border-red-500 rounded-r-2xl p-4 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-500 shrink-0">
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[11px] font-black text-red-800 uppercase tracking-widest">Peringatan Audit Laci</h4>
+                    <p className="text-[9px] text-red-600 font-bold mt-0.5">
+                      Hari ini terdapat selisih fisik &gt; Rp100.000:
+                    </p>
+                    <div className="mt-1.5 space-y-1">
+                      {badAudits.map((a, i) => (
+                        <div key={i} className="flex justify-between items-center text-[10px] font-black">
+                          <span className="text-red-700">- {a.kasirName}</span>
+                          <span className={a.selisih < 0 ? "text-red-600" : "text-green-600"}>
+                            {a.selisih < 0 ? "KURANG" : "LEBIH"} {formatRupiah(Math.abs(a.selisih))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
       {props.kasirRole === 'owner' && !props.isPc && (
         <div className="px-1.5 mb-8">
           <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center gap-4 border-b-4 border-orange-600/20">
@@ -1971,127 +2038,232 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}               {activeOwnerSubView === 'audit' && (
                 <div className="space-y-4">
-                  {/* Kasir Selector for Audit */}
-                  <div className="flex justify-between items-center bg-purple-50 p-3 rounded-2xl border border-purple-100">
+                  <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
                     <div>
-                      <p className="text-[10px] font-black text-purple-800 uppercase tracking-widest">Pilih Kasir / Shift</p>
-                      <p className="text-[8px] text-purple-400 font-bold uppercase">Audit Perorangan</p>
+                      <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Riwayat Audit (Otomatis)</p>
+                      <p className="text-[8px] text-indigo-400 font-bold uppercase">Hasil rekap laporan kasir</p>
                     </div>
                     <div className="relative">
                       <select
                         value={props.filterKasir || 'Semua'}
                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                        className="bg-white border border-purple-200 text-purple-800 text-xs font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none shadow-sm"
+                        className="bg-white border border-indigo-200 text-indigo-800 text-[10px] font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none shadow-sm"
                       >
                         <option value="Semua">Semua Kasir</option>
                         {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
                           <option key={id} value={id}>{acc.name}</option>
                         ))}
                       </select>
-                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-purple-400 pointer-events-none"></i>
-                    </div>
-                  </div>
-
-                  <div className="p-5 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-[2rem] text-white shadow-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-                    <div className="relative z-10">
-                      <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest text-center mb-4">Input Uang Fisik Di Laci</p>
-                      <div className="relative mb-4">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-white/40">Rp</span>
-                        <input 
-                          type="text" 
-                          inputMode="numeric"
-                          placeholder="0" 
-                          value={auditFisik}
-                          onChange={e => setAuditFisik(formatInputRupiah(e.target.value))}
-                          className="w-full py-4 pl-12 pr-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl font-black text-xl text-white outline-none focus:ring-4 focus:ring-white/10 placeholder:text-white/20" 
-                        />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="bg-black/10 p-3 rounded-2xl border border-white/5 text-center">
-                          <p className="text-[8px] font-black text-purple-200 uppercase tracking-widest mb-1">Hitungan Sistem</p>
-                          <p className="text-[11px] font-black text-white">{formatRupiah(ownerTotalLaci)}</p>
-                        </div>
-                        <div className="bg-black/10 p-3 rounded-2xl border border-white/5 text-center">
-                          <p className="text-[8px] font-black text-purple-200 uppercase tracking-widest mb-1">Selisih Audit</p>
-                          {(() => {
-                            const val = (parseInt(auditFisik.replace(/[^0-9]/g, '')) || 0) - ownerTotalLaci
-                            return <p className={cn("text-[11px] font-black", val >= 0 ? "text-green-300" : "text-red-300")}>{formatRupiah(val)}</p>
-                          })()}
-                        </div>
-                      </div>
-
-                      <button 
-                        onClick={handleSimpanAudit}
-                        className="w-full bg-white text-purple-700 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-                      >
-                        <i className="fa-solid fa-save"></i> Simpan Hasil Audit
-                      </button>
+                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-indigo-400 pointer-events-none"></i>
                     </div>
                   </div>
 
                   <div className="space-y-3">
+                    {/* Ringkasan Performa Seluruh Kasir */}
+                    {(() => {
+                      const perf: Record<string, { name: string, minus: number, plus: number }> = {};
+                      
+                      // Inisialisasi semua kasir
+                      Object.entries(props.kasirList)
+                        .filter(([id]) => id !== 'owner')
+                        .forEach(([id, acc]) => {
+                          perf[id] = { name: acc.name, minus: 0, plus: 0 };
+                        });
+
+                      auditHistory.forEach(h => {
+                        if (!perf[h.kasirId]) perf[h.kasirId] = { name: h.kasirName, minus: 0, plus: 0 };
+                        if (h.selisih < 0) perf[h.kasirId].minus += Math.abs(h.selisih);
+                        else if (h.selisih > 0) perf[h.kasirId].plus += h.selisih;
+                      });
+                      
+                      let perfList = Object.entries(perf).map(([id, p]) => ({ id, ...p }));
+                      if (props.filterKasir !== 'Semua') {
+                        perfList = perfList.filter(p => p.id === props.filterKasir);
+                      }
+                      
+                      if (perfList.length === 0) return null; // Jika belum ada kasir sama sekali
+
+                      return (
+                        <div className="mb-4">
+                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Akumulasi Bulan Ini</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {perfList.map((p, idx) => {
+                              const total = p.plus - p.minus;
+                              const isMinus = total < 0;
+                              return (
+                                <div key={idx} className="bg-white border border-gray-100 p-3 rounded-2xl shadow-sm">
+                                  <div className="flex justify-between items-center border-b border-gray-50 pb-2 mb-2">
+                                    <p className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">{p.name}</p>
+                                    <span className={cn("text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest", isMinus ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600")}>
+                                      {isMinus ? "Minus" : "Plus"}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between gap-2">
+                                    <div className="flex-1 bg-red-50/50 rounded-xl p-2">
+                                      <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-0.5">Total Kurang</p>
+                                      <p className="text-[10px] font-black text-red-600">{formatRupiah(p.minus)}</p>
+                                    </div>
+                                    <div className="flex-1 bg-emerald-50/50 rounded-xl p-2">
+                                      <p className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mb-0.5">Total Lebih</p>
+                                      <p className="text-[10px] font-black text-emerald-600">{formatRupiah(p.plus)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     <div className="flex justify-between items-center px-1">
-                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Riwayat Audit Terakhir</h4>
-                      <div className="w-8 h-px bg-gray-100 flex-grow mx-3"></div>
-                    </div>
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">Detail Per Hari</h4>
+                        <div className="w-8 h-px bg-gray-100 flex-grow mx-3 hidden sm:block"></div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                          <button 
+                            onClick={() => {
+                              if (props.handleSyncPast30Days) {
+                                props.handleSyncPast30Days();
+                                props.showToast("Menyinkronkan riwayat 30 hari terakhir...");
+                              }
+                            }}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 active:scale-95 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <i className="fa-solid fa-cloud-arrow-down text-[10px]"></i>
+                            Sinkron Data
+                          </button>
+                          <input 
+                            type="date" 
+                            value={auditFilterDate} 
+                            onChange={(e) => setAuditFilterDate(e.target.value)} 
+                            className="text-[9px] font-black uppercase text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-indigo-300"
+                          />
+                        </div>
+                      </div>
                     
                     {(() => {
-                      const filteredHistory = props.filterKasir === 'Semua' 
+                      let filteredHistory = props.filterKasir === 'Semua' 
                         ? auditHistory 
                         : auditHistory.filter(h => h.kasirId === props.filterKasir)
+
+                      if (auditFilterDate) {
+                        filteredHistory = filteredHistory.filter(h => h.tanggalAsli === auditFilterDate)
+                      }
+
+                      const totalSelisih = filteredHistory.reduce((acc, curr) => acc + curr.selisih, 0);
 
                       if (filteredHistory.length === 0) {
                         return (
                           <div className="text-center py-12 bg-gray-50 rounded-[2rem] border border-dashed border-gray-200">
                             <i className="fa-solid fa-clipboard-check text-2xl text-gray-200 mb-2"></i>
                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                              {props.filterKasir === 'Semua' ? 'Belum ada riwayat audit' : `Belum ada audit untuk ${props.kasirList[props.filterKasir || '']?.name}`}
+                              Belum ada riwayat audit/closing
                             </p>
                           </div>
                         )
                       }
 
+                      // Grouping for UI rendering
+                      const groupedByDate: Record<string, typeof auditHistory> = {};
+                      filteredHistory.forEach(item => {
+                        if (!groupedByDate[item.tanggal]) groupedByDate[item.tanggal] = [];
+                        groupedByDate[item.tanggal].push(item);
+                      });
+
                       return (
-                        <div className="space-y-2">
-                          {filteredHistory.map((item, index) => (
-                            <div key={index} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center group">
-                              <div className="flex items-center gap-3">
-                                <div className={cn(
-                                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center",
-                                  item.selisih >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
-                                )}>
-                                  <span className="text-[8px] font-black leading-none">{item.selisih >= 0 ? 'OK' : 'MISS'}</span>
-                                  <i className={cn("fa-solid text-[10px] mt-0.5", item.selisih >= 0 ? "fa-check" : "fa-xmark")}></i>
+                        <div className="space-y-4">
+                          {/* Akumulasi Selisih */}
+                          <div className={cn(
+                            "p-3 rounded-2xl flex justify-between items-center border shadow-sm",
+                            totalSelisih < -50000 ? "bg-red-50 border-red-100" : (totalSelisih > -5000 && totalSelisih < 5000 ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100")
+                          )}>
+                            <div className="flex items-center gap-2">
+                              <i className="fa-solid fa-calculator text-gray-400"></i>
+                              <div>
+                                <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Total Akumulasi</p>
+                                <p className="text-[10px] font-bold text-gray-400">Untuk data yang ditampilkan</p>
+                              </div>
+                            </div>
+                            <span className={cn(
+                              "text-sm font-black",
+                              totalSelisih < 0 ? "text-red-600" : "text-green-600"
+                            )}>
+                              {totalSelisih < 0 ? "KURANG " : "LEBIH "} {formatRupiah(Math.abs(totalSelisih))}
+                            </span>
+                          </div>
+
+                          <div className="space-y-4">
+                            {Object.entries(groupedByDate).map(([tanggal, items]) => (
+                              <div key={tanggal} className="space-y-2">
+                                <div className="flex items-center gap-2 px-1">
+                                  <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">{items[0].dayContext}</span>
+                                  <span className="text-[9px] font-bold text-slate-400">{tanggal}</span>
                                 </div>
-                                <div>
-                                  <div className="flex items-center gap-1.5 mb-1">
-                                    <p className="text-[10px] font-black text-gray-800 uppercase leading-none">
-                                      {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {item.jam}
-                                    </p>
-                                    <span className="bg-purple-100 text-purple-600 text-[7px] font-black px-1.5 py-0.5 rounded uppercase">{item.kasirName}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[8px] font-bold text-gray-400 uppercase">Selisih:</span>
-                                    <span className={cn("text-[10px] font-black", item.selisih >= 0 ? "text-green-600" : "text-red-600")}>
-                                      {formatRupiah(item.selisih)}
-                                    </span>
-                                  </div>
+                                <div className="space-y-2">
+                                  {items.map((item, index) => {
+                                    const absSelisih = Math.abs(item.selisih);
+                                    let colorBox = "bg-green-50 text-green-600 border border-green-100";
+                                    let colorText = "text-green-600";
+                                    let icon = "fa-check";
+                                    let statusLabel = "WAJAR";
+
+                                    if (absSelisih > 50000) {
+                                      colorBox = "bg-red-50 text-red-600 border border-red-100";
+                                      colorText = "text-red-600";
+                                      icon = "fa-triangle-exclamation";
+                                      statusLabel = "FATAL";
+                                    } else if (absSelisih > 5000) {
+                                      colorBox = "bg-amber-50 text-amber-600 border border-amber-100";
+                                      colorText = "text-amber-600";
+                                      icon = "fa-exclamation";
+                                      statusLabel = "CEK";
+                                    }
+
+                                    return (
+                                      <div 
+                                        key={index} 
+                                        onClick={() => {
+                                          if (props.setFilterTanggal) props.setFilterTanggal(item.tanggalAsli);
+                                          if (props.setFilterKasir) props.setFilterKasir(item.kasirId);
+                                          // Navigate to LaporanView
+                                          props.setActiveView(props.isPc ? 'view-owner-laporan' : 'view-laporan');
+                                        }}
+                                        className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center group cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all relative overflow-hidden"
+                                        title="Lihat rincian laporan shift ini"
+                                      >
+                                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-indigo-50/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <i className="fa-solid fa-chevron-right text-indigo-400 text-[10px]"></i>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <div className={cn("w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0", colorBox)}>
+                                            <span className="text-[8px] font-black leading-none">{statusLabel}</span>
+                                            <i className={cn("fa-solid text-[10px] mt-0.5", icon)}></i>
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                              <p className="text-[11px] font-black text-gray-800 uppercase leading-none group-hover:text-indigo-600 transition-colors">
+                                                {item.kasirName}
+                                              </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className={cn("text-[9px] font-black uppercase", colorText)}>
+                                                {item.selisih === 0 ? 'Klop' : item.selisih < 0 ? 'Kurang' : 'Lebih'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="pr-4 sm:pr-6">
+                                          <span className={cn("text-xs font-black", colorText)}>
+                                            {formatRupiah(Math.abs(item.selisih))}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
-                              <button 
-                                onClick={() => {
-                                  // Hapus berdasarkan pencarian objek asli karena index sudah difilter
-                                  const originalIndex = auditHistory.findIndex(h => h === item)
-                                  if (originalIndex !== -1) hapusAudit(originalIndex)
-                                }}
-                                className="w-8 h-8 rounded-full bg-red-50 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                              >
-                                <i className="fa-solid fa-trash text-[9px]"></i>
-                              </button>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )
                     })()}

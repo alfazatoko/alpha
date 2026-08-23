@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { parseAppIntent, findStokProduct, answerFromKB, callGroqAPI, VIEW_MAP, type ChatMessage } from '../lib/botEngine'
 import { supabase } from '../lib/supabase'
+import { motion } from 'motion/react'
 
 export type CustomIntent = {
   question: string;
@@ -357,8 +358,11 @@ const AssistantBot: React.FC<Props> = ({
   return (
     <>
       {/* ── FAB Button ──────────────────────────────────────────────────────── */}
-      <button
+      <motion.button
         id="bot-fab-btn"
+        drag
+        dragMomentum={false}
+        whileDrag={{ scale: 1.1, cursor: 'grabbing' }}
         onClick={() => { setIsOpen(p=>!p); setShowSettings(false) }}
         title="Asisten Bot Alpha"
         style={{ backdropFilter:'blur(12px)' }}
@@ -373,7 +377,7 @@ const AssistantBot: React.FC<Props> = ({
           </>
         )}
         {!isOpen && <span className="absolute inset-0 rounded-2xl bg-indigo-400 opacity-30 animate-ping pointer-events-none"/>}
-      </button>
+      </motion.button>
 
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       <div

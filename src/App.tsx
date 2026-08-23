@@ -1143,6 +1143,9 @@ const MainApp: React.FC<MainAppProps> = ({
   // Laporan Date Filter
   const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(getLocalDateString())
   const [dailyReport, setDailyReport] = useState<any>(null)
+  
+  // Audit Sync Trigger
+  const [syncPast30Days, setSyncPast30Days] = useState(false)
 
   // --- DYNAMIC DATA FETCHER FOR PAST DATES ---
   useEffect(() => {
@@ -1215,7 +1218,16 @@ const MainApp: React.FC<MainAppProps> = ({
          fetchRange(filterTanggalMulai, filterTanggalAkhir, `Riwayat_${filterTanggalMulai}_${filterTanggalAkhir}`);
       }
     }
-  }, [filterTanggalLaporan, filterTanggalMulai, filterTanggalAkhir, googleUid, fetchedDates, targetStoreId])
+
+    // Fetch Past 30 Days (for Audit)
+    if (syncPast30Days) {
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      fetchRange(thirtyDaysAgo.toISOString().split('T')[0], today.toISOString().split('T')[0], `Past30Days`);
+      setSyncPast30Days(false);
+    }
+  }, [filterTanggalLaporan, filterTanggalMulai, filterTanggalAkhir, syncPast30Days, googleUid, fetchedDates, targetStoreId])
 
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
@@ -2172,12 +2184,15 @@ const MainApp: React.FC<MainAppProps> = ({
                       formKeterangan={formKeterangan}
                       setFormKeterangan={setFormKeterangan}
                       handleSimpanTransaksi={handleSimpanTransaksi}
+                      handleSyncPast30Days={() => setSyncPast30Days(true)}
                       transactions={todayTransactions}
+                      allTransactions={displayTransactions}
                       isSaving={isSaving}
                       totalAdmin={totalAdmin}
                       totalVolume={totalVolume}
                       totalAksesoris={totalAksesoris}
                       totalTarik={totalTarik}
+                      setFilterTanggal={setFilterTanggalLaporan}
                       totalSaldoKas={totalSaldoKas}
                       penjualanDigital={penjualanDigital}
                       kasModal={kasModal}
@@ -2236,12 +2251,15 @@ const MainApp: React.FC<MainAppProps> = ({
             formKeterangan={formKeterangan}
             setFormKeterangan={setFormKeterangan}
             handleSimpanTransaksi={handleSimpanTransaksi}
+            handleSyncPast30Days={() => setSyncPast30Days(true)}
             transactions={todayTransactions}
+            allTransactions={displayTransactions}
             isSaving={isSaving}
             totalAdmin={totalAdmin}
             totalVolume={totalVolume}
             totalAksesoris={totalAksesoris}
             totalTarik={totalTarik}
+            setFilterTanggal={setFilterTanggalLaporan}
             totalSaldoKas={totalSaldoKas}
             penjualanDigital={penjualanDigital}
             kasModal={kasModal}
