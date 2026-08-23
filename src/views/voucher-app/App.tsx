@@ -135,6 +135,43 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const [cashiers, setCashiers] = useState<Cashier[]>(INITIAL_CASHIERS);
   const [activeCashierIndex, setActiveCashierIndex] = useState<number>(0);
 
+  // Auto-Sync States
+  const isDataLoadedRef = useRef(false);
+  const [unsyncedChanges, setUnsyncedChanges] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const performSyncToCloud = async () => {
+    if (!activeStoreId) return;
+    setIsSyncing(true);
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    
+    try {
+      const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+      const existingData = data?.voucher_app_data || {};
+      const newData = {
+        ...existingData,
+        all_detailed_handovers: detailedHandovers,
+        [cashierId]: {
+          products,
+          transactions,
+          notifications,
+          handovers: shiftHandovers
+        }
+      };
+      const { error } = await supabase.from('store_settings').upsert({
+        store_id: activeStoreId,
+        voucher_app_data: newData
+      }, { onConflict: 'store_id' });
+      
+      if (!error) {
+        setUnsyncedChanges(false);
+      }
+    } catch (error) {
+      console.error("Exception syncing voucher app data", error);
+    }
+    setIsSyncing(false);
+  };
+
   // Sync with external props from Host App
   // FIXED: 'cashiers' removed from deps to prevent infinite loop
   // Syncs `cashiers` list with `kasirList` from the host app (Owner settings)
@@ -366,12 +403,13 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setDetailedHandovers(loadedDetailedHandovers);
     if (cachedTheme) setTheme(cachedTheme);
 
+    isDataLoadedRef.current = false;
+
     // If online mode is active, fetch from cloud
     if (activeStoreId) {
       supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
         if (data && data.voucher_app_data) {
           const cashierData = data.voucher_app_data[cashierId];
-          // ✅ SOLUSI 1: Baca all_detailed_handovers dari level toko (bukan per-kasir)
           const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
           if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
           if (cashierData) {
@@ -379,16 +417,23 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             if (cashierData.transactions) setTransactions(cashierData.transactions);
             if (cashierData.notifications) setNotifications(cashierData.notifications);
             if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
-            // detailedHandovers per-kasir lama sudah diprioritaskan ke global; skip
           } else if (!cachedProducts && data.voucher_app_data.products) {
             setProducts(data.voucher_app_data.products);
           }
         }
+      }).finally(() => {
+        // Tandai bahwa load awal dari cloud sudah selesai agar tidak memicu unsynced false positive
+        setTimeout(() => {
+          isDataLoadedRef.current = true;
+          setUnsyncedChanges(false);
+        }, 300);
       });
+    } else {
+      isDataLoadedRef.current = true;
     }
   }, [activeStoreId, activeCashierIndex]);
 
-  // Push to Supabase on every change (Debounced)
+  // Push to Supabase on every change (Debounced to 60s)
   useEffect(() => {
     const storeKey = activeStoreId || 'default';
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
@@ -400,35 +445,20 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     localStorage.setItem(`${prefix}_transactions`, JSON.stringify(transactions));
     localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
     localStorage.setItem(`${prefix}_handovers`, JSON.stringify(shiftHandovers));
-    // ✅ SOLUSI 1: Simpan detailedHandovers ke key GLOBAL (per-toko)
     localStorage.setItem(globalDetailedHandoversKey, JSON.stringify(detailedHandovers));
+
+    // Jika belum selesai load awal, jangan mark unsynced
+    if (!isDataLoadedRef.current) return;
 
     if (!activeStoreId) return;
 
-    // Debounced save to Supabase
+    // Tandai ada perubahan yang belum tersync ke cloud
+    setUnsyncedChanges(true);
+
+    // Debounced save to Supabase (60 seconds)
     const timeout = setTimeout(() => {
-      supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
-        const existingData = data?.voucher_app_data || {};
-        const newData = {
-          ...existingData,
-          // ✅ SOLUSI 1: all_detailed_handovers disimpan di level toko (bukan per-kasir)
-          all_detailed_handovers: detailedHandovers,
-          [cashierId]: {
-            products,
-            transactions,
-            notifications,
-            handovers: shiftHandovers
-            // detailedHandovers TIDAK disimpan per-kasir lagi
-          }
-        };
-        supabase.from('store_settings').upsert({
-          store_id: activeStoreId,
-          voucher_app_data: newData
-        }, { onConflict: 'store_id' }).then(({ error }) => {
-          if (error) console.error("Error syncing voucher app data to supabase", error);
-        });
-      });
-    }, 2500);
+      performSyncToCloud();
+    }, 60000);
 
     return () => clearTimeout(timeout);
   }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex]);
@@ -2437,6 +2467,27 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             </li>
           </ul>
         </nav>
+
+        {/* ── Unsynced Changes Warning Banner ── */}
+        {unsyncedChanges && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-amber-50 border border-amber-200 shadow-xl rounded-2xl p-4 flex flex-col items-center gap-3 z-[100] w-[90%] animate-in slide-in-from-bottom-4 duration-300 backdrop-blur-sm">
+            <div className="flex items-start gap-2.5 text-amber-900 text-[11px] font-bold text-center leading-tight">
+              <i className="fa-solid fa-triangle-exclamation text-amber-500 animate-pulse text-lg mt-0.5"></i>
+              <span>Anda memiliki catatan pembukuan/stok yang belum tersimpan ke Cloud!</span>
+            </div>
+            <button 
+              onClick={performSyncToCloud}
+              disabled={isSyncing}
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 transition-all text-white font-black text-[10px] py-2.5 rounded-xl uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:scale-100"
+            >
+              {isSyncing ? (
+                <><i className="fa-solid fa-circle-notch fa-spin"></i> MENYINKRONKAN...</>
+              ) : (
+                <><i className="fa-solid fa-cloud-arrow-up"></i> SYNC SEKARANG</>
+              )}
+            </button>
+          </div>
+        )}
 
       </div> {/* Closing smartphone frame */}
     </div>
