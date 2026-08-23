@@ -420,27 +420,34 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
     // If online mode is active, fetch from cloud
     if (activeStoreId) {
-      supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
-        if (data && data.voucher_app_data) {
-          const cashierData = data.voucher_app_data[cashierId];
-          const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
-          if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
-          if (cashierData) {
-            if (cashierData.products) setProducts(cashierData.products);
-            if (cashierData.transactions) setTransactions(cashierData.transactions);
-            if (cashierData.notifications) setNotifications(cashierData.notifications);
-            if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
-          } else if (!cachedProducts && data.voucher_app_data.products) {
-            setProducts(data.voucher_app_data.products);
+      const fetchCloudData = async () => {
+        try {
+          const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+          if (data && data.voucher_app_data) {
+            const cashierData = data.voucher_app_data[cashierId];
+            const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
+            if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
+            if (cashierData) {
+              if (cashierData.products) setProducts(cashierData.products);
+              if (cashierData.transactions) setTransactions(cashierData.transactions);
+              if (cashierData.notifications) setNotifications(cashierData.notifications);
+              if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
+            } else if (!cachedProducts && data.voucher_app_data.products) {
+              setProducts(data.voucher_app_data.products);
+            }
           }
+        } catch (error) {
+          console.error("Gagal load data dari cloud:", error);
         }
-      }).finally(() => {
+        
         // Tandai bahwa load awal dari cloud sudah selesai agar tidak memicu unsynced false positive
         setTimeout(() => {
           isDataLoadedRef.current = true;
           setUnsyncedChanges(false);
         }, 300);
-      });
+      };
+      
+      fetchCloudData();
     } else {
       isDataLoadedRef.current = true;
     }
