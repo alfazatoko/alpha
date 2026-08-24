@@ -83,7 +83,7 @@ export interface ShiftHandover {
   totalProductsCount: number;
   totalStockTransferred: number;
   inventoryValue: number;
-  status: 'Otomatis (Closed)' | 'Berhasil Diserahterimakan';
+  status: 'Otomatis (Closed)' | 'Berhasil Diserahterimakan' | 'Tutup Shift (Self)';
   notes: string;
 }
 

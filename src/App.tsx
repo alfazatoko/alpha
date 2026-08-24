@@ -405,7 +405,7 @@ const MainApp: React.FC<MainAppProps> = ({
   const [activeView, setActiveView] = useState('view-beranda')
   const [botSearchQuery, setBotSearchQuery] = useState<string | undefined>(undefined)
   const [botActiveTab, setBotActiveTab] = useState<string | undefined>(undefined)
-  const [groqApiKey, setGroqApiKey] = useState<string>(() => localStorage.getItem('alphaPro_groq_api_key') || '')
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('alphaPro_gemini_api_key') || '')
 
   // ── Multi-Store States & Derived Store Info ──
   const [pantauStoreId, setPantauStoreId] = useState<string | 'all'>(() => {
@@ -581,7 +581,7 @@ const MainApp: React.FC<MainAppProps> = ({
       running_texts: runningTexts,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
-      groq_api_key: groqApiKey || null,
+      gemini_api_key: geminiApiKey || null,
       updated_at: new Date().toISOString()
     })
     
@@ -592,11 +592,11 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  // ── Simpan Groq API Key ke localStorage + Supabase ──
-  const handleSaveGroqKey = async (key: string) => {
+  // ── Simpan Gemini API Key ke localStorage + Supabase ──
+  const handleSaveGeminiKey = async (key: string) => {
     const trimmedKey = key.trim()
-    localStorage.setItem('alphaPro_groq_api_key', trimmedKey)
-    setGroqApiKey(trimmedKey)
+    localStorage.setItem('alphaPro_gemini_api_key', trimmedKey)
+    setGeminiApiKey(trimmedKey)
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
     const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
@@ -607,21 +607,21 @@ const MainApp: React.FC<MainAppProps> = ({
       running_texts: runningTexts,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
-      groq_api_key: trimmedKey || null,
+      gemini_api_key: trimmedKey || null,
       updated_at: new Date().toISOString()
     })
-    if (error) console.error('Gagal simpan Groq key ke cloud:', error.message)
-    else showToast('GROQ KEY DISIMPAN & DISINKRONKAN!')
+    if (error) console.error('Gagal simpan Gemini key ke cloud:', error.message)
+    else showToast('GEMINI KEY DISIMPAN & DISINKRONKAN!')
   }
 
-  const handleSaveGroqKeyClear = async () => {
-    localStorage.removeItem('alphaPro_groq_api_key')
-    setGroqApiKey('')
+  const handleSaveGeminiKeyClear = async () => {
+    localStorage.removeItem('alphaPro_gemini_api_key')
+    setGeminiApiKey('')
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
     await supabase.from('store_settings').upsert({
       store_id: effectiveStoreId,
-      groq_api_key: null,
+      gemini_api_key: null,
       updated_at: new Date().toISOString()
     })
   }
@@ -727,12 +727,12 @@ const MainApp: React.FC<MainAppProps> = ({
         }
       }
 
-      // Sync Groq API Key
-      if (data.groq_api_key) {
-        const local = localStorage.getItem('alphaPro_groq_api_key')
-        if (local !== data.groq_api_key) {
-          localStorage.setItem('alphaPro_groq_api_key', data.groq_api_key)
-          setGroqApiKey(data.groq_api_key)
+      // Sync Gemini API Key
+      if (data.gemini_api_key) {
+        const local = localStorage.getItem('alphaPro_gemini_api_key')
+        if (local !== data.gemini_api_key) {
+          localStorage.setItem('alphaPro_gemini_api_key', data.gemini_api_key)
+          setGeminiApiKey(data.gemini_api_key)
           changed = true
         }
       }
@@ -2759,9 +2759,9 @@ const MainApp: React.FC<MainAppProps> = ({
         activeStoreId={targetStoreId !== 'all' ? targetStoreId : activeStoreId}
         currentUsername={username}
         kasirRole={account.role}
-        groqApiKey={groqApiKey}
-        onSaveGroqKey={handleSaveGroqKey}
-        onClearGroqKey={handleSaveGroqKeyClear}
+        geminiApiKey={geminiApiKey}
+        onSaveGeminiKey={handleSaveGeminiKey}
+        onClearGeminiKey={handleSaveGeminiKeyClear}
         kasirList={kasirList}
         transactions={todayTransactions}
         absensiList={absensi}

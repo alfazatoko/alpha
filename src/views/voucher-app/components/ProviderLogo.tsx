@@ -48,24 +48,50 @@ export default function ProviderLogo({
     );
   }
 
-  // Axis Logo
+  // Axis Logo — ungu gelap, teks AXIS putih bold
   if (opLower.includes('axis')) {
     return (
-      <div 
-        className={`${sizeClasses[size]} bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-100 p-1.5 flex items-center justify-center shadow-sm border border-white/60 relative overflow-hidden shrink-0 ${className}`}
+      <div
+        className={`${sizeClasses[size]} bg-[#5b1f82] p-1 flex flex-col items-center justify-center shadow-sm border border-purple-900/40 relative overflow-hidden shrink-0 ${className}`}
       >
-        {/* Subtle metallic sheen */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent pointer-events-none" />
-        
-        {/* Axis Purple Bubble */}
-        <div className="w-[88%] h-[78%] bg-gradient-to-br from-[#7c2d82] to-[#581c87] rounded-[18px] rounded-br-[4px] flex items-center justify-center shadow-md p-1 transform transition-transform">
-          <span className="text-slate-900 dark:text-white font-black text-[13px] tracking-tight font-sans">
-            AXIS
-          </span>
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#4a1870] via-[#7c2d8a] to-[#9333a0] opacity-80 pointer-events-none" />
+        {/* Axis wordmark — putih bold di ungu */}
+        <span className="relative z-10 text-white font-black tracking-wide leading-none"
+          style={{ fontSize: size === 'xs' ? '7px' : size === 'sm' ? '11px' : '15px', fontFamily: 'sans-serif', letterSpacing: '0.06em' }}>
+          AXIS
+        </span>
+        {/* Underline dekoratif */}
+        <div className="relative z-10 w-4/5 h-[2px] bg-white/50 rounded-full mt-1" />
       </div>
     );
   }
+
+  // Tri (3) Logo — merah scarlet khas Tri, angka 3 putih besar + label TRI
+  if (opLower.includes('tri') || opLower === '3') {
+    return (
+      <div
+        className={`${sizeClasses[size]} bg-gradient-to-br from-[#e4002b] to-[#b80023] p-1 flex flex-col items-center justify-center shadow-sm border border-red-900/30 relative overflow-hidden shrink-0 ${className}`}
+      >
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
+        {/* Angka 3 putih tebal */}
+        <span
+          className="relative z-10 text-white font-black leading-none select-none"
+          style={{ fontSize: size === 'xs' ? '14px' : size === 'sm' ? '22px' : '30px', fontFamily: 'sans-serif', textShadow: '0 2px 6px rgba(0,0,0,0.3)' }}
+        >
+          3
+        </span>
+        {/* Label TRI di bawah */}
+        <span
+          className="relative z-10 text-white/90 font-black tracking-widest leading-none mt-0.5"
+          style={{ fontSize: size === 'xs' ? '5px' : size === 'sm' ? '7px' : '8px', fontFamily: 'sans-serif', letterSpacing: '0.25em' }}
+        >
+          TRI
+        </span>
+      </div>
+    );
+  }
+
+  // XL Logo
 
   // Telkomsel Logo
   if (opLower.includes('telkomsel') || opLower.includes('tsel')) {
@@ -127,20 +153,6 @@ export default function ProviderLogo({
     );
   }
 
-  // Tri (3) Logo
-  if (opLower.includes('tri') || opLower.includes('3')) {
-    return (
-      <div 
-        className={`${sizeClasses[size]} bg-gradient-to-br from-slate-800 via-slate-900 to-black p-1 flex items-center justify-center shadow-sm border border-white/20 relative overflow-hidden shrink-0 ${className}`}
-      >
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
-        
-        <span className="font-black text-slate-900 dark:text-white text-[42px] leading-none font-sans drop-shadow-md">
-          3
-        </span>
-      </div>
-    );
-  }
 
   // XL Logo
   if (opLower.includes('xl')) {
@@ -167,26 +179,36 @@ export default function ProviderLogo({
     );
   }
 
-  // Smartfren Logo
+  // Smartfren Logo — ikon wave merah khas Smartfren + teks merah
   if (opLower.includes('smartfren') || opLower.includes('smart')) {
     return (
-      <div 
-        className={`${sizeClasses[size]} bg-gradient-to-br from-slate-100 via-rose-50 to-red-100 p-1 flex flex-col items-center justify-center shadow-sm border border-white/60 relative overflow-hidden shrink-0 ${className}`}
+      <div
+        className={`${sizeClasses[size]} bg-white p-1 flex flex-col items-center justify-center shadow-sm border border-red-100 relative overflow-hidden shrink-0 ${className}`}
       >
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent pointer-events-none" />
-        
-        <div className="w-8 h-8 relative flex items-center justify-center">
-          <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-sm">
-            {/* Smartfren red curve loops */}
-            <path d="M 20 60 C 20 30, 45 20, 60 35 C 75 50, 50 70, 75 75 C 85 77, 90 70, 90 70" 
-              fill="none" 
-              stroke="#e11d48" 
-              strokeWidth="12" 
-              strokeLinecap="round" 
-            />
-          </svg>
-        </div>
-        <span className="text-[7.5px] font-black text-rose-500 font-black dark:text-rose-400 tracking-tight font-sans -mt-1">
+        <div className="absolute inset-0 bg-gradient-to-br from-white via-red-50/30 to-white pointer-events-none" />
+        {/* Smartfren wave icon — dua gelombang S merah bertumpuk */}
+        <svg viewBox="0 0 80 50" className="w-[75%] h-auto drop-shadow-sm" fill="none">
+          {/* Gelombang atas */}
+          <path
+            d="M 5 18 C 5 8, 18 4, 28 10 C 38 16, 42 24, 55 22 C 65 20, 72 14, 75 10"
+            stroke="#e4002b"
+            strokeWidth="6.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Gelombang bawah — offset */}
+          <path
+            d="M 5 34 C 5 24, 18 20, 28 26 C 38 32, 42 40, 55 38 C 65 36, 72 30, 75 26"
+            stroke="#e4002b"
+            strokeWidth="6.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+        <span
+          className="relative z-10 font-black text-[#e4002b] tracking-tighter leading-none"
+          style={{ fontSize: size === 'xs' ? '5px' : size === 'sm' ? '7px' : '8px', fontFamily: 'sans-serif' }}
+        >
           smartfren
         </span>
       </div>

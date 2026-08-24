@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGroqAPI, VIEW_MAP, type ChatMessage } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, VIEW_MAP, type ChatMessage } from '../lib/botEngine'
 import { supabase } from '../lib/supabase'
 import { motion } from 'motion/react'
 
@@ -30,7 +30,7 @@ interface BotMessage {
   id: string
   from: 'user' | 'bot'
   text: string
-  mode?: 'app' | 'kb' | 'groq' | 'error'
+  mode?: 'app' | 'kb' | 'gemini' | 'error'
 }
 
 interface Props {
@@ -41,9 +41,9 @@ interface Props {
   activeStoreId: string
   currentUsername: string
   kasirRole: string
-  groqApiKey: string
-  onSaveGroqKey: (key: string) => Promise<void>
-  onClearGroqKey: () => Promise<void>
+  geminiApiKey: string
+  onSaveGeminiKey: (key: string) => Promise<void>
+  onClearGeminiKey: () => Promise<void>
   kasirList?: Record<string, any>
   transactions?: any[]
   absensiList?: any[]
@@ -53,10 +53,10 @@ interface Props {
 const ModeBadge: React.FC<{ mode?: string }> = ({ mode }) => {
   if (!mode) return null
   const cfg: Record<string, { label: string; color: string }> = {
-    app:   { label: '📱 Aplikasi', color: 'bg-blue-500/30 text-blue-200' },
-    kb:    { label: '📚 Offline',  color: 'bg-emerald-500/30 text-emerald-200' },
-    groq:  { label: '🌐 Groq AI', color: 'bg-violet-500/30 text-violet-200' },
-    error: { label: '⚠️ Error',    color: 'bg-rose-500/30 text-rose-200' },
+    app:    { label: '📱 Aplikasi',  color: 'bg-blue-500/30 text-blue-200' },
+    kb:     { label: '📚 Offline',   color: 'bg-emerald-500/30 text-emerald-200' },
+    gemini: { label: '✨ Gemini AI', color: 'bg-violet-500/30 text-violet-200' },
+    error:  { label: '⚠️ Error',     color: 'bg-rose-500/30 text-rose-200' },
   }
   const c = cfg[mode]; if (!c) return null
   return <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full ml-1 ${c.color}`}>{c.label}</span>
@@ -76,8 +76,8 @@ function renderText(text: string) {
   })
 }
 
-// ── GROQ KEY STORAGE ──────────────────────────────────────────────────────────
-const GROQ_KEY = 'alphaPro_groq_api_key'
+// ── GEMINI KEY STORAGE ────────────────────────────────────────────────────────
+const GEMINI_KEY = 'alphaPro_gemini_api_key'
 
 // Helper for dynamic suggestions based on user query history
 const getDynamicSuggestions = () => {
@@ -105,9 +105,9 @@ const AssistantBot: React.FC<Props> = ({
   setBotActiveTab, 
   activeStoreId, 
   currentUsername, 
-  groqApiKey, 
-  onSaveGroqKey, 
-  onClearGroqKey,
+  geminiApiKey, 
+  onSaveGeminiKey, 
+  onClearGeminiKey,
   kasirList = {},
   transactions = [],
   absensiList = []
@@ -127,14 +127,14 @@ const AssistantBot: React.FC<Props> = ({
   }])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [groqKeyInput, setGroqKeyInput] = useState('')
-  const [groqStatus, setGroqStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
+  const [geminiKeyInput, setGeminiKeyInput] = useState('')
+  const [geminiStatus, setGeminiStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis'])
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const groqHistory = useRef<ChatMessage[]>([])
+  const geminiHistory = useRef<ChatMessage[]>([])
 
   // Drag to scroll logic for suggestions
   const [isDragging, setIsDragging] = useState(false)
@@ -296,17 +296,21 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
-    // ③ Groq API (jika ada key)
-    const activeKey = groqApiKey || localStorage.getItem(GROQ_KEY) || ''
+    // ③ Gemini API (jika ada key)
+    const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
     if (activeKey) {
       try {
-        const reply = await callGroqAPI(text, groqHistory.current, activeKey)
-        groqHistory.current = [...groqHistory.current, { role: 'user' as const, content: text }, { role: 'assistant' as const, content: reply }].slice(-12)
+        const reply = await callGeminiAPI(text, geminiHistory.current, activeKey)
+        geminiHistory.current = [
+          ...geminiHistory.current,
+          { role: 'user' as const, parts: [{ text }] as [{text: string}] },
+          { role: 'model' as const, parts: [{ text: reply }] as [{text: string}] }
+        ].slice(-12)
         setIsTyping(false)
-        addMessage('bot', reply, 'groq')
+        addMessage('bot', reply, 'gemini')
       } catch (e: any) {
         setIsTyping(false)
-        addMessage('bot', `⚠️ **Groq Error:** ${e.message}`, 'error')
+        addMessage('bot', `⚠️ **Gemini Error:** ${e.message}`, 'error')
       }
       setSuggestions(getDynamicSuggestions())
       return
@@ -316,20 +320,20 @@ const AssistantBot: React.FC<Props> = ({
     setIsTyping(false)
     addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, groqApiKey, kasirList, transactions, absensiList, customIntents, messages])
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key==='Enter') handleSend() }
 
-  const handleSaveGroqKey = async () => {
-    const k = groqKeyInput.trim()
-    if (!k.startsWith('gsk_')) { setGroqStatus('error'); return }
+  const handleSaveGeminiKey = async () => {
+    const k = geminiKeyInput.trim()
+    if (!k) { setGeminiStatus('error'); return }
     setIsSavingKey(true)
-    await onSaveGroqKey(k)
+    await onSaveGeminiKey(k)
     setIsSavingKey(false)
-    setGroqStatus('saved')
-    setTimeout(() => { setGroqStatus('idle'); setGroqKeyInput(''); setShowSettings(false) }, 1500)
+    setGeminiStatus('saved')
+    setTimeout(() => { setGeminiStatus('idle'); setGeminiKeyInput(''); setShowSettings(false) }, 1500)
   }
-  const handleClearGroqKey = async () => { await onClearGroqKey(); setGroqKeyInput(''); setGroqStatus('idle') }
+  const handleClearGeminiKey = async () => { await onClearGeminiKey(); setGeminiKeyInput(''); setGeminiStatus('idle') }
 
   const handleSaveTeach = async () => {
     const newIntent: CustomIntent = { question: teachQuestion.trim(), type: teachType, target: teachTarget.trim() }
@@ -352,8 +356,8 @@ const AssistantBot: React.FC<Props> = ({
     })
   }
 
-  const effectiveGroqKey = groqApiKey || localStorage.getItem(GROQ_KEY) || ''
-  const hasGroqKey = !!effectiveGroqKey
+  const effectiveGeminiKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
+  const hasGeminiKey = !!effectiveGeminiKey
 
   return (
     <>
@@ -393,10 +397,10 @@ const AssistantBot: React.FC<Props> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="text-white font-black text-[11px] uppercase tracking-widest leading-none">Bot Alpha</p>
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasGroqKey ? 'bg-emerald-400' : 'bg-amber-400'}`} title={hasGroqKey?'Groq AI aktif':'Mode offline'}/>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasGeminiKey ? 'bg-emerald-400' : 'bg-amber-400'}`} title={hasGeminiKey?'Gemini AI aktif':'Mode offline'}/>
             </div>
             <p className="text-indigo-200 text-[9px] font-bold mt-0.5">
-              {hasGroqKey ? '🌐 Groq AI + Offline KB' : '📚 Mode Offline — Set Groq key di ⚙️'}
+              {hasGeminiKey ? '✨ Gemini AI + Offline KB' : '📚 Mode Offline — Set Gemini key di ⚙️'}
             </p>
           </div>
           <button onClick={()=>{setShowSettings(p=>!p);setShowTeachModal(false)}} title="Settings" className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-90 ${showSettings?'bg-white/30 text-white':'bg-white/15 hover:bg-white/25 text-white/70'}`}>
@@ -410,36 +414,36 @@ const AssistantBot: React.FC<Props> = ({
         {/* Settings Panel */}
         {showSettings && (
           <div className="px-4 py-3 border-b border-white/10 shrink-0 space-y-3" style={{ background:'rgba(255,255,255,0.04)' }}>
-            <p className="text-white font-black text-[10px] uppercase tracking-widest">⚙️ Groq API Key</p>
+            <p className="text-white font-black text-[10px] uppercase tracking-widest">⚙️ Gemini API Key</p>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
               <p className="text-indigo-200 text-[9px] leading-relaxed">
                 Dapatkan key gratis di{' '}
-                <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-violet-300 underline font-bold">console.groq.com</a>
-                {' '}→ API Keys → Create Key
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-300 underline font-bold">aistudio.google.com</a>
+                {' '}→ Get API Key → Create API Key
               </p>
-              {hasGroqKey && (
+              {hasGeminiKey && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"/>
-                  <span className="text-emerald-300 text-[9px] font-bold flex-1">Key aktif: {effectiveGroqKey.slice(0,8)}•••</span>
-                  <button onClick={handleClearGroqKey} className="text-rose-400 text-[9px] font-black hover:text-rose-300 transition-colors">Hapus</button>
+                  <span className="text-emerald-300 text-[9px] font-bold flex-1">Key aktif: {effectiveGeminiKey.slice(0,8)}•••</span>
+                  <button onClick={handleClearGeminiKey} className="text-rose-400 text-[9px] font-black hover:text-rose-300 transition-colors">Hapus</button>
                 </div>
               )}
               <input
                 type="password"
-                value={groqKeyInput}
-                onChange={e=>{ setGroqKeyInput(e.target.value); setGroqStatus('idle') }}
-                placeholder={hasGroqKey ? 'Masukkan key baru...' : 'gsk_xxxxxxxxxxxxxxxxxx'}
+                value={geminiKeyInput}
+                onChange={e=>{ setGeminiKeyInput(e.target.value); setGeminiStatus('idle') }}
+                placeholder={hasGeminiKey ? 'Masukkan key baru...' : 'Paste Gemini API key di sini...'}
                 className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-[10px] font-mono text-white placeholder:text-indigo-300/50 focus:outline-none focus:border-indigo-400/60 transition-all"
               />
               <button
-                onClick={handleSaveGroqKey}
-                disabled={!groqKeyInput.trim() || isSavingKey}
-                className={`w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40 ${groqStatus==='saved'?'bg-emerald-600 text-white':groqStatus==='error'?'bg-rose-600 text-white':'bg-gradient-to-r from-indigo-600 to-violet-600 text-white'}`}
+                onClick={handleSaveGeminiKey}
+                disabled={!geminiKeyInput.trim() || isSavingKey}
+                className={`w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40 ${geminiStatus==='saved'?'bg-emerald-600 text-white':geminiStatus==='error'?'bg-rose-600 text-white':'bg-gradient-to-r from-indigo-600 to-violet-600 text-white'}`}
               >
-                {isSavingKey ? '⏳ Menyimpan & sync cloud...' : groqStatus==='saved' ? '✓ Tersimpan & Disync!' : groqStatus==='error' ? '✗ Key tidak valid (harus gsk_...)' : '💾 Simpan & Sync ke Cloud'}
+                {isSavingKey ? '⏳ Menyimpan & sync cloud...' : geminiStatus==='saved' ? '✓ Tersimpan & Disync!' : geminiStatus==='error' ? '✗ Key terlalu pendek / tidak valid' : '💾 Simpan & Sync ke Cloud'}
               </button>
             </div>
-            <p className="text-indigo-300/60 text-[8.5px] text-center">Free: 14.400 req/hari • Model: llama-3.1-8b • 🌐 Sync Supabase</p>
+            <p className="text-indigo-300/60 text-[8.5px] text-center">✨ Gratis • Model: gemini-3.5-flash-lite • 🌐 Sync Supabase</p>
           </div>
         )}
 
@@ -576,7 +580,7 @@ const AssistantBot: React.FC<Props> = ({
                 value={input}
                 onChange={e=>setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={hasGroqKey ? 'Tanya apa saja...' : 'Ketik perintah atau pertanyaan...'}
+                placeholder={hasGeminiKey ? 'Tanya apa saja...' : 'Ketik perintah atau pertanyaan...'}
                 className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-3 py-2.5 text-[11px] font-medium text-white placeholder:text-indigo-300/60 focus:outline-none focus:border-indigo-400/70 focus:bg-white/15 transition-all"
               />
               <button

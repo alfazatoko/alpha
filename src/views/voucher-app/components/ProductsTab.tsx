@@ -30,6 +30,7 @@ import type { VoucherProduct, UserRole, Cashier } from '../types';
 import { OPERATOR_STYLES } from '../data';
 import ProviderLogo from './ProviderLogo';
 import { supabase } from '../../../lib/supabase';
+import { callGeminiAPI } from '../../../lib/botEngine';
 
 interface ProductsTabProps {
   products: VoucherProduct[];
@@ -279,11 +280,21 @@ export default function ProductsTab({
   const [formBarcode, setFormBarcode] = useState('');
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.barcode.includes(searchQuery) ||
-                          p.operator.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesOperator = selectedOperator === 'Semua' || p.operator === selectedOperator;
-    const matchesLowStock = !showLowStockOnly || p.currentStock <= p.minStockLevel;
+    const safeName = (p.name || '').toLowerCase();
+    const safeBarcode = p.barcode || '';
+    const safeOperator = (p.operator || '').toLowerCase();
+    const safeSearch = (searchQuery || '').toLowerCase();
+
+    const matchesSearch = safeName.includes(safeSearch) || 
+                          safeBarcode.includes(safeSearch) ||
+                          safeOperator.includes(safeSearch);
+                          
+    // Pencocokan operator harus case-insensitive dan aman dari spasi berlebih
+    const matchesOperator = selectedOperator === 'Semua' || safeOperator === selectedOperator.toLowerCase();
+    
+    const currentStock = typeof p.currentStock === 'number' ? p.currentStock : 0;
+    const minStock = typeof p.minStockLevel === 'number' ? p.minStockLevel : 0;
+    const matchesLowStock = !showLowStockOnly || currentStock <= minStock;
 
     return matchesSearch && matchesOperator && matchesLowStock;
   });
@@ -417,14 +428,56 @@ export default function ProductsTab({
     }
   };
 
+  const handleParseBulkAI = async () => {
+    if (!bulkAIText.trim()) return;
+    
+    const apiKey = localStorage.getItem('alphaPro_gemini_api_key');
+    if (!apiKey) {
+      alert('API Key Gemini belum diset. Silakan isi di pengaturan Bot Alpha (ikon bot di beranda) untuk menggunakan fitur AI Scanner.');
+      return;
+    }
+
+    setIsParsingAI(true);
+    try {
+      const prompt = `Anda adalah sistem data extractor untuk aplikasi voucher konter.
+Tugas Anda: Ekstrak SEMUA data voucher dari teks berantakan berikut.
+Abaikan kalimat obrolan yang tidak relevan. Konversi harga (misal: "25rb", "25k") jadi angka utuh (25000).
+Kembalikan HANYA array JSON (tanpa blok markdown \`\`\`json, langsung array-nya saja) dengan format objek berikut per item:
+[{ "operator": "string", "name": "string", "costPrice": number, "sellingPrice": number, "stock": number, "minStockLevel": number }]
+Jika stok alert tidak disebutkan, isi minStockLevel dengan 4. Jika operator tidak jelas, isi "Lainnya".
+
+Teks:
+${bulkAIText}`;
+
+      const reply = await callGeminiAPI(prompt, [], apiKey);
+      
+      let cleanReply = reply.trim();
+      if (cleanReply.startsWith('```')) {
+        cleanReply = cleanReply.replace(/^```(?:json)?/, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleanReply);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setBulkParsedProducts(parsed);
+      } else {
+        alert('Gemini gagal mengekstrak data. Pastikan teks berisi detail voucher yang jelas.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Error saat memproses dengan Gemini: ' + e.message);
+    } finally {
+      setIsParsingAI(false);
+    }
+  };
+
   const handleSaveBulk = () => {
     if (bulkParsedProducts.length === 0) return;
 
     // Siapkan semua produk sekaligus sebagai array
     const productsToAdd: Omit<VoucherProduct, 'id'>[] = bulkParsedProducts.map(p => ({
-      name: p.name || 'Produk Baru',
+      name: (p.name || '').trim() || 'Produk Baru',
       category: 'Paket Data' as const,
-      operator: (operatorsList.find(op => op.toLowerCase() === (p.operator || '').toLowerCase()) || 'Telkomsel') as VoucherProduct['operator'],
+      operator: (operatorsList.find(op => op.toLowerCase() === (p.operator || '').trim().toLowerCase()) || 'Lainnya') as VoucherProduct['operator'],
       costPrice: Number(p.costPrice) || 0,
       sellingPrice: Number(p.sellingPrice) || 0,
       currentStock: Number(p.stock) || 0,
@@ -462,10 +515,12 @@ export default function ProductsTab({
     'Smartfren': 'bg-pink-600 text-slate-900 dark:text-white'
   };
 
-  function getShortName(name: string, operator: string) {
-    let short = name.replace(new RegExp(operator, 'i'), '').trim();
+  function getShortName(name: string = '', operator: string = '') {
+    const safeName = name || '';
+    const safeOp = operator || '';
+    let short = safeName.replace(new RegExp(safeOp, 'i'), '').trim();
     short = short.replace(/Hari/i, 'H').replace(/Bulan/i, 'B');
-    return short;
+    return short || safeName; // Fallback to safeName if it becomes empty
   }
   
   if (viewMode === 'table') {
@@ -788,7 +843,11 @@ export default function ProductsTab({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {operatorsList.map(op => {
-                  const opProducts = filteredProducts.filter(p => p.operator.toLowerCase().includes(op.toLowerCase()) || (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => p.operator.toLowerCase().includes(o.toLowerCase()))));
+                  const opProducts = filteredProducts.filter(p => {
+                    const safeOp = (p.operator || '').toLowerCase();
+                    return safeOp.includes(op.toLowerCase()) || 
+                      (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => safeOp.includes(o.toLowerCase())));
+                  });
                   if (opProducts.length === 0) return null;
                   
                   return (
@@ -910,15 +969,28 @@ export default function ProductsTab({
                   className="w-full bg-slate-50 dark:bg-slate-950/60 border border-amber-500/20 rounded-xl px-3 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs focus:outline-none focus:border-amber-400 transition min-h-[120px] font-mono"
                 />
 
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleParseBulk}
-                    disabled={!bulkAIText.trim()}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-900 text-xs font-bold py-2.5 px-4 rounded-xl transition flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <ListPlus className="w-4 h-4" />
-                    Scan & Susun Format
-                  </button>
+                <div className="flex justify-between items-center mt-2 flex-wrap gap-3">
+                  <div className="text-[10px] text-slate-500 max-w-[200px]">
+                    Gunakan <b className="text-indigo-400">✨ Scan dengan AI</b> jika data dari WA/Catatan berantakan.
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleParseBulk}
+                      disabled={!bulkAIText.trim()}
+                      className="bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold py-2.5 px-3 rounded-xl transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <ListPlus className="w-4 h-4" />
+                      Manual (=)
+                    </button>
+                    <button
+                      onClick={handleParseBulkAI}
+                      disabled={!bulkAIText.trim() || isParsingAI}
+                      className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-90 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition flex items-center gap-1.5 disabled:opacity-50 shadow-lg shadow-indigo-500/30"
+                    >
+                      {isParsingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                      {isParsingAI ? 'Memproses...' : '✨ Scan dengan AI'}
+                    </button>
+                  </div>
                 </div>
 
                 {bulkParsedProducts.length > 0 && (

@@ -501,32 +501,48 @@ export function answerFromKB(
   return null
 }
 
-// ── Groq API ──────────────────────────────────────────────────────────────────
-export interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string }
+// ── Gemini API ────────────────────────────────────────────────────────────────
+export interface ChatMessage { role: 'user' | 'model'; parts: [{ text: string }] }
 
-const GROQ_SYSTEM = `Kamu adalah Bot Alpha, asisten AI untuk toko pulsa dan konter bernama ALFAZA CELL. 
+const GEMINI_SYSTEM = `Kamu adalah Bot Alpha, asisten AI untuk toko pulsa dan konter bernama ALFAZA CELL.
 Jawab dalam Bahasa Indonesia yang singkat, padat, dan ramah. Gunakan emoji secukupnya.
 Spesialisasi: bisnis konter/pulsa, teknologi, matematika, info umum.
 Jika tidak tahu, jujur saja. Jangan jawab hal berbahaya atau SARA.
 Format jawaban: gunakan baris baru dan poin jika perlu, tapi tetap ringkas (maks 150 kata).`
 
-export async function callGroqAPI(userMessage: string, history: ChatMessage[], apiKey: string): Promise<string> {
-  const messages: ChatMessage[] = [
-    { role: 'system', content: GROQ_SYSTEM },
-    ...history.slice(-6), // max 6 pesan terakhir sebagai konteks
-    { role: 'user', content: userMessage }
+const GEMINI_MODEL = 'gemini-3.5-flash-lite'
+
+export async function callGeminiAPI(userMessage: string, history: ChatMessage[], apiKey: string): Promise<string> {
+  // Build contents array: history (max 6 messages) + current user message
+  const contents: ChatMessage[] = [
+    ...history.slice(-6),
+    { role: 'user', parts: [{ text: userMessage }] }
   ]
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`
+
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages, temperature: 0.7, max_tokens: 512 })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: GEMINI_SYSTEM }] },
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 512,
+      }
+    })
   })
+
   if (!res.ok) {
-    const err = await res.json().catch(()=>({}))
-    if (res.status === 401) throw new Error('API key tidak valid. Cek kembali di Settings bot.')
+    const err = await res.json().catch(() => ({}))
+    if (res.status === 400) throw new Error('API key tidak valid atau request salah format.')
+    if (res.status === 403) throw new Error('API key tidak valid. Cek kembali di Settings bot.')
     if (res.status === 429) throw new Error('Batas request tercapai. Coba lagi sebentar.')
     throw new Error(err?.error?.message || `Error ${res.status}`)
   }
+
   const data = await res.json()
-  return data.choices?.[0]?.message?.content?.trim() || 'Maaf, tidak ada respons.'
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+  return text?.trim() || 'Maaf, tidak ada respons dari Gemini.'
 }

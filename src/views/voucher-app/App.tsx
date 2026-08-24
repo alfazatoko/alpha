@@ -901,7 +901,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     customNotes: string,
     toCashierIdOverride?: string,
     toCashierNameOverride?: string,
-    finalProductsOverride?: VoucherProduct[]
+    finalProductsOverride?: VoucherProduct[],
+    isSelfHandover?: boolean
   ) => {
     const storeKey = activeStoreId || 'default';
     const finalProducts = finalProductsOverride || products;
@@ -923,8 +924,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       totalProductsCount,
       totalStockTransferred,
       inventoryValue,
-      status: 'Berhasil Diserahterimakan',
-      notes: customNotes || 'Serah terima tutup shift kasir'
+      status: isSelfHandover ? 'Tutup Shift (Self)' : 'Berhasil Diserahterimakan',
+      notes: customNotes || (isSelfHandover ? 'Tutup shift — stok direset untuk shift berikutnya' : 'Serah terima tutup shift kasir')
     };
 
     const updatedHandovers = [newHandover, ...shiftHandovers];
@@ -936,79 +937,108 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       amount: inventoryValue,
       cashierName: fromCashierName,
       timestamp: new Date().toISOString(),
-      notes: `Serah terima ke ${toCashierName}. Notes: ${newHandover.notes}`
+      notes: isSelfHandover
+        ? `Tutup shift ${fromCashierName} — stok direset, siap shift berikutnya`
+        : `Serah terima ke ${toCashierName}. Notes: ${newHandover.notes}`
     };
 
     const updatedTrx = [newTrx, ...transactions];
 
-    const updatedNotifs = pushNotification(
-      'transfer',
-      'Serah Terima Berhasil!',
-      `Stok ${totalStockTransferred} voucher telah diserahkan dari ${fromCashierName} ke ${toCashierName}. ${fromCashierName} tetap login.`,
-      notifications
-    );
+    if (isSelfHandover) {
+      // ─── SELF-HANDOVER ─────────────────────────────────────────────────────
+      // Stok di-reset ke 0 dulu (closing), lalu langsung dibuka kembali
+      // dengan stok yang sama (produk tidak berubah, hanya transaksi di-reset)
+      const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
+      const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
+      localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
+      setProducts(zeroedProducts);
 
-    // ✅ Salin produk dengan stok akhir ke storage kasir penerima
-    // Saat kasir penerima login nanti, stoknya sudah terisi otomatis
-    const toPrefix = `v_${storeKey}_${toCashierId}`;
-    // Ambil produk yang sudah ada di kasir penerima (jika ada), lalu update stoknya
-    const existingToProducts = (() => {
-      try {
-        const raw = localStorage.getItem(`${toPrefix}_products`);
-        return raw ? JSON.parse(raw) as VoucherProduct[] : null;
-      } catch { return null; }
-    })();
+      // Catat transaksi closing di storage kasir yang sama
+      const selfOpeningTrx: Transaction = {
+        id: `trx-self-opening-${Date.now()}`,
+        type: 'SERAH_TERIMA',
+        quantity: totalStockTransferred,
+        amount: inventoryValue,
+        cashierName: fromCashierName,
+        timestamp: new Date().toISOString(),
+        notes: `Buka shift baru (self-handover) — stok lanjut dari shift sebelumnya: ${totalStockTransferred} pcs.`
+      };
+      localStorage.setItem(`${fromPrefix}_transactions`, JSON.stringify([selfOpeningTrx, ...updatedTrx]));
 
-    // Buat daftar produk kasir penerima: ambil stok dari hasil serah terima
-    const productsForReceiver: VoucherProduct[] = finalProducts.map(p => {
-      const existingP = existingToProducts?.find(ep => ep.id === p.id);
-      return existingP
-        ? { ...existingP, currentStock: p.currentStock } // update stok, pertahankan data lain
-        : { ...p }; // copy penuh jika belum ada
-    });
+      const updatedNotifs = pushNotification(
+        'transfer',
+        '↺ Tutup Shift Berhasil!',
+        `${fromCashierName} telah menutup shift. Stok di-reset. Siap untuk shift berikutnya.`,
+        notifications
+      );
 
-    // Simpan produk yang sudah diupdate ke storage kasir penerima
-    localStorage.setItem(`${toPrefix}_products`, JSON.stringify(productsForReceiver));
+      setShiftHandovers(updatedHandovers);
+      setTransactions(updatedTrx);
+      setNotifications(updatedNotifs);
+    } else {
+      // ─── HANDOVER KE KASIR LAIN ────────────────────────────────────────────
+      const updatedNotifs = pushNotification(
+        'transfer',
+        'Serah Terima Berhasil!',
+        `Stok ${totalStockTransferred} voucher telah diserahkan dari ${fromCashierName} ke ${toCashierName}. ${fromCashierName} tetap login.`,
+        notifications
+      );
 
-    // Catat transaksi handover di log kasir penerima juga
-    const existingToTrx = (() => {
-      try {
-        const raw = localStorage.getItem(`${toPrefix}_transactions`);
-        return raw ? JSON.parse(raw) as Transaction[] : [];
-      } catch { return []; }
-    })();
-    const receiverOpeningTrx: Transaction = {
-      id: `trx-opening-${Date.now()}`,
-      type: 'SERAH_TERIMA',
-      quantity: totalStockTransferred,
-      amount: inventoryValue,
-      cashierName: toCashierName,
-      timestamp: new Date().toISOString(),
-      notes: `Menerima serah terima stok dari ${fromCashierName}. Stok awal shift: ${totalStockTransferred} pcs.`
-    };
-    localStorage.setItem(`${toPrefix}_transactions`, JSON.stringify([receiverOpeningTrx, ...existingToTrx]));
+      // ✅ Salin produk dengan stok akhir ke storage kasir penerima
+      const toPrefix = `v_${storeKey}_${toCashierId}`;
+      const existingToProducts = (() => {
+        try {
+          const raw = localStorage.getItem(`${toPrefix}_products`);
+          return raw ? JSON.parse(raw) as VoucherProduct[] : null;
+        } catch { return null; }
+      })();
 
-    // ✅ SOLUSI 2: Reset stok kasir PENGIRIM ke 0 setelah serah terima
-    // Riwayat historis tetap aman di detailedHandovers & transactions
-    const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
-    const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
-    localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
-    setProducts(zeroedProducts);
+      const productsForReceiver: VoucherProduct[] = finalProducts.map(p => {
+        const existingP = existingToProducts?.find(ep => ep.id === p.id);
+        return existingP
+          ? { ...existingP, currentStock: p.currentStock }
+          : { ...p };
+      });
 
-    // ✅ SOLUSI 3: Tulis flag "pending handover" ke storage kasir penerima
-    // Saat kasir penerima login, flag ini dibaca dan banner ditampilkan sekali
-    const pendingHandoverFlag = {
-      fromCashierName,
-      toCashierName,
-      totalStockTransferred,
-      timestamp: new Date().toISOString()
-    };
-    localStorage.setItem(`${toPrefix}_pending_handover`, JSON.stringify(pendingHandoverFlag));
+      localStorage.setItem(`${toPrefix}_products`, JSON.stringify(productsForReceiver));
 
-    // ✅ TIDAK mengganti activeCashierIndex — kasir yang login tetap sama
-    setShiftHandovers(updatedHandovers);
-    setTransactions(updatedTrx);
-    setNotifications(updatedNotifs);
+      // Catat transaksi handover di log kasir penerima juga
+      const existingToTrx = (() => {
+        try {
+          const raw = localStorage.getItem(`${toPrefix}_transactions`);
+          return raw ? JSON.parse(raw) as Transaction[] : [];
+        } catch { return []; }
+      })();
+      const receiverOpeningTrx: Transaction = {
+        id: `trx-opening-${Date.now()}`,
+        type: 'SERAH_TERIMA',
+        quantity: totalStockTransferred,
+        amount: inventoryValue,
+        cashierName: toCashierName,
+        timestamp: new Date().toISOString(),
+        notes: `Menerima serah terima stok dari ${fromCashierName}. Stok awal shift: ${totalStockTransferred} pcs.`
+      };
+      localStorage.setItem(`${toPrefix}_transactions`, JSON.stringify([receiverOpeningTrx, ...existingToTrx]));
+
+      // ✅ Reset stok kasir PENGIRIM ke 0 setelah serah terima
+      const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
+      const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
+      localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
+      setProducts(zeroedProducts);
+
+      // ✅ Tulis flag "pending handover" ke storage kasir penerima
+      const pendingHandoverFlag = {
+        fromCashierName,
+        toCashierName,
+        totalStockTransferred,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(`${toPrefix}_pending_handover`, JSON.stringify(pendingHandoverFlag));
+
+      setShiftHandovers(updatedHandovers);
+      setTransactions(updatedTrx);
+      setNotifications(updatedNotifs);
+    }
 
     setHandoverSuccessSummary(newHandover);
     setShowHandoverSuccessOverlay(true);

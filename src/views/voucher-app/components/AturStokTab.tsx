@@ -232,9 +232,17 @@ export default function AturStokTab({
   // Kasir penerima serah terima (bisa dipilih dari daftar)
   const [selectedToCashierId, setSelectedToCashierId] = useState<string>(loadedSession?.selectedToCashierId ?? nextCashier.id);
 
-  // Daftar kasir yang bisa dipilih (semua kecuali kasir aktif)
-  const availableToCashiers = (allCashiers || [nextCashier]).filter(c => c.id !== activeCashier.id);
-  const selectedToCashier = availableToCashiers.find(c => c.id === selectedToCashierId) || nextCashier;
+  // ── SELF-HANDOVER: Kasir bisa serah terima ke diri sendiri (untuk toko 1 kasir / rotasi jadwal) ──
+  // Buat virtual entry "diri sendiri" yang selalu tersedia
+  const selfCashierOption = { ...activeCashier, name: activeCashier.name + ' (Tutup Shift)', id: activeCashier.id + '__self' };
+  // Daftar kasir lain (exclude diri sendiri)
+  const otherCashiers = (allCashiers || [nextCashier]).filter(c => c.id !== activeCashier.id);
+  // Gabungkan: kasir lain DULU, lalu opsi diri sendiri di bawah
+  const availableToCashiers = [...otherCashiers, selfCashierOption];
+  // Resolve kasir terpilih — jika self, gunakan selfCashierOption
+  const selectedToCashier = availableToCashiers.find(c => c.id === selectedToCashierId) || (otherCashiers[0] || selfCashierOption);
+  // Flag apakah ini self-handover
+  const isSelfHandover = selectedToCashier.id === selfCashierOption.id;
 
   const isLight = theme === 'light';
 
@@ -437,8 +445,10 @@ export default function AturStokTab({
       cashPhysical: physicalCashValue,
       cashDiff: cashDifference,
       note: catatanSelisih,
-      toCashierId: selectedToCashier.id,
-      toCashierName: selectedToCashier.name,
+      // Kirim ID asli (tanpa '__self') agar App.tsx bisa proses dengan benar
+      toCashierId: isSelfHandover ? activeCashier.id : selectedToCashier.id,
+      toCashierName: isSelfHandover ? activeCashier.name : selectedToCashier.name,
+      isSelfHandover,        // ← flag penting untuk App.tsx
       items: items.map(i => ({
         productId: i.productId,
         name: i.productName,
@@ -1580,59 +1590,78 @@ export default function AturStokTab({
               </span>
             </div>
 
-            {availableToCashiers.length === 0 ? (
-              <p className={`text-xs text-center py-2 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Tidak ada kasir lain tersedia.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-2">
-                {availableToCashiers.map((cashier) => {
-                  const isSelected = selectedToCashierId === cashier.id;
-                  return (
-                    <button
-                      key={cashier.id}
-                      type="button"
-                      onClick={() => setSelectedToCashierId(cashier.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer text-left ${
-                        isSelected
-                          ? (isLight ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-emerald-500 bg-emerald-500/10')
-                          : (isLight ? 'border-slate-200 bg-slate-50 hover:border-indigo-300' : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50')
-                      }`}
-                    >
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 border-2 ${
-                        isSelected
-                          ? 'bg-emerald-500 border-emerald-400 text-white'
-                          : (isLight ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300')
-                      }`}>
-                        {cashier.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
+            <div className="grid grid-cols-1 gap-2">
+              {availableToCashiers.map((cashier) => {
+                const isSelected = selectedToCashierId === cashier.id;
+                const isSelf = cashier.id.endsWith('__self');
+                const displayName = isSelf ? activeCashier.name : cashier.name;
+                return (
+                  <button
+                    key={cashier.id}
+                    type="button"
+                    onClick={() => setSelectedToCashierId(cashier.id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer text-left ${
+                      isSelected
+                        ? isSelf
+                          ? (isLight ? 'border-amber-400 bg-amber-50 shadow-sm' : 'border-amber-400 bg-amber-500/10')
+                          : (isLight ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-emerald-500 bg-emerald-500/10')
+                        : (isLight ? 'border-slate-200 bg-slate-50 hover:border-indigo-300' : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50')
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 border-2 ${
+                      isSelected
+                        ? isSelf
+                          ? 'bg-amber-400 border-amber-300 text-white'
+                          : 'bg-emerald-500 border-emerald-400 text-white'
+                        : (isLight ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300')
+                    }`}>
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className={`text-sm font-bold truncate ${
                           isSelected
-                            ? (isLight ? 'text-emerald-800' : 'text-emerald-300')
+                            ? isSelf
+                              ? (isLight ? 'text-amber-800' : 'text-amber-300')
+                              : (isLight ? 'text-emerald-800' : 'text-emerald-300')
                             : (isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white')
-                        }`}>{cashier.name}</p>
-                        <p className={`text-[10px] font-medium ${
-                          isSelected
-                            ? (isLight ? 'text-emerald-600' : 'text-emerald-400')
-                            : (isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400')
-                        }`}>{cashier.role}</p>
+                        }`}>{displayName}</p>
+                        {isSelf && (
+                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${
+                            isSelected
+                              ? 'bg-amber-400/30 text-amber-700 dark:text-amber-300'
+                              : (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/20 text-amber-400')
+                          }`}>Tutup Shift</span>
+                        )}
                       </div>
-                      {isSelected && (
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                          <Check className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                      <p className={`text-[10px] font-medium ${
+                        isSelected
+                          ? isSelf
+                            ? (isLight ? 'text-amber-600' : 'text-amber-400')
+                            : (isLight ? 'text-emerald-600' : 'text-emerald-400')
+                          : (isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400')
+                      }`}>
+                        {isSelf ? 'Stok di-reset & siap shift berikutnya' : cashier.role}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                        isSelf ? 'bg-amber-400' : 'bg-emerald-500'
+                      }`}>
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Flow Arrow Summary */}
           <div className={`rounded-xl p-3 flex items-center justify-between gap-2 text-xs border shadow-xs ${
-            isLight ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-slate-200' : 'bg-gradient-to-r from-blue-500/5 to-emerald-500/5 border-slate-700'
+            isSelfHandover
+              ? (isLight ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200' : 'bg-gradient-to-r from-amber-500/5 to-yellow-500/5 border-amber-500/30')
+              : (isLight ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-slate-200' : 'bg-gradient-to-r from-blue-500/5 to-emerald-500/5 border-slate-700')
           }`}>
             <div className="flex items-center gap-2.5">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
@@ -1645,16 +1674,32 @@ export default function AturStokTab({
                 <span className={`font-black text-xs ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>{activeCashier.name}</span>
               </div>
             </div>
-            <ArrowRight className={`w-5 h-5 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+            {isSelfHandover ? (
+              <span className={`text-[9px] font-black px-2 py-1 rounded-full border ${
+                isLight ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+              }`}>↺ TUTUP SHIFT</span>
+            ) : (
+              <ArrowRight className={`w-5 h-5 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+            )}
             <div className="flex items-center gap-2.5">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
-                isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/50 text-emerald-300'
+                isSelfHandover
+                  ? (isLight ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-amber-600/30 border-amber-500/50 text-amber-300')
+                  : (isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/50 text-emerald-300')
               }`}>
-                {selectedToCashier.name.charAt(0)}
+                {activeCashier.name.charAt(0)}
               </div>
               <div>
-                <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Menerima</span>
-                <span className={`font-black text-xs ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>{selectedToCashier.name}</span>
+                <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {isSelfHandover ? 'Shift Baru' : 'Menerima'}
+                </span>
+                <span className={`font-black text-xs ${
+                  isSelfHandover
+                    ? (isLight ? 'text-amber-800' : 'text-amber-400')
+                    : (isLight ? 'text-emerald-800' : 'text-emerald-400')
+                }`}>
+                  {isSelfHandover ? activeCashier.name : selectedToCashier.name}
+                </span>
               </div>
             </div>
           </div>
@@ -1678,10 +1723,14 @@ export default function AturStokTab({
             <button
               type="button"
               onClick={handleCompleteHandover}
-              disabled={availableToCashiers.length === 0}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+              className={`px-4 py-2 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 ${
+                isSelfHandover
+                  ? 'bg-amber-500 hover:bg-amber-400'
+                  : 'bg-emerald-600 hover:bg-emerald-500'
+              }`}
             >
-              <Handshake className="w-4 h-4" /> Serahkan ke {selectedToCashier.name}
+              <Handshake className="w-4 h-4" />
+              {isSelfHandover ? '↺ Tutup Shift & Reset Stok' : `Serahkan ke ${selectedToCashier.name}`}
             </button>
           </div>
         </motion.div>
