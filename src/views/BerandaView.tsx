@@ -2297,62 +2297,133 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
                   {absenTab === 'summary' ? (() => {
                     const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
-                    const todayStr = new Date().toLocaleDateString('en-CA')
+                    const today = new Date()
+                    const todayStr = today.toLocaleDateString('en-CA')
+                    
+                    // Filter untuk bulan ini
+                    const currentMonthPrefix = todayStr.substring(0, 7) // "YYYY-MM"
+                    const daysPassed = today.getDate() // Jumlah hari yang sudah berlalu bulan ini
                     
                     return (
-                      <div className="space-y-4">
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Kehadiran Hari Ini ({new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })})</p>
-                        
-                        <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
-                          {/* Header Summary */}
-                          <div className="bg-teal-50/50 px-4 py-2.5 border-b border-gray-50 flex justify-between items-center">
-                            <h4 className="text-[11px] font-black text-teal-900 uppercase tracking-widest">
-                              Ringkasan Absen
-                            </h4>
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
-                              <span className="text-[8px] font-black text-teal-600 uppercase tracking-tighter">Live Monitor</span>
+                      <div className="space-y-6">
+                        {/* REKAPITULASI BULAN INI */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between px-1">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                              Rekap Kehadiran ({today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })})
+                            </p>
+                            <span className="text-[8px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              s/d Tgl {today.getDate()}
                             </span>
                           </div>
                           
-                          <div className="divide-y divide-gray-50">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {cashiers.map(([id, acc]) => {
-                              const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
+                              // Data absensi bulan ini untuk kasir ini
+                              const monthData = (props.absensiList || []).filter(a => 
+                                a.username === id && a.tanggal.startsWith(currentMonthPrefix)
+                              )
                               
-                              let shiftLabel = 'BELUM ABSEN'
-                              let shiftColor = 'text-gray-300'
+                              const totalHadir = monthData.length
+                              const totalLibur = Math.max(0, daysPassed - totalHadir)
                               
-                              if (entry) {
+                              let pagi = 0
+                              let siang = 0
+                              
+                              monthData.forEach(entry => {
                                 const hour = parseInt(entry.jam_masuk.split(':')[0])
-                                if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-500'; }
-                                else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-500'; }
-                                else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600'; }
-                              }
-
+                                if (hour < 10) pagi++
+                                else siang++ // Termasuk Normal (10-14) dan Siang (15+)
+                              })
+                              
                               return (
-                                <div key={id} className="px-4 py-3.5 flex justify-between items-center bg-white">
-                                  <div className="w-1/3">
-                                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
-                                  </div>
+                                <div key={`rekap-${id}`} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
+                                  <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                  <h4 className="text-[11px] font-black text-gray-800 uppercase tracking-widest mb-3 pl-1">
+                                    {acc.name}
+                                  </h4>
                                   
-                                  <div className="flex-1 text-center">
-                                    <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
-                                      {shiftLabel}
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="w-1/4 text-right">
-                                    <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
-                                    <p className={cn(
-                                      "text-[10px] font-black tabular-nums leading-none",
-                                      entry ? "text-blue-600" : "text-gray-200"
-                                    )}>
-                                      {entry ? entry.jam_masuk : '--:--'}
-                                    </p>
+                                  <div className="grid grid-cols-4 gap-2 text-center">
+                                    <div className="bg-teal-50/50 rounded-xl p-2 border border-teal-50">
+                                      <p className="text-[8px] font-bold text-teal-600 uppercase mb-1">Hadir</p>
+                                      <p className="text-[12px] font-black text-teal-700">{totalHadir}</p>
+                                    </div>
+                                    <div className="bg-orange-50/50 rounded-xl p-2 border border-orange-50">
+                                      <p className="text-[8px] font-bold text-orange-600 uppercase mb-1">Pagi</p>
+                                      <p className="text-[12px] font-black text-orange-700">{pagi}</p>
+                                    </div>
+                                    <div className="bg-indigo-50/50 rounded-xl p-2 border border-indigo-50">
+                                      <p className="text-[8px] font-bold text-indigo-600 uppercase mb-1">Siang</p>
+                                      <p className="text-[12px] font-black text-indigo-700">{siang}</p>
+                                    </div>
+                                    <div className="bg-rose-50/50 rounded-xl p-2 border border-rose-50">
+                                      <p className="text-[8px] font-bold text-rose-600 uppercase mb-1">Libur</p>
+                                      <p className="text-[12px] font-black text-rose-700">{totalLibur}</p>
+                                    </div>
                                   </div>
                                 </div>
                               )
                             })}
+                          </div>
+                        </div>
+
+                        {/* KEHADIRAN HARI INI */}
+                        <div className="space-y-3">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">
+                            Kehadiran Hari Ini ({today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })})
+                          </p>
+                          
+                          <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                            {/* Header Summary */}
+                            <div className="bg-teal-50/50 px-4 py-2.5 border-b border-gray-50 flex justify-between items-center">
+                              <h4 className="text-[11px] font-black text-teal-900 uppercase tracking-widest">
+                                Status Shift
+                              </h4>
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
+                                <span className="text-[8px] font-black text-teal-600 uppercase tracking-tighter">Live Monitor</span>
+                              </span>
+                            </div>
+                            
+                            <div className="divide-y divide-gray-50">
+                              {cashiers.map(([id, acc]) => {
+                                const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
+                                
+                                let shiftLabel = 'BELUM ABSEN'
+                                let shiftColor = 'text-gray-400 bg-gray-50'
+                                
+                                if (entry) {
+                                  const hour = parseInt(entry.jam_masuk.split(':')[0])
+                                  if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-600 bg-orange-50'; }
+                                  else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-600 bg-indigo-50'; }
+                                  else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600 bg-purple-50'; }
+                                }
+
+                                return (
+                                  <div key={`today-${id}`} className="px-4 py-3.5 flex justify-between items-center bg-white hover:bg-gray-50/50 transition-colors">
+                                    <div className="w-1/3">
+                                      <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                    </div>
+                                    
+                                    <div className="flex-1 text-center">
+                                      <span className={cn("px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                        {shiftLabel}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="w-1/4 text-right">
+                                      <p className="text-[7px] font-black text-gray-400 uppercase leading-none mb-1">JAM MASUK</p>
+                                      <p className={cn(
+                                        "text-[11px] font-black tabular-nums leading-none",
+                                        entry ? "text-teal-600" : "text-gray-300"
+                                      )}>
+                                        {entry ? entry.jam_masuk : '--:--'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
                         </div>
                       </div>
