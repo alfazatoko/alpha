@@ -2759,12 +2759,31 @@ const MainApp: React.FC<MainAppProps> = ({
         activeStoreId={targetStoreId !== 'all' ? targetStoreId : activeStoreId}
         currentUsername={username}
         kasirRole={account.role}
+        kasirName={account.name}
         geminiApiKey={geminiApiKey}
         onSaveGeminiKey={handleSaveGeminiKey}
         onClearGeminiKey={handleSaveGeminiKeyClear}
         kasirList={kasirList}
-        transactions={todayTransactions}
+        transactions={transactions}
         absensiList={absensi}
+        onActionKasbon={(nama, nominal, keterangan) => {
+          // Simpan kasbon baru ke localStorage secara langsung (tersinkron saat buka halaman kasbon)
+          try {
+            const key = `alphaPro_${targetStoreId !== 'all' ? targetStoreId : activeStoreId}_kasbon_list`
+            const existing = JSON.parse(localStorage.getItem(key) || '[]')
+            const newKasbon = { id: `kb-${Date.now()}`, nama, nominal, keterangan, tanggal: new Date().toLocaleDateString('id-ID'), lunas: false }
+            localStorage.setItem(key, JSON.stringify([newKasbon, ...existing]))
+          } catch {}
+        }}
+        onActionKontak={(nama, nomor, keterangan) => {
+          // Simpan kontak baru ke localStorage buku kontak
+          try {
+            const key = `alphaPro_${targetStoreId !== 'all' ? targetStoreId : activeStoreId}_buku_kontak`
+            const existing = JSON.parse(localStorage.getItem(key) || '[]')
+            const newKontak = { id: `kontak-${Date.now()}`, nama, nomor, keterangan, tanggal: new Date().toLocaleDateString('id-ID') }
+            localStorage.setItem(key, JSON.stringify([newKontak, ...existing]))
+          } catch {}
+        }}
       />
 
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, VIEW_MAP, type ChatMessage } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
 import { supabase } from '../lib/supabase'
 import { motion } from 'motion/react'
 
@@ -31,6 +31,7 @@ interface BotMessage {
   from: 'user' | 'bot'
   text: string
   mode?: 'app' | 'kb' | 'gemini' | 'error'
+  timestamp?: number
 }
 
 interface Props {
@@ -41,12 +42,17 @@ interface Props {
   activeStoreId: string
   currentUsername: string
   kasirRole: string
+  kasirName?: string
   geminiApiKey: string
   onSaveGeminiKey: (key: string) => Promise<void>
   onClearGeminiKey: () => Promise<void>
   kasirList?: Record<string, any>
   transactions?: any[]
   absensiList?: any[]
+  // Handlers untuk AI Action (No. 3)
+  onActionKasbon?: (nama: string, nominal: number, keterangan: string) => void
+  onActionKontak?: (nama: string, nomor: string, keterangan: string) => void
+  onActionIzin?: (username: string, tanggal: string, alasan: string) => void
 }
 
 // ── Mode Badge ────────────────────────────────────────────────────────────────
@@ -104,13 +110,18 @@ const AssistantBot: React.FC<Props> = ({
   setBotSearchQuery, 
   setBotActiveTab, 
   activeStoreId, 
-  currentUsername, 
+  currentUsername,
+  kasirRole,
+  kasirName,
   geminiApiKey, 
   onSaveGeminiKey, 
   onClearGeminiKey,
   kasirList = {},
   transactions = [],
-  absensiList = []
+  absensiList = [],
+  onActionKasbon,
+  onActionKontak,
+  onActionIzin
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -121,20 +132,48 @@ const AssistantBot: React.FC<Props> = ({
   const [teachQuestion, setTeachQuestion] = useState('')
   const [teachType, setTeachType] = useState<'navigate' | 'text'>('text')
   const [teachTarget, setTeachTarget] = useState('')
-  const [messages, setMessages] = useState<BotMessage[]>([{
-    id: 'welcome', from: 'bot', mode: 'kb',
-    text: '👋 Halo! Aku **Bot Alpha**.\n\nAku bisa bantu navigasi, cek stok, kalkulator bisnis, info operator, dan banyak lagi!\n\nKetik *bantuan* untuk panduan lengkap. 😊',
-  }])
+  const [messages, setMessages] = useState<BotMessage[]>([])
+  
+  // Load riwayat obrolan khusus akun (owner/kasir) & toko
+  useEffect(() => {
+    const historyKey = `alphaPro_${activeStoreId}_bot_history_${currentUsername}`
+    try {
+      const saved = localStorage.getItem(historyKey)
+      if (saved) {
+        const parsed = JSON.parse(saved) as BotMessage[]
+        const now = Date.now()
+        // Tampilkan pesan 2 hari terakhir saja
+        const recentMessages = parsed.filter(m => !m.timestamp || (now - m.timestamp < 2 * 24 * 60 * 60 * 1000))
+        if (recentMessages.length > 0) {
+          setMessages(recentMessages)
+          return
+        }
+      }
+    } catch(e) {}
+    
+    // Default welcome
+    setMessages([{
+      id: 'welcome', from: 'bot', mode: 'kb',
+      text: '👋 Halo! Aku **Bot Alpha**.\n\nAku bisa bantu navigasi, cek stok, kalkulator bisnis, info operator, dan banyak lagi!\n\nKetik *bantuan* untuk panduan lengkap. 😊',
+      timestamp: Date.now()
+    }])
+  }, [activeStoreId, currentUsername])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [geminiKeyInput, setGeminiKeyInput] = useState('')
   const [geminiStatus, setGeminiStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis'])
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'today' | 'yesterday'>('all')
+  const [showHistoryMenu, setShowHistoryMenu] = useState(false)
+  const [pendingActions, setPendingActions] = useState<BotAction[] | null>(null)
+  const [pendingActionSummary, setPendingActionSummary] = useState<string>('')
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
   const geminiHistory = useRef<ChatMessage[]>([])
+  const systemPromptRef = useRef<string>('')
 
   // Drag to scroll logic for suggestions
   const [isDragging, setIsDragging] = useState(false)
@@ -161,10 +200,21 @@ const AssistantBot: React.FC<Props> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+      setTimeout(() => {
+        const savedScroll = localStorage.getItem('alphaPro_bot_scroll')
+        if (savedScroll && chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = parseInt(savedScroll, 10)
+        } else {
+          endRef.current?.scrollIntoView({ behavior: 'auto' })
+        }
+      }, 80)
       if (!showSettings && !showTeachModal) setTimeout(() => inputRef.current?.focus(), 120)
+      // Build dynamic system prompt setiap kali bot dibuka (data selalu fresh)
+      const role = kasirRole === 'owner' ? 'owner' : 'kasir'
+      const ctx = buildStoreContext(role, activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList)
+      systemPromptRef.current = buildSystemPrompt(ctx)
     }
-  }, [isOpen, messages, showSettings, showTeachModal])
+  }, [isOpen, messages, showSettings, showTeachModal, kasirRole, activeStoreId, kasirName, currentUsername, kasirList, transactions, absensiList])
 
   // Load Custom Intents
   useEffect(() => {
@@ -188,23 +238,34 @@ const AssistantBot: React.FC<Props> = ({
   }, [isOpen])
 
   const addMessage = useCallback((from: 'user'|'bot', text: string, mode?: BotMessage['mode']) => {
-    setMessages(prev => [...prev, { id: Date.now()+Math.random()+'', from, text, mode }])
-  }, [])
+    setMessages(prev => {
+      const newMsg: BotMessage = { id: Date.now()+Math.random()+'', from, text, mode, timestamp: Date.now() }
+      const newMsgs = [...prev, newMsg]
+      const historyKey = `alphaPro_${activeStoreId}_bot_history_${currentUsername}`
+      localStorage.setItem(historyKey, JSON.stringify(newMsgs))
+      return newMsgs
+    })
+  }, [activeStoreId, currentUsername])
 
-  const handleSend = useCallback(async (rawText?: string) => {
+  const sendTimeoutRef = useRef<any>(null)
+
+  const handleSend = useCallback((rawText?: string) => {
     const text = (rawText ?? input).trim()
     if (!text || isTyping) return
     setInput('')
     
-    if (text.toLowerCase() === 'ajari bot') {
-      const lastUserMsg = [...messages].reverse().find(m => m.from === 'user' && m.text.toLowerCase() !== 'ajari bot')
-      setTeachQuestion(lastUserMsg ? lastUserMsg.text : '')
-      setShowTeachModal(true)
-      return
-    }
+    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current)
+    sendTimeoutRef.current = setTimeout(async () => {
+      setHistoryFilter('all')
+      if (text.toLowerCase() === 'ajari bot') {
+        const lastUserMsg = [...messages].reverse().find(m => m.from === 'user' && m.text.toLowerCase() !== 'ajari bot')
+        setTeachQuestion(lastUserMsg ? lastUserMsg.text : '')
+        setShowTeachModal(true)
+        return
+      }
 
-    addMessage('user', text)
-    setIsTyping(true)
+      addMessage('user', text)
+      setIsTyping(true)
 
     // Save query to history for suggestions learning
     const queryLower = text.toLowerCase().trim()
@@ -216,6 +277,39 @@ const AssistantBot: React.FC<Props> = ({
         hist[queryLower] = (hist[queryLower] || 0) + 1
         localStorage.setItem('alphaPro_bot_query_history', JSON.stringify(hist))
       } catch (e) {}
+    }
+
+    // ⓪Cek apakah user secara spesifik memanggil Gemini (Bypass Offline DB)
+    const isForceGemini = queryLower.startsWith('gemini') || queryLower.startsWith('hey gemini') || queryLower.startsWith('halo gemini') || queryLower.startsWith('tanya gemini')
+    const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
+
+    if (isForceGemini) {
+      if (!activeKey) {
+        setIsTyping(false)
+        addMessage('bot', '⚠️ Kamu mencoba memanggil Gemini, tapi API Key Gemini belum dipasang.\n\nSilakan klik ikon gerigi (⚙️) di atas untuk memasukkan API Key terlebih dahulu.', 'error')
+        setSuggestions(getDynamicSuggestions())
+        return
+      }
+      
+      try {
+        // Hilangkan kata panggilannya agar prompt ke Gemini lebih bersih
+        const cleanQuery = text.replace(/^(hey gemini|halo gemini|tanya gemini|gemini)[,\s]*/i, '').trim() || text
+        const rawReply = await callGeminiAPI(cleanQuery, geminiHistory.current, activeKey, systemPromptRef.current || undefined)
+        const { cleanText, actions } = parseBotActions(rawReply)
+        geminiHistory.current = [
+          ...geminiHistory.current,
+          { role: 'user' as const, parts: [{ text: cleanQuery }] as [{text: string}] },
+          { role: 'model' as const, parts: [{ text: cleanText }] as [{text: string}] }
+        ].slice(-12)
+        setIsTyping(false)
+        addMessage('bot', cleanText, 'gemini')
+        if (actions.length > 0) setTimeout(() => requestConfirmation(actions), 400)
+      } catch (e: any) {
+        setIsTyping(false)
+        addMessage('bot', `⚠️ **Gemini Error:** ${e.message}`, 'error')
+      }
+      setSuggestions(getDynamicSuggestions())
+      return
     }
 
     // ⓪ Cek Custom Intent (Learned by Bot)
@@ -296,18 +390,23 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
-    // ③ Gemini API (jika ada key)
-    const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
+    // ③ Gemini API (jika ada key) — dengan System Prompt berisi Buku Besar & Role-Aware
     if (activeKey) {
       try {
-        const reply = await callGeminiAPI(text, geminiHistory.current, activeKey)
+        const reply = await callGeminiAPI(text, geminiHistory.current, activeKey, systemPromptRef.current || undefined)
+        // Parse apakah ada AI Action di dalam respon
+        const { cleanText, actions } = parseBotActions(reply)
         geminiHistory.current = [
           ...geminiHistory.current,
           { role: 'user' as const, parts: [{ text }] as [{text: string}] },
-          { role: 'model' as const, parts: [{ text: reply }] as [{text: string}] }
+          { role: 'model' as const, parts: [{ text: cleanText }] as [{text: string}] }
         ].slice(-12)
         setIsTyping(false)
-        addMessage('bot', reply, 'gemini')
+        addMessage('bot', cleanText, 'gemini')
+        // Eksekusi AI Action jika ada
+        if (actions.length > 0) {
+          setTimeout(() => requestConfirmation(actions), 400)
+        }
       } catch (e: any) {
         setIsTyping(false)
         addMessage('bot', `⚠️ **Gemini Error:** ${e.message}`, 'error')
@@ -320,7 +419,69 @@ const AssistantBot: React.FC<Props> = ({
     setIsTyping(false)
     addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages])
+    }, 300)
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin])
+
+  // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
+  const requestConfirmation = useCallback((actions: BotAction[]) => {
+    // Bangun ringkasan aksi yang akan dilakukan untuk ditampilkan ke user
+    const summaryLines = actions.map(action => {
+      if (action.type === 'kasbon') {
+        const nominal = parseInt(action.payload.nominal?.replace(/\D/g, '') || '0', 10)
+        return `📝 Catat Kasbon Rp${nominal.toLocaleString('id-ID')} atas nama **${action.payload.nama}**${action.payload.keterangan ? ` (${action.payload.keterangan})` : ''}`
+      } else if (action.type === 'kontak') {
+        return `📞 Simpan Kontak **${action.payload.nama}** — No. HP: **${action.payload.nomor}**${action.payload.keterangan ? ` (${action.payload.keterangan})` : ''}`
+      } else if (action.type === 'navigate') {
+        const viewInfo = VIEW_MAP[action.payload.view]
+        return `🔀 Pindah ke halaman **${viewInfo?.label || action.payload.view}**`
+      } else if (action.type === 'izin') {
+        return `📅 Izin kasir **${action.payload.username}** tanggal ${action.payload.tanggal}${action.payload.alasan ? ` — ${action.payload.alasan}` : ''}`
+      }
+      return ''
+    }).filter(Boolean).join('\n')
+
+    setPendingActions(actions)
+    setPendingActionSummary(summaryLines)
+  }, [])
+
+  // ── AI Action: Konfirmasi OK — Eksekusi Sekarang ──────────────────────────────
+  const confirmExecuteActions = useCallback(() => {
+    if (!pendingActions) return
+    for (const action of pendingActions) {
+      if (action.type === 'kasbon') {
+        const nominal = parseInt(action.payload.nominal?.replace(/\D/g, '') || '0', 10)
+        if (onActionKasbon && action.payload.nama && nominal > 0) {
+          onActionKasbon(action.payload.nama, nominal, action.payload.keterangan || '')
+          addMessage('bot', `✅ **Berhasil!** Kasbon Rp${nominal.toLocaleString('id-ID')} atas nama **${action.payload.nama}** sudah dicatat ke sistem.`, 'app')
+        }
+      } else if (action.type === 'kontak') {
+        if (onActionKontak && action.payload.nama && action.payload.nomor) {
+          onActionKontak(action.payload.nama, action.payload.nomor, action.payload.keterangan || '')
+          addMessage('bot', `✅ **Berhasil!** Kontak **${action.payload.nama}** (${action.payload.nomor}) sudah disimpan ke Buku Kontak.`, 'app')
+        }
+      } else if (action.type === 'navigate') {
+        const viewInfo = VIEW_MAP[action.payload.view]
+        if (viewInfo) {
+          setActiveView(viewInfo.view)
+          addMessage('bot', `✅ **Berhasil!** Berpindah ke halaman **${viewInfo.label}**.`, 'app')
+        }
+      } else if (action.type === 'izin') {
+        if (onActionIzin && action.payload.username && action.payload.tanggal) {
+          onActionIzin(action.payload.username, action.payload.tanggal, action.payload.alasan || '')
+          addMessage('bot', `✅ **Berhasil!** Izin kasir **${action.payload.username}** untuk ${action.payload.tanggal} sudah dicatat.`, 'app')
+        }
+      }
+    }
+    setPendingActions(null)
+    setPendingActionSummary('')
+  }, [pendingActions, onActionKasbon, onActionKontak, onActionIzin, setActiveView, addMessage])
+
+  // ── AI Action: Konfirmasi Batal ───────────────────────────────────────────────
+  const cancelActions = useCallback(() => {
+    addMessage('bot', '🚫 **Dibatalkan.** Tidak ada perubahan yang dilakukan.', 'kb')
+    setPendingActions(null)
+    setPendingActionSummary('')
+  }, [addMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key==='Enter') handleSend() }
 
@@ -391,6 +552,26 @@ const AssistantBot: React.FC<Props> = ({
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/10 shrink-0" style={{ background:'linear-gradient(90deg,#4f46e5 0%,#7c3aed 100%)' }}>
+          {/* Hamburger Menu Riwayat */}
+          <div className="relative shrink-0">
+            <button 
+              onClick={() => setShowHistoryMenu(!showHistoryMenu)}
+              className={`w-7 h-7 rounded-xl flex flex-col gap-1 items-center justify-center transition-all active:scale-90 ${showHistoryMenu ? 'bg-white/30 text-white' : 'bg-white/15 hover:bg-white/25 text-white/80'}`}
+              title="Filter Riwayat"
+            >
+              <span className="w-3.5 h-0.5 bg-current rounded-full"></span>
+              <span className="w-3.5 h-0.5 bg-current rounded-full"></span>
+              <span className="w-3.5 h-0.5 bg-current rounded-full"></span>
+            </button>
+            {showHistoryMenu && (
+              <div className="absolute top-full left-0 mt-2 w-32 bg-indigo-950 border border-indigo-500/30 rounded-xl shadow-2xl overflow-hidden z-20 flex flex-col py-1.5" style={{ backdropFilter:'blur(10px)' }}>
+                <p className="px-3 py-1.5 text-[8.5px] font-black text-indigo-400 uppercase tracking-widest border-b border-indigo-500/20 mb-1">Riwayat</p>
+                <button onClick={() => { setHistoryFilter('all'); setShowHistoryMenu(false) }} className={`text-left px-3 py-2 text-[10px] font-bold transition-all ${historyFilter === 'all' ? 'text-white bg-indigo-600/60' : 'text-indigo-200 hover:bg-white/10'}`}>Semua</button>
+                <button onClick={() => { setHistoryFilter('today'); setShowHistoryMenu(false) }} className={`text-left px-3 py-2 text-[10px] font-bold transition-all ${historyFilter === 'today' ? 'text-white bg-indigo-600/60' : 'text-indigo-200 hover:bg-white/10'}`}>Hari Ini</button>
+                <button onClick={() => { setHistoryFilter('yesterday'); setShowHistoryMenu(false) }} className={`text-left px-3 py-2 text-[10px] font-bold transition-all ${historyFilter === 'yesterday' ? 'text-white bg-indigo-600/60' : 'text-indigo-200 hover:bg-white/10'}`}>Kemarin</button>
+              </div>
+            )}
+          </div>
           <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
             <BotIcon size={20} className="text-white"/>
           </div>
@@ -521,22 +702,148 @@ const AssistantBot: React.FC<Props> = ({
         {/* Messages */}
         {!showSettings && !showTeachModal && (
           <>
-            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5" style={{ minHeight:'180px', maxHeight:'340px' }}>
-              {messages.map(msg => (
-                <div key={msg.id} className={`flex ${msg.from==='user'?'justify-end':'justify-start'}`}>
-                  {msg.from==='bot' && (
-                    <div className="w-6 h-6 rounded-lg bg-indigo-600/60 flex items-center justify-center shrink-0 mr-1.5 mt-0.5 shadow">
-                      <BotIcon size={15} className="text-white"/>
+            {isTyping && (
+              <div className="w-full h-[2px] bg-white/5 relative overflow-hidden shrink-0">
+                <div className="absolute top-0 bottom-0 left-0 bg-indigo-400 w-1/3 rounded-full animate-[progress_1.5s_ease-in-out_infinite]" />
+                <style>{`@keyframes progress { 0% { left: -30%; } 100% { left: 100%; } }`}</style>
+              </div>
+            )}
+            <div 
+              ref={chatContainerRef}
+              onScroll={(e) => localStorage.setItem('alphaPro_bot_scroll', e.currentTarget.scrollTop.toString())}
+              className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5" 
+              style={{ minHeight:'180px', maxHeight:'340px' }}
+            >
+              {messages.filter(msg => {
+                if (historyFilter === 'all') return true
+                const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date()
+                const today = new Date()
+                const yesterday = new Date(today)
+                yesterday.setDate(yesterday.getDate() - 1)
+                if (historyFilter === 'today') return msgDate.toDateString() === today.toDateString()
+                if (historyFilter === 'yesterday') return msgDate.toDateString() === yesterday.toDateString()
+                return true
+              }).map((msg, idx, arr) => {
+                const msgDate = msg.timestamp ? new Date(msg.timestamp) : new Date()
+                const today = new Date()
+                const yesterday = new Date(today)
+                yesterday.setDate(yesterday.getDate() - 1)
+                
+                let dateLabel = ''
+                if (msgDate.toDateString() === today.toDateString()) dateLabel = 'Hari Ini'
+                else if (msgDate.toDateString() === yesterday.toDateString()) dateLabel = 'Kemarin'
+                else dateLabel = msgDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                
+                let showDivider = false
+                if (idx === 0) showDivider = true
+                else {
+                  const prevMsg = arr[idx-1]
+                  const prevDate = prevMsg.timestamp ? new Date(prevMsg.timestamp) : new Date()
+                  if (msgDate.toDateString() !== prevDate.toDateString()) showDivider = true
+                }
+                
+                const timeString = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : ''
+
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDivider && (
+                      <div className="flex justify-center my-3.5">
+                        <span className="bg-black/30 border border-white/5 px-4 py-1 rounded-full text-[9px] font-black text-indigo-300 uppercase tracking-widest shadow-sm">
+                          {dateLabel}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex ${msg.from==='user'?'justify-end':'justify-start'}`}>
+                      {msg.from==='bot' && (
+                        <div className="w-6 h-6 rounded-lg bg-indigo-600/60 flex items-center justify-center shrink-0 mr-1.5 mt-0.5 shadow">
+                          <BotIcon size={15} className="text-white"/>
+                        </div>
+                      )}
+                      {msg.from==='user' && (
+                        <button 
+                          onClick={() => { if (!isTyping) handleSend(msg.text) }}
+                          className="mr-2 mt-auto mb-1 text-white/30 hover:text-white/80 active:scale-90 transition-all flex items-center justify-center p-1"
+                          title="Ulangi perintah ini"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                        </button>
+                      )}
+                      <div className={`max-w-[82%] flex flex-col gap-0.5 ${msg.from==='user'?'items-end':''}`}>
+                        <div className="flex items-center gap-1.5 px-1">
+                          {msg.from==='bot' && <ModeBadge mode={msg.mode}/>}
+                          {timeString && <span className="text-[8.5px] text-white/30 font-bold tracking-wider">{timeString}</span>}
+                        </div>
+                        <div className={`px-3 py-2 rounded-2xl text-[11px] font-medium leading-relaxed shadow ${msg.from==='user'?'bg-indigo-600 text-white rounded-tr-sm':'bg-white/10 text-slate-100 rounded-tl-sm border border-white/10'}`}>
+                          {renderText(msg.text)}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className={`max-w-[82%] flex flex-col gap-0.5 ${msg.from==='user'?'items-end':''}`}>
-                    {msg.from==='bot' && <ModeBadge mode={msg.mode}/>}
-                    <div className={`px-3 py-2 rounded-2xl text-[11px] font-medium leading-relaxed shadow ${msg.from==='user'?'bg-indigo-600 text-white rounded-tr-sm':'bg-white/10 text-slate-100 rounded-tl-sm border border-white/10'}`}>
-                      {renderText(msg.text)}
+                  </React.Fragment>
+                )
+              })}
+
+              {/* ── Kartu Konfirmasi Aksi AI ───────────────────────────────── */}
+              {pendingActions && pendingActions.length > 0 && (
+                <div className="flex justify-start">
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/70 flex items-center justify-center shrink-0 mr-1.5 mt-0.5 shadow shrink-0">
+                    <span className="text-white text-[10px] font-black">⚡</span>
+                  </div>
+                  <div className="max-w-[88%] bg-amber-500/10 border border-amber-400/40 rounded-2xl rounded-tl-sm px-3 py-2.5 space-y-2.5 shadow">
+                    <p className="text-[10px] font-black text-amber-300 uppercase tracking-widest">⚡ Konfirmasi Aksi</p>
+                    <p className="text-[10px] text-slate-300 leading-relaxed">
+                      Bot akan melakukan hal berikut. Apakah sudah benar?
+                    </p>
+                    <div className="bg-black/20 rounded-xl px-2.5 py-2 space-y-1.5">
+                      {pendingActions.map((action, i) => {
+                        let icon = '⚡';
+                        let colorClass = 'bg-gray-500/30 text-gray-200 border-gray-400/30';
+                        let text = '';
+                        
+                        if (action.type === 'kasbon') {
+                          const nominal = parseInt(action.payload.nominal?.replace(/\D/g, '') || '0', 10);
+                          icon = '📝';
+                          colorClass = 'bg-emerald-500/30 text-emerald-200 border-emerald-400/30';
+                          text = `Catat Kasbon Rp${nominal.toLocaleString('id-ID')} atas nama **${action.payload.nama}**${action.payload.keterangan ? ` (${action.payload.keterangan})` : ''}`;
+                        } else if (action.type === 'kontak') {
+                          icon = '📞';
+                          colorClass = 'bg-sky-500/30 text-sky-200 border-sky-400/30';
+                          text = `Simpan Kontak **${action.payload.nama}** — No. HP: **${action.payload.nomor}**${action.payload.keterangan ? ` (${action.payload.keterangan})` : ''}`;
+                        } else if (action.type === 'navigate') {
+                          icon = '🔀';
+                          colorClass = 'bg-indigo-500/30 text-indigo-200 border-indigo-400/30';
+                          const viewInfo = VIEW_MAP[action.payload.view];
+                          text = `Pindah ke halaman **${viewInfo?.label || action.payload.view}**`;
+                        } else if (action.type === 'izin') {
+                          icon = '📅';
+                          colorClass = 'bg-orange-500/30 text-orange-200 border-orange-400/30';
+                          text = `Izin kasir **${action.payload.username}** tanggal ${action.payload.tanggal}${action.payload.alasan ? ` — ${action.payload.alasan}` : ''}`;
+                        }
+                        
+                        return (
+                          <div key={i} className={`flex items-start gap-1.5 p-1.5 rounded-lg border ${colorClass}`}>
+                            <span className="text-[11px] shrink-0 pt-0.5">{icon}</span>
+                            <p className="text-[10px] font-medium leading-snug">{renderText(text)}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="flex gap-2 pt-0.5">
+                      <button
+                        onClick={cancelActions}
+                        className="flex-1 py-1.5 rounded-xl text-[10px] font-black bg-white/10 hover:bg-white/20 text-white/70 transition-all active:scale-95"
+                      >
+                        🚫 Batalkan
+                      </button>
+                      <button
+                        onClick={confirmExecuteActions}
+                        className="flex-1 py-1.5 rounded-xl text-[10px] font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow shadow-emerald-500/30 transition-all active:scale-95"
+                      >
+                        ✅ Ya, Lanjutkan
+                      </button>
                     </div>
                   </div>
                 </div>
-              ))}
+              )}
               {isTyping && (
                 <div className="flex justify-start items-center gap-1.5">
                   <div className="w-6 h-6 rounded-lg bg-indigo-600/60 flex items-center justify-center shrink-0 shadow"><BotIcon size={15} className="text-white"/></div>

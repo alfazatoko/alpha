@@ -504,20 +504,240 @@ export function answerFromKB(
 // ── Gemini API ────────────────────────────────────────────────────────────────
 export interface ChatMessage { role: 'user' | 'model'; parts: [{ text: string }] }
 
-const GEMINI_SYSTEM = `Kamu adalah Bot Alpha, asisten AI untuk toko pulsa dan konter bernama ALFAZA CELL.
-Jawab dalam Bahasa Indonesia yang singkat, padat, dan ramah. Gunakan emoji secukupnya.
-Spesialisasi: bisnis konter/pulsa, teknologi, matematika, info umum.
-Jika tidak tahu, jujur saja. Jangan jawab hal berbahaya atau SARA.
-Format jawaban: gunakan baris baru dan poin jika perlu, tapi tetap ringkas (maks 150 kata).`
-
 const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 
-export async function callGeminiAPI(userMessage: string, history: ChatMessage[], apiKey: string): Promise<string> {
-  // Build contents array: history (max 6 messages) + current user message
+// ── Tipe data untuk konteks toko ──────────────────────────────────────────────
+export interface StoreContext {
+  role: 'owner' | 'kasir'
+  storeName?: string
+  kasirName?: string
+  currentMonth?: string
+  monthlyTransactions?: any[]
+  allTransactions?: any[]
+  kasbonList?: any[]
+  auditHistory?: any[]
+  kasirList?: Record<string, any>
+  stokRendah?: { name: string; stock: number; minStock: number }[]
+}
+
+// ── Pembangun Prompt Sistem Dinamis ───────────────────────────────────────────
+export function buildSystemPrompt(ctx: StoreContext): string {
+  const isOwner = ctx.role === 'owner'
+  const storeName = ctx.storeName || 'ALFAZA CELL'
+  const monthLabel = ctx.currentMonth || new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+
+  // ── Bangun "Buku Besar" dari data historis ──
+  let bukuBesar = ''
+
+  if (ctx.monthlyTransactions && ctx.monthlyTransactions.length > 0) {
+    const txs = ctx.monthlyTransactions
+    const totalNominal = txs.reduce((s: number, t: any) => s + (t.nominal || 0), 0)
+    const totalAdmin = txs.reduce((s: number, t: any) => s + (t.adminFee || 0), 0)
+    const totalCount = txs.length
+
+    // Breakdown per kategori
+    const catMap: Record<string, { count: number; nominal: number; admin: number }> = {}
+    txs.forEach((t: any) => {
+      const c = t.kategori || 'Lain-lain'
+      if (!catMap[c]) catMap[c] = { count: 0, nominal: 0, admin: 0 }
+      catMap[c].count++
+      catMap[c].nominal += t.nominal || 0
+      catMap[c].admin += t.adminFee || 0
+    })
+    const catBreakdown = Object.entries(catMap)
+      .map(([cat, d]) => `  - ${cat}: ${d.count} trx, Omset Rp${d.nominal.toLocaleString('id-ID')}, Admin Rp${d.admin.toLocaleString('id-ID')}`)
+      .join('\n')
+
+    // Breakdown per kasir (owner only)
+    let kasirBreakdown = ''
+    if (isOwner && ctx.kasirList) {
+      const kasirMap: Record<string, { count: number; nominal: number }> = {}
+      txs.forEach((t: any) => {
+        const k = t.kasir_id || t.kasirName || 'Tidak diketahui'
+        if (!kasirMap[k]) kasirMap[k] = { count: 0, nominal: 0 }
+        kasirMap[k].count++
+        kasirMap[k].nominal += t.nominal || 0
+      })
+      kasirBreakdown = '\nPenjualan per Kasir:\n' + Object.entries(kasirMap)
+        .map(([k, d]) => {
+          const name = ctx.kasirList?.[k]?.name || k
+          return `  - ${name}: ${d.count} trx, Rp${d.nominal.toLocaleString('id-ID')}`
+        }).join('\n')
+    }
+
+    bukuBesar += `\n\n📊 DATA PENJUALAN BULAN INI (${monthLabel}):
+Total Transaksi: ${totalCount} trx
+Total Omset: Rp${totalNominal.toLocaleString('id-ID')}
+Total Pendapatan Admin: Rp${totalAdmin.toLocaleString('id-ID')}
+Breakdown Kategori:
+${catBreakdown}${kasirBreakdown}`
+  }
+
+  // Kasbon (owner only)
+  if (isOwner && ctx.kasbonList && ctx.kasbonList.length > 0) {
+    const belumLunas = ctx.kasbonList.filter((k: any) => !k.lunas)
+    const totalKasbon = belumLunas.reduce((s: number, k: any) => s + (k.nominal || 0), 0)
+    bukuBesar += `\n\n💰 KASBON PELANGGAN BELUM LUNAS:
+Jumlah: ${belumLunas.length} pelanggan
+Total Piutang: Rp${totalKasbon.toLocaleString('id-ID')}
+(Rincian disembunyikan. Berikan rincian nama hanya jika secara spesifik diminta.)`
+  }
+
+  // Stok rendah
+  if (ctx.stokRendah && ctx.stokRendah.length > 0) {
+    bukuBesar += `\n\n⚠️ STOK VOUCHER MENIPIS:
+${ctx.stokRendah.map(p => `  - ${p.name}: ${p.stock} pcs (min alert: ${p.minStock})`).join('\n')}`
+  }
+
+  // Audit/selisih (owner only)
+  if (isOwner && ctx.auditHistory && ctx.auditHistory.length > 0) {
+    const bulanIni = new Date().toISOString().substring(0, 7)
+    const auditBulanIni = ctx.auditHistory.filter((a: any) => (a.tanggalAsli || a.tanggal || '').startsWith(bulanIni))
+    if (auditBulanIni.length > 0) {
+      const totalMinus = auditBulanIni.filter((a: any) => a.selisih < 0).reduce((s: number, a: any) => s + Math.abs(a.selisih), 0)
+      const totalPlus = auditBulanIni.filter((a: any) => a.selisih > 0).reduce((s: number, a: any) => s + a.selisih, 0)
+      bukuBesar += `\n\n🔍 REKAP AUDIT KASIR BULAN INI:
+Total Minus (selisih kurang): Rp${totalMinus.toLocaleString('id-ID')}
+Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
+    }
+  }
+
+  // ── SISTEM PROMPT FINAL ──
+  const basePrompt = `Kamu adalah Bot Alpha, asisten AI cerdas untuk toko ${storeName}.
+Kamu berperan sebagai "Karyawan Analis Toko" yang memahami pembukuan, stok voucher, dan operasional toko konter pulsa.
+Jawab dalam Bahasa Indonesia yang ringkas, cerdas, dan ramah. Gunakan emoji secukupnya.
+Format jawaban: gunakan baris baru dan poin jika perlu, maksimal 200 kata kecuali diminta analisa detail.
+Jika tidak tahu, katakan jujur. Jangan jawab hal berbahaya atau SARA.`
+
+  const roleSection = isOwner
+    ? `\n\nKAMU SEDANG BERBICARA DENGAN: OWNER (${ctx.kasirName || 'Pemilik Toko'})
+Sebagai Owner, ia BOLEH mengetahui: modal, keuntungan, gaji kasir, total piutang kasbon, rekap audit, dan semua data finansial sensitif.
+Kamu wajib menjawab pertanyaan tentang data sensitif tersebut secara transparan dan akurat.
+FITUR AKSI (untuk aksi langsung ke sistem, gunakan format tag di akhir jawaban):
+- Untuk catat kasbon: [ACTION:kasbon|nama|nominal|keterangan]
+- Untuk simpan kontak pelanggan: [ACTION:kontak|nama|nomor_hp|keterangan]
+- Untuk buka halaman tertentu: [ACTION:navigate|nama_view]
+- Untuk set izin kasir: [ACTION:izin|username_kasir|tanggal|alasan]`
+    : `\n\nKAMU SEDANG BERBICARA DENGAN: KASIR (${ctx.kasirName || 'Kasir'})
+ATURAN PRIVASI KETAT:
+- DILARANG membocorkan: harga modal produk, total keuntungan toko, gaji kasir lain, rekap audit kasir lain, data finansial owner.
+- Jika ditanya hal di atas, tolak dengan sopan: "Maaf, informasi tersebut hanya bisa diakses oleh Owner."
+- Kamu BOLEH bantu kasir: cek stok produk sendiri, info produk, kalkulator, info operator, navigasi halaman.
+FITUR AKSI (terbatas untuk kasir):
+- Untuk catat kasbon pelanggan: [ACTION:kasbon|nama|nominal|keterangan]
+- Untuk simpan kontak pelanggan: [ACTION:kontak|nama|nomor_hp|keterangan]
+- Untuk buka halaman: [ACTION:navigate|nama_view]`
+
+  return basePrompt + roleSection + (bukuBesar ? `\n\n--- DATA TOKO REAL-TIME ---${bukuBesar}` : '')
+}
+
+// ── Pembangun Konteks Toko dari localStorage ──────────────────────────────────
+export function buildStoreContext(
+  role: 'owner' | 'kasir',
+  storeId: string,
+  kasirName: string,
+  kasirList: Record<string, any> = {},
+  transactions: any[] = [],
+  absensiList: any[] = []
+): StoreContext {
+  // Ambil data kasbon dari localStorage
+  let kasbonList: any[] = []
+  try {
+    const raw = localStorage.getItem(`alphaPro_${storeId}_kasbon_list`)
+    if (raw) kasbonList = JSON.parse(raw)
+  } catch {}
+
+  // Ambil data audit dari localStorage
+  let auditHistory: any[] = []
+  try {
+    const raw = localStorage.getItem(`alphaPro_${storeId}_audit_history`)
+    if (raw) auditHistory = JSON.parse(raw)
+  } catch {}
+
+  // Ambil data stok voucher yang hampir habis
+  let stokRendah: { name: string; stock: number; minStock: number }[] = []
+  try {
+    const stokKeys = [`v_${storeId}_products`, `alphaPro_${storeId}_stok_voucher_products`]
+    let allProducts: any[] = []
+    for (const k of stokKeys) {
+      const raw = localStorage.getItem(k)
+      if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { allProducts = p; break } }
+    }
+    stokRendah = allProducts
+      .filter(p => (p.currentStock ?? p.stock ?? 0) <= (p.minStockLevel ?? 4))
+      .map(p => ({ name: p.name, stock: p.currentStock ?? p.stock ?? 0, minStock: p.minStockLevel ?? 4 }))
+  } catch {}
+
+  // Filter transaksi bulan ini
+  const bulanIni = new Date().toISOString().substring(0, 7)
+  const monthlyTransactions = transactions.filter(t => (t.timestamp || '').startsWith(bulanIni))
+
+  // Filter data kasir untuk peran kasir (whitelist - hanya lihat dirinya sendiri)
+  let safeKasirList = kasirList;
+  if (role === 'kasir') {
+    safeKasirList = Object.fromEntries(
+      Object.entries(kasirList).filter(([k, v]) => k === kasirName || v.name === kasirName)
+    )
+  }
+
+  return {
+    role,
+    storeName: 'ALFAZA CELL',
+    kasirName,
+    currentMonth: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+    monthlyTransactions,
+    allTransactions: transactions,
+    kasbonList,
+    auditHistory,
+    kasirList: safeKasirList,
+    stokRendah
+  }
+}
+
+// ── Parse AI Action dari respon Gemini ────────────────────────────────────────
+export interface BotAction {
+  type: 'kasbon' | 'navigate' | 'izin' | 'kontak'
+  payload: Record<string, string>
+}
+
+export function parseBotActions(reply: string): { cleanText: string; actions: BotAction[] } {
+  const actionRegex = /\[ACTION:([^\]]+)\]/g
+  const actions: BotAction[] = []
+  let match
+
+  while ((match = actionRegex.exec(reply)) !== null) {
+    const parts = match[1].split('|')
+    const type = parts[0] as BotAction['type']
+    if (type === 'kasbon' && parts.length >= 3) {
+      actions.push({ type, payload: { nama: parts[1] || '', nominal: parts[2] || '0', keterangan: parts[3] || '' } })
+    } else if (type === 'kontak' && parts.length >= 3) {
+      actions.push({ type, payload: { nama: parts[1] || '', nomor: parts[2] || '', keterangan: parts[3] || '' } })
+    } else if (type === 'navigate' && parts.length >= 2) {
+      actions.push({ type, payload: { view: parts[1] || '' } })
+    } else if (type === 'izin' && parts.length >= 3) {
+      actions.push({ type, payload: { username: parts[1] || '', tanggal: parts[2] || '', alasan: parts[3] || '' } })
+    }
+  }
+
+  const cleanText = reply.replace(actionRegex, '').trim()
+  return { cleanText, actions }
+}
+
+// ── Gemini API Call (dengan dukungan system prompt override) ──────────────────
+export async function callGeminiAPI(
+  userMessage: string,
+  history: ChatMessage[],
+  apiKey: string,
+  systemPromptOverride?: string
+): Promise<string> {
   const contents: ChatMessage[] = [
-    ...history.slice(-6),
+    ...history.slice(-8),
     { role: 'user', parts: [{ text: userMessage }] }
   ]
+
+  const systemInstruction = systemPromptOverride || `Kamu adalah Bot Alpha, asisten AI untuk toko pulsa dan konter.
+Jawab dalam Bahasa Indonesia yang singkat, padat, dan ramah. Gunakan emoji secukupnya.
+Jika tidak tahu, jujur saja. Jangan jawab hal berbahaya atau SARA.`
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`
 
@@ -525,11 +745,11 @@ export async function callGeminiAPI(userMessage: string, history: ChatMessage[],
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: GEMINI_SYSTEM }] },
+      system_instruction: { parts: [{ text: systemInstruction }] },
       contents,
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 512,
+        maxOutputTokens: 600,
       }
     })
   })

@@ -1011,6 +1011,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
+  const [absenFilterMonth, setAbsenFilterMonth] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
 
   // Grafik State
   const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
@@ -2273,36 +2277,54 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
               {activeOwnerSubView === 'absen' && (
                 <div className="space-y-6">
-                  {/* TABS RINGKASAN vs FULL */}
-                  <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
-                    <button 
-                      onClick={() => setAbsenTab('summary')} 
-                      className={cn(
-                        "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                        absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
-                      )}
-                    >
-                      Ringkasan
-                    </button>
-                    <button 
-                      onClick={() => setAbsenTab('full')} 
-                      className={cn(
-                        "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                        absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
-                      )}
-                    >
-                      Riwayat Full
-                    </button>
+                  {/* FILTER BULAN DAN TABS */}
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Periode Kehadiran</label>
+                      <input 
+                        type="month"
+                        value={absenFilterMonth}
+                        onChange={(e) => setAbsenFilterMonth(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-teal-400"
+                      />
+                    </div>
+                    <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                      <button 
+                        onClick={() => setAbsenTab('summary')} 
+                        className={cn(
+                          "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                          absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                        )}
+                      >
+                        Ringkasan
+                      </button>
+                      <button 
+                        onClick={() => setAbsenTab('full')} 
+                        className={cn(
+                          "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                          absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                        )}
+                      >
+                        Riwayat Full
+                      </button>
+                    </div>
                   </div>
 
                   {absenTab === 'summary' ? (() => {
                     const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
                     const today = new Date()
-                    const todayStr = today.toLocaleDateString('en-CA')
                     
-                    // Filter untuk bulan ini
-                    const currentMonthPrefix = todayStr.substring(0, 7) // "YYYY-MM"
-                    const daysPassed = today.getDate() // Jumlah hari yang sudah berlalu bulan ini
+                    // Filter untuk bulan yang dipilih
+                    const [yyyy, mm] = absenFilterMonth.split('-').map(Number);
+                    const selectedMonthDate = new Date(yyyy, mm - 1);
+                    const isCurrentMonth = today.getFullYear() === yyyy && (today.getMonth() + 1) === mm;
+                    
+                    let daysPassed = 0;
+                    if (isCurrentMonth) {
+                      daysPassed = today.getDate();
+                    } else if (selectedMonthDate < today) {
+                      daysPassed = new Date(yyyy, mm, 0).getDate(); // Total hari dalam bulan tersebut
+                    }
                     
                     return (
                       <div className="space-y-6">
@@ -2310,10 +2332,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         <div className="space-y-3">
                           <div className="flex items-center justify-between px-1">
                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                              Rekap Kehadiran ({today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })})
+                              Rekap {selectedMonthDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                             </p>
                             <span className="text-[8px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                              s/d Tgl {today.getDate()}
+                              {isCurrentMonth ? `s/d Tgl ${today.getDate()}` : 'Sebulan Penuh'}
                             </span>
                           </div>
                           
@@ -2321,7 +2343,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             {cashiers.map(([id, acc]) => {
                               // Data absensi bulan ini untuk kasir ini
                               const monthData = (props.absensiList || []).filter(a => 
-                                a.username === id && a.tanggal.startsWith(currentMonthPrefix)
+                                a.username === id && a.tanggal.startsWith(absenFilterMonth)
                               )
                               
                               const totalHadir = monthData.length
@@ -2368,6 +2390,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         </div>
 
                         {/* KEHADIRAN HARI INI */}
+                        {isCurrentMonth && (
                         <div className="space-y-3">
                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">
                             Kehadiran Hari Ini ({today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })})
@@ -2387,6 +2410,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             
                             <div className="divide-y divide-gray-50">
                               {cashiers.map(([id, acc]) => {
+                                const todayStr = today.toLocaleDateString('en-CA')
                                 const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
                                 
                                 let shiftLabel = 'BELUM ABSEN'
@@ -2426,21 +2450,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             </div>
                           </div>
                         </div>
+                        )}
                       </div>
                     )
                   })() : (() => {
                     const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
-                    const last30Days = Array.from({length: 30}, (_, i) => {
-                      const d = new Date()
-                      d.setDate(d.getDate() - i)
+                    
+                    const [yyyy, mm] = absenFilterMonth.split('-').map(Number);
+                    const daysInMonth = new Date(yyyy, mm, 0).getDate();
+                    const daysInSelectedMonth = Array.from({length: daysInMonth}, (_, i) => {
+                      const d = new Date(yyyy, mm - 1, daysInMonth - i) // descending order
                       return d
                     })
 
                     return (
                       <div className="space-y-4">
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Riwayat 30 Hari Terakhir</p>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Riwayat Bulan {new Date(yyyy, mm - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
                         
-                        {last30Days.map(date => {
+                        {daysInSelectedMonth.map(date => {
                           const dateStr = date.toLocaleDateString('en-CA')
                           const dayAttendance = props.absensiList?.filter(a => a.tanggal === dateStr) || []
                           
