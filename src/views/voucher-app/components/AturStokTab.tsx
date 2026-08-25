@@ -141,6 +141,7 @@ export default function AturStokTab({
   // ─── SESSION PERSISTENCE KEY ───────────────────────────────────────────────
   // Dibaca satu kali saat mount; fallback ke key generik jika prop belum ada
   const SK = sessionKey || `audit_session_default`;
+  const isOwnerMode = userRole === 'owner';
 
   // ─── LOAD SESSION DARI LOCALSTORAGE (sekali saat mount) ────────────────────
   const loadedSession = (() => {
@@ -471,6 +472,18 @@ export default function AturStokTab({
 
   return (
     <div className={`w-full space-y-3 font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-700 dark:text-slate-200'}`} id="atur-stok-container">
+      {/* OWNER VIEW-ONLY BANNER */}
+      {isOwnerMode && (
+        <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${isLight ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
+          <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Mode Pantau (Owner)</p>
+            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>Serah terima & atur stok hanya bisa dilakukan oleh Kasir aktif.</p>
+          </div>
+        </div>
+      )}
       
       {/* BANNER: Sesi Dilanjutkan (jika restore dari localStorage) */}
       {isRestoredSession && !isHandoverSuccess && (
@@ -665,8 +678,8 @@ export default function AturStokTab({
             </div>
           </div>
 
-          {/* Quick Metric & Action Row - 4 BALANCED MODERN CARDS */}
-          <div className="grid grid-cols-4 gap-1.5 px-0.5">
+          {/* Quick Metric & Action Row - 3 BALANCED MODERN CARDS */}
+          <div className="grid grid-cols-3 gap-1.5 px-0.5">
             {/* 1. Total Stok Awal */}
             <div className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs ${
               isLight 
@@ -722,41 +735,7 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {/* 3. Tambah Stok Masuk */}
-            <button 
-              type="button"
-              onClick={() => setShowIncomingStock(!showIncomingStock)}
-              className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs transition cursor-pointer text-left ${
-                showIncomingStock 
-                  ? 'bg-blue-600 text-slate-900 dark:text-white border-blue-600 shadow-sm' 
-                  : (isLight 
-                      ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800' 
-                      : 'bg-white dark:bg-slate-800 hover:bg-blue-950/60 border-blue-500/30 text-slate-900 dark:text-white')
-              }`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${
-                  showIncomingStock ? 'text-slate-900 dark:text-white' : (isLight ? 'text-blue-600' : 'text-blue-400')
-                }`}>
-                  + Masuk
-                </span>
-                <Plus className="w-3 h-3 shrink-0" />
-              </div>
-              <div className="flex items-baseline gap-0.5 mt-0.5">
-                <span className={`text-sm sm:text-lg font-black tracking-tight font-mono ${
-                  showIncomingStock ? 'text-slate-900 dark:text-white' : (isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white')
-                }`}>
-                  {totalIncomingStock}
-                </span>
-                <span className={`text-[8px] sm:text-[9px] font-semibold ${
-                  showIncomingStock ? 'text-blue-100' : (isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400')
-                }`}>
-                  Pcs
-                </span>
-              </div>
-            </button>
-            
-            {/* 4. Filter / Kolom Status */}
+            {/* 3. Filter / Kolom Status */}
             <button 
               type="button"
               onClick={() => setShowStatusColumn(!showStatusColumn)}
@@ -819,47 +798,24 @@ export default function AturStokTab({
               }`}>
                 <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
                   <th className={`py-2 px-2 font-bold ${
-                    showIncomingStock && showStatusColumn 
-                      ? 'w-[36%]' 
-                      : showIncomingStock || showStatusColumn 
-                        ? 'w-[42%]' 
-                        : 'w-[50%]'
+                    showStatusColumn ? 'w-[45%]' : 'w-[55%]'
                   }`}>
                     VOUCHER
                   </th>
                   <th className={`py-2 px-1 text-center font-bold ${
-                    showIncomingStock && showStatusColumn 
-                      ? 'w-[14%]' 
-                      : showIncomingStock || showStatusColumn 
-                        ? 'w-[18%]' 
-                        : 'w-[22%]'
+                    showStatusColumn ? 'w-[18%]' : 'w-[20%]'
                   }`}>
                     LALU
                   </th>
-                  {showIncomingStock && (
-                    <th className={`py-2 px-1 text-center font-bold ${
-                      showStatusColumn ? 'w-[18%]' : 'w-[20%]'
-                    } ${
-                      isLight ? 'text-blue-700 bg-blue-50/50' : 'text-blue-400 bg-blue-950/30'
-                    }`}>
-                      MASUK
-                    </th>
-                  )}
                   <th className={`py-2 px-1.5 text-center font-bold ${
-                    showIncomingStock && showStatusColumn 
-                      ? 'w-[20%]' 
-                      : showIncomingStock || showStatusColumn 
-                        ? 'w-[24%]' 
-                        : 'w-[28%]'
+                    showStatusColumn ? 'w-[20%]' : 'w-[25%]'
                   } ${
                     isLight ? 'text-blue-700' : 'text-blue-400'
                   }`}>
                     STOK AWAL
                   </th>
                   {showStatusColumn && (
-                    <th className={`py-2 px-1 text-center font-bold ${
-                      showIncomingStock ? 'w-[12%]' : 'w-[16%]'
-                    }`}>
+                    <th className={`py-2 px-1 text-center font-bold w-[17%]`}>
                       STATUS
                     </th>
                   )}
@@ -882,8 +838,8 @@ export default function AturStokTab({
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => !isInitialLocked && setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId })}
-                      className={`transition-colors cursor-pointer ${
+                      onClick={() => !isInitialLocked && !isOwnerMode && setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingThis 
                           ? (isLight ? 'bg-blue-100/70 ring-1 ring-blue-400' : 'bg-blue-900/40 ring-1 ring-blue-500/50')
                           : (isLight ? 'hover:bg-blue-50/60 bg-white' : 'hover:bg-blue-950/30')
@@ -916,37 +872,6 @@ export default function AturStokTab({
                       <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
                         {item.previousStock}
                       </td>
-
-                      {/* TAMBAHAN MASUK (OPTIONAL) */}
-                      {showIncomingStock && (
-                        <td className={`py-2 px-1 text-center ${isLight ? 'bg-blue-50/30' : 'bg-blue-950/20'}`} onClick={(e) => e.stopPropagation()}>
-                          <div className={`inline-flex items-center gap-0.5 rounded-lg p-0.5 border ${
-                            isLight ? 'bg-white border-blue-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 border-blue-500/30'
-                          }`}>
-                            <button
-                              type="button"
-                              onClick={() => handleIncomingDelta(item.productId, -1)}
-                              className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center cursor-pointer ${
-                                isLight ? 'bg-slate-100 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                              }`}
-                            >
-                              -
-                            </button>
-                            <span className={`text-xs font-mono font-bold min-w-3 text-center ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                              {item.incomingStock}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleIncomingDelta(item.productId, 1)}
-                              className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center cursor-pointer ${
-                                isLight ? 'bg-slate-100 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                              }`}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </td>
-                      )}
 
                       {/* STOK FISIK AWAL */}
                       <td className="py-2 px-1 text-center">
@@ -987,6 +912,11 @@ export default function AturStokTab({
                                 : (isLight ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-rose-950/60 text-rose-500 font-black dark:text-rose-400 border-rose-500/30')
                             }`}>
                               {diffWithExpected > 0 ? `+${diffWithExpected}` : diffWithExpected}
+                              {diffWithExpected < 0 && (
+                                <span className="ml-0.5 text-[7px] uppercase opacity-80 font-black">
+                                  ({item.auditReason === 'audit' ? 'Hilang' : 'Jual'})
+                                </span>
+                              )}
                             </span>
                           )}
                         </td>
@@ -1035,7 +965,7 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {isInitialLocked ? (
+            {!isOwnerMode && (isInitialLocked ? (
               <div className="flex gap-1.5">
                 <button 
                   onClick={() => setIsInitialLocked(false)} 
@@ -1061,7 +991,7 @@ export default function AturStokTab({
               >
                 <Lock className="w-3.5 h-3.5" /> Kunci Stok Awal & Lanjut
               </button>
-            )}
+            ))}
           </div>
         </motion.div>
       )}
@@ -1230,8 +1160,8 @@ export default function AturStokTab({
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => setActiveEditingRow({ step: 2, type: 'final', productId: item.productId })}
-                      className={`transition-colors cursor-pointer ${
+                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 2, type: 'final', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingFinal 
                           ? (isLight ? 'bg-emerald-100/70 ring-1 ring-emerald-400' : 'bg-emerald-900/40 ring-1 ring-emerald-500/50')
                           : (isLight ? 'hover:bg-emerald-50/60 bg-white' : 'hover:bg-blue-950/30')
@@ -1271,14 +1201,15 @@ export default function AturStokTab({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveEditingRow({ step: 2, type: 'final', productId: item.productId });
+                            if (!isOwnerMode) setActiveEditingRow({ step: 2, type: 'final', productId: item.productId });
                           }}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition cursor-pointer active:scale-95 ${
+                          disabled={isOwnerMode}
+                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
                             isLight 
                               ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
                               : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
                           }`}
-                          title="Ketuk untuk ubah sisa akhir"
+                          title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : 'Ketuk untuk ubah sisa akhir'}
                         >
                           <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
                             {item.finalStock}
@@ -1306,7 +1237,8 @@ export default function AturStokTab({
             </table>
           </div>
 
-          {/* Bottom Actions */}
+          {/* Bottom Actions - hidden for owner */}
+          {!isOwnerMode && (
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
@@ -1319,7 +1251,6 @@ export default function AturStokTab({
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Awal
             </button>
-
             <button
               type="button"
               onClick={() => setCurrentStep(3)}
@@ -1328,6 +1259,7 @@ export default function AturStokTab({
               Lanjut: Cek Tunai & QRIS <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+          )}
         </motion.div>
       )}
 
@@ -1490,7 +1422,8 @@ export default function AturStokTab({
             )}
           </div>
 
-          {/* Navigation */}
+          {/* Navigation - hidden for owner */}
+          {!isOwnerMode && (
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
@@ -1503,7 +1436,6 @@ export default function AturStokTab({
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Akhir
             </button>
-
             <button
               type="button"
               onClick={() => setCurrentStep(4)}
@@ -1512,6 +1444,7 @@ export default function AturStokTab({
               Lanjut: Serah Terima <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+          )}
         </motion.div>
       )}
 
@@ -1704,7 +1637,8 @@ export default function AturStokTab({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - hidden for owner */}
+          {!isOwnerMode && (
           <div className={`flex items-center justify-between gap-2 pt-1 border-t ${
             isLight ? 'border-slate-200' : 'border-slate-200 dark:border-slate-800'
           }`}>
@@ -1719,7 +1653,6 @@ export default function AturStokTab({
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Cek Uang
             </button>
-
             <button
               type="button"
               onClick={handleCompleteHandover}
@@ -1733,6 +1666,7 @@ export default function AturStokTab({
               {isSelfHandover ? '↺ Tutup Shift & Reset Stok' : `Serahkan ke ${selectedToCashier.name}`}
             </button>
           </div>
+          )}
         </motion.div>
       )}
 
@@ -1777,7 +1711,7 @@ export default function AturStokTab({
 
       {/* FLOATING FOCUS EDIT CARD (1 BARIS MELAYANG DENGAN LATAR SEDIKIT BLUR) */}
       <AnimatePresence>
-        {activeEditingRow.productId && (
+        {activeEditingRow.productId && !isOwnerMode && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1897,7 +1831,8 @@ export default function AturStokTab({
                         <div className="flex items-center justify-center gap-3 w-full">
                           <button
                             type="button"
-                            onClick={() => handleInitialDelta(item.productId, -1)}
+                            onClick={() => !isOwnerMode && handleInitialDelta(item.productId, -1)}
+                            disabled={isOwnerMode}
                             className={`w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition border shadow-xs ${
                               isLight 
                                 ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300' 
@@ -1919,7 +1854,8 @@ export default function AturStokTab({
 
                           <button
                             type="button"
-                            onClick={() => handleInitialDelta(item.productId, 1)}
+                            onClick={() => !isOwnerMode && handleInitialDelta(item.productId, 1)}
+                            disabled={isOwnerMode}
                             className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30"
                             title="Tambah 1"
                           >
@@ -1960,6 +1896,53 @@ export default function AturStokTab({
                           </button>
                         </div>
                       </div>
+
+                      {/* Reason Selector when Initial Stock < Expected */}
+                      {item.initialStock < expectedInitial && (
+                        <div className={`p-3 rounded-xl border flex flex-col gap-2 shadow-inner ${
+                          isLight ? 'bg-amber-50/50 border-amber-200' : 'bg-amber-950/20 border-amber-500/30'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
+                              Keterangan Stok Berkurang
+                            </span>
+                            <span className={`text-[9px] font-black ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>
+                              -{expectedInitial - item.initialStock} PCS
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, auditReason: 'penjualan' } : i));
+                              }}
+                              className={`p-2 rounded-lg text-[10px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                                item.auditReason === 'penjualan'
+                                  ? (isLight ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-500 text-slate-900 border-amber-500 shadow-sm')
+                                  : (isLight ? 'bg-white text-slate-600 border-slate-300 hover:bg-amber-50/50' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700')
+                              }`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.auditReason === 'penjualan' ? 'bg-current' : 'bg-transparent'}`}></div>
+                              Terjual / Laku
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, auditReason: 'audit' } : i));
+                              }}
+                              className={`p-2 rounded-lg text-[10px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                                item.auditReason === 'audit'
+                                  ? (isLight ? 'bg-rose-500 text-white border-rose-600 shadow-sm' : 'bg-rose-500 text-slate-900 border-rose-500 shadow-sm')
+                                  : (isLight ? 'bg-white text-slate-600 border-slate-300 hover:bg-rose-50/50' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700')
+                              }`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.auditReason === 'audit' ? 'bg-current' : 'bg-transparent'}`}></div>
+                              Hilang / Rusak
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

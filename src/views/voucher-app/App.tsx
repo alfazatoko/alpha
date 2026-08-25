@@ -13,6 +13,7 @@ import {
   Bell, 
   X, 
   Clock, 
+  Check,
   CheckCircle,
   HelpCircle,
   ArrowUpRight,
@@ -332,6 +333,16 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         e.preventDefault();
         document.getElementById('btn-confirm-quick-sale')?.click();
       }
+      
+      // Shortcut P untuk toggle Pasca-Closing
+      if (e.key.toLowerCase() === 'p') {
+        // Jangan trigger jika user sedang mengetik di input box (seperti catatan)
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+          return;
+        }
+        e.preventDefault();
+        setIsPostClosing(prev => !prev);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -343,6 +354,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   const [formQuantity, setFormQuantity] = useState<number>(1);
   const [formNote, setFormNote] = useState('');
   const [formPaymentMethod, setFormPaymentMethod] = useState<'TUNAI' | 'NON_TUNAI' | 'QRIS' | 'TRANSFER'>('TUNAI');
+  const [isPostClosing, setIsPostClosing] = useState(false);
+  const [dismissedPostClosing, setDismissedPostClosing] = useState<string[]>([]);
   const [saleSearchQuery, setSaleSearchQuery] = useState('');
   const [restockSearchQuery, setRestockSearchQuery] = useState('');
   const [saleSelectedOperator, setSaleSelectedOperator] = useState<string>('SEMUA');
@@ -1143,7 +1156,10 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     e.preventDefault();
     if (!formProductId) return;
     
-    const finalNote = `[${formPaymentMethod}]${formNote ? ' ' + formNote : ''}`;
+    const baseNote = formNote ? ' ' + formNote : '';
+    const finalNote = isPostClosing 
+      ? `[${formPaymentMethod}] [PASCA-CLOSING]${baseNote}` 
+      : `[${formPaymentMethod}]${baseNote}`;
     
     handleAdjustStock(
       formProductId,
@@ -1159,6 +1175,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setFormQuantity(1);
     setFormNote('');
     setFormPaymentMethod('TUNAI');
+    setIsPostClosing(false);
     setShowQuickSale(false);
   };
 
@@ -1714,22 +1731,40 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     />
                   )}
 
-                  {activeTab === 'notif' && (
-                    <LogAktivitasTab 
-                      notifications={notifications}
-                      userRole={currentUserRole}
-                      theme={theme}
-                      onMarkAllRead={() => {
-                        const updated = notifications.map(n => ({ ...n, isRead: true }));
-                        setNotifications(updated);
-                        saveState(products, transactions, updated, shiftHandovers, detailedHandovers);
-                      }}
-                      onClearAll={() => {
-                        setNotifications([]);
-                        saveState(products, transactions, [], shiftHandovers, detailedHandovers);
-                      }}
-                    />
-                  )}
+                  {activeTab === 'notif' && (() => {
+                    const postClosingTrx = transactions.filter(t => 
+                      t.notes?.includes('[PASCA-CLOSING]') && !dismissedPostClosing.includes(t.id)
+                    );
+                    
+                    return (
+                      <LogAktivitasTab 
+                        notifications={notifications}
+                        userRole={currentUserRole}
+                        theme={theme}
+                        postClosingTransactions={postClosingTrx}
+                        onResolvePostClosing={(ids) => {
+                          setDismissedPostClosing(prev => [...prev, ...ids]);
+                          const updatedNotifs = pushNotification(
+                            'success',
+                            'Penjualan Pasca Closing Diarsipkan',
+                            `${ids.length} transaksi pasca closing telah ditandai selesai dan diarsipkan.`,
+                            notifications
+                          );
+                          setNotifications(updatedNotifs);
+                          saveState(products, transactions, updatedNotifs, shiftHandovers, detailedHandovers);
+                        }}
+                        onMarkAllRead={() => {
+                          const updated = notifications.map(n => ({ ...n, isRead: true }));
+                          setNotifications(updated);
+                          saveState(products, transactions, updated, shiftHandovers, detailedHandovers);
+                        }}
+                        onClearAll={() => {
+                          setNotifications([]);
+                          saveState(products, transactions, [], shiftHandovers, detailedHandovers);
+                        }}
+                      />
+                    );
+                  })()}
 
                   {activeTab === 'profil' && (
                     <ProfileTab
@@ -1983,6 +2018,34 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         onChange={(e) => setFormNote(e.target.value)}
                         className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
                       />
+
+                      <label className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-colors ${
+                        isPostClosing 
+                          ? 'bg-yellow-50 border-yellow-300 dark:bg-yellow-500/10 dark:border-yellow-500/30' 
+                          : 'bg-slate-50 border-slate-200 dark:bg-white/5 dark:border-white/10 hover:bg-yellow-50/50 dark:hover:bg-yellow-500/5'
+                      }`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          isPostClosing 
+                            ? 'bg-yellow-500 border-yellow-600 dark:border-yellow-400 text-white' 
+                            : 'bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600'
+                        }`}>
+                          {isPostClosing && <Check className="w-3 h-3" />}
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          className="sr-only" 
+                          checked={isPostClosing}
+                          onChange={(e) => setIsPostClosing(e.target.checked)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-[10px] font-bold block ${
+                            isPostClosing ? 'text-yellow-800 dark:text-yellow-400' : 'text-slate-700 dark:text-slate-300'
+                          }`}>Tandai sebagai Pasca-Closing</span>
+                          <span className={`text-[8px] leading-tight block ${
+                            isPostClosing ? 'text-yellow-700/80 dark:text-yellow-500/80' : 'text-slate-500'
+                          }`}>Jualan setelah hitungan stok (simpan uang tunai/qris terpisah).</span>
+                        </div>
+                      </label>
                     </div>
 
                     {selectedProduct && (

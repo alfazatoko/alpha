@@ -373,7 +373,7 @@ export default function DashboardTab({
               <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>ATUR STOK</span>
             </button>
 
-            {/* 3. RESTOK */}
+            {/* 3. TAMBAH STOK */}
             <button
               type="button"
               onClick={onOpenQuickRestock}
@@ -382,7 +382,7 @@ export default function DashboardTab({
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
                 <PlusCircle className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>RESTOK</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>TAMBAH STOK</span>
             </button>
 
             {/* 4. RIWAYAT */}
@@ -764,7 +764,7 @@ export default function DashboardTab({
           </button>
         )}
 
-        {/* ROW 1: 4 Large Priority Action Buttons (PRODUK, ATUR STOK, RESTOK, RIWAYAT) */}
+        {/* ROW 1: 4 Large Priority Action Buttons (PRODUK, ATUR STOK, TAMBAH STOK, RIWAYAT) */}
         <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-priority-actions-bar">
           {/* 1. PRODUK */}
           <button
@@ -796,7 +796,7 @@ export default function DashboardTab({
             </span>
           </button>
 
-          {/* 3. RESTOK */}
+          {/* 3. TAMBAH STOK */}
           <button
             type="button"
             onClick={onOpenQuickRestock}
@@ -807,7 +807,7 @@ export default function DashboardTab({
               <PlusCircle className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
-              RESTOK
+              TAMBAH STOK
             </span>
           </button>
 
