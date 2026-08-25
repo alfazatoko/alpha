@@ -24,7 +24,11 @@ import {
   ListFilter,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  PackagePlus,
+  ClipboardCheck,
+  Wallet
 } from 'lucide-react';
 import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
 
@@ -619,40 +623,54 @@ export default function AturStokTab({
         </div>
       </div>
 
-      {/* 2. COMPACT STEPPER BAR */}
-      <div className="px-1 py-0.5">
-        <div className="relative flex items-center justify-between max-w-xs mx-auto">
+      {/* 2. COMPACT STEPPER BAR DENGAN IKON */}
+      <div className="px-1 py-1 sm:py-2">
+        <div className="relative flex items-center justify-between max-w-sm mx-auto px-2">
           {/* Background Line */}
-          <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-full h-[2px] ${isLight ? 'bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800'}`} />
+          <div className={`absolute left-6 right-6 top-[16px] sm:top-[18px] h-[2px] ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
           
           {/* Active Line Fill */}
           <div 
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-[2px] bg-blue-500 transition-all duration-300"
-            style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
+            className="absolute left-6 top-[16px] sm:top-[18px] h-[2px] bg-blue-500 transition-all duration-300"
+            style={{ width: `calc(${((currentStep - 1) / 4) * 100}% - 1.5rem)` }}
           />
 
-          {[1, 2, 3, 4, 5].map((step) => {
-            const isActive = currentStep === step;
-            const isPassed = currentStep > step;
+          {[
+            { id: 1, label: 'Awal', icon: ClipboardList },
+            { id: 2, label: 'Masuk', icon: PackagePlus },
+            { id: 3, label: 'Akhir', icon: ClipboardCheck },
+            { id: 4, label: 'Kas', icon: Wallet },
+            { id: 5, label: 'Selesai', icon: Handshake }
+          ].map((step) => {
+            const isActive = currentStep === step.id;
+            const isPassed = currentStep > step.id;
+            const Icon = step.icon;
             
             return (
-              <button
-                key={step}
-                onClick={() => {
-                  if (step === 1 || isInitialLocked) {
-                    setCurrentStep(step as any);
-                  }
-                }}
-                className={`relative z-10 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer ${
-                  isActive 
-                    ? 'bg-blue-600 text-slate-900 dark:text-white shadow-md shadow-blue-500/30 border-2 border-white dark:border-blue-400' 
-                    : isPassed
-                      ? (isLight ? 'bg-blue-50 text-blue-700 border border-blue-300 font-black' : 'bg-white dark:bg-slate-800 text-blue-400 border border-blue-500/40')
-                      : (isLight ? 'bg-white text-slate-600 dark:text-slate-400 border border-slate-300 shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-700')
-                }`}
-              >
-                {step}
-              </button>
+              <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (step.id === 1 || isInitialLocked) {
+                      setCurrentStep(step.id as any);
+                    }
+                  }}
+                  className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-300 cursor-pointer ${
+                    isActive 
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110 ring-2 ring-white dark:ring-slate-900' 
+                      : isPassed
+                        ? (isLight ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-900/40 text-blue-400 border border-blue-500/30')
+                        : (isLight ? 'bg-white text-slate-400 border border-slate-200 shadow-sm' : 'bg-slate-800 text-slate-500 border border-slate-700')
+                  }`}
+                >
+                  <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" strokeWidth={isActive ? 2.5 : 2} />
+                </button>
+                <span className={`text-[9px] sm:text-[10px] font-bold tracking-tight transition-colors ${
+                  isActive ? (isLight ? 'text-blue-700' : 'text-blue-400') : (isPassed ? (isLight ? 'text-slate-700' : 'text-slate-300') : (isLight ? 'text-slate-400' : 'text-slate-500'))
+                }`}>
+                  {step.label}
+                </span>
+              </div>
             );
           })}
         </div>
@@ -1019,6 +1037,23 @@ export default function AturStokTab({
           animate={{ opacity: 1, y: 0 }}
           className="space-y-2.5"
         >
+          {/* Sesi 1: Banner Buka Shift */}
+          <div className={`p-3 sm:p-4 rounded-xl border flex gap-3 items-start shadow-sm ${
+            isLight ? 'bg-indigo-50 border-indigo-200' : 'bg-indigo-950/40 border-indigo-900/50'
+          }`}>
+            <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${isLight ? 'bg-indigo-100 text-indigo-600' : 'bg-indigo-900/60 text-indigo-400'}`}>
+              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <h4 className={`text-xs sm:text-sm font-bold ${isLight ? 'text-indigo-900' : 'text-indigo-100'}`}>
+                Pembukuan Awal Selesai! 🎉
+              </h4>
+              <p className={`text-[9px] sm:text-[10px] mt-0.5 leading-relaxed ${isLight ? 'text-indigo-700' : 'text-indigo-300'}`}>
+                Selamat bertugas dan semoga hari ini laris manis. Anda bisa membiarkan halaman ini tetap terbuka jika ingin mencatat barang masuk sewaktu-waktu tanpa mengganggu pembukuan awal.
+              </p>
+            </div>
+          </div>
+
           {/* Header */}
           <div className="px-1 flex items-start justify-between gap-2">
             <div className="flex items-start gap-2">
@@ -1137,9 +1172,9 @@ export default function AturStokTab({
             <button
               type="button"
               onClick={() => setCurrentStep(3)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
             >
-              Lanjut: Hitung Stok Akhir <ArrowRight className="w-3.5 h-3.5" />
+              Tutup Shift & Mulai Closing <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </motion.div>
