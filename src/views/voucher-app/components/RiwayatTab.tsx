@@ -293,7 +293,7 @@ export default function RiwayatTab({
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
-                REKAP TOTAL HARIAN — 4 Kolom: TRX | Uang Masuk | Tarik Tunai | Admin
+                REKAP TOTAL HARIAN — 4 Kolom: TRX | Omset | Kas Fisik | Kas Sistem
             ───────────────────────────────────────────────────────────────── */}
             <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
 
@@ -328,42 +328,42 @@ export default function RiwayatTab({
                 </div>
               </div>
 
-              {/* Row 2: Uang Masuk + Tarik Tunai + Admin — 3 equal cols */}
+              {/* Row 2: Omset + Kas Fisik + Kas Sistem — 3 equal cols */}
               <div className="grid grid-cols-3 gap-2">
-                {/* Uang Masuk */}
+                {/* Omset */}
                 <div className="bg-emerald-50 dark:bg-slate-950/50 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">Uang Masuk</span>
+                    <span className="text-[9px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">OMSET</span>
                     <Banknote className="w-3 h-3 text-emerald-500/60" />
                   </div>
                   <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalUangMasuk)}
                   </div>
-                  <div className="text-[8px] text-emerald-500/60 font-bold">Total Omset</div>
+                  <div className="text-[8px] text-emerald-500/60 font-bold">Total Pemasukan</div>
                 </div>
 
-                {/* Tarik Tunai */}
+                {/* Kas Fisik */}
                 <div className="bg-cyan-50 dark:bg-slate-950/50 border border-cyan-200 dark:border-cyan-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">Tarik Tunai</span>
+                    <span className="text-[9px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">KAS FISIK</span>
                     <Banknote className="w-3 h-3 text-cyan-500/60" />
                   </div>
                   <div className="font-mono font-black text-cyan-700 dark:text-cyan-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalTarikTunai)}
                   </div>
-                  <div className="text-[8px] text-cyan-500/60 font-bold">Kas Fisik</div>
+                  <div className="text-[8px] text-cyan-500/60 font-bold">Dihitung Manual</div>
                 </div>
 
-                {/* Admin */}
+                {/* Kas Sistem */}
                 <div className="bg-amber-50 dark:bg-slate-950/50 border border-amber-200 dark:border-amber-500/20 rounded-xl p-2.5 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">Admin</span>
+                    <span className="text-[9px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">KAS SISTEM</span>
                     <QrCode className="w-3 h-3 text-amber-500/60" />
                   </div>
                   <div className="font-mono font-black text-amber-700 dark:text-amber-400 text-sm leading-tight">
                     Rp {fmtCompact(daySummary.totalAdmin)}
                   </div>
-                  <div className="text-[8px] text-amber-500/60 font-bold">Kas Ekspektasi</div>
+                  <div className="text-[8px] text-amber-500/60 font-bold">Hitungan Komputer</div>
                 </div>
               </div>
             </div>
@@ -455,7 +455,7 @@ export default function RiwayatTab({
                       </div>
 
                       {/* ───────────────────────────────────────────────────────────
-                          SUMMARY STATS — 5 kolom mini: TRX | Uang Masuk | Tarik Tunai | Admin | Status
+                          SUMMARY STATS — 5 kolom mini: TRX | Omset | Kas Fisik | Kas Sistem | Status
                       ─────────────────────────────────────────────────────────── */}
                       <div className="grid grid-cols-5 gap-1.5 text-xs">
 
@@ -468,31 +468,31 @@ export default function RiwayatTab({
                           <div className="text-[8px] text-indigo-400/70 font-bold">Pcs Laku</div>
                         </div>
 
-                        {/* 2. Uang Masuk */}
+                        {/* 2. Omset */}
                         <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">Masuk</div>
+                          <div className="text-[8px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">OMSET</div>
                           <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-[11px] leading-tight">
                             {fmtCompact(record.totalSalesAmount)}
                           </div>
-                          <div className="text-[8px] text-emerald-400/70 font-bold">Omset</div>
+                          <div className="text-[8px] text-emerald-400/70 font-bold">Total</div>
                         </div>
 
-                        {/* 3. Tarik Tunai */}
+                        {/* 3. Kas Fisik */}
                         <div className="bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">Tunai</div>
+                          <div className="text-[8px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">FISIK</div>
                           <div className="font-mono font-black text-cyan-400 text-[11px] leading-tight">
                             {fmtCompact(record.cashPhysical)}
                           </div>
-                          <div className="text-[8px] text-cyan-400/70 font-bold">Kas Fisik</div>
+                          <div className="text-[8px] text-cyan-400/70 font-bold">Di Laci</div>
                         </div>
 
-                        {/* 4. Admin */}
+                        {/* 4. Kas Sistem */}
                         <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-2 space-y-0.5 col-span-1">
-                          <div className="text-[8px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">Admin</div>
+                          <div className="text-[8px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">SISTEM</div>
                           <div className="font-mono font-black text-amber-400 text-[11px] leading-tight">
                             {fmtCompact(record.cashExpected)}
                           </div>
-                          <div className="text-[8px] text-amber-400/70 font-bold">Ekspektasi</div>
+                          <div className="text-[8px] text-amber-400/70 font-bold">Hitungan</div>
                         </div>
 
                         {/* 5. Status Kas */}

@@ -1595,6 +1595,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       products={products}
                       activeCashierName={activeCashier.name}
                       nextCashierName={nextCashier.name}
+                      allCashiers={cashiers}
                       userRole={currentUserRole}
                       onOpenHandoverModal={() => setShowHandoverModal(true)}
                     />

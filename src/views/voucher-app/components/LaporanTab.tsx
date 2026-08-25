@@ -22,7 +22,7 @@ import {
   Search,
   ChevronDown
 } from 'lucide-react';
-import type { ShiftHandover, Transaction, VoucherProduct, UserRole } from '../types';
+import type { ShiftHandover, Transaction, VoucherProduct, UserRole, Cashier } from '../types';
 
 interface LaporanTabProps {
   shiftHandovers: ShiftHandover[];
@@ -31,6 +31,7 @@ interface LaporanTabProps {
   activeCashierName: string;
   nextCashierName: string;
   userRole: UserRole;
+  allCashiers?: Cashier[];
   onOpenHandoverModal: () => void;
 }
 
@@ -41,52 +42,21 @@ export default function LaporanTab({
   activeCashierName,
   nextCashierName,
   userRole,
+  allCashiers = [],
   onOpenHandoverModal
 }: LaporanTabProps) {
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   const [typeFilter, setTypeFilter] = useState<'SEMUA' | 'PENJUALAN' | 'RESTOCK' | 'SERAH_TERIMA'>('SEMUA');
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(
+    userRole === 'owner' ? 'SEMUA' : activeCashierName
+  );
 
   // Calculate today's overall statistics
   const totalRegisterVouchers = products.reduce((acc, p) => acc + p.currentStock, 0);
   const totalInventoryValue = products.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0);
 
-  // Active cashier statistics for current shift
-  const currentShiftSales = transactions.filter(
-    t => t.type === 'PENJUALAN' && t.cashierName === activeCashierName
-  );
-  const currentShiftRevenue = currentShiftSales.reduce((acc, s) => acc + s.amount, 0);
-  const currentShiftQuantity = currentShiftSales.reduce((acc, s) => acc + s.quantity, 0);
-
-  const paymentStats = useMemo(() => {
-    let tunai = 0;
-    let nonTunai = 0;
-    let profit = 0;
-
-    currentShiftSales.forEach(s => {
-      if (s.paymentMethod === 'NON_TUNAI' || s.paymentMethod === 'QRIS' || s.paymentMethod === 'TRANSFER') {
-        nonTunai += s.amount;
-      } else {
-        tunai += s.amount;
-      }
-      const cogs = s.cogs || ((products.find(p => p.id === s.productId)?.costPrice || 0) * s.quantity);
-      profit += (s.amount - cogs);
-    });
-    
-    const total = tunai + nonTunai;
-    return {
-      tunai, nonTunai, total, profit,
-      tunaiPct: total > 0 ? (tunai / total) * 100 : 0,
-      nonTunaiPct: total > 0 ? (nonTunai / total) * 100 : 0
-    };
-  }, [currentShiftSales, products]);
-
   // Unified activity log filtering
   const filteredActivities = useMemo(() => {
-    // Combine transactions and handovers into a unified view if needed
-    // or just filter transactions if they contain everything.
-    // Based on requirement, we'll filter the transactions list mostly,
-    // but handovers are in a separate list. Let's merge them for a unified history.
-    
     const combined = [
       ...transactions.map(t => ({ ...t, activityType: t.type })),
       ...shiftHandovers.map(h => ({
@@ -107,37 +77,76 @@ export default function LaporanTab({
         const itemDate = new Date(item.timestamp).toISOString().split('T')[0];
         const dateMatch = dateFilter ? itemDate === dateFilter : true;
         const typeMatch = typeFilter === 'SEMUA' ? true : item.activityType === typeFilter;
-        return dateMatch && typeMatch;
+        
+        const cashierMatch = selectedCashierFilter === 'SEMUA' 
+          ? true 
+          : item.cashierName === selectedCashierFilter || item.toCashier === selectedCashierFilter;
+          
+        return dateMatch && typeMatch && cashierMatch;
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [transactions, shiftHandovers, dateFilter, typeFilter]);
+  }, [transactions, shiftHandovers, dateFilter, typeFilter, selectedCashierFilter]);
+
+  // Aggregate stats from the filtered activities (for the selected day & cashier)
+  const paymentStats = useMemo(() => {
+    let tunai = 0;
+    let nonTunai = 0;
+    let profit = 0;
+    let quantity = 0;
+
+    filteredActivities.forEach(log => {
+      if (log.activityType === 'PENJUALAN') {
+        const amount = log.amount || 0;
+        const qty = log.quantity || 0;
+        quantity += qty;
+        
+        if (log.paymentMethod === 'NON_TUNAI' || log.paymentMethod === 'QRIS' || log.paymentMethod === 'TRANSFER') {
+          nonTunai += amount;
+        } else {
+          tunai += amount;
+        }
+        
+        const cogs = log.cogs || ((products.find(p => p.id === log.productId)?.costPrice || 0) * qty);
+        profit += (amount - cogs);
+      }
+    });
+    
+    return { tunai, nonTunai, profit, quantity };
+  }, [filteredActivities, products]);
 
   return (
     <div className="space-y-4 pb-8" id="laporan-tab-container">
-      {/* Shift Overview Banner */}
-      <div className="bg-indigo-50 dark:bg-slate-900 dark:bg-gradient-to-r dark:from-indigo-950/60 dark:to-purple-950/40 border border-indigo-500/15 rounded-2xl p-5 relative overflow-hidden flex items-center justify-between shadow-lg">
-        <div className="space-y-1">
-          <span className="text-[10px] bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-            Shift Aktif
-          </span>
-          <h3 className="text-base font-black text-slate-900 dark:text-white">{activeCashierName}</h3>
-          <p className="text-[10px] text-slate-600 dark:text-slate-400">Bertanggung jawab penuh atas fisik register</p>
+      {userRole === 'owner' && (
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+              <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tampilkan Data Kasir</h4>
+            </div>
+          </div>
+          <div className="relative w-40">
+            <select
+              value={selectedCashierFilter}
+              onChange={(e) => setSelectedCashierFilter(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-8 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 appearance-none transition cursor-pointer"
+            >
+              <option value="SEMUA">Semua Kasir</option>
+              {allCashiers?.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+          </div>
         </div>
-
-        <button 
-          onClick={onOpenHandoverModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-slate-900 dark:text-white text-xs font-bold py-2 px-3.5 rounded-xl transition border border-indigo-500/20 cursor-pointer"
-        >
-          <ArrowRightLeft className="h-3.5 w-3.5" />
-          Tutup Shift
-        </button>
-      </div>
+      )}
 
       {/* New Total Penjualan Voucher Box */}
-      <div className="relative mt-8 mb-4">
+      <div className="relative mt-5 mb-4">
         <div className="absolute -top-3 left-0 right-0 flex justify-center z-10">
-          <span className="bg-slate-50 dark:bg-[#0f172a] px-3 py-0.5 text-[11px] font-black tracking-widest text-slate-800 dark:text-slate-200 uppercase">
-            Total Penjualan Voucher
+          <span className="bg-slate-50 dark:bg-[#0f172a] px-3 py-0.5 text-[11px] font-black tracking-widest text-slate-800 dark:text-slate-200 uppercase text-center border border-slate-200 dark:border-slate-800 rounded-full shadow-sm">
+            Total Jualan Hari Ini {selectedCashierFilter !== 'SEMUA' ? `(${selectedCashierFilter})` : ''}
           </span>
         </div>
         <div className="border border-slate-800 dark:border-slate-300 rounded-[20px] pt-5 pb-4 px-2">
@@ -148,7 +157,7 @@ export default function LaporanTab({
                 <Layers className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span className="text-[10px] font-extrabold tracking-wide uppercase">Laku</span>
               </div>
-              <span className="text-base font-black text-slate-900 dark:text-white font-mono">{currentShiftQuantity}</span>
+              <span className="text-base font-black text-slate-900 dark:text-white font-mono">{paymentStats.quantity}</span>
             </div>
             {/* Tunai */}
             <div className="flex flex-col items-center justify-center gap-1">
