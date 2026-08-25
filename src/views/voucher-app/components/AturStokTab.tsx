@@ -164,10 +164,10 @@ export default function AturStokTab({
 
   const [isRestoredSession] = useState(!!loadedSession);
 
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(loadedSession?.currentStep ?? 1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(loadedSession?.currentStep as any ?? 1);
   const [items, setItems] = useState<StockAuditItem[]>(loadedSession?.items ?? []);
   const [isInitialLocked, setIsInitialLocked] = useState(loadedSession?.isInitialLocked ?? false);
-  const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
+  const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2 | 3; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
   const [showIncomingStock, setShowIncomingStock] = useState(loadedSession?.showIncomingStock ?? false);
   const [showStatusColumn, setShowStatusColumn] = useState(loadedSession?.showStatusColumn ?? false);
   const [selectedOperator, setSelectedOperator] = useState<string>('SEMUA');
@@ -304,8 +304,8 @@ export default function AturStokTab({
   const totalFinalStock = items.reduce((sum, i) => sum + i.finalStock, 0);
 
   // Sales calculations
-  const totalSoldPcs = items.reduce((sum, i) => sum + Math.max(0, i.initialStock - i.finalStock), 0);
-  const totalSalesAmount = items.reduce((sum, i) => sum + (Math.max(0, i.initialStock - i.finalStock) * i.price), 0);
+  const totalSoldPcs = items.reduce((sum, i) => sum + Math.max(0, (i.initialStock + i.incomingStock) - i.finalStock), 0);
+  const totalSalesAmount = items.reduce((sum, i) => sum + (Math.max(0, (i.initialStock + i.incomingStock) - i.finalStock) * i.price), 0);
   
   // Calculate digital payments from shift transactions
   const { totalDigitalAmount, totalDigitalPcs } = useMemo(() => {
@@ -371,8 +371,22 @@ export default function AturStokTab({
         return { 
           ...item, 
           incomingStock: newIncoming,
-          initialStock: item.previousStock + newIncoming,
-          finalStock: item.previousStock + newIncoming
+          finalStock: item.finalStock + delta
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleSetIncomingDirect = (productId: string, val: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newIncoming = Math.max(0, val);
+        const delta = newIncoming - item.incomingStock;
+        return { 
+          ...item, 
+          incomingStock: newIncoming,
+          finalStock: item.finalStock + delta
         };
       }
       return item;
@@ -617,7 +631,7 @@ export default function AturStokTab({
             style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
           />
 
-          {[1, 2, 3, 4].map((step) => {
+          {[1, 2, 3, 4, 5].map((step) => {
             const isActive = currentStep === step;
             const isPassed = currentStep > step;
             
@@ -997,7 +1011,7 @@ export default function AturStokTab({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. LANGKAH 2: HITUNG STOK AKHIR (TUTUP SHIFT) */}
+      {/* 2. LANGKAH 2: TAMBAH STOK BARU (BARANG MASUK) */}
       {/* ========================================================================= */}
       {currentStep === 2 && !isHandoverSuccess && (
         <motion.div
@@ -1008,8 +1022,143 @@ export default function AturStokTab({
           {/* Header */}
           <div className="px-1 flex items-start justify-between gap-2">
             <div className="flex items-start gap-2">
-              <div className="w-5 h-5 rounded-full bg-emerald-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
+              <div className="w-5 h-5 rounded-full bg-indigo-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
                 2
+              </div>
+              <div>
+                <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  Tambah Stok Baru (Barang Masuk)
+                </h3>
+                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 leading-tight ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
+                  Catat penambahan voucher baru jika ada barang masuk di tengah shift.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-indigo-900/40 shadow-md'
+          }`}>
+            <table className="w-full table-fixed text-left border-collapse bg-transparent">
+              <thead className={`border-b ${
+                isLight ? 'bg-slate-50/90 border-slate-200 text-slate-800 font-bold' : 'bg-white dark:bg-slate-800 border-indigo-900/40 text-slate-600 dark:text-slate-300 font-bold'
+              }`}>
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
+                  <th className="py-2 px-2 w-[42%] sm:w-[40%] font-bold">VOUCHER</th>
+                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold">AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>+ MASUK</th>
+                  <th className="py-2 px-2 text-right w-[16%] sm:w-[20%] font-bold">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody className={`text-xs divide-y ${
+                isLight ? 'divide-slate-100 bg-white' : 'divide-indigo-900/20'
+              }`}>
+                {filteredItems.map((item) => {
+                  const isEditingIncoming = activeEditingRow.step === 2 && 
+                                         activeEditingRow.type === 'incoming' && 
+                                         activeEditingRow.productId === item.productId;
+                  const productDetails = products.find(p => p.id === item.productId);
+                  const nameParts = item.productName.split(' ');
+                  const brandTitle = nameParts[0];
+                  const variantSubtitle = nameParts.slice(1).join(' ');
+
+                  return (
+                    <tr 
+                      key={item.productId} 
+                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
+                        isEditingIncoming 
+                          ? (isLight ? 'bg-indigo-50 ring-1 ring-indigo-400' : 'bg-indigo-900/40 ring-1 ring-indigo-500/50')
+                          : (isLight ? 'hover:bg-slate-50 bg-white' : 'hover:bg-blue-950/30')
+                      }`}
+                    >
+                      <td className="py-2.5 px-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            <span className={`text-sm sm:text-base font-black truncate ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                              {brandTitle}
+                            </span>
+                            <span className={`text-xs sm:text-[13px] font-bold truncate ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {variantSubtitle || item.productName}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
+                        {item.initialStock}
+                      </td>
+                      
+                      <td className="py-2 px-1 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isOwnerMode) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
+                          }}
+                          disabled={isOwnerMode}
+                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
+                            isLight 
+                              ? (item.incomingStock > 0 ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700')
+                              : (item.incomingStock > 0 ? 'bg-indigo-900/60 border-indigo-400/50 text-indigo-300' : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-400')
+                          }`}
+                        >
+                          <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                            {item.incomingStock > 0 ? '+' + item.incomingStock : 0}
+                          </span>
+                        </button>
+                      </td>
+
+                      <td className={`py-2 px-2 text-right font-mono font-black text-xs sm:text-sm leading-tight ${
+                        isLight ? 'text-slate-900' : 'text-slate-100'
+                      }`}>
+                        {item.initialStock + item.incomingStock}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
+                isLight 
+                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
+                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Awal
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentStep(3)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+            >
+              Lanjut: Hitung Stok Akhir <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. LANGKAH 3: HITUNG STOK AKHIR (TUTUP SHIFT) */}
+      {/* ========================================================================= */}
+      {currentStep === 3 && !isHandoverSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2.5"
+        >
+          {/* Header */}
+          <div className="px-1 flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <div className="w-5 h-5 rounded-full bg-emerald-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
+                3
               </div>
               <div>
                 <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
@@ -1147,7 +1296,7 @@ export default function AturStokTab({
                 isLight ? 'divide-slate-100 bg-white' : 'divide-blue-900/20'
               }`}>
                 {filteredItems.map((item) => {
-                  const isEditingFinal = activeEditingRow.step === 2 && 
+                  const isEditingFinal = activeEditingRow.step === 3 && 
                                          activeEditingRow.type === 'final' && 
                                          activeEditingRow.productId === item.productId;
                   const productDetails = products.find(p => p.id === item.productId);
@@ -1160,7 +1309,7 @@ export default function AturStokTab({
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 2, type: 'final', productId: item.productId })}
+                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 3, type: 'final', productId: item.productId })}
                       className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingFinal 
                           ? (isLight ? 'bg-emerald-100/70 ring-1 ring-emerald-400' : 'bg-emerald-900/40 ring-1 ring-emerald-500/50')
@@ -1201,7 +1350,7 @@ export default function AturStokTab({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!isOwnerMode) setActiveEditingRow({ step: 2, type: 'final', productId: item.productId });
+                            if (!isOwnerMode) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
                           }}
                           disabled={isOwnerMode}
                           className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
@@ -1242,18 +1391,18 @@ export default function AturStokTab({
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setCurrentStep(1)}
+              onClick={() => setCurrentStep(2)}
               className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
                 isLight 
                   ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
                   : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
               }`}
             >
-              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Awal
+              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Tambah Stok
             </button>
             <button
               type="button"
-              onClick={() => setCurrentStep(3)}
+              onClick={() => setCurrentStep(4)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
               Lanjut: Cek Tunai & QRIS <ArrowRight className="w-3.5 h-3.5" />
@@ -1264,9 +1413,9 @@ export default function AturStokTab({
       )}
 
       {/* ========================================================================= */}
-      {/* 3. LANGKAH 3: CEK TUNAI VS NON-TUNAI / QRIS */}
+      {/* 4. LANGKAH 4: CEK TUNAI VS NON-TUNAI / QRIS */}
       {/* ========================================================================= */}
-      {currentStep === 3 && !isHandoverSuccess && (
+      {currentStep === 4 && !isHandoverSuccess && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1427,7 +1576,7 @@ export default function AturStokTab({
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setCurrentStep(2)}
+              onClick={() => setCurrentStep(3)}
               className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
                 isLight 
                   ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
@@ -1438,7 +1587,7 @@ export default function AturStokTab({
             </button>
             <button
               type="button"
-              onClick={() => setCurrentStep(4)}
+              onClick={() => setCurrentStep(5)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
               Lanjut: Serah Terima <ArrowRight className="w-3.5 h-3.5" />
@@ -1449,9 +1598,9 @@ export default function AturStokTab({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. LANGKAH 4: SERAH TERIMA KASIR */}
+      {/* 5. LANGKAH 5: SERAH TERIMA KASIR */}
       {/* ========================================================================= */}
-      {currentStep === 4 && !isHandoverSuccess && (
+      {currentStep === 5 && !isHandoverSuccess && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1644,7 +1793,7 @@ export default function AturStokTab({
           }`}>
             <button
               type="button"
-              onClick={() => setCurrentStep(3)}
+              onClick={() => setCurrentStep(4)}
               className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
                 isLight 
                   ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50' 
@@ -1756,9 +1905,9 @@ export default function AturStokTab({
                         Item {currentIdx + 1} dari {filteredItems.length}
                       </span>
                       <span className={`text-[11px] font-bold ${
-                        isStep1 ? (isLight ? 'text-blue-600' : 'text-blue-400') : (isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400')
+                        isStep1 ? (isLight ? 'text-blue-600' : 'text-blue-400') : (activeEditingRow.step === 2 ? (isLight ? 'text-indigo-600' : 'text-indigo-400') : (isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400'))
                       }`}>
-                        {isStep1 ? 'Edit Stok Awal' : 'Edit Sisa Akhir'}
+                        {isStep1 ? 'Edit Stok Awal' : activeEditingRow.step === 2 ? 'Tambah Stok Baru' : 'Edit Sisa Akhir'}
                       </span>
                     </div>
                     <button
@@ -1790,7 +1939,9 @@ export default function AturStokTab({
                     <span className={`text-xs sm:text-sm font-mono font-bold px-2.5 py-0.5 rounded-full ${
                       isStep1
                         ? (isLight ? 'bg-blue-100 text-blue-800' : 'bg-blue-950/80 text-blue-300 border border-blue-800/50')
-                        : (isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50')
+                        : activeEditingRow.step === 2
+                          ? (isLight ? 'bg-indigo-100 text-indigo-800' : 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/50')
+                          : (isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50')
                     }`}>
                       @Rp{item.price.toLocaleString('id-ID')}
                     </span>
@@ -1947,7 +2098,92 @@ export default function AturStokTab({
                   )}
 
                   {/* Content for Step 2 (Sisa Akhir) */}
-                  {!isStep1 && (
+                  {/* Content for Step 2 (Tambah Stok Baru) */}
+                  {activeEditingRow.step === 2 && (
+                    <div className="space-y-4">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <label className={`text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          JUMLAH BARANG MASUK SAAT INI
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock - 1)}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition active:scale-90 ${
+                              isLight 
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200' 
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 shadow-lg'
+                            }`}
+                          >
+                            <Minus className="w-5 h-5" />
+                          </button>
+
+                          <div className={`relative w-28 h-16 rounded-2xl flex items-center justify-center border-2 ${
+                            isLight 
+                              ? 'bg-white border-indigo-200 shadow-inner' 
+                              : 'bg-slate-900 border-indigo-500/30 shadow-inner'
+                          }`}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.incomingStock || ''}
+                              onChange={(e) => handleSetIncomingDirect(item.productId, parseInt(e.target.value) || 0)}
+                              className={`w-full text-center bg-transparent border-none outline-none font-black text-3xl font-mono ${
+                                isLight ? 'text-indigo-700' : 'text-indigo-400'
+                              }`}
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock + 1)}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition active:scale-90 shadow-md ${
+                              isLight 
+                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500' 
+                                : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500'
+                            }`}
+                          >
+                            <Plus className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                        {[1, 5, 10, 50].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock + val)}
+                            className={`py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 border ${
+                              isLight 
+                                ? 'bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700' 
+                                : 'bg-slate-800 hover:bg-indigo-900/40 border-slate-700 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-300'
+                            }`}
+                          >
+                            <span className="text-[10px] opacity-70">Tambah</span>
+                            <span>+{val}</span>
+                          </button>
+                        ))}
+                      </div>
+                      
+                      {/* Simpan & Push ke Global Stock */}
+                      <button
+                        onClick={() => {
+                          if (productDetails && item.incomingStock > 0) {
+                            onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
+                          }
+                          setActiveEditingRow(prev => ({ ...prev, productId: null }));
+                        }}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg transition active:scale-95 flex flex-col items-center justify-center"
+                      >
+                        <span>Simpan Stok Baru (Enter)</span>
+                        <span className="text-[9px] font-normal opacity-80">Otomatis menambah stok kasir jualan saat ini</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Content for Step 3 (Sisa Akhir) */}
+                  {activeEditingRow.step === 3 && (
                     <div className="space-y-3">
                       {/* Context Stats */}
                       <div className="grid grid-cols-2 gap-2 text-center">
