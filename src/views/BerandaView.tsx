@@ -1165,18 +1165,17 @@ const ProfitPanel: React.FC<{
 
 const DEFAULT_OWNER_MENU = [
   { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
-  { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
-  { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
-  { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
+  { id: 'view-owner-profit', title: 'Profit', desc: 'Kalender keuntungan', icon: 'fa-calendar-check', color: 'bg-emerald-700' },
+  { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
+  { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
   { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
   { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
-  { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
-  { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
-  { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
-  { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+  { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
   { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
-  { id: 'view-owner-profit', title: 'Profit', desc: 'Kalender keuntungan', icon: 'fa-calendar-check', color: 'bg-emerald-700' },
-  // Setting dihapus atau bisa dimunculkan lagi jika dibutuhkan. Kalau butuh, tambah id: 'view-owner-setting'
+  { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
+  { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+  { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
+  { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
 ];
 
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
@@ -2036,7 +2035,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {menuOrder.map((id) => {
               const item = DEFAULT_OWNER_MENU.find(m => m.id === id)
               if (!item) return null
