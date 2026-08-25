@@ -80,7 +80,7 @@ export default function LaporanTab({
         
         const cashierMatch = selectedCashierFilter === 'SEMUA' 
           ? true 
-          : item.cashierName === selectedCashierFilter || item.toCashier === selectedCashierFilter;
+          : item.cashierName === selectedCashierFilter || (item as any).toCashier === selectedCashierFilter;
           
         return dateMatch && typeMatch && cashierMatch;
       })
