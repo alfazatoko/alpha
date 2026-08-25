@@ -905,6 +905,280 @@ const CatatanPanel: React.FC<{
   );
 };
 
+const ProfitPanel: React.FC<{
+  transactions: Transaction[]
+  kasirList: Record<string, KasirAccount>
+  activeStoreId: string | 'all'
+  showToast?: (msg: string) => void
+}> = ({ transactions, kasirList, activeStoreId, showToast }) => {
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [syncedData, setSyncedData] = useState<Record<string, any>>({})
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  useEffect(() => {
+    const raw = localStorage.getItem(`alphaPro_${activeStoreId}_daily_profit`)
+    if (raw) {
+      try {
+        setSyncedData(JSON.parse(raw))
+      } catch(e) {}
+    }
+  }, [activeStoreId])
+
+  const profitData = useMemo(() => {
+    const data: Record<string, { totalKasir: number, perKasir: Record<string, number>, totalVC: number, perKasirVC: Record<string, number> }> = JSON.parse(JSON.stringify(syncedData))
+    const todayStr = getLocalDateString()
+    const liveToday = { totalKasir: 0, perKasir: {} as Record<string, number>, totalVC: 0, perKasirVC: {} as Record<string, number> }
+    
+    // 1. Non-voucher transactions (Live for today only)
+    transactions.forEach(t => {
+      const date = t.timestamp.substring(0, 10)
+      if (date === todayStr) {
+        if (!t.kategori.startsWith('Isi ') && t.adminFee) {
+          liveToday.totalKasir += t.adminFee
+          const kasirName = t.kasir_id && kasirList[t.kasir_id] ? kasirList[t.kasir_id].name : (t.kasir_id || 'Unknown')
+          if (!liveToday.perKasir[kasirName]) liveToday.perKasir[kasirName] = 0
+          liveToday.perKasir[kasirName] += t.adminFee
+        }
+      }
+    })
+
+    // 2. Voucher transactions (Live for today only)
+    if (activeStoreId !== 'all') {
+      for(let i=1; i<=5; i++) {
+        const vTxRaw = localStorage.getItem(`v_${activeStoreId}_c${i}_transactions`)
+        if (vTxRaw) {
+          try {
+            const vTxs = JSON.parse(vTxRaw)
+            vTxs.forEach((t: any) => {
+              if (t.type === 'PENJUALAN') {
+                const date = t.timestamp.substring(0, 10)
+                if (date === todayStr) {
+                  const profitVC = t.amount - (t.cogs || 0)
+                  if (profitVC > 0) {
+                    liveToday.totalVC += profitVC
+                    const kasirName = t.cashierName || 'Unknown'
+                    if (!liveToday.perKasirVC[kasirName]) liveToday.perKasirVC[kasirName] = 0
+                    liveToday.perKasirVC[kasirName] += profitVC
+                  }
+                }
+              }
+            })
+          } catch(e) {}
+        }
+      }
+    }
+
+    // Only merge live data for today
+    if (liveToday.totalKasir > 0 || liveToday.totalVC > 0) {
+      data[todayStr] = liveToday
+    }
+
+    return data
+  }, [transactions, activeStoreId, kasirList, syncedData])
+
+  const handleSync = async () => {
+    setIsSyncing(true)
+    try {
+      const today = new Date()
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0]
+
+      // Fetch all regular transactions for the month from Supabase
+      let allMonthTxs: Transaction[] = []
+      let hasMore = true
+      let from = 0
+      const step = 1000
+
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('*')
+          .gte('timestamp', `${firstDay}T00:00:00`)
+          .lte('timestamp', `${lastDay}T23:59:59`)
+          .order('timestamp', { ascending: false })
+          .range(from, from + step - 1)
+          
+        if (activeStoreId !== 'all') {
+          query = query.eq('store_id', activeStoreId)
+        }
+
+        const { data, error } = await query
+        if (error || !data) {
+          hasMore = false
+        } else {
+          allMonthTxs = [...allMonthTxs, ...data]
+          from += step
+          if (data.length < step) hasMore = false
+        }
+      }
+
+      const syncData: Record<string, any> = JSON.parse(JSON.stringify(syncedData))
+      const monthData: Record<string, any> = {}
+
+      // Process regular transactions
+      allMonthTxs.forEach(t => {
+        const date = t.timestamp.substring(0, 10)
+        if (!monthData[date]) monthData[date] = { totalKasir: 0, perKasir: {}, totalVC: 0, perKasirVC: {} }
+        
+        if (!t.kategori.startsWith('Isi ') && t.adminFee) {
+          monthData[date].totalKasir += t.adminFee
+          const kasirName = t.kasir_id && kasirList[t.kasir_id] ? kasirList[t.kasir_id].name : (t.kasir_id || 'Unknown')
+          if (!monthData[date].perKasir[kasirName]) monthData[date].perKasir[kasirName] = 0
+          monthData[date].perKasir[kasirName] += t.adminFee
+        }
+      })
+
+      // Process voucher transactions
+      if (activeStoreId !== 'all') {
+        for(let i=1; i<=5; i++) {
+          const vTxRaw = localStorage.getItem(`v_${activeStoreId}_c${i}_transactions`)
+          if (vTxRaw) {
+            try {
+              const vTxs = JSON.parse(vTxRaw)
+              vTxs.forEach((t: any) => {
+                if (t.type === 'PENJUALAN') {
+                  const date = t.timestamp.substring(0, 10)
+                  if (date >= firstDay && date <= lastDay) {
+                    if (!monthData[date]) monthData[date] = { totalKasir: 0, perKasir: {}, totalVC: 0, perKasirVC: {} }
+                    const profitVC = t.amount - (t.cogs || 0)
+                    if (profitVC > 0) {
+                      monthData[date].totalVC += profitVC
+                      const kasirName = t.cashierName || 'Unknown'
+                      if (!monthData[date].perKasirVC[kasirName]) monthData[date].perKasirVC[kasirName] = 0
+                      monthData[date].perKasirVC[kasirName] += profitVC
+                    }
+                  }
+                }
+              })
+            } catch(e) {}
+          }
+        }
+      }
+
+      // Overwrite the month's dates in syncData
+      Object.keys(monthData).forEach(date => {
+        syncData[date] = monthData[date]
+      })
+
+      localStorage.setItem(`alphaPro_${activeStoreId}_daily_profit`, JSON.stringify(syncData))
+      setSyncedData(syncData)
+      if (showToast) showToast('Data profit bulan ini berhasil diunduh & disinkronkan!')
+    } catch (e) {
+      if (showToast) showToast('Gagal sinkron profit. Periksa koneksi internet.')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const todayStr = getLocalDateString()
+  const currentMonthStr = todayStr.substring(0, 7)
+  
+  let profitHariIni = 0
+  let profitBulanIni = 0
+
+  Object.keys(profitData).forEach(date => {
+    const totalDay = profitData[date].totalKasir + profitData[date].totalVC
+    if (date === todayStr) profitHariIni = totalDay
+    if (date.startsWith(currentMonthStr)) profitBulanIni += totalDay
+  })
+
+  const sortedDates = Object.keys(profitData).sort((a, b) => b.localeCompare(a))
+
+  return (
+    <div className="space-y-4 pb-10">
+      <div className="flex justify-end mb-2">
+        <button 
+          onClick={handleSync}
+          disabled={isSyncing}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-widest py-2 px-4 rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+        >
+          <i className={cn("fa-solid fa-arrows-rotate", isSyncing && "fa-spin")}></i>
+          {isSyncing ? "Menyinkronkan..." : "Sinkron Profit"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl shadow-sm">
+          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Profit Bulan Ini</p>
+          <p className="text-sm font-black text-emerald-800">{formatRupiah(profitBulanIni)}</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl shadow-sm">
+          <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Profit Hari Ini</p>
+          <p className="text-[8px] font-bold text-blue-500 mb-0.5">Estimasi Berjalan</p>
+          <p className="text-sm font-black text-blue-800">{formatRupiah(profitHariIni)}</p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+        <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <i className="fa-solid fa-calendar-days text-emerald-600"></i> Kalender Keuntungan
+        </h3>
+        <div className="space-y-3">
+          {sortedDates.map(date => {
+            const dayData = profitData[date]
+            const isSelected = selectedDate === date
+            const totalDay = dayData.totalKasir + dayData.totalVC
+            return (
+              <div key={date} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                <button 
+                  onClick={() => setSelectedDate(isSelected ? null : date)}
+                  className={cn("w-full text-left p-3 flex justify-between items-center transition-all", isSelected ? "bg-emerald-50" : "bg-gray-50 hover:bg-emerald-50/50")}
+                >
+                  <div>
+                    <p className="text-xs font-black text-gray-800">{date}</p>
+                  </div>
+                  <div className="text-right flex items-center gap-3">
+                    <p className="text-sm font-black text-emerald-600">{formatRupiah(totalDay)}</p>
+                    <i className={cn("fa-solid text-[10px] text-gray-400 transition-transform", isSelected ? "fa-chevron-up" : "fa-chevron-down")}></i>
+                  </div>
+                </button>
+                {isSelected && (
+                  <div className="p-3 bg-white border-t border-gray-100 space-y-2">
+                    {Object.entries(dayData.perKasir).map(([kasirName, profit]) => (
+                      <div key={kasirName} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
+                        <p className="text-[10px] font-black text-gray-600 uppercase">Profit {kasirName}</p>
+                        <p className="text-[11px] font-black text-gray-800">{formatRupiah(profit)}</p>
+                      </div>
+                    ))}
+                    {Object.entries(dayData.perKasirVC).map(([kasirName, profit]) => (
+                      <div key={'vc-'+kasirName} className="flex justify-between items-center bg-orange-50 p-2 rounded-lg border border-orange-100">
+                        <p className="text-[10px] font-black text-orange-600 uppercase">Profit VC - {kasirName}</p>
+                        <p className="text-[11px] font-black text-orange-800">{formatRupiah(profit)}</p>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center bg-emerald-50 p-2 rounded-lg border border-emerald-100 mt-2">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase">TOTAL PROFIT VC</p>
+                      <p className="text-[11px] font-black text-emerald-800">{formatRupiah(dayData.totalVC)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {sortedDates.length === 0 && (
+            <p className="text-xs font-bold text-gray-400 text-center py-4">Belum ada data profit tersimpan.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const DEFAULT_OWNER_MENU = [
+  { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
+  { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
+  { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
+  { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
+  { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
+  { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
+  { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
+  { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
+  { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
+  { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+  { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
+  { id: 'view-owner-profit', title: 'Profit', desc: 'Kalender keuntungan', icon: 'fa-calendar-check', color: 'bg-emerald-700' },
+  // Setting dihapus atau bisa dimunculkan lagi jika dibutuhkan. Kalau butuh, tambah id: 'view-owner-setting'
+];
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
 
@@ -924,6 +1198,50 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
+
+  // STATE: Owner Menu Reordering
+  const [isEditMenuMode, setIsEditMenuMode] = useState(false)
+  const [menuOrder, setMenuOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('alphaPro_owner_menu_order')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Pastikan semua default items tetap ada walaupun ada update
+          const validSaved = parsed.filter(id => DEFAULT_OWNER_MENU.find(m => m.id === id))
+          const missing = DEFAULT_OWNER_MENU.filter(m => !validSaved.includes(m.id)).map(m => m.id)
+          return [...validSaved, ...missing]
+        }
+      }
+    } catch {}
+    return DEFAULT_OWNER_MENU.map(m => m.id)
+  })
+  const [selectedForSwap, setSelectedForSwap] = useState<string | null>(null)
+
+  const handleMenuClick = (id: string) => {
+    if (isEditMenuMode) {
+      if (!selectedForSwap) {
+        setSelectedForSwap(id)
+      } else if (selectedForSwap === id) {
+        setSelectedForSwap(null) // Batal pilih
+      } else {
+        // Lakukan Swap
+        const newOrder = [...menuOrder]
+        const idx1 = newOrder.indexOf(selectedForSwap)
+        const idx2 = newOrder.indexOf(id)
+        if (idx1 !== -1 && idx2 !== -1) {
+          const temp = newOrder[idx1]
+          newOrder[idx1] = newOrder[idx2]
+          newOrder[idx2] = temp
+          setMenuOrder(newOrder)
+          localStorage.setItem('alphaPro_owner_menu_order', JSON.stringify(newOrder))
+        }
+        setSelectedForSwap(null)
+      }
+    } else {
+      props.setActiveView(id)
+    }
+  }
 
   // --- AUTO SYNC PERFORMA HARIAN ---
   useEffect(() => {
@@ -1685,45 +2003,79 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       {props.kasirRole === 'owner' && !props.isPc && (
         <div className="px-1.5 mb-8">
-          <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center gap-4 border-b-4 border-orange-600/20">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/30 shadow-inner">
-              <i className="fa-solid fa-shield-halved text-2xl"></i>
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-[2rem] p-6 mb-6 shadow-lg shadow-orange-200/50 flex items-center justify-between border-b-4 border-orange-600/20">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/30 shadow-inner">
+                <i className="fa-solid fa-shield-halved text-2xl"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-white text-xl tracking-tight leading-none">Panel Owner</h3>
+                <p className="text-white/80 text-[11px] font-bold mt-1.5 uppercase tracking-widest">Kelola semua data toko</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-black text-white text-xl tracking-tight leading-none">Panel Owner</h3>
-              <p className="text-white/80 text-[11px] font-bold mt-1.5 uppercase tracking-widest">Kelola semua data toko</p>
-            </div>
+            
+            {/* Tombol Edit Menu */}
+            <button 
+              onClick={() => {
+                setIsEditMenuMode(!isEditMenuMode)
+                setSelectedForSwap(null)
+              }}
+              className={cn(
+                "w-10 h-10 rounded-2xl flex items-center justify-center text-white backdrop-blur-md border border-white/30 transition-all",
+                isEditMenuMode ? "bg-white/40 shadow-lg scale-110" : "bg-white/20 shadow-inner active:scale-95"
+              )}
+            >
+              <i className={cn("fa-solid text-lg", isEditMenuMode ? "fa-check" : "fa-pen")}></i>
+            </button>
           </div>
 
+          {isEditMenuMode && (
+            <div className="mb-4 bg-orange-100/80 border border-orange-200 p-3 rounded-2xl text-center shadow-sm animate-in fade-in slide-in-from-top-2">
+              <p className="text-xs font-black text-orange-800 tracking-tight uppercase">MODE EDIT SUSUNAN AKTIF</p>
+              <p className="text-[10px] text-orange-600 font-bold mt-0.5">Ketuk tombol pertama, lalu ketuk tombol kedua untuk menukar posisinya.</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
-            {[
-              { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
-              { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
-              { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
-              { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
-              { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
-              { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
-              { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
-              { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
-              { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
-              { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
-              { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
-              { id: 'view-akun', title: 'Setting', desc: 'Pengaturan app', icon: 'fa-gear', color: 'bg-slate-600' },
-            ].map((item) => (
-              <button 
-                key={item.id}
-                onClick={() => props.setActiveView(item.id)}
-                className="bg-white border border-gray-100 rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 shadow-sm active:scale-95 transition-all hover:border-orange-200"
-              >
-                <div className={cn("w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg", item.color)}>
-                  <i className={`fa-solid ${item.icon} text-lg`}></i>
-                </div>
-                <div className="text-center">
-                  <p className="text-[11px] font-black text-black leading-none mb-1">{item.title}</p>
-                  <p className="text-[8px] font-bold text-gray-400 leading-tight">{item.desc}</p>
-                </div>
-              </button>
-            ))}
+            {menuOrder.map((id) => {
+              const item = DEFAULT_OWNER_MENU.find(m => m.id === id)
+              if (!item) return null
+              
+              const isSelected = selectedForSwap === item.id
+              
+              return (
+                <button 
+                  key={item.id}
+                  onClick={() => handleMenuClick(item.id)}
+                  className={cn(
+                    "bg-white border rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 shadow-sm transition-all relative overflow-hidden",
+                    isEditMenuMode ? "animate-pulse-slow cursor-pointer" : "active:scale-95 hover:border-orange-200 border-gray-100",
+                    isEditMenuMode && !isSelected ? "border-dashed border-orange-300 bg-orange-50/10" : "",
+                    isSelected ? "border-solid border-orange-500 bg-orange-50 ring-2 ring-orange-500 ring-offset-1 scale-105" : ""
+                  )}
+                >
+                  {isEditMenuMode && (
+                    <div className={cn(
+                      "absolute top-2 right-2 rounded-full w-5 h-5 flex items-center justify-center transition-colors",
+                      isSelected ? "bg-orange-500" : "bg-black/5"
+                    )}>
+                      <i className={cn("fa-solid fa-up-down-left-right text-[8px]", isSelected ? "text-white" : "text-gray-400")}></i>
+                    </div>
+                  )}
+                  <div className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg transition-transform", 
+                    item.color,
+                    isEditMenuMode && !isSelected ? "opacity-80 scale-90" : "scale-100"
+                  )}>
+                    <i className={`fa-solid ${item.icon} text-lg`}></i>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[11px] font-black text-black leading-none mb-1">{item.title}</p>
+                    <p className="text-[8px] font-bold text-gray-400 leading-tight">{item.desc}</p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -1743,6 +2095,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             case 'saldo': return { title: 'PENGATURAN SALDO', color: 'from-emerald-600 to-emerald-800', icon: 'fa-wallet', desc: 'Alokasi dan penambahan modal harian kasir.' }
             case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
             case 'catatan': return { title: 'CATATAN OWNER', color: 'from-amber-500 to-orange-600', icon: 'fa-clipboard-list', desc: 'Catat pengingat penting dan daftar belanja.' }
+            case 'profit': return { title: 'KALENDER KEUNTUNGAN', color: 'from-emerald-500 to-emerald-700', icon: 'fa-calendar-check', desc: 'Total keuntungan harian dan rincian per kasir.' }
             default: return { title: 'BACKUP & RESET', color: 'from-red-600 to-red-800', icon: 'fa-database', desc: 'Cadangkan data dan kembalikan ke pengaturan awal.' }
           }
         };
@@ -3422,6 +3775,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
               {activeOwnerSubView === 'catatan' && (
                 <CatatanPanel showToast={props.showToast} onConfirm={props.onConfirm} />
+              )}
+              {activeOwnerSubView === 'profit' && (
+                <ProfitPanel
+                  transactions={props.allTransactions || []}
+                  kasirList={props.kasirList}
+                  activeStoreId={currentTargetStoreId}
+                  showToast={props.showToast}
+                />
               )}
             </div>
             </div>

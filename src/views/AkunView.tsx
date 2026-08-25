@@ -92,9 +92,9 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
       }
     }
 
-    // Check check-in
+    // Check check-in (matching the logic in BerandaView which uses jam_masuk or just checks entry existence)
     const hasAbsen = (absensiList || []).some(
-      a => a.username === username && a.tanggal === dateStr && a.waktu_masuk
+      a => a.username === username && a.tanggal === dateStr
     );
 
     if (hasAbsen) {

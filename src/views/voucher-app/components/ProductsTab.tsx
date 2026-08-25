@@ -127,6 +127,9 @@ export default function ProductsTab({
   const [bulkAIText, setBulkAIText] = useState('');
   const [isParsingAI, setIsParsingAI] = useState(false);
   const [bulkParsedProducts, setBulkParsedProducts] = useState<any[]>([]);
+  // true jika AI scan berhenti di tengah karena batas token —
+  // dipakai untuk tampilkan warning bahwa hasil tidak lengkap
+  const [isPartialScan, setIsPartialScan] = useState(false);
 
   const [isBulkSelectMode, setIsBulkSelectMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -428,6 +431,56 @@ export default function ProductsTab({
     }
   };
 
+  /**
+   * salvagePartialJson — Coba selamatkan objek-objek JSON yang sudah lengkap
+   * dari teks JSON array yang terpotong di tengah akibat batas token.
+   *
+   * Strategi:
+   * 1. Coba append ']' langsung — jika produk terakhir kebetulan sudah selesai
+   * 2. Potong di '}' terakhir lalu append ']' — buang objek yang belum selesai
+   * 3. Extract semua objek lengkap dengan regex sebagai fallback terakhir
+   */
+  const salvagePartialJson = (rawText: string): any[] => {
+    const text = rawText.replace(/\[SCAN_PARTIAL\]/g, '').trim();
+    // Hapus markdown jika ada
+    const clean = text
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .trim();
+
+    // Cari blok array
+    const start = clean.indexOf('[');
+    if (start === -1) return [];
+    const body = clean.slice(start);
+
+    // Strategi 1: append ']' langsung
+    try {
+      const r = JSON.parse(body.endsWith(']') ? body : body + ']');
+      if (Array.isArray(r) && r.length > 0) return r;
+    } catch {}
+
+    // Strategi 2: potong di '}' terakhir lalu append ']'
+    const lastBrace = body.lastIndexOf('}');
+    if (lastBrace > 0) {
+      try {
+        const r = JSON.parse(body.substring(0, lastBrace + 1) + ']');
+        if (Array.isArray(r) && r.length > 0) return r;
+      } catch {}
+    }
+
+    // Strategi 3: ekstrak semua objek yang komplet dengan regex
+    const matches = body.match(/\{[^{}]+\}/g);
+    if (matches) {
+      const salvaged = matches
+        .map(m => { try { return JSON.parse(m); } catch { return null; } })
+        .filter(Boolean)
+        .filter(obj => obj.name || obj.operator);
+      if (salvaged.length > 0) return salvaged;
+    }
+
+    return [];
+  };
+
   const handleParseBulkAI = async () => {
     if (!bulkAIText.trim()) return;
     
@@ -438,33 +491,62 @@ export default function ProductsTab({
     }
 
     setIsParsingAI(true);
+    setIsPartialScan(false);
     try {
       const prompt = `Anda adalah sistem data extractor untuk aplikasi voucher konter.
 Tugas Anda: Ekstrak SEMUA data voucher dari teks berantakan berikut.
 Abaikan kalimat obrolan yang tidak relevan. Konversi harga (misal: "25rb", "25k") jadi angka utuh (25000).
-Kembalikan HANYA array JSON (tanpa blok markdown \`\`\`json, langsung array-nya saja) dengan format objek berikut per item:
+Kembalikan HANYA array JSON valid (tanpa blok markdown, langsung array-nya saja) dengan format per item:
 [{ "operator": "string", "name": "string", "costPrice": number, "sellingPrice": number, "stock": number, "minStockLevel": number }]
 Jika stok alert tidak disebutkan, isi minStockLevel dengan 4. Jika operator tidak jelas, isi "Lainnya".
+PENTING: Output harus dimulai dari karakter "[" dan diakhiri "]". Jangan tambahkan teks lain.
 
-Teks:
+Teks yang akan diekstrak:
 ${bulkAIText}`;
 
-      const reply = await callGeminiAPI(prompt, [], apiKey);
-      
-      let cleanReply = reply.trim();
-      if (cleanReply.startsWith('```')) {
-        cleanReply = cleanReply.replace(/^```(?:json)?/, '').replace(/```$/, '').trim();
+      // Gunakan maxTokens 4096 agar JSON banyak produk tidak terpotong
+      const reply = await callGeminiAPI(prompt, [], apiKey, undefined, 4096);
+
+      // Cek apakah AI berhenti di tengah karena batas token
+      const isPartial = reply.includes('[SCAN_PARTIAL]');
+
+      // ── Robust JSON extraction ─────────────────────────────────────────────
+      let cleanReply = reply.replace('[SCAN_PARTIAL]', '').trim();
+      cleanReply = cleanReply.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
+      // Cari array JSON di dalam teks
+      const arrayMatch = cleanReply.match(/(\[[\s\S]*\])/);
+      if (arrayMatch) cleanReply = arrayMatch[1];
+
+      let parsed: any[] = [];
+      try {
+        parsed = JSON.parse(cleanReply);
+        if (!Array.isArray(parsed)) parsed = [];
+      } catch {
+        // Parse gagal — coba salvage jika respons parsial
+        if (isPartial) {
+          parsed = salvagePartialJson(reply);
+        } else {
+          console.error('JSON parse error. Raw reply:', reply);
+          throw new Error(
+            'Gemini merespons tapi format JSON tidak valid. ' +
+            'Coba kurangi jumlah data atau gunakan fitur Manual (=).'
+          );
+        }
       }
 
-      const parsed = JSON.parse(cleanReply);
       if (Array.isArray(parsed) && parsed.length > 0) {
         setBulkParsedProducts(parsed);
+        setIsPartialScan(isPartial);
+      } else if (isPartial) {
+        // Batas token tercapai sebelum ada satu produk pun yang selesai
+        alert('⚠️ Batas token tercapai sebelum ada data yang bisa diekstrak. Coba kurangi jumlah teks atau bagi menjadi beberapa bagian.');
       } else {
-        alert('Gemini gagal mengekstrak data. Pastikan teks berisi detail voucher yang jelas.');
+        alert('Gemini tidak menemukan data voucher dalam teks. Pastikan teks mengandung informasi produk (nama, harga, stok).');
       }
     } catch (e: any) {
-      console.error(e);
-      alert('Error saat memproses dengan Gemini: ' + e.message);
+      console.error('[AI Scan Error]', e);
+      alert(`❌ Gagal scan dengan AI:\n\n${e.message}`);
     } finally {
       setIsParsingAI(false);
     }
@@ -995,7 +1077,22 @@ ${bulkAIText}`;
 
                 {bulkParsedProducts.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
-                    <p className="text-xs font-bold text-amber-300 mb-2">Hasil Susunan ({bulkParsedProducts.length} Produk):</p>
+                    {/* ⚠️ Warning banner jika scan parsial akibat batas token */}
+                    {isPartialScan && (
+                      <div className="mb-3 px-3 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-start gap-2">
+                        <span className="text-amber-400 text-base shrink-0 mt-0.5">⚠️</span>
+                        <div>
+                          <p className="text-[11px] font-black text-amber-300 leading-snug">
+                            Scan tidak sampai selesai — batas token AI tercapai
+                          </p>
+                          <p className="text-[10px] text-amber-400/80 mt-0.5 leading-snug">
+                            Berhasil mengekstrak <b className="text-amber-300">{bulkParsedProducts.length} produk</b> dari sebagian data.
+                            Produk yang belum ter-scan bisa dimasukkan manual atau scan ulang sisa teks-nya.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs font-bold text-amber-300 mb-2">Hasil Susunan ({bulkParsedProducts.length} Produk){isPartialScan ? ' — Parsial' : ''}:</p>
                     <div className="max-h-40 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                       {bulkParsedProducts.map((p, idx) => (
                         <div key={idx} className="bg-slate-50 border-slate-200 shadow-sm dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-white/5 text-[10px]">
@@ -1014,7 +1111,7 @@ ${bulkAIText}`;
                     <div className="flex gap-2 mt-4">
                       <button
                         type="button"
-                        onClick={() => setBulkParsedProducts([])}
+                        onClick={() => { setBulkParsedProducts([]); setIsPartialScan(false); }}
                         className="flex-1 py-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent rounded-xl transition border border-slate-200 dark:border-white/10"
                       >
                         Batal
@@ -1024,7 +1121,7 @@ ${bulkAIText}`;
                         onClick={handleSaveBulk}
                         className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-900 dark:text-white text-xs font-bold py-3 rounded-xl transition shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                       >
-                        Simpan Semua ke Stok
+                        {isPartialScan ? `Simpan ${bulkParsedProducts.length} Produk (Parsial)` : 'Simpan Semua ke Stok'}
                       </button>
                     </div>
                   </div>

@@ -31,6 +31,7 @@ export type AppIntent =
   | { type: 'navigate'; view: string; label: string; tab?: string }
   | { type: 'edit_stok'; query: string }
   | { type: 'tanya_stok'; query: string }
+  | { type: 'set_alarm'; minutes: number; message: string }
   | { type: 'ambiguous'; message: string; suggestions: string[] }
   | { type: 'none' }
 
@@ -98,11 +99,8 @@ export function parseAppIntent(text: string): AppIntent {
         c === `buka halaman ${kw}` || 
         c === `pindah ke ${kw}` || 
         c === `pindah halaman ${kw}` ||
-        c.includes(`buka ${kw}`) ||
-        c.includes(`ke ${kw}`) ||
-        c.includes(`halaman ${kw}`) ||
-        c.includes(`pindah ${kw}`) ||
-        (kw.split(' ').length > 1 && c.includes(kw))
+        (c.startsWith(`buka ${kw}`) && c.length < `buka ${kw}`.length + 5) ||
+        (c.startsWith(`ke ${kw}`) && c.length < `ke ${kw}`.length + 5)
       ) {
         const label = VIEW_MAP[Object.keys(VIEW_MAP).find(k => VIEW_MAP[k].view === item.view) || '']?.label || kw
         return { type: 'navigate', view: item.view, label, tab: item.tab }
@@ -141,14 +139,36 @@ export function parseAppIntent(text: string): AppIntent {
     }
   }
 
-  // 4. Navigasi Umum (dengan pembersihan prefiks)
+  // 4. Alarm / Pengingat
+  let alarmMatch = c.match(/(?:ingatkan|alarm).*?(\d+)\s*(menit|jam|detik)\s*(?:lagi\s+)?(?:buat|untuk\s+)?(.*)/i);
+  if (!alarmMatch) alarmMatch = c.match(/(?:ingatkan|alarm).*?(?:buat|untuk\s+)?(.*?)\s+(?:dalam|setelah\s+)?(\d+)\s*(menit|jam|detik)/i);
+  
+  if (alarmMatch) {
+    let numStr, unit, msg;
+    if (isNaN(Number(alarmMatch[1]))) {
+      msg = alarmMatch[1];
+      numStr = alarmMatch[2];
+      unit = alarmMatch[3];
+    } else {
+      numStr = alarmMatch[1];
+      unit = alarmMatch[2];
+      msg = alarmMatch[3];
+    }
+    const val = parseInt(numStr, 10);
+    let minutes = unit.startsWith('jam') ? val * 60 : unit.startsWith('detik') ? val / 60 : val;
+    if (minutes > 0) {
+      return { type: 'set_alarm', minutes, message: msg.replace(/^[!?.,\s]+|[!?.,\s]+$/g, '') || 'Pengingat' };
+    }
+  }
+
+  // 5. Navigasi Umum (dengan pembersihan prefiks)
   let nav = c
   for (const t of ['ke halaman', 'pindah ke', 'pindah halaman', 'buka halaman', 'tampilkan', 'buka', 'ke ']) {
     if (nav.startsWith(t)) { nav = nav.slice(t.length).trim(); break }
   }
   for (const info of Object.values(VIEW_MAP)) {
     for (const kw of info.keywords) {
-      if (nav === kw || nav.includes(kw) || c.includes(kw)) {
+      if (nav === kw || (nav.startsWith(kw) && nav.length < kw.length + 5)) {
         return { type: 'navigate', view: info.view, label: info.label }
       }
     }
@@ -199,7 +219,7 @@ const KB: KBEntry[] = [
   // Bantuan
   {
     test: c => c==='bantuan'||c==='help'||c.includes('bisa apa')||c.includes('kamu bisa')||c.includes('fitur bot'),
-    answer: '🛠️ **Panduan Bot Alpha:**\n\n**📱 Navigasi & Halaman:**\n• *"buka atur stok"* — Ke Stok Voucher\n• *"buka kasbon"* — Ke Buku Kasbon\n• *"buka gaji kasir"* — Ke Owner Gaji\n\n**📊 Tanya Data Offline Toko:**\n• *"daftar kasbon"* — Cek kasbon belum lunas\n• *"cari kontak budi"* — Cari no hp pelanggan\n• *"gaji roni"* — Lihat detail gaji kasir\n• *"rekap hari ini"* — Total nominal & rincian penjualan\n• *"absen hari ini"* — Status kehadiran kasir\n\n**🧮 Kalkulator:**\n• *"berapa 5000 x 12"*\n• *"modal 13000 jual 15000"*\n• *"10% dari 500000"*\n\n**📡 Info Operator:**\n• *"cara cek saldo telkomsel"*\n• *"nomor cs indosat"*\n\n**💬 Umum (Groq):**\n• Tanya apa saja jika Groq key sudah diset'
+    answer: '🛠️ **Panduan Bot Alpha:**\n\n**📱 Navigasi & Halaman:**\n• *"buka atur stok"* — Ke Stok Voucher\n• *"buka kasbon"* — Ke Buku Kasbon\n• *"buka gaji kasir"* — Ke Owner Gaji\n\n**📊 Laporan & Transaksi Voucher:**\n• *"rekap voucher hari ini"* — Omzet & detail penjualan\n• *"cari transaksi axis"* — Filter per produk\n• *"transaksi non tunai"* — Filter per metode bayar\n• *"stok menipis"* — Cek produk hampir habis\n\n**💰 Kalkulator & Pengingat:**\n• *"bayar 50rb voucher 5rb kembalian"*\n• *"modal 13000 jual 15000"*\n• *"ingatkan saya 30 menit untuk setor kas"*\n\n**📦 Data Toko Offline:**\n• *"daftar kasbon"*, *"cari kontak budi"*\n• *"rekap hari ini"* — Transaksi utama\n• *"absen hari ini"*\n\n**📡 Info Operator:**\n• *"cara cek saldo telkomsel"*\n• *"nomor cs indosat"*\n\n**💬 Umum (Gemini):**\n• Tanya apa saja jika Gemini key sudah diset'
   },
   // Jam & Tanggal
   {
@@ -303,6 +323,28 @@ const KB: KBEntry[] = [
     test: c => c.includes('nama kamu')||c.includes('namamu')||c.includes('kamu namanya'),
     answer: 'Namaku **Bot Alpha** 🤖 — asisten virtual toko ALPHA. Senang berkenalan! 😊'
   },
+  // Kalkulator Kembalian — "bayar 50rb voucher 5rb kembaliannya berapa"
+  {
+    test: c => (c.includes('kembalian') || c.includes('kembalian') || c.includes('kembali')) &&
+               (c.includes('bayar') || c.includes('bayar')) &&
+               /\d/.test(c),
+    answer: c => {
+      const nums = [...c.matchAll(/(\d[\d.,]*)(?:\s*(?:rb|ribu|k))?/g)]
+        .map(m => {
+          const raw = m[1].replace(/\./g, '')
+          const full = m[0].toLowerCase()
+          const mult = full.endsWith('rb') || full.endsWith('ribu') || full.endsWith('k') ? 1000 : 1
+          return parseFloat(raw) * mult
+        }).filter(n => n > 0)
+      // Angka besar = bayar, angka kecil = harga
+      if (nums.length < 2) return '💡 Contoh: *"bayar 50rb voucher 5rb kembaliannya berapa"*'
+      const sorted = [...nums].sort((a,b) => b - a)
+      const bayar = sorted[0], harga = sorted[sorted.length - 1]
+      const kembalian = bayar - harga
+      if (kembalian < 0) return `⚠️ Uang tidak cukup! Kurang **Rp ${Math.abs(kembalian).toLocaleString('id-ID')}**.`
+      return `💰 **Kalkulator Kembalian:**\n• Bayar: Rp ${bayar.toLocaleString('id-ID')}\n• Harga: Rp ${harga.toLocaleString('id-ID')}\n• **Kembalian: Rp ${kembalian.toLocaleString('id-ID')}** ✅`
+    }
+  },
 ]
 
 // ── Knowledge Base Lookup (With Database Contexts) ───────────────────────────────────
@@ -312,7 +354,9 @@ export function answerFromKB(
   username: string,
   kasirList: Record<string, any> = {},
   transactions: any[] = [],
-  absensiList: any[] = []
+  absensiList: any[] = [],
+  voucherTransactions: any[] = [],
+  voucherProducts: any[] = []
 ): string | null {
   const c = text.toLowerCase().trim()
 
@@ -491,6 +535,198 @@ export function answerFromKB(
     return res
   }
 
+  // 6. LAPORAN KILAT VOUCHER — rekap penjualan voucher hari ini
+  const isVoucherReport = c.includes('rekap voucher') || c.includes('laporan voucher') ||
+    c.includes('omzet voucher') || c.includes('omset voucher') ||
+    (c.includes('voucher') && (c.includes('hari ini') || c.includes('rekap') || c.includes('penjualan'))) ||
+    c === 'rekap voucher' || c === 'laporan voucher hari ini'
+
+  if (isVoucherReport) {
+    // Baca dari localStorage voucher app (storeId + cashier based keys)
+    let vtxs: any[] = voucherTransactions
+    if (vtxs.length === 0) {
+      // Coba baca dari localStorage
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_transactions')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { vtxs = [...vtxs, ...p] } }
+          }
+        }
+      } catch {}
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayVtxs = vtxs.filter(t => {
+      const ts = t.timestamp || t.date || t.tanggal || ''
+      return ts.startsWith(todayStr) && t.type === 'PENJUALAN'
+    })
+
+    if (todayVtxs.length === 0) {
+      return `📊 **Rekap Voucher Hari Ini:**\n\nBelum ada penjualan voucher yang tercatat hari ini. Semangat! 💪`
+    }
+
+    const totalAmt = todayVtxs.reduce((s, t) => s + (t.amount || t.total || t.sellingPrice || 0), 0)
+    const tunai = todayVtxs.filter(t => (t.paymentMethod || t.metode || '') === 'TUNAI')
+    const nonTunai = todayVtxs.filter(t => (t.paymentMethod || t.metode || '') !== 'TUNAI')
+    const tunaiAmt = tunai.reduce((s, t) => s + (t.amount || t.total || 0), 0)
+    const nonTunaiAmt = nonTunai.reduce((s, t) => s + (t.amount || t.total || 0), 0)
+
+    // Produk terlaris
+    const prodMap: Record<string, { count: number; amt: number }> = {}
+    todayVtxs.forEach(t => {
+      const name = t.productName || t.namaVoucher || t.product || 'Tidak diketahui'
+      if (!prodMap[name]) prodMap[name] = { count: 0, amt: 0 }
+      prodMap[name].count += (t.quantity || t.qty || 1)
+      prodMap[name].amt += (t.amount || t.total || 0)
+    })
+    const sorted = Object.entries(prodMap).sort((a, b) => b[1].count - a[1].count)
+    const terlaris = sorted[0]
+
+    let res = `📊 **Rekap Voucher ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}:**\n\n`
+    res += `• **Total Penjualan**: ${todayVtxs.length} transaksi\n`
+    res += `• **Total Omzet**: **Rp ${totalAmt.toLocaleString('id-ID')}**\n`
+    if (tunaiAmt > 0) res += `• **Tunai**: Rp ${tunaiAmt.toLocaleString('id-ID')} (${tunai.length} trx)\n`
+    if (nonTunaiAmt > 0) res += `• **Non Tunai**: Rp ${nonTunaiAmt.toLocaleString('id-ID')} (${nonTunai.length} trx)\n`
+    if (terlaris) res += `\n🏆 **Terlaris**: ${terlaris[0]} — ${terlaris[1].count} pcs (Rp ${terlaris[1].amt.toLocaleString('id-ID')})`
+    if (sorted.length > 1) {
+      res += `\n\n**Top 3 Produk:**\n`
+      sorted.slice(0, 3).forEach((e, i) => {
+        res += `${i + 1}. ${e[0]}: **${e[1].count} pcs** — Rp ${e[1].amt.toLocaleString('id-ID')}\n`
+      })
+    }
+    return res
+  }
+
+  // 7. STOK MENIPIS — cek produk hampir habis
+  const isStokWarning = c === 'stok menipis' || c === 'stok habis' || c === 'produk menipis' ||
+    c.includes('stok menipis') || c.includes('hampir habis') || c.includes('mau habis') ||
+    c.includes('stok kritis') || c.includes('warning stok')
+
+  if (isStokWarning) {
+    let allProducts: any[] = voucherProducts
+    if (allProducts.length === 0) {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_products')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { allProducts = [...allProducts, ...p] } }
+          }
+        }
+        // De-duplikasi berdasarkan id
+        const seen = new Set()
+        allProducts = allProducts.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
+      } catch {}
+    }
+
+    const menipis = allProducts.filter(p => {
+      const stok = p.currentStock ?? p.stock ?? 0
+      const min = p.minStockLevel ?? 3
+      return stok <= min
+    }).sort((a, b) => (a.currentStock ?? a.stock ?? 0) - (b.currentStock ?? b.stock ?? 0))
+
+    if (menipis.length === 0) {
+      return `✅ **Stok Aman!** Semua produk voucher masih di atas batas minimum. 👍`
+    }
+
+    let res = `⚠️ **${menipis.length} Produk Stok Menipis:**\n\n`
+    menipis.slice(0, 10).forEach((p, i) => {
+      const stok = p.currentStock ?? p.stock ?? 0
+      const min = p.minStockLevel ?? 3
+      const icon = stok === 0 ? '🔴' : stok <= 1 ? '🟠' : '🟡'
+      res += `${icon} **${p.name}**: ${stok} pcs _(min: ${min})_\n`
+    })
+    if (menipis.length > 10) res += `...dan ${menipis.length - 10} produk lainnya.`
+    res += `\n\n💡 Ketik *"atur stok"* untuk update stok sekarang.`
+    return res
+  }
+
+  // 8. CARI TRANSAKSI VOUCHER — filter berdasarkan nama produk / metode bayar
+  const isCariTrx = (c.includes('cari transaksi') || c.includes('transaksi voucher') ||
+    c.includes('penjualan voucher') || c.includes('cari penjualan') ||
+    c.includes('transaksi non tunai') || c.includes('transaksi tunai') ||
+    c.includes('penjualan tunai') || c.includes('penjualan non tunai') ||
+    (c.includes('transaksi') && (c.includes('axis') || c.includes('xl') || c.includes('telkomsel') ||
+     c.includes('indosat') || c.includes('tri') || c.includes('smartfren') || c.includes('kemarin') ||
+     c.includes('hari ini') || c.includes('tadi'))))
+
+  if (isCariTrx) {
+    let vtxs: any[] = voucherTransactions
+    if (vtxs.length === 0) {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_transactions')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) vtxs = [...vtxs, ...p] }
+          }
+        }
+      } catch {}
+    }
+
+    let filtered = vtxs.filter(t => t.type === 'PENJUALAN')
+
+    // Filter tanggal
+    const todayStr = new Date().toISOString().split('T')[0]
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+    if (c.includes('hari ini') || c.includes('tadi')) {
+      filtered = filtered.filter(t => (t.timestamp || '').startsWith(todayStr))
+    } else if (c.includes('kemarin')) {
+      filtered = filtered.filter(t => (t.timestamp || '').startsWith(yesterdayStr))
+    }
+
+    // Filter metode bayar
+    if (c.includes('non tunai') || c.includes('nontunai') || c.includes('qris') || c.includes('transfer')) {
+      filtered = filtered.filter(t => (t.paymentMethod || '') !== 'TUNAI')
+    } else if (c.includes('tunai') && !c.includes('non')) {
+      filtered = filtered.filter(t => (t.paymentMethod || '') === 'TUNAI')
+    }
+
+    // Filter nama produk / operator
+    const operatorKeywords = ['axis', 'xl', 'telkomsel', 'tsel', 'indosat', 'im3', 'tri', 'smartfren']
+    for (const op of operatorKeywords) {
+      if (c.includes(op)) {
+        filtered = filtered.filter(t => {
+          const name = (t.productName || t.namaVoucher || t.product || '').toLowerCase()
+          return name.includes(op) || (op === 'tsel' && name.includes('telkomsel'))
+        })
+        break
+      }
+    }
+    // Filter kata lain (bukan operator)
+    const queryWords = c
+      .replace(/cari|transaksi|penjualan|voucher|hari ini|kemarin|tadi|tunai|non|qris|transfer/g, '')
+      .replace(new RegExp(operatorKeywords.join('|'), 'g'), '')
+      .trim()
+    if (queryWords.length > 2) {
+      filtered = filtered.filter(t => {
+        const name = (t.productName || t.namaVoucher || t.product || '').toLowerCase()
+        return name.includes(queryWords)
+      })
+    }
+
+    if (filtered.length === 0) {
+      return `❌ Tidak ada transaksi voucher yang cocok dengan pencarian tersebut.\n\nCoba: *"cari transaksi axis"* atau *"transaksi non tunai hari ini"*`
+    }
+
+    const totalAmt = filtered.reduce((s, t) => s + (t.amount || t.total || 0), 0)
+    let res = `🔍 **Hasil: ${filtered.length} Transaksi Voucher**\n`
+    res += `_(Total: Rp ${totalAmt.toLocaleString('id-ID')})_\n\n`
+    filtered.slice(0, 7).forEach((t, i) => {
+      const nama = t.productName || t.namaVoucher || t.product || '-'
+      const amt = (t.amount || t.total || 0).toLocaleString('id-ID')
+      const metode = t.paymentMethod === 'TUNAI' ? '💵' : '📲'
+      const tgl = t.timestamp ? new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'
+      const qty = t.quantity || t.qty || 1
+      res += `${i + 1}. ${metode} **${nama}** ×${qty} — Rp ${amt} _(${tgl})_\n`
+    })
+    if (filtered.length > 7) res += `...dan ${filtered.length - 7} transaksi lainnya.`
+    return res
+  }
+
   // Fallback ke KB bawaan
   for (const entry of KB) {
     if (entry.test(c)) {
@@ -616,8 +852,10 @@ Kamu wajib menjawab pertanyaan tentang data sensitif tersebut secara transparan 
 FITUR AKSI (untuk aksi langsung ke sistem, gunakan format tag di akhir jawaban):
 - Untuk catat kasbon: [ACTION:kasbon|nama|nominal|keterangan]
 - Untuk simpan kontak pelanggan: [ACTION:kontak|nama|nomor_hp|keterangan]
+- Untuk buat catatan owner: [ACTION:catatan|judul|isi_catatan]
 - Untuk buka halaman tertentu: [ACTION:navigate|nama_view]
-- Untuk set izin kasir: [ACTION:izin|username_kasir|tanggal|alasan]`
+- Untuk set izin kasir: [ACTION:izin|username_kasir|tanggal|alasan]
+TIPS NAVIGASI CERDAS: Jika user meminta buka riwayat/laporan spesifik (misal "tanggal 20 Agustus"), kamu bisa menanggapi dengan ramah dan tetap memberikan [ACTION:navigate|view-transaksi] atau [ACTION:navigate|view-owner-laporan]. Walaupun saat ini aksi hanya pindah halaman, kamu harus menjawab seolah mengerti konteks tanggalnya.`
     : `\n\nKAMU SEDANG BERBICARA DENGAN: KASIR (${ctx.kasirName || 'Kasir'})
 ATURAN PRIVASI KETAT:
 - DILARANG membocorkan: harga modal produk, total keuntungan toko, gaji kasir lain, rekap audit kasir lain, data finansial owner.
@@ -696,7 +934,7 @@ export function buildStoreContext(
 
 // ── Parse AI Action dari respon Gemini ────────────────────────────────────────
 export interface BotAction {
-  type: 'kasbon' | 'navigate' | 'izin' | 'kontak'
+  type: 'kasbon' | 'navigate' | 'izin' | 'kontak' | 'catatan'
   payload: Record<string, string>
 }
 
@@ -716,6 +954,8 @@ export function parseBotActions(reply: string): { cleanText: string; actions: Bo
       actions.push({ type, payload: { view: parts[1] || '' } })
     } else if (type === 'izin' && parts.length >= 3) {
       actions.push({ type, payload: { username: parts[1] || '', tanggal: parts[2] || '', alasan: parts[3] || '' } })
+    } else if (type === 'catatan' && parts.length >= 3) {
+      actions.push({ type, payload: { judul: parts[1] || '', isi: parts[2] || '' } })
     }
   }
 
@@ -728,7 +968,8 @@ export async function callGeminiAPI(
   userMessage: string,
   history: ChatMessage[],
   apiKey: string,
-  systemPromptOverride?: string
+  systemPromptOverride?: string,
+  maxTokens: number = 2048
 ): Promise<string> {
   const contents: ChatMessage[] = [
     ...history.slice(-8),
@@ -749,20 +990,32 @@ Jika tidak tahu, jujur saja. Jangan jawab hal berbahaya atau SARA.`
       contents,
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 600,
+        maxOutputTokens: maxTokens,
       }
     })
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    if (res.status === 400) throw new Error('API key tidak valid atau request salah format.')
-    if (res.status === 403) throw new Error('API key tidak valid. Cek kembali di Settings bot.')
-    if (res.status === 429) throw new Error('Batas request tercapai. Coba lagi sebentar.')
-    throw new Error(err?.error?.message || `Error ${res.status}`)
+    const apiMsg = err?.error?.message || ''
+    if (res.status === 400) throw new Error(`Request tidak valid: ${apiMsg || 'Cek format prompt atau API key.'}`)
+    if (res.status === 403) throw new Error('API key tidak valid atau tidak punya akses ke model ini. Cek di Settings bot.')
+    if (res.status === 404) throw new Error(`Model "${GEMINI_MODEL}" tidak ditemukan. Hubungi developer untuk update nama model.`)
+    if (res.status === 429) throw new Error('Quota API habis. Coba lagi beberapa saat.')
+    throw new Error(apiMsg || `Error HTTP ${res.status}`)
   }
 
   const data = await res.json()
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+  const finishReason = data?.candidates?.[0]?.finishReason
+
+  // Saat MAX_TOKENS: jangan throw error — kembalikan hasil parsial dengan marker
+  // khusus agar caller bisa salvage data yang sudah berhasil diekstrak sebagian.
+  if (finishReason === 'MAX_TOKENS') {
+    return (text?.trim() || '') + '\n[SCAN_PARTIAL]'
+  }
+  if (!text && finishReason === 'SAFETY') {
+    throw new Error('Respons diblokir filter keamanan Gemini. Coba ubah format teks input.')
+  }
   return text?.trim() || 'Maaf, tidak ada respons dari Gemini.'
 }

@@ -39,6 +39,8 @@ interface LogAktivitasTabProps {
   notifications: LiveNotification[];
   userRole: UserRole;
   theme?: 'dark' | 'light';
+  postClosingTransactions?: any[];
+  onResolvePostClosing?: (ids: string[]) => void;
   onMarkAllRead: () => void;
   onClearAll: () => void;
   onNavigate?: (tab: any) => void;
@@ -49,6 +51,8 @@ export default function LogAktivitasTab({
   notifications, 
   userRole,
   theme = 'dark',
+  postClosingTransactions = [],
+  onResolvePostClosing,
   onMarkAllRead,
   onClearAll,
   onNavigate,
@@ -63,6 +67,7 @@ export default function LogAktivitasTab({
   }); // YYYY-MM-DD
   const [showHighRiskOnly, setShowHighRiskOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [filterPascaClosing, setFilterPascaClosing] = useState(false);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -273,6 +278,58 @@ export default function LogAktivitasTab({
         </div>
       </div>
 
+      {/* SPECIAL BANNER: Penjualan Pasca-Closing */}
+      {postClosingTransactions && postClosingTransactions.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600/50 rounded-2xl p-4 shadow-lg shadow-yellow-500/10 mb-4 animate-in fade-in slide-in-from-top-4 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-400/10 dark:bg-yellow-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+          <div className="relative z-10">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-yellow-800 dark:text-yellow-400 leading-tight">INFO PENJUALAN SETELAH CLOSING</h3>
+                  <p className="text-[10px] font-bold text-yellow-700/80 dark:text-yellow-500/80 uppercase tracking-widest mt-0.5">Tindakan Diperlukan</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/50 dark:bg-black/20 rounded-xl p-3 border border-yellow-200/50 dark:border-yellow-700/30 mb-3">
+              <ul className="space-y-1.5 mb-3">
+                {postClosingTransactions.map(t => (
+                  <li key={t.id} className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-yellow-900 dark:text-yellow-100 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0"></span>
+                      {t.quantity}x {t.productName || 'Voucher'} <span className="text-[9px] text-yellow-600 dark:text-yellow-500 font-bold px-1.5 py-0.5 bg-yellow-200/50 dark:bg-yellow-800/30 rounded-md">{t.paymentMethod || 'TUNAI'}</span>
+                    </span>
+                    <span className="font-black text-yellow-800 dark:text-yellow-300">Rp {t.amount.toLocaleString('id-ID')}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="pt-2 border-t border-yellow-200 dark:border-yellow-700/30 flex justify-between items-end">
+                <span className="text-[10px] font-bold text-yellow-700 dark:text-yellow-500">Total Uang Fisik / QRIS:</span>
+                <span className="text-lg font-black text-yellow-700 dark:text-yellow-400">
+                  Rp {postClosingTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-yellow-800/70 dark:text-yellow-200/60 font-semibold mb-3 leading-snug">
+              *Catatan: Pastikan jumlah uang di atas sudah disisihkan/diserahkan. Klik tombol di bawah jika hitungan sudah beres.
+            </p>
+
+            <button
+              onClick={() => onResolvePostClosing && onResolvePostClosing(postClosingTransactions.map(t => t.id))}
+              className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Selesaikan & Arsipkan
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Large Search & Filter Bar */}
       <div className={`p-3.5 sm:p-4 rounded-2xl border space-y-3 sticky top-0 z-20 backdrop-blur-md ${
         isLight ? 'bg-white/95 border-slate-200 shadow-xs' : 'bg-white dark:bg-slate-900/95 border-slate-200 dark:border-white/10 shadow-lg'
@@ -309,8 +366,37 @@ export default function LogAktivitasTab({
 
         {/* Filter Pills */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+          <button
+            onClick={() => { setSelectedType('all'); setFilterPascaClosing(false); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+              !filterPascaClosing && selectedType === 'all'
+                ? (isLight ? 'bg-indigo-600 text-slate-900 dark:text-white keep-white border-indigo-600 shadow-xs' : 'bg-cyan-500 text-white keep-white border-cyan-500')
+                : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5')
+            }`}
+          >
+            Semua Log
+          </button>
+          
+          {/* Tombol khusus Pasca Closing */}
+          <button
+            onClick={() => setFilterPascaClosing(v => !v)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border flex items-center gap-1 ${
+              filterPascaClosing
+                ? 'bg-yellow-500 text-white border-yellow-500 shadow-md shadow-yellow-500/30'
+                : (isLight ? 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300' : 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border-yellow-500/30')
+            }`}
+          >
+            ⏰ Pasca Closing
+            {postClosingTransactions.length > 0 && (
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ml-0.5 ${
+                filterPascaClosing ? 'bg-white/30 text-white' : 'bg-yellow-500 text-white'
+              }`}>
+                {postClosingTransactions.length}
+              </span>
+            )}
+          </button>
+
           {[
-            { id: 'all', label: 'Semua Log' },
             { id: 'warning', label: '🚨 Peringatan' },
             { id: 'success', label: '✅ Tambah Stok' },
             { id: 'transfer', label: '📱 Serah Terima' },
@@ -318,9 +404,9 @@ export default function LogAktivitasTab({
           ].map(f => (
             <button
               key={f.id}
-              onClick={() => setSelectedType(f.id as any)}
+              onClick={() => { setSelectedType(f.id as any); setFilterPascaClosing(false); }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
-                selectedType === f.id
+                !filterPascaClosing && selectedType === f.id
                   ? (isLight ? 'bg-indigo-600 text-slate-900 dark:text-white keep-white border-indigo-600 shadow-xs' : 'bg-cyan-500 text-white keep-white border-cyan-500')
                   : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5')
               }`}
@@ -378,7 +464,88 @@ export default function LogAktivitasTab({
         </AnimatePresence>
       </div>
 
-      {/* Main Spacious Notification Cards */}
+      {/* Mode Pasca Closing: tampilkan transaksi pasca-closing saja */}
+      {filterPascaClosing ? (
+        <div className="space-y-3">
+          <div className={`px-3 py-2 rounded-xl border flex items-center gap-2 ${
+            isLight ? 'bg-yellow-50 border-yellow-200' : 'bg-yellow-500/10 border-yellow-500/30'
+          }`}>
+            <span className="text-base">⏰</span>
+            <div>
+              <p className={`text-xs font-black ${isLight ? 'text-yellow-800' : 'text-yellow-400'}`}>Mode: Pasca Closing</p>
+              <p className={`text-[10px] ${isLight ? 'text-yellow-700/70' : 'text-yellow-500/70'}`}>
+                Menampilkan {postClosingTransactions.length} penjualan setelah closing terakhir
+              </p>
+            </div>
+          </div>
+
+          {postClosingTransactions.length === 0 ? (
+            <div className={`p-10 rounded-2xl border text-center flex flex-col items-center justify-center ${
+              isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-900/30 border-slate-200 dark:border-white/10'
+            }`}>
+              <span className="text-4xl mb-3">🎉</span>
+              <h3 className={`text-base font-black ${isLight ? 'text-slate-800' : 'text-slate-900 dark:text-white'}`}>
+                Tidak Ada Penjualan Pasca Closing
+              </h3>
+              <p className={`text-xs mt-1 max-w-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Semua penjualan sudah diselesaikan sebelum closing. Bagus!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {postClosingTransactions.map(t => (
+                <div key={t.id} className={`px-3 py-2.5 rounded-xl border ${
+                  isLight ? 'bg-white border-yellow-200 shadow-xs' : 'bg-yellow-900/20 border-yellow-600/30'
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        isLight ? 'bg-yellow-100 text-yellow-600' : 'bg-yellow-500/20 text-yellow-400'
+                      }`}>
+                        <span className="text-sm">🛒</span>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-black ${isLight ? 'text-slate-900' : 'text-yellow-100'}`}>
+                          {t.quantity}x {t.productName || 'Voucher'}
+                        </p>
+                        <p className={`text-[9px] font-semibold ${isLight ? 'text-slate-400' : 'text-yellow-500/70'}`}>
+                          {t.cashierName || '-'} • {t.paymentMethod || 'TUNAI'} •{' '}
+                          {new Date(t.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-black ${isLight ? 'text-yellow-700' : 'text-yellow-300'}`}>
+                      Rp{Number(t.amount).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Total footer */}
+              <div className={`px-3 py-2.5 rounded-xl border mt-1 flex justify-between items-center ${
+                isLight ? 'bg-yellow-50 border-yellow-300' : 'bg-yellow-500/20 border-yellow-500/40'
+              }`}>
+                <span className={`text-xs font-black ${isLight ? 'text-yellow-800' : 'text-yellow-300'}`}>
+                  Total Penjualan Pasca Closing
+                </span>
+                <span className={`text-base font-black ${isLight ? 'text-yellow-700' : 'text-yellow-300'}`}>
+                  Rp{postClosingTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+
+              {onResolvePostClosing && (
+                <button
+                  onClick={() => onResolvePostClosing(postClosingTransactions.map(t => t.id))}
+                  className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Selesaikan & Arsipkan
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="space-y-4">
         {groupedNotifications.length === 0 ? (
           <div className={`p-10 rounded-2xl border text-center flex flex-col items-center justify-center ${
@@ -504,6 +671,7 @@ export default function LogAktivitasTab({
           ))
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -61,6 +61,9 @@ const App: React.FC = () => {
   const [currentUsername, setCurrentUsername] = useState(hasBypass ? 'demo_owner' : '')
   const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(hasBypass ? { name: 'Demo Owner', role: 'owner', pin: '1234' } : null)
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  
+  // ── UI States ──
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Check Supabase Auth
   useEffect(() => {
@@ -255,31 +258,39 @@ const App: React.FC = () => {
   }
 
   const handleExitStore = useCallback(() => {
-    localStorage.removeItem('alphaPro_loggedIn')
-    localStorage.removeItem('alphaPro_username')
-    localStorage.removeItem('alphaPro_name')
-    localStorage.removeItem('alphaPro_role')
-    localStorage.removeItem('alphaPro_active_role')
-    localStorage.removeItem('alphaPro_active_store_id')
-    localStorage.removeItem('alphaPro_active_store')
-    setSelectedRole(null)
-    setActiveStoreId('all')
-    setActiveStore(null)
-    setIsLoggedIn(false)
-    setCurrentUsername('')
-    setCurrentAccount(null)
-    window.location.hash = '#/beranda'
+    setIsLoggingOut(true)
+    setTimeout(() => {
+      localStorage.removeItem('alphaPro_loggedIn')
+      localStorage.removeItem('alphaPro_username')
+      localStorage.removeItem('alphaPro_name')
+      localStorage.removeItem('alphaPro_role')
+      localStorage.removeItem('alphaPro_active_role')
+      localStorage.removeItem('alphaPro_active_store_id')
+      localStorage.removeItem('alphaPro_active_store')
+      setSelectedRole(null)
+      setActiveStoreId('all')
+      setActiveStore(null)
+      setIsLoggedIn(false)
+      setCurrentUsername('')
+      setCurrentAccount(null)
+      window.location.hash = '#/beranda'
+      setIsLoggingOut(false)
+    }, 400) // 400ms delay to let the loading screen paint smoothly before destroying MainApp
   }, [])
 
   const handleLogoutCashierOnly = useCallback(() => {
-    localStorage.removeItem('alphaPro_loggedIn')
-    localStorage.removeItem('alphaPro_username')
-    localStorage.removeItem('alphaPro_name')
-    localStorage.removeItem('alphaPro_role')
-    setIsLoggedIn(false)
-    setCurrentUsername('')
-    setCurrentAccount(null)
-    window.location.hash = '#/beranda'
+    setIsLoggingOut(true)
+    setTimeout(() => {
+      localStorage.removeItem('alphaPro_loggedIn')
+      localStorage.removeItem('alphaPro_username')
+      localStorage.removeItem('alphaPro_name')
+      localStorage.removeItem('alphaPro_role')
+      setIsLoggedIn(false)
+      setCurrentUsername('')
+      setCurrentAccount(null)
+      window.location.hash = '#/beranda'
+      setIsLoggingOut(false)
+    }, 400)
   }, [])
 
   const handleLogoutGoogle = async () => {
@@ -339,24 +350,33 @@ const App: React.FC = () => {
 
   // ── Everything below only renders when fully logged in ──
   return (
-    <MainApp 
-      username={currentUsername} 
-      account={currentAccount} 
-      googleUid={googleSession.user.id} 
-      googleEmail={googleSession.user.email}
-      onLogout={selectedRole === 'owner' ? handleExitStore : handleLogoutCashierOnly}
-      kasirList={kasirList}
-      setKasirList={setKasirList}
-      refreshKasirList={(newList) => { if (newList) setKasirList(newList) }}
-      isLoggedIn={isLoggedIn}
-      activeStoreId={activeStoreId}
-      activeRole={selectedRole}
-      activeStore={activeStore}
-      onUpdateActiveCashier={(uname, acc) => {
-        setCurrentUsername(uname)
-        setCurrentAccount(acc)
-      }}
-    />
+    <>
+      {isLoggingOut && (
+        <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <div className="w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin mb-4"></div>
+          <h2 className="text-lg font-black text-slate-800">Keluar dari sistem...</h2>
+          <p className="text-xs font-semibold text-slate-500 mt-1">Mengamankan data lokal Anda</p>
+        </div>
+      )}
+      <MainApp 
+        username={currentUsername} 
+        account={currentAccount} 
+        googleUid={googleSession.user.id} 
+        googleEmail={googleSession.user.email}
+        onLogout={selectedRole === 'owner' ? handleExitStore : handleLogoutCashierOnly}
+        kasirList={kasirList}
+        setKasirList={setKasirList}
+        refreshKasirList={(newList) => { if (newList) setKasirList(newList) }}
+        isLoggedIn={isLoggedIn}
+        activeStoreId={activeStoreId}
+        activeRole={selectedRole}
+        activeStore={activeStore}
+        onUpdateActiveCashier={(uname, acc) => {
+          setCurrentUsername(uname)
+          setCurrentAccount(acc)
+        }}
+      />
+    </>
   )
 }
 
@@ -1877,7 +1897,8 @@ const MainApp: React.FC<MainAppProps> = ({
                     'view-owner-izin': 'Izin Karyawan',
                     'view-owner-gaji': 'Penggajian',
                     'view-owner-backup': 'Backup & Restore',
-                    'view-owner-saldo': 'Manajemen Saldo'
+                    'view-owner-saldo': 'Manajemen Saldo',
+                    'view-owner-profit': 'Profit Keuntungan'
                   };
                   return titles[activeView] || 'Dashboard';
                 })()}</h2>
@@ -2166,6 +2187,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 case 'view-owner-gaji':
                 case 'view-owner-backup':
                 case 'view-owner-saldo':
+                case 'view-owner-profit':
                   return (
                     <BerandaView
                       active={true}
@@ -2766,6 +2788,36 @@ const MainApp: React.FC<MainAppProps> = ({
         kasirList={kasirList}
         transactions={transactions}
         absensiList={absensi}
+        voucherTransactions={(() => {
+          const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+          let all: any[] = []
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i) || ''
+              if (k.startsWith(`v_${sid}`) && k.endsWith('_transactions')) {
+                const raw = localStorage.getItem(k)
+                if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) all = [...all, ...p] }
+              }
+            }
+          } catch {}
+          return all
+        })()}
+        voucherProducts={(() => {
+          const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+          let all: any[] = []
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i) || ''
+              if (k.startsWith(`v_${sid}`) && k.endsWith('_products')) {
+                const raw = localStorage.getItem(k)
+                if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) all = [...all, ...p] }
+              }
+            }
+            const seen = new Set()
+            all = all.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
+          } catch {}
+          return all
+        })()}
         onActionKasbon={(nama, nominal, keterangan) => {
           // Simpan kasbon baru ke localStorage secara langsung (tersinkron saat buka halaman kasbon)
           try {
@@ -2783,6 +2835,15 @@ const MainApp: React.FC<MainAppProps> = ({
             const newKontak = { id: `kontak-${Date.now()}`, nama, nomor, keterangan, tanggal: new Date().toLocaleDateString('id-ID') }
             localStorage.setItem(key, JSON.stringify([newKontak, ...existing]))
           } catch {}
+        }}
+        onActionCatatan={(judul, isi) => {
+          try {
+            const key = 'alphaPro_global_catatanOwner'
+            const existing = JSON.parse(localStorage.getItem(key) || '[]')
+            const newCatatan = { id: `catatan-${Date.now()}`, tanggal: new Date().toLocaleDateString('id-ID'), judul, isi, selesai: false }
+            existing.unshift(newCatatan)
+            localStorage.setItem(key, JSON.stringify(existing))
+          } catch(e) {}
         }}
       />
 

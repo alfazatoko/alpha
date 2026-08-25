@@ -49,10 +49,13 @@ interface Props {
   kasirList?: Record<string, any>
   transactions?: any[]
   absensiList?: any[]
+  voucherTransactions?: any[]
+  voucherProducts?: any[]
   // Handlers untuk AI Action (No. 3)
   onActionKasbon?: (nama: string, nominal: number, keterangan: string) => void
   onActionKontak?: (nama: string, nomor: string, keterangan: string) => void
   onActionIzin?: (username: string, tanggal: string, alasan: string) => void
+  onActionCatatan?: (judul: string, isi: string) => void
 }
 
 // ── Mode Badge ────────────────────────────────────────────────────────────────
@@ -119,9 +122,12 @@ const AssistantBot: React.FC<Props> = ({
   kasirList = {},
   transactions = [],
   absensiList = [],
+  voucherTransactions = [],
+  voucherProducts = [],
   onActionKasbon,
   onActionKontak,
-  onActionIzin
+  onActionIzin,
+  onActionCatatan
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -163,7 +169,7 @@ const AssistantBot: React.FC<Props> = ({
   const [geminiKeyInput, setGeminiKeyInput] = useState('')
   const [geminiStatus, setGeminiStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [isSavingKey, setIsSavingKey] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis'])
+  const [suggestions, setSuggestions] = useState<string[]>(['bantuan', 'rekap voucher hari ini', 'stok menipis', 'ke laporan'])
   const [historyFilter, setHistoryFilter] = useState<'all' | 'today' | 'yesterday'>('all')
   const [showHistoryMenu, setShowHistoryMenu] = useState(false)
   const [pendingActions, setPendingActions] = useState<BotAction[] | null>(null)
@@ -213,8 +219,47 @@ const AssistantBot: React.FC<Props> = ({
       const role = kasirRole === 'owner' ? 'owner' : 'kasir'
       const ctx = buildStoreContext(role, activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList)
       systemPromptRef.current = buildSystemPrompt(ctx)
+
+      // ── Auto Stok Warning saat bot pertama kali dibuka hari ini ──
+      const warnKey = `alphaPro_${activeStoreId}_bot_stok_warn_${new Date().toISOString().split('T')[0]}`
+      if (!localStorage.getItem(warnKey)) {
+        // Cek produk menipis dari voucherProducts prop atau localStorage
+        let allProds = voucherProducts.length > 0 ? voucherProducts : []
+        if (allProds.length === 0) {
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i) || ''
+              if (k.startsWith(`v_${activeStoreId}`) && k.endsWith('_products')) {
+                const raw = localStorage.getItem(k)
+                if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) allProds = [...allProds, ...p] }
+              }
+            }
+            const seen = new Set()
+            allProds = allProds.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
+          } catch {}
+        }
+        const menipis = allProds.filter(p => (p.currentStock ?? p.stock ?? 0) <= (p.minStockLevel ?? 3))
+        if (menipis.length > 0) {
+          setTimeout(() => {
+            const names = menipis.slice(0, 3).map(p => p.name).join(', ')
+            const extra = menipis.length > 3 ? ` +${menipis.length - 3} lainnya` : ''
+            setMessages(prev => {
+              const warn: BotMessage = {
+                id: 'stok-warn-' + Date.now(),
+                from: 'bot',
+                mode: 'app',
+                text: `⚠️ **Peringatan Stok Menipis!**\n\n${menipis.length} produk hampir habis: **${names}**${extra}.\n\nKetik *"stok menipis"* untuk detail lengkap.`,
+                timestamp: Date.now()
+              }
+              return [...prev, warn]
+            })
+            localStorage.setItem(warnKey, '1')
+            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+          }, 800)
+        }
+      }
     }
-  }, [isOpen, messages, showSettings, showTeachModal, kasirRole, activeStoreId, kasirName, currentUsername, kasirList, transactions, absensiList])
+  }, [isOpen, messages, showSettings, showTeachModal, kasirRole, activeStoreId, kasirName, currentUsername, kasirList, transactions, absensiList, voucherProducts])
 
   // Load Custom Intents
   useEffect(() => {
@@ -376,9 +421,52 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
+    if (intent.type === 'set_alarm') {
+      setIsTyping(false)
+      const ms = intent.minutes * 60 * 1000
+      const displayTime = intent.minutes < 1 ? `${Math.round(intent.minutes * 60)} detik` : `${intent.minutes} menit`
+      addMessage('bot', `⏰ **Alarm Diatur!**\n\nAku akan mengingatkanmu untuk: **"${intent.message}"** dalam waktu ${displayTime} dari sekarang.`, 'app')
+      setSuggestions(getDynamicSuggestions())
+      
+      setTimeout(() => {
+        setMessages(prev => [
+          ...prev, 
+          {
+            id: 'alarm-' + Date.now(),
+            from: 'bot',
+            mode: 'app',
+            text: `🔔 **PENGINGAT (ALARM) !**\n\nSaatnya untuk: **${intent.message}**`,
+            timestamp: Date.now()
+          }
+        ])
+        setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        
+        // Coba mainkan notifikasi suara (bip)
+        try {
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+          if (AudioContext) {
+            const ctx = new AudioContext()
+            const osc = ctx.createOscillator()
+            const gainNode = ctx.createGain()
+            osc.connect(gainNode)
+            gainNode.connect(ctx.destination)
+            osc.type = 'triangle'
+            osc.frequency.setValueAtTime(800, ctx.currentTime)
+            osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1)
+            gainNode.gain.setValueAtTime(0.5, ctx.currentTime)
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+            osc.start(ctx.currentTime)
+            osc.stop(ctx.currentTime + 0.5)
+          }
+        } catch (e) {}
+      }, ms)
+      
+      return
+    }
+
     // ② Coba Knowledge Base lokal (offline database intelligence)
     await new Promise(r => setTimeout(r, 400))
-    const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList)
+    const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
     if (kbAnswer) {
       setIsTyping(false)
       addMessage('bot', kbAnswer, 'kb')
@@ -420,7 +508,7 @@ const AssistantBot: React.FC<Props> = ({
     addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
     }, 300)
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin])
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin, onActionCatatan, onActionKontak])
 
   // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
   const requestConfirmation = useCallback((actions: BotAction[]) => {
@@ -436,6 +524,8 @@ const AssistantBot: React.FC<Props> = ({
         return `🔀 Pindah ke halaman **${viewInfo?.label || action.payload.view}**`
       } else if (action.type === 'izin') {
         return `📅 Izin kasir **${action.payload.username}** tanggal ${action.payload.tanggal}${action.payload.alasan ? ` — ${action.payload.alasan}` : ''}`
+      } else if (action.type === 'catatan') {
+        return `📝 Buat catatan baru dengan judul **${action.payload.judul}**`
       }
       return ''
     }).filter(Boolean).join('\n')
@@ -470,11 +560,16 @@ const AssistantBot: React.FC<Props> = ({
           onActionIzin(action.payload.username, action.payload.tanggal, action.payload.alasan || '')
           addMessage('bot', `✅ **Berhasil!** Izin kasir **${action.payload.username}** untuk ${action.payload.tanggal} sudah dicatat.`, 'app')
         }
+      } else if (action.type === 'catatan') {
+        if (onActionCatatan && action.payload.judul && action.payload.isi) {
+          onActionCatatan(action.payload.judul, action.payload.isi)
+          addMessage('bot', `✅ **Berhasil!** Catatan "**${action.payload.judul}**" sudah disimpan ke buku catatan Owner.`, 'app')
+        }
       }
     }
     setPendingActions(null)
     setPendingActionSummary('')
-  }, [pendingActions, onActionKasbon, onActionKontak, onActionIzin, setActiveView, addMessage])
+  }, [pendingActions, onActionKasbon, onActionKontak, onActionIzin, onActionCatatan, setActiveView, addMessage])
 
   // ── AI Action: Konfirmasi Batal ───────────────────────────────────────────────
   const cancelActions = useCallback(() => {
@@ -817,6 +912,10 @@ const AssistantBot: React.FC<Props> = ({
                           icon = '📅';
                           colorClass = 'bg-orange-500/30 text-orange-200 border-orange-400/30';
                           text = `Izin kasir **${action.payload.username}** tanggal ${action.payload.tanggal}${action.payload.alasan ? ` — ${action.payload.alasan}` : ''}`;
+                        } else if (action.type === 'catatan') {
+                          icon = '📌';
+                          colorClass = 'bg-amber-500/30 text-amber-200 border-amber-400/30';
+                          text = `Simpan Catatan Baru: **${action.payload.judul}**\n"${action.payload.isi}"`;
                         }
                         
                         return (

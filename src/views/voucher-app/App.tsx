@@ -150,16 +150,47 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     try {
       const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
       const existingData = data?.voucher_app_data || {};
+      const existingCashierData = existingData[cashierId] || {};
+
+      // ── Pembatasan Data Harian (Auto-Archive) ──
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 2); // Simpan 2 hari terakhir di memori aktif
+      const cutoffTime = cutoff.getTime();
+
+      const activeTrx = transactions.filter(t => new Date(t.timestamp).getTime() >= cutoffTime);
+      const newlyArchivedTrx = transactions.filter(t => new Date(t.timestamp).getTime() < cutoffTime);
+      
+      const activeNotifs = notifications.filter(n => new Date(n.timestamp).getTime() >= cutoffTime);
+      const newlyArchivedNotifs = notifications.filter(n => new Date(n.timestamp).getTime() < cutoffTime);
+
+      const existingArchiveTrx = existingCashierData.transactions_archive || [];
+      const existingArchiveNotifs = existingCashierData.notifications_archive || [];
+
+      // Gabungkan arsip baru & lama tanpa duplikat
+      const mergedArchiveTrx = [...newlyArchivedTrx, ...existingArchiveTrx].reduce((acc, curr) => {
+        if (!acc.find((x: any) => x.id === curr.id)) acc.push(curr);
+        return acc;
+      }, [] as Transaction[]);
+
+      const mergedArchiveNotifs = [...newlyArchivedNotifs, ...existingArchiveNotifs].reduce((acc, curr) => {
+        if (!acc.find((x: any) => x.id === curr.id)) acc.push(curr);
+        return acc;
+      }, [] as LiveNotification[]);
+
       const newData = {
         ...existingData,
         all_detailed_handovers: detailedHandovers,
         [cashierId]: {
+          ...existingCashierData, // Pertahankan data lain jika ada
           products,
-          transactions,
-          notifications,
-          handovers: shiftHandovers
+          transactions: activeTrx,
+          notifications: activeNotifs,
+          handovers: shiftHandovers,
+          transactions_archive: mergedArchiveTrx,
+          notifications_archive: mergedArchiveNotifs
         }
       };
+      
       const { error } = await supabase.from('store_settings').upsert({
         store_id: activeStoreId,
         voucher_app_data: newData
@@ -167,6 +198,15 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       
       if (!error) {
         setUnsyncedChanges(false);
+        // Jika ada data yang berhasil diarsipkan, bersihkan dari State dan LocalStorage
+        if (newlyArchivedTrx.length > 0) {
+          setTransactions(activeTrx);
+          localStorage.setItem(`v_${activeStoreId}_${cashierId}_transactions`, JSON.stringify(activeTrx));
+        }
+        if (newlyArchivedNotifs.length > 0) {
+          setNotifications(activeNotifs);
+          localStorage.setItem(`v_${activeStoreId}_${cashierId}_notifications`, JSON.stringify(activeNotifs));
+        }
       }
     } catch (error) {
       console.error("Exception syncing voucher app data", error);
@@ -383,6 +423,10 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const cachedTheme = localStorage.getItem('v_theme') as 'dark' | 'light' | null;
 
     let loadedProducts = cachedProducts ? JSON.parse(cachedProducts) : INITIAL_PRODUCTS;
+    // Auto-recovery: Jika produk kosong (terhapus karena bug sebelumnya), kembalikan katalog dengan stok 0
+    if (Array.isArray(loadedProducts) && loadedProducts.length === 0) {
+      loadedProducts = INITIAL_PRODUCTS.map(p => ({ ...p, currentStock: 0 }));
+    }
     let loadedTransactions = cachedTransactions ? JSON.parse(cachedTransactions) : INITIAL_TRANSACTIONS;
     let loadedNotifications = cachedNotifications ? JSON.parse(cachedNotifications) : INITIAL_NOTIFICATIONS;
     let loadedHandovers = cachedHandovers ? JSON.parse(cachedHandovers) : [];
@@ -428,12 +472,56 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
             if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
             if (cashierData) {
-              if (cashierData.products) setProducts(cashierData.products);
-              if (cashierData.transactions) setTransactions(cashierData.transactions);
-              if (cashierData.notifications) setNotifications(cashierData.notifications);
+                if (cashierData.products) {
+                  const p = cashierData.products;
+                  if (Array.isArray(p) && p.length === 0) {
+                    setProducts(INITIAL_PRODUCTS.map(prod => ({ ...prod, currentStock: 0 })));
+                  } else {
+                    setProducts(p);
+                  }
+                }
+              let needsArchiving = false;
+
+              if (cashierData.transactions) {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - 2);
+                const cutoffTime = cutoff.getTime();
+                const activeTrx = cashierData.transactions.filter((t: any) => new Date(t.timestamp).getTime() >= cutoffTime);
+                
+                if (activeTrx.length < cashierData.transactions.length) {
+                  setTransactions(cashierData.transactions);
+                  needsArchiving = true;
+                } else {
+                  setTransactions(activeTrx);
+                }
+              }
+
+              if (cashierData.notifications) {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - 2);
+                const cutoffTime = cutoff.getTime();
+                const activeNotifs = cashierData.notifications.filter((n: any) => new Date(n.timestamp).getTime() >= cutoffTime);
+                
+                if (activeNotifs.length < cashierData.notifications.length) {
+                  setNotifications(cashierData.notifications);
+                  needsArchiving = true;
+                } else {
+                  setNotifications(activeNotifs);
+                }
+              }
+
               if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
+              
+              if (needsArchiving) {
+                setTimeout(() => setUnsyncedChanges(true), 2000);
+              }
             } else if (!cachedProducts && data.voucher_app_data.products) {
-              setProducts(data.voucher_app_data.products);
+                const p = data.voucher_app_data.products;
+                if (Array.isArray(p) && p.length === 0) {
+                  setProducts(INITIAL_PRODUCTS.map(prod => ({ ...prod, currentStock: 0 })));
+                } else {
+                  setProducts(p);
+                }
             }
           }
         } catch (error) {
@@ -451,14 +539,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     } else {
       isDataLoadedRef.current = true;
     }
-  }, [activeStoreId, activeCashierIndex]);
+  }, [activeStoreId, activeCashierIndex, cashiers]);
 
   // Push to Supabase on every change (Debounced to 60s)
   useEffect(() => {
+    // Jika belum selesai load awal, jangan simpan apapun ke lokal apalagi cloud
+    // Ini mencegah data lama menimpa data kasir baru saat proses ganti kasir
+    if (!isDataLoadedRef.current) return;
+
     const storeKey = activeStoreId || 'default';
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
     const prefix = `v_${storeKey}_${cashierId}`;
     const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
+    const savedAt = new Date().toISOString();
 
     // Save locally per-store & per-cashier
     localStorage.setItem(`${prefix}_products`, JSON.stringify(products));
@@ -466,9 +559,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
     localStorage.setItem(`${prefix}_handovers`, JSON.stringify(shiftHandovers));
     localStorage.setItem(globalDetailedHandoversKey, JSON.stringify(detailedHandovers));
-
-    // Jika belum selesai load awal, jangan mark unsynced
-    if (!isDataLoadedRef.current) return;
+    localStorage.setItem(`${prefix}_savedAt`, savedAt);
 
     if (!activeStoreId) return;
 
@@ -481,7 +572,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     }, 60000);
 
     return () => clearTimeout(timeout);
-  }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex]);
+  }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex, cashiers]);
 
   // Watch for day change while app is open
   useEffect(() => {
@@ -1034,6 +1125,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         timestamp: new Date().toISOString()
       };
       localStorage.setItem(`${toPrefix}_pending_handover`, JSON.stringify(pendingHandoverFlag));
+
+      // ✅ Tulis timestamp lokal untuk kasir penerima agar cloud tidak menimpa data handover ini
+      localStorage.setItem(`${toPrefix}_savedAt`, new Date().toISOString());
 
       setShiftHandovers(updatedHandovers);
       setTransactions(updatedTrx);
@@ -1592,7 +1686,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           `Serah terima: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`,
                           toCashierId,
                           toCashierName,
-                          finalProductsForReceiver
+                          finalProductsForReceiver,
+                          handoverData.isSelfHandover
                         );
                         saveState(products, transactions, notifications, shiftHandovers, updatedDetailed);
                       }}
