@@ -73,7 +73,7 @@ interface VoucherAppProps {
   externalCashierName?: string;
   activeStoreId?: string;
   googleUid?: string;
-  kasirList?: Record<string, { name?: string; role?: string; pin?: string }>;
+  kasirList?: Record<string, { name?: string; role?: string; pin?: string; avatar?: string }>;
   externalSearchQuery?: string;
   externalTab?: string;
   onClearExternalTab?: () => void;
@@ -135,6 +135,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Shift & Cashier states
   const [cashiers, setCashiers] = useState<Cashier[]>(INITIAL_CASHIERS);
   const [activeCashierIndex, setActiveCashierIndex] = useState<number>(0);
+
+  // ── ACTIVE SHIFT CASHIER ────────────────────────────────────────────────────
+  // Hanya 1 kasir per toko yang boleh edit stok/jual di waktu bersamaan.
+  // ID disimpan di localStorage dengan key: v_${storeId}_active_shift_cashier_id
+  const [activeShiftCashierId, setActiveShiftCashierId] = useState<string | null>(null);
 
   // Auto-Sync States
   const isDataLoadedRef = useRef(false);
@@ -239,7 +244,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
           name: data.name || username,
           role: 'Kasir Shift',
           email: `${username.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
-          avatar: 'https://ui-avatars.com/api/?name=' + encodeURIComponent(data.name || username),
+          avatar: data.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(data.name || username)),
           isOnline: true
         }));
       setCashiers(newCashiers);
@@ -413,6 +418,21 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
   // Audio Context reference
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Load activeShiftCashierId from localStorage on mount / storeId change
+  useEffect(() => {
+    const storeKey = activeStoreId || 'default';
+    const shiftKey = `v_${storeKey}_active_shift_cashier_id`;
+    const stored = localStorage.getItem(shiftKey);
+    if (stored) {
+      setActiveShiftCashierId(stored);
+    } else {
+      // Jika belum ada record → kasir pertama yang login dianggap aktif
+      const firstCashierId = cashiers[activeCashierIndex]?.id || 'c1';
+      localStorage.setItem(shiftKey, firstCashierId);
+      setActiveShiftCashierId(firstCashierId);
+    }
+  }, [activeStoreId]);
 
   // Load state from localStorage on mount & when cashier changes
   useEffect(() => {
@@ -747,6 +767,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
   const activeCashier = cashiers[activeCashierIndex] || cashiers[0];
   const nextCashier = cashiers[activeCashierIndex === 0 ? 1 : 0] || cashiers[1];
+
+  // ── Derived: apakah kasir yang sedang login adalah kasir aktif shift? ──
+  // Owner selalu bisa lihat tapi tidak bisa edit (ditangani di isOwnerMode)
+  const isActiveCashierOnDuty = currentUserRole === 'owner'
+    ? false  // Owner tidak pernah dianggap "on duty" untuk edit
+    : activeShiftCashierId === null || activeShiftCashierId === activeCashier?.id;
 
   // Manual & quick stock modifier
   const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
@@ -1084,7 +1110,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       const updatedNotifs = pushNotification(
         'transfer',
         'Serah Terima Berhasil!',
-        `Stok ${totalStockTransferred} voucher telah diserahkan dari ${fromCashierName} ke ${toCashierName}. ${fromCashierName} tetap login.`,
+        `Stok ${totalStockTransferred} voucher telah diserahkan dari ${fromCashierName} ke ${toCashierName}. ${fromCashierName} tetap login sebagai read-only.`,
         notifications
       );
 
@@ -1129,6 +1155,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
       localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
       setProducts(zeroedProducts);
+
+      // ✅ ACTIVE SHIFT: Pindahkan hak akses edit ke kasir penerima
+      const shiftKey = `v_${storeKey}_active_shift_cashier_id`;
+      localStorage.setItem(shiftKey, toCashierId);
+      setActiveShiftCashierId(toCashierId);
 
       // ✅ Tulis flag "pending handover" ke storage kasir penerima
       const pendingHandoverFlag = {
@@ -1503,6 +1534,29 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                     </div>
                   )}
 
+                  {/* ── BANNER: Kasir Bukan Giliran Aktif ── */}
+                  {currentUserRole !== 'owner' && !isActiveCashierOnDuty && activeTab === 'beranda' && (
+                    <div className="mx-3 mt-3 mb-0 animate-in slide-in-from-top-2 duration-300">
+                      <div className="relative flex items-start gap-3 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 to-orange-500/10 px-4 py-3.5 shadow-md overflow-hidden">
+                        <div className="absolute -top-6 -right-6 w-24 h-24 bg-amber-500/20 blur-2xl rounded-full pointer-events-none" />
+                        <div className="shrink-0 w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center mt-0.5">
+                          <Lock className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <div className="flex-1 min-w-0 relative z-10">
+                          <p className="text-[11px] font-black text-amber-300 uppercase tracking-widest leading-none mb-1">
+                            Mode Pantau — Bukan Giliran Anda
+                          </p>
+                          <p className="text-xs text-amber-100 font-medium leading-snug">
+                            Kasir aktif saat ini: <span className="font-black text-white">{cashiers.find(c => c.id === activeShiftCashierId)?.name || 'Kasir Lain'}</span>. Anda hanya bisa <span className="font-bold text-amber-300">melihat data</span> tanpa bisa mengedit stok atau menjual.
+                          </p>
+                          <p className="text-[9px] text-amber-400/70 font-semibold mt-1">
+                            Hak akses edit akan berpindah ke Anda setelah serah terima dilakukan.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {activeTab === 'beranda' && (
                     <DashboardTab
                       products={products}
@@ -1527,6 +1581,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         if (products.length > 0) setFormProductId(products[0].id);
                         setFormQuantity(1);
                         setFormNote('');
+                        if (!isActiveCashierOnDuty) return; // Blokir jika bukan kasir aktif
                         setShowQuickSale(true);
                       }}
                       onOpenQuickRestock={() => {
@@ -1535,6 +1590,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         if (products.length > 0) setFormProductId(products[0].id);
                         setFormQuantity(1);
                         setFormNote('');
+                        if (!isActiveCashierOnDuty) return; // Blokir jika bukan kasir aktif
                         setShowQuickRestock(true);
                       }}
                       onOpenHandoverModal={() => setShowHandoverModal(true)}

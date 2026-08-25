@@ -796,18 +796,18 @@ export default function DashboardTab({
             </span>
           </button>
 
-          {/* 3. TAMBAH STOK */}
+          {/* 3. LAPORAN */}
           <button
             type="button"
-            onClick={onOpenQuickRestock}
+            onClick={() => onNavigate('laporan')}
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
-            id="btn-quick-restok"
+            id="btn-quick-laporan-main"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
-              <PlusCircle className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+              <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
-              TAMBAH STOK
+              LAPORAN
             </span>
           </button>
 
@@ -859,18 +859,18 @@ export default function DashboardTab({
             </span>
           </button>
 
-          {/* 3. Laporan */}
+          {/* 3. Notifikasi */}
           <button
             type="button"
-            onClick={() => onNavigate('laporan')}
+            onClick={() => onNavigate('notif')}
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
-            id="btn-quick-laporan"
+            id="btn-quick-notifikasi"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-blue-500/30">
-              <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-indigo-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-indigo-500/30">
+              <Bell className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
-              Laporan
+              Notifikasi
             </span>
           </button>
 

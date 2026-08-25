@@ -1725,14 +1725,36 @@ export default function AturStokTab({
                         : (isLight ? 'border-slate-200 bg-slate-50 hover:border-indigo-300' : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50')
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 border-2 ${
+                    {/* Avatar dengan foto/gambar profil */}
+                    <div className={`w-11 h-11 rounded-full overflow-hidden shrink-0 border-2 shadow-sm ${
                       isSelected
                         ? isSelf
-                          ? 'bg-amber-400 border-amber-300 text-white'
-                          : 'bg-emerald-500 border-emerald-400 text-white'
-                        : (isLight ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300')
+                          ? 'border-amber-300'
+                          : 'border-emerald-400'
+                        : (isLight ? 'border-slate-200' : 'border-slate-600')
                     }`}>
-                      {displayName.charAt(0).toUpperCase()}
+                      {cashier.avatar ? (
+                        <img
+                          src={isSelf ? activeCashier.avatar : cashier.avatar}
+                          alt={displayName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            target.parentElement!.innerHTML = `<div class="w-full h-full flex items-center justify-center text-sm font-black ${isSelected ? 'bg-emerald-500 text-white' : 'bg-indigo-100 text-indigo-700'}">${displayName.charAt(0).toUpperCase()}</div>`;
+                          }}
+                        />
+                      ) : (
+                        <div className={`w-full h-full flex items-center justify-center font-black text-sm ${
+                          isSelected
+                            ? isSelf
+                              ? 'bg-amber-400 text-white'
+                              : 'bg-emerald-500 text-white'
+                            : (isLight ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-500/20 text-indigo-300')
+                        }`}>
+                          {displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1781,10 +1803,28 @@ export default function AturStokTab({
               : (isLight ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-slate-200' : 'bg-gradient-to-r from-blue-500/5 to-emerald-500/5 border-slate-700')
           }`}>
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
-                isLight ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-blue-600/30 border-blue-500/50 text-blue-300'
+              {/* Avatar foto kasir penyerah */}
+              <div className={`w-9 h-9 rounded-full overflow-hidden border-2 shrink-0 ${
+                isLight ? 'border-blue-300' : 'border-blue-500/50'
               }`}>
-                {activeCashier.name.charAt(0)}
+                {activeCashier.avatar ? (
+                  <img
+                    src={activeCashier.avatar}
+                    alt={activeCashier.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const t = e.target as HTMLImageElement;
+                      t.style.display = 'none';
+                      t.parentElement!.innerHTML = `<div class="w-full h-full flex items-center justify-center text-sm font-black bg-blue-100 text-blue-700">${activeCashier.name.charAt(0)}</div>`;
+                    }}
+                  />
+                ) : (
+                  <div className={`w-full h-full flex items-center justify-center font-black text-sm ${
+                    isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-600/30 text-blue-300'
+                  }`}>
+                    {activeCashier.name.charAt(0)}
+                  </div>
+                )}
               </div>
               <div>
                 <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Menyerahkan</span>
@@ -1799,12 +1839,32 @@ export default function AturStokTab({
               <ArrowRight className={`w-5 h-5 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
             )}
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 ${
+              {/* Avatar foto kasir penerima */}
+              <div className={`w-9 h-9 rounded-full overflow-hidden border-2 shrink-0 ${
                 isSelfHandover
-                  ? (isLight ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-amber-600/30 border-amber-500/50 text-amber-300')
-                  : (isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/50 text-emerald-300')
+                  ? (isLight ? 'border-amber-300' : 'border-amber-500/50')
+                  : (isLight ? 'border-emerald-300' : 'border-emerald-500/50')
               }`}>
-                {activeCashier.name.charAt(0)}
+                {selectedToCashier?.avatar ? (
+                  <img
+                    src={selectedToCashier.avatar}
+                    alt={isSelfHandover ? activeCashier.name : selectedToCashier.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const t = e.target as HTMLImageElement;
+                      t.style.display = 'none';
+                      t.parentElement!.innerHTML = `<div class="w-full h-full flex items-center justify-center text-sm font-black ${isSelfHandover ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${(isSelfHandover ? activeCashier.name : selectedToCashier.name).charAt(0)}</div>`;
+                    }}
+                  />
+                ) : (
+                  <div className={`w-full h-full flex items-center justify-center font-black text-sm ${
+                    isSelfHandover
+                      ? (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-600/30 text-amber-300')
+                      : (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300')
+                  }`}>
+                    {activeCashier.name.charAt(0)}
+                  </div>
+                )}
               </div>
               <div>
                 <span className={`text-[8px] font-bold uppercase block ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>

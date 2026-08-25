@@ -13,7 +13,7 @@ interface VoucherViewProps {
   kasirName?: string
   googleUid?: string
   currentUsername?: string
-  kasirList?: Record<string, { name?: string; role?: string; pin?: string }>
+  kasirList?: Record<string, { name?: string; role?: string; pin?: string; avatar?: string }>
   externalSearchQuery?: string
   externalTab?: string
   onClearExternalTab?: () => void
