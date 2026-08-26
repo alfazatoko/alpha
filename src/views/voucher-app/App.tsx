@@ -808,13 +808,13 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       activeShiftCashierId === activeCashier?.id ||
       activeShiftCashierId === activeCashier?.name ||
       `c_${activeShiftCashierId}` === activeCashier?.id ||
-      (activeShiftCashierId && activeCashier?.id && activeShiftCashierId.replace(/^c_/, '') === activeCashier.id.replace(/^c_/, ''));
+      !!(activeShiftCashierId && activeCashier?.id && activeShiftCashierId.replace(/^c_/, '') === activeCashier.id.replace(/^c_/, ''));
 
   const activeShiftCashierObj = cashiers.find(c => 
     c.id === activeShiftCashierId || 
     c.name === activeShiftCashierId ||
     c.id === `c_${activeShiftCashierId}` ||
-    (c.id && activeShiftCashierId && c.id.replace(/^c_/, '') === activeShiftCashierId.replace(/^c_/, ''))
+    !!(c.id && activeShiftCashierId && c.id.replace(/^c_/, '') === activeShiftCashierId.replace(/^c_/, ''))
   );
   const activeShiftCashierName = activeShiftCashierObj?.name || (kasirList && activeShiftCashierId ? (kasirList[activeShiftCashierId.replace(/^c_/, '')]?.name || activeShiftCashierId) : (activeCashier?.name || 'Kasir Aktif'));
 
