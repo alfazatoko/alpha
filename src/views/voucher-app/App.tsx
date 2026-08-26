@@ -281,6 +281,10 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     const storeKey = activeStoreId || 'default';
     const cashierId = cashiers[activeCashierIndex]?.id;
     if (!cashierId) return;
+
+    // CEGAH PEMBACAAN FLAG JIKA KASIR MASIH DATA DUMMY TAPI KITA MENUNGGU KASIR LIST DARI PROPS
+    if (kasirList && Object.keys(kasirList).length > 0 && (cashierId === 'cashier-1' || cashierId === 'c1' || cashierId === 'cashier-2')) return;
+
     const flagKey = `v_${storeKey}_${cashierId}_pending_handover`;
     try {
       const raw = localStorage.getItem(flagKey);
@@ -295,7 +299,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     } catch {
       setPendingHandoverInfo(null);
     }
-  }, [activeCashierIndex, cashiers, activeStoreId]);
+  }, [activeCashierIndex, cashiers, activeStoreId, kasirList]);
 
   // Detail view context routing state
   const [selectedProduct, setSelectedProduct] = useState<VoucherProduct | null>(null);
@@ -419,20 +423,48 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Audio Context reference
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // Load activeShiftCashierId from localStorage on mount / storeId change
+  // Load & validate activeShiftCashierId with Auto-Healing (Fix stale dummy IDs like cashier-1)
   useEffect(() => {
     const storeKey = activeStoreId || 'default';
     const shiftKey = `v_${storeKey}_active_shift_cashier_id`;
     const stored = localStorage.getItem(shiftKey);
-    if (stored) {
+
+    // CEGAH AUTO-HEALING MENGHANCURKAN DATA VALID SAAT CASHIERS MASIH MOCK DATA TAPI KASIR LIST DARI PROPS SUDAH ADA / AKAN DATANG
+    const hasExternalKasirList = kasirList && Object.keys(kasirList).length > 0;
+    const isMockData = cashiers.length > 0 && (cashiers[0].id === 'cashier-1' || cashiers[0].id === 'c1');
+    if (hasExternalKasirList && isMockData) return;
+
+    // Cek apakah ID yang tersimpan valid di dalam daftar kasir toko saat ini
+    const isValidInStore = (id: string | null): boolean => {
+      if (!id || cashiers.length === 0) return false;
+      // Jangan pernah anggap id dummy 'cashier-1' / 'cashier-2' valid jika toko punya list kasir sendiri
+      if ((id === 'cashier-1' || id === 'cashier-2' || id === 'c1') && cashiers.some(c => c.id.startsWith('c_'))) {
+        return false;
+      }
+      return cashiers.some(c => 
+        c.id === id || 
+        c.name === id || 
+        c.id === `c_${id}` || 
+        c.name.toLowerCase() === id.toLowerCase()
+      );
+    };
+
+    if (stored && isValidInStore(stored)) {
       setActiveShiftCashierId(stored);
     } else {
-      // Jika belum ada record → kasir pertama yang login dianggap aktif
-      const firstCashierId = cashiers[activeCashierIndex]?.id || 'c1';
-      localStorage.setItem(shiftKey, firstCashierId);
-      setActiveShiftCashierId(firstCashierId);
+      // Auto-healing: Jika tersimpan ID dummy / tidak valid (misal 'cashier-1'),
+      // tetapkan kasir yang sedang aktif login saat ini sebagai Kasir Aktif yang sah
+      const currentCashierId = cashiers[activeCashierIndex]?.id || cashiers[0]?.id;
+      if (currentCashierId && currentCashierId !== 'cashier-1' && currentCashierId !== 'cashier-2') {
+        localStorage.setItem(shiftKey, currentCashierId);
+        setActiveShiftCashierId(currentCashierId);
+      } else if (!hasExternalKasirList && currentCashierId) {
+        // Fallback untuk stand-alone app tanpa kasirList
+        localStorage.setItem(shiftKey, currentCashierId);
+        setActiveShiftCashierId(currentCashierId);
+      }
     }
-  }, [activeStoreId]);
+  }, [activeStoreId, cashiers, activeCashierIndex, kasirList]);
 
   // Load state from localStorage on mount & when cashier changes
   useEffect(() => {
@@ -772,7 +804,19 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Owner selalu bisa lihat tapi tidak bisa edit (ditangani di isOwnerMode)
   const isActiveCashierOnDuty = currentUserRole === 'owner'
     ? false  // Owner tidak pernah dianggap "on duty" untuk edit
-    : activeShiftCashierId === null || activeShiftCashierId === activeCashier?.id;
+    : activeShiftCashierId === null || 
+      activeShiftCashierId === activeCashier?.id ||
+      activeShiftCashierId === activeCashier?.name ||
+      `c_${activeShiftCashierId}` === activeCashier?.id ||
+      (activeShiftCashierId && activeCashier?.id && activeShiftCashierId.replace(/^c_/, '') === activeCashier.id.replace(/^c_/, ''));
+
+  const activeShiftCashierObj = cashiers.find(c => 
+    c.id === activeShiftCashierId || 
+    c.name === activeShiftCashierId ||
+    c.id === `c_${activeShiftCashierId}` ||
+    (c.id && activeShiftCashierId && c.id.replace(/^c_/, '') === activeShiftCashierId.replace(/^c_/, ''))
+  );
+  const activeShiftCashierName = activeShiftCashierObj?.name || (kasirList && activeShiftCashierId ? (kasirList[activeShiftCashierId.replace(/^c_/, '')]?.name || activeShiftCashierId) : (activeCashier?.name || 'Kasir Aktif'));
 
   // Manual & quick stock modifier
   const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
@@ -1537,20 +1581,33 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                   {/* ── BANNER: Kasir Bukan Giliran Aktif ── */}
                   {currentUserRole !== 'owner' && !isActiveCashierOnDuty && activeTab === 'beranda' && (
                     <div className="mx-3 mt-3 mb-0 animate-in slide-in-from-top-2 duration-300">
-                      <div className="relative flex items-start gap-3 rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 to-orange-500/10 px-4 py-3.5 shadow-md overflow-hidden">
-                        <div className="absolute -top-6 -right-6 w-24 h-24 bg-amber-500/20 blur-2xl rounded-full pointer-events-none" />
-                        <div className="shrink-0 w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center mt-0.5">
-                          <Lock className="w-5 h-5 text-amber-400" />
+                      <div className={`relative flex items-start gap-3 rounded-2xl border px-4 py-3.5 shadow-md overflow-hidden ${
+                        isLight 
+                          ? 'border-amber-400/60 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 text-amber-950 shadow-amber-500/10'
+                          : 'border-amber-400/40 bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900/90 text-amber-100'
+                      }`}>
+                        <div className={`shrink-0 w-9 h-9 rounded-xl border flex items-center justify-center mt-0.5 ${
+                          isLight
+                            ? 'bg-amber-500/20 border-amber-400/60 text-amber-900 shadow-xs'
+                            : 'bg-amber-500/20 border-amber-400/30 text-amber-400'
+                        }`}>
+                          <Lock className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0 relative z-10">
-                          <p className="text-[11px] font-black text-amber-300 uppercase tracking-widest leading-none mb-1">
-                            Mode Pantau — Bukan Giliran Anda
+                          <p className={`text-[11px] font-black uppercase tracking-widest leading-none mb-1.5 ${
+                            isLight ? 'text-amber-950' : 'text-amber-300'
+                          }`}>
+                            MODE PANTAU — BUKAN GILIRAN ANDA
                           </p>
-                          <p className="text-xs text-amber-100 font-medium leading-snug">
-                            Kasir aktif saat ini: <span className="font-black text-white">{cashiers.find(c => c.id === activeShiftCashierId)?.name || 'Kasir Lain'}</span>. Anda hanya bisa <span className="font-bold text-amber-300">melihat data</span> tanpa bisa mengedit stok atau menjual.
+                          <p className={`text-xs font-medium leading-relaxed ${
+                            isLight ? 'text-amber-950' : 'text-amber-100'
+                          }`}>
+                            Shift aktif saat ini sedang dipegang oleh: <span className={`font-black underline decoration-amber-500/50 px-1.5 py-0.5 rounded ${isLight ? 'bg-amber-200/80 text-amber-950 border border-amber-300/60' : 'bg-amber-500/20 text-white'}`}>{activeShiftCashierName}</span>. Anda hanya dapat <span className="font-bold">melihat data</span> tanpa akses mengedit stok atau transaksi.
                           </p>
-                          <p className="text-[9px] text-amber-400/70 font-semibold mt-1">
-                            Hak akses edit akan berpindah ke Anda setelah serah terima dilakukan.
+                          <p className={`text-[9.5px] font-bold mt-1.5 ${
+                            isLight ? 'text-amber-800' : 'text-amber-400/80'
+                          }`}>
+                            ℹ️ Hak akses edit akan otomatis berpindah ke Anda setelah Kasir Aktif melakukan Serah Terima Shift.
                           </p>
                         </div>
                       </div>
@@ -1567,7 +1624,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       userRole={currentUserRole}
                       theme={theme}
                       kasirList={kasirList}
-                      hasActiveAuditSession={(() => {
+                      hasActiveAuditSession={isActiveCashierOnDuty && (() => {
                         try {
                           return !!localStorage.getItem(`audit_${activeStoreId || 'default'}_${activeCashier.id}`);
                         } catch { return false; }
@@ -1667,6 +1724,8 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       transactions={transactions}
                       userRole={currentUserRole}
                       theme={theme}
+                      isActiveCashierOnDuty={isActiveCashierOnDuty}
+                      activeShiftCashierName={activeShiftCashierName}
                       onUpdateProductStock={(productId, newStock, subReason) => {
                         const p = products.find(prod => prod.id === productId);
                         if (p) {

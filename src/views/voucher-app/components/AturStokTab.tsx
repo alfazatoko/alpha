@@ -52,6 +52,8 @@ interface AturStokTabProps {
   transactions: Transaction[];
   userRole: UserRole;
   theme?: 'dark' | 'light';
+  isActiveCashierOnDuty?: boolean;
+  activeShiftCashierName?: string;
   onUpdateProductStock: (productId: string, newStock: number, subReason?: 'penjualan' | 'audit' | 'restock') => void;
   onBulkUpdateProductStock: (updates: { productId: string; newStock: number; subReason?: 'penjualan' | 'audit' }[]) => void;
   onRecordHandover: (handoverData: any) => void;
@@ -135,6 +137,8 @@ export default function AturStokTab({
   transactions,
   userRole,
   theme = 'dark',
+  isActiveCashierOnDuty = true,
+  activeShiftCashierName = 'Kasir Lain',
   onUpdateProductStock,
   onBulkUpdateProductStock,
   onRecordHandover,
@@ -146,6 +150,7 @@ export default function AturStokTab({
   // Dibaca satu kali saat mount; fallback ke key generik jika prop belum ada
   const SK = sessionKey || `audit_session_default`;
   const isOwnerMode = userRole === 'owner';
+  const isReadOnly = isOwnerMode || !isActiveCashierOnDuty;
 
   // ─── LOAD SESSION DARI LOCALSTORAGE (sekali saat mount) ────────────────────
   const loadedSession = (() => {
@@ -490,15 +495,26 @@ export default function AturStokTab({
 
   return (
     <div className={`w-full space-y-3 font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-700 dark:text-slate-200'}`} id="atur-stok-container">
-      {/* OWNER VIEW-ONLY BANNER */}
-      {isOwnerMode && (
-        <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${isLight ? 'bg-amber-50 border-amber-300 text-amber-800' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
+      {/* MODE PANTAU BANNER (READ-ONLY) */}
+      {isReadOnly && (
+        <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border shadow-xs ${
+          isLight 
+            ? 'bg-amber-100/90 border-amber-300/80 text-amber-950' 
+            : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+        }`}>
           <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
-            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            <Lock className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Mode Pantau (Owner)</p>
-            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>Serah terima & atur stok hanya bisa dilakukan oleh Kasir aktif.</p>
+            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-950' : 'text-amber-300'}`}>
+              {isOwnerMode ? 'Mode Pantau (Owner)' : 'Mode Pantau — Bukan Giliran Anda'}
+            </p>
+            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-900' : 'text-amber-200'}`}>
+              {isOwnerMode 
+                ? 'Serah terima & atur stok hanya bisa dilakukan oleh Kasir aktif.' 
+                : `Shift saat ini dipegang oleh Kasir: ${activeShiftCashierName}. Anda hanya dapat melihat data stok.`
+              }
+            </p>
           </div>
         </div>
       )}
