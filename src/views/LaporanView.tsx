@@ -20,7 +20,7 @@ interface LaporanViewProps {
   filterTanggal: string
   setFilterTanggal: (v: string) => void
   saldoReal: number
-  onUpdateSaldoReal?: (rows: {nominal: number, keterangan: string}[]) => void
+  onUpdateSaldoReal?: (rows: {nominal: number, keterangan: string}[], operkanInfo?: { isOperkan: boolean, targetKasirId: string }) => void
   isSaving?: boolean
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
@@ -152,6 +152,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [catatanKasir, setCatatanKasir] = useState('')
   const [confirmSelisih, setConfirmSelisih] = useState(false)
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
+  const [isOperkanSaldo, setIsOperkanSaldo] = useState(false)
+  const [targetKasirId, setTargetKasirId] = useState('')
 
   useEffect(() => {
     if (props.activeStoreId && props.filterTanggal) {
@@ -203,6 +205,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   // Admin fee (exclude Admin Dalam and transactions from LAIN tab)
   const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   const currentTotalSaldoKas = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
+  
+  const currentTxCount = props.transactions.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length
+  const currentUangMasuk = sum(props.transactions.filter(t => t.kategori !== 'Tarik Tunai' && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
 
   const [syncTrigger, setSyncTrigger] = useState(0)
   useEffect(() => {
@@ -939,6 +944,43 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           </div>
         </div>
 
+        {/* 4 RINGKASAN HARIAN (PC VIEW 1 KOTAK LEBAR DIVIDED BY LINES) */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 mb-6">
+          <div className="grid grid-cols-4 divide-x divide-slate-100 dark:divide-slate-700">
+            {/* 1. TRX HARI INI */}
+            <div className="flex flex-col justify-between items-center text-center px-3">
+              <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">TRX HARI INI</span>
+              <span className="text-2xl font-black text-slate-800 dark:text-white my-1.5 leading-none">{currentTxCount}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Jumlah Transaksi</span>
+            </div>
+
+            {/* 2. ADMIN FEE */}
+            <div className="flex flex-col justify-between items-center text-center px-3">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">ADMIN FEE</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 my-1.5 leading-none">{formatRupiah(currentTotalAdmin)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Total Admin Fee</span>
+            </div>
+
+            {/* 3. UANG MASUK */}
+            <div className="flex flex-col justify-between items-center text-center px-3">
+              <span className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
+              </span>
+              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1.5 leading-none">{formatRupiah(currentUangMasuk)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Penjualan → Laci</span>
+            </div>
+
+            {/* 4. TARIK TUNAI */}
+            <div className="flex flex-col justify-between items-center text-center px-3">
+              <span className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
+              </span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1.5 leading-none">{formatRupiah(currentTotalTarik)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Laci → Pembeli</span>
+            </div>
+          </div>
+        </div>
+
         {/* VOUCHER SALES SUMMARY FOR PC */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
@@ -1345,6 +1387,44 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   >
                     <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
                   </button>
+
+                  {/* Pilihan Operkan Saldo ke Kasir Shift Selanjutnya */}
+                  <div className="mt-3 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={isOperkanSaldo}
+                        onChange={(e) => {
+                          setIsOperkanSaldo(e.target.checked);
+                          if (!e.target.checked) setTargetKasirId('');
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
+                        Operkan Saldo Ini ke Kasir Selanjutnya
+                      </span>
+                    </label>
+
+                    {isOperkanSaldo && (
+                      <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
+                        <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
+                          Pilih Kasir Penerima (Shift Selanjutnya)
+                        </label>
+                        <select
+                          value={targetKasirId}
+                          onChange={(e) => setTargetKasirId(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">-- Pilih Kasir Penerima --</option>
+                          {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
+                            <option key={username} value={username}>
+                              {data.name || username}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
@@ -1362,6 +1442,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         .filter(r => r.nominal > 0);
                         
                       if (finalRows.length === 0) return;
+
+                      if (isOperkanSaldo && !targetKasirId) {
+                        alert('Pilih kasir penerima terlebih dahulu!');
+                        return;
+                      }
                       
                       const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
                       const currentSelisih = totalNominal - currentSaldoBank;
@@ -1373,8 +1458,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         return;
                       }
                       
-                      props.onUpdateSaldoReal?.(finalRows);
+                      props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
                       setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+                      setIsOperkanSaldo(false);
+                      setTargetKasirId('');
                       setShowSaldoRealModal(false);
                       setConfirmSelisih(false);
                     }}
@@ -1538,6 +1625,43 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
             <p className="text-[10px] text-emerald-50 font-bold uppercase tracking-widest flex items-center gap-1.5"><i className="fa-solid fa-cash-register"></i> Saldo Laci Kasir</p>
             <p className="text-base font-black text-white mt-2 drop-shadow-sm">{formatRupiah(currentTotalSaldoKas)}</p>
+          </div>
+        </div>
+
+        {/* 4 RINGKASAN HARIAN (1 KOTAK LEBAR DIVIDED BY LINES) */}
+        <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 rounded-3xl p-3 shadow-sm">
+          <div className="grid grid-cols-4 divide-x divide-slate-100 dark:divide-slate-700/60">
+            {/* 1. TRX HARI INI */}
+            <div className="flex flex-col justify-between items-center text-center px-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">TRX HARI INI</span>
+              <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white my-1 leading-none">{currentTxCount}</span>
+              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Jumlah Transaksi</span>
+            </div>
+
+            {/* 2. ADMIN FEE */}
+            <div className="flex flex-col justify-between items-center text-center px-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">ADMIN FEE</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 my-1 leading-none truncate w-full">{formatRupiah(currentTotalAdmin)}</span>
+              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Total Admin Fee</span>
+            </div>
+
+            {/* 3. UANG MASUK */}
+            <div className="flex flex-col justify-between items-center text-center px-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
+              </span>
+              <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 my-1 leading-none truncate w-full">{formatRupiah(currentUangMasuk)}</span>
+              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Penjualan → Laci</span>
+            </div>
+
+            {/* 4. TARIK TUNAI */}
+            <div className="flex flex-col justify-between items-center text-center px-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
+              </span>
+              <span className="text-xs sm:text-sm font-black text-rose-600 dark:text-rose-400 my-1 leading-none truncate w-full">{formatRupiah(currentTotalTarik)}</span>
+              <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Laci → Pembeli</span>
+            </div>
           </div>
         </div>
         
@@ -1955,6 +2079,44 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 >
                   <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
                 </button>
+
+                {/* Pilihan Operkan Saldo ke Kasir Shift Selanjutnya */}
+                <div className="mt-3 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={isOperkanSaldo}
+                      onChange={(e) => {
+                        setIsOperkanSaldo(e.target.checked);
+                        if (!e.target.checked) setTargetKasirId('');
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
+                      Operkan Saldo Ini ke Kasir Selanjutnya
+                    </span>
+                  </label>
+
+                  {isOperkanSaldo && (
+                    <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
+                      <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
+                        Pilih Kasir Penerima (Shift Selanjutnya)
+                      </label>
+                      <select
+                        value={targetKasirId}
+                        onChange={(e) => setTargetKasirId(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="">-- Pilih Kasir Penerima --</option>
+                        {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
+                          <option key={username} value={username}>
+                            {data.name || username}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
@@ -1972,6 +2134,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       .filter(r => r.nominal > 0);
                       
                     if (finalRows.length === 0) return;
+
+                    if (isOperkanSaldo && !targetKasirId) {
+                      alert('Pilih kasir penerima terlebih dahulu!');
+                      return;
+                    }
                     
                     const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
                     const currentSelisih = totalNominal - currentSaldoBank;
@@ -1983,8 +2150,10 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       return;
                     }
                     
-                    props.onUpdateSaldoReal?.(finalRows);
+                    props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
                     setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+                    setIsOperkanSaldo(false);
+                    setTargetKasirId('');
                     setShowSaldoRealModal(false);
                     setConfirmSelisih(false);
                   }}

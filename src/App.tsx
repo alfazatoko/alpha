@@ -1676,7 +1676,10 @@ const MainApp: React.FC<MainAppProps> = ({
     })
   }
 
-  const handleSimpanSaldoRealAplikasi = (rows: { nominal: number, keterangan: string }[]) => {
+  const handleSimpanSaldoRealAplikasi = (
+    rows: { nominal: number, keterangan: string }[],
+    operkanInfo?: { isOperkan: boolean, targetKasirId: string }
+  ) => {
     if (isSaving || rows.length === 0) return
     const validRows = rows.filter(r => r.nominal > 0)
     if (validRows.length === 0) return showToast('Nominal tidak valid!')
@@ -1689,7 +1692,8 @@ const MainApp: React.FC<MainAppProps> = ({
       return showToast('Pilih cabang (toko) terlebih dahulu!')
     }
     
-    const newTxs = validRows.map((row, index) => ({
+    const nowISO = getLocalISOString()
+    const newTxs: any[] = validRows.map((row, index) => ({
       id: Date.now().toString() + '-' + index,
       user_id: googleUid,
       kasir_id: username,
@@ -1697,9 +1701,27 @@ const MainApp: React.FC<MainAppProps> = ({
       nominal: row.nominal,
       admin_fee: 0,
       keterangan: row.keterangan || 'Update Saldo Real HP',
-      timestamp: getLocalISOString(),
+      timestamp: nowISO,
       store_id: finalStoreId
     }))
+
+    // Jika opsi operkan saldo ke kasir selanjutnya diaktifkan
+    if (operkanInfo?.isOperkan && operkanInfo.targetKasirId) {
+      validRows.forEach((row, index) => {
+        const appLabel = row.keterangan || `Aplikasi ${index + 1}`
+        newTxs.push({
+          id: Date.now().toString() + '-operkan-' + index,
+          user_id: googleUid,
+          kasir_id: operkanInfo.targetKasirId,
+          kategori: 'Isi Saldo Bank',
+          nominal: row.nominal,
+          admin_fee: 0,
+          keterangan: `Operan Saldo Bank Awal dari ${username} (${appLabel})`,
+          timestamp: nowISO,
+          store_id: finalStoreId
+        })
+      })
+    }
 
     supabase.from('transactions').insert(newTxs).then(({ error }) => {
       setIsSaving(false)
@@ -1717,9 +1739,116 @@ const MainApp: React.FC<MainAppProps> = ({
           store_id: tx.store_id || undefined
         }))
         setTransactions(prev => [...optimisticTxs, ...prev])
-        showToast('Saldo Real Aplikasi Diperbarui!')
+
+        if (operkanInfo?.isOperkan && operkanInfo.targetKasirId) {
+          const targetName = kasirList[operkanInfo.targetKasirId]?.name || operkanInfo.targetKasirId
+          showToast(`Saldo Real Diperbarui & Diserahkan ke ${targetName}!`)
+        } else {
+          showToast('Saldo Real Aplikasi Diperbarui!')
+        }
+
+        // Trigger Closing Snapshot on Saldo Real Input
+        const totalSaldoRealInput = validRows.reduce((s, r) => s + r.nominal, 0)
+        saveClosingSnapshot(username, finalStoreId, totalSaldoRealInput)
       }
     })
+  }
+
+  const saveClosingSnapshot = async (kasirUsername: string, targetStore: string, totalSaldoRealInput: number) => {
+    try {
+      const todayStr = getLocalDateString()
+      const todayTxs = transactions.filter(t => 
+        t.timestamp.substring(0, 10) === todayStr &&
+        (!targetStore || targetStore === 'all' || t.store_id === targetStore)
+      )
+
+      let omset = 0
+      let adminFee = 0
+      let pengeluaran = 0
+      let tambahSaldo = 0
+      let count = 0
+
+      todayTxs.forEach(t => {
+        const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]')
+        const isIsi = String(t.kategori).startsWith('Isi')
+
+        if (isIsi) {
+          if (t.kasir_id === kasirUsername || kasirUsername === 'all') {
+            tambahSaldo += Number(t.nominal) || 0
+          }
+        } else if (!isKhususAtauNonTunai) {
+          if (t.kasir_id === kasirUsername || kasirUsername === 'all') {
+            count++
+            adminFee += Number(t.adminFee) || 0
+            if (t.kategori === 'Tarik Tunai') {
+              pengeluaran += Number(t.nominal) || 0
+            } else {
+              omset += Number(t.nominal) || 0
+            }
+          }
+        }
+      })
+
+      let voucherProfit = 0
+      let stokAwal = 0
+      let stokAkhir = 0
+      if (targetStore && targetStore !== 'all') {
+        const savedV = localStorage.getItem(`alphaPro_${targetStore}_stok_voucher_${todayStr}`)
+        if (savedV) {
+          try {
+            const dataVoucher = JSON.parse(savedV)
+            Object.values(dataVoucher).forEach((items: any) => {
+              items.forEach((item: any) => {
+                stokAwal += Number(item.awal) || 0
+                stokAkhir += Number(item.akhir) || 0
+                const laku = Math.max(0, (item.awal || 0) - (item.akhir || 0))
+                if (item.modal && laku > 0) {
+                  voucherProfit += laku * ((item.price || 0) - item.modal)
+                }
+              })
+            })
+          } catch (e) {}
+        }
+      }
+
+      const totalLaba = adminFee + voucherProfit
+
+      const record = {
+        user_id: googleUid,
+        store_id: targetStore,
+        kasir_id: kasirUsername,
+        tanggal: todayStr,
+        omset,
+        laba: totalLaba,
+        laba_admin: adminFee,
+        laba_voucher: voucherProfit,
+        pengeluaran,
+        tambah_saldo: tambahSaldo,
+        saldo_real: totalSaldoRealInput,
+        stok_awal_voucher: stokAwal,
+        stok_akhir_voucher: stokAkhir,
+        total_transaksi: count,
+        timestamp: getLocalISOString()
+      }
+
+      localStorage.setItem(`alphaPro_${targetStore}_closing_${todayStr}_${kasirUsername}`, JSON.stringify(record))
+
+      const { data: existing } = await supabase
+        .from('performa_harian')
+        .select('id')
+        .eq('user_id', googleUid)
+        .eq('kasir_id', kasirUsername)
+        .eq('tanggal', todayStr)
+        .single()
+
+      if (existing && existing.id) {
+        await supabase.from('performa_harian').update(record).eq('id', existing.id)
+      } else {
+        await supabase.from('performa_harian').insert([record])
+      }
+    } catch (err) {
+      console.error('Snapshot closing error:', err)
+    }
   }
 
 
