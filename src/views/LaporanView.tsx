@@ -154,6 +154,119 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
   const [isOperkanSaldo, setIsOperkanSaldo] = useState(false)
   const [targetKasirId, setTargetKasirId] = useState('')
+  const [showAuditModal, setShowAuditModal] = useState(false)
+
+  // Logika pasangan kronologis audit shift (Berkelanjutan Pagi -> Malam -> Pagi Besok)
+  const auditShiftPairs = useMemo(() => {
+    const closingTxs = props.transactions.filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
+    const openingTxs = props.transactions.filter(t => t.kategori === 'Isi Saldo Bank')
+
+    const closingBatchesMap = new Map<string, { id: string, timestamp: string, kasir_id: string, totalNominal: number, items: string[] }>()
+
+    closingTxs.forEach(t => {
+      const kId = t.kasir_id || 'unknown'
+      const batchKey = `${t.timestamp.substring(0, 16)}_${kId}`
+      if (!closingBatchesMap.has(batchKey)) {
+        closingBatchesMap.set(batchKey, {
+          id: t.id,
+          timestamp: t.timestamp,
+          kasir_id: kId,
+          totalNominal: 0,
+          items: []
+        })
+      }
+      const b = closingBatchesMap.get(batchKey)!
+      b.totalNominal += t.nominal
+      if (t.keterangan) b.items.push(`${t.keterangan}: ${formatRupiah(t.nominal).replace(',00', '')}`)
+    })
+
+    const closingBatches = Array.from(closingBatchesMap.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
+    const pairs: {
+      id: string
+      dateStr: string
+      timeStr: string
+      kasirClosing: string
+      kasirOpening: string
+      saldoClosing: number
+      saldoOpening: number
+      selisih: number
+      isOperan: boolean
+      details: string[]
+    }[] = []
+
+    closingBatches.forEach(cb => {
+      const dateStr = cb.timestamp.substring(0, 10)
+      const timeStr = cb.timestamp.substring(11, 16)
+      const kasirClosingName = props.kasirList?.[cb.kasir_id]?.name || cb.kasir_id
+
+      const operanTxs = openingTxs.filter(t => 
+        t.timestamp.substring(0, 16) === cb.timestamp.substring(0, 16) &&
+        (t.keterangan || '').includes('Operan Saldo Bank Awal')
+      )
+
+      if (operanTxs.length > 0) {
+        const kasirOpeningId = operanTxs[0].kasir_id || ''
+        const kasirOpeningName = props.kasirList?.[kasirOpeningId]?.name || kasirOpeningId || 'Unknown'
+        const totalOpeningNominal = operanTxs.reduce((s, t) => s + t.nominal, 0)
+        const diff = totalOpeningNominal - cb.totalNominal
+
+        pairs.push({
+          id: cb.id,
+          dateStr,
+          timeStr,
+          kasirClosing: kasirClosingName,
+          kasirOpening: kasirOpeningName,
+          saldoClosing: cb.totalNominal,
+          saldoOpening: totalOpeningNominal,
+          selisih: diff,
+          isOperan: true,
+          details: cb.items
+        })
+      } else {
+        const nextOpeningTxs = openingTxs.filter(t => t.timestamp > cb.timestamp && t.kasir_id !== cb.kasir_id)
+        if (nextOpeningTxs.length > 0) {
+          const nextTx = nextOpeningTxs[0]
+          const kasirOpeningId = nextTx.kasir_id || ''
+          const kasirOpeningName = props.kasirList?.[kasirOpeningId]?.name || kasirOpeningId || 'Unknown'
+          const totalOpeningNominal = nextTx.nominal
+          const diff = totalOpeningNominal - cb.totalNominal
+
+          pairs.push({
+            id: cb.id,
+            dateStr,
+            timeStr,
+            kasirClosing: kasirClosingName,
+            kasirOpening: kasirOpeningName,
+            saldoClosing: cb.totalNominal,
+            saldoOpening: totalOpeningNominal,
+            selisih: diff,
+            isOperan: false,
+            details: cb.items
+          })
+        } else {
+          pairs.push({
+            id: cb.id,
+            dateStr,
+            timeStr,
+            kasirClosing: kasirClosingName,
+            kasirOpening: 'Shift Selanjutnya',
+            saldoClosing: cb.totalNominal,
+            saldoOpening: cb.totalNominal,
+            selisih: 0,
+            isOperan: false,
+            details: cb.items
+          })
+        }
+      }
+    })
+
+    return pairs.reverse()
+  }, [props.transactions, props.kasirList])
+
+  const auditDiscrepancies = useMemo(() => {
+    return auditShiftPairs.filter(p => p.selisih !== 0 && p.kasirOpening !== 'Shift Selanjutnya')
+  }, [auditShiftPairs])
 
   useEffect(() => {
     if (props.activeStoreId && props.filterTanggal) {
@@ -1524,6 +1637,24 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAuditModal(true)}
+              className={cn(
+                "px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 text-[10px] font-bold uppercase tracking-wider",
+                auditDiscrepancies.length > 0
+                  ? "bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/50"
+                  : "bg-white/20 text-white hover:bg-white/30"
+              )}
+            >
+              <i className="fa-solid fa-clipboard-check text-[10px]"></i>
+              <span>Audit Shift</span>
+              {auditDiscrepancies.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-white text-rose-600 text-[9px] font-black flex items-center justify-center ml-0.5">
+                  {auditDiscrepancies.length}
+                </span>
+              )}
+            </button>
+
             <button 
               id="laporan-share-action"
               onClick={() => setShowShareMenu(!showShareMenu)}
@@ -1615,6 +1746,35 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       </div>
 
       <div className="px-1.5 pb-5 space-y-2.5">
+        {/* BANNER NOTIFIKASI AUDIT SERAH TERIMA SHIFT */}
+        {auditDiscrepancies.length > 0 && (
+          <div className="p-3.5 bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/40 dark:to-orange-950/40 border-2 border-rose-300 dark:border-rose-800 rounded-2xl shadow-sm flex items-center justify-between gap-3 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/30">
+                <i className="fa-solid fa-triangle-exclamation text-base"></i>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider">
+                    ⚠️ Peringatan Audit Shift
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black">
+                    {auditDiscrepancies.length} Selisih
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300 mt-0.5">
+                  Ditemukan selisih input antara Saldo Closing Penyerah & Saldo Awal Shift Penerima!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowAuditModal(true)}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0 shadow-md active:scale-95 transition-all"
+            >
+              Cek Audit
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-3xl shadow-lg shadow-blue-500/20 relative overflow-hidden">
             <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
@@ -2194,6 +2354,142 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             >
               OK, SAYA PERIKSA
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TIMELINE AUDIT SERAH TERIMA SHIFT */}
+      {showAuditModal && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Header Modal */}
+            <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+                  <i className="fa-solid fa-clipboard-check text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-white">Timeline Audit Serah Terima Shift</h3>
+                  <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A ➔ Saldo Awal Kasir B</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAuditModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Content List */}
+            <div className="p-4 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
+              {auditShiftPairs.length === 0 ? (
+                <div className="py-12 text-center text-slate-400">
+                  <i className="fa-solid fa-folder-open text-4xl mb-2 opacity-50"></i>
+                  <p className="text-xs font-bold uppercase tracking-wider">Belum ada riwayat closing/serah terima shift</p>
+                </div>
+              ) : (
+                auditShiftPairs.map((pair, idx) => {
+                  const isDiscrepancy = pair.selisih !== 0 && pair.kasirOpening !== 'Shift Selanjutnya'
+
+                  return (
+                    <div 
+                      key={pair.id + '-' + idx}
+                      className={cn(
+                        "p-4 rounded-2xl border transition-all space-y-3",
+                        isDiscrepancy 
+                          ? "bg-rose-50/60 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60 shadow-sm"
+                          : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/80"
+                      )}
+                    >
+                      {/* Top Header Row */}
+                      <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} • {pair.timeStr}
+                          </span>
+                          {pair.isOperan && (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">
+                              Auto Operan
+                            </span>
+                          )}
+                        </div>
+
+                        {isDiscrepancy ? (
+                          <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                            <i className="fa-solid fa-triangle-exclamation"></i> Selisih {formatRupiah(pair.selisih)}
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                            <i className="fa-solid fa-circle-check"></i> KLOP / MATCH
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Main Handover Flow */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
+                        {/* Kasir Penyerah (Closing) */}
+                        <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                            Shift Penyerah (Closing)
+                          </span>
+                          <p className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                            <i className="fa-solid fa-user-minus text-rose-500"></i>
+                            {pair.kasirClosing}
+                          </p>
+                          <p className="text-sm font-black text-emerald-600 mt-1">
+                            {formatRupiah(pair.saldoClosing)}
+                          </p>
+                        </div>
+
+                        {/* Kasir Penerima (Saldo Awal) */}
+                        <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                            Shift Penerima (Saldo Awal)
+                          </span>
+                          <p className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                            <i className="fa-solid fa-user-plus text-blue-500"></i>
+                            {pair.kasirOpening}
+                          </p>
+                          <p className="text-sm font-black text-blue-600 mt-1">
+                            {formatRupiah(pair.saldoOpening)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Details Items if any */}
+                      {pair.details.length > 0 && (
+                        <div className="pt-2 border-t border-slate-200/40 dark:border-slate-700/40">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Rincian Saldo Real HP:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {pair.details.map((d, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-lg bg-slate-200/70 dark:bg-slate-700/70 text-slate-700 dark:text-slate-300 text-[9px] font-bold">
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Footer Modal */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                Total Record: {auditShiftPairs.length} Shift
+              </span>
+              <button
+                onClick={() => setShowAuditModal(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+              >
+                Tutup
+              </button>
+            </div>
+
           </div>
         </div>
       )}
