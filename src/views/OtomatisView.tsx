@@ -3,6 +3,11 @@ import { cn, formatInputRupiah, parseNominal } from '../lib/utils'
 import type { PresetOtomatis } from '../types'
 import generatedPresets from '../generated_presets.json'
 
+export interface AdminRule {
+  max: number;
+  admin: number;
+}
+
 interface OtomatisViewProps {
   active: boolean
   setActiveView: (v: string) => void
@@ -28,6 +33,32 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   const [formJual, setFormJual] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({})
+
+  // New states for Admin Otomatis
+  const [activeOtoTab, setActiveOtoTab] = useState<'teks' | 'admin'>('teks')
+  const [adminRules, setAdminRules] = useState<Record<string, AdminRule[]>>(() => {
+    try {
+      const saved = localStorage.getItem(`alphaPro_${props.activeStoreId || 'all'}_adminRules`)
+      if (saved) return JSON.parse(saved)
+    } catch(e) {}
+    return {
+      'Transfer Bank': [],
+      'DANA': [],
+      'FLIP': [],
+      'Tarik Tunai': []
+    }
+  })
+
+  // State for Admin Form
+  const [formAdminKategori, setFormAdminKategori] = useState('Transfer Bank')
+  const [formAdminMax, setFormAdminMax] = useState('')
+  const [formAdminFee, setFormAdminFee] = useState('')
+
+  useEffect(() => {
+    if (props.activeStoreId && props.activeStoreId !== 'all') {
+      localStorage.setItem(`alphaPro_${props.activeStoreId}_adminRules`, JSON.stringify(adminRules))
+    }
+  }, [adminRules, props.activeStoreId])
 
   const toggleCategory = (kat: string) => {
     setCollapsedCategories(prev => ({
@@ -116,6 +147,49 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
     setFormJual('')
   }
 
+  const handleSimpanAdminRule = () => {
+    const maxNum = parseNominal(formAdminMax)
+    const adminNum = parseNominal(formAdminFee)
+
+    if (maxNum <= 0 || adminNum <= 0) {
+      return props.showToast('Nominal maksimal dan biaya admin harus lebih dari 0!')
+    }
+
+    setAdminRules(prev => {
+      const catRules = prev[formAdminKategori] ? [...prev[formAdminKategori]] : []
+      // Check if max already exists
+      const existingIdx = catRules.findIndex(r => r.max === maxNum)
+      if (existingIdx >= 0) {
+        catRules[existingIdx].admin = adminNum
+      } else {
+        catRules.push({ max: maxNum, admin: adminNum })
+      }
+      
+      // Sort ascending by max
+      catRules.sort((a, b) => a.max - b.max)
+      
+      return {
+        ...prev,
+        [formAdminKategori]: catRules
+      }
+    })
+
+    setFormAdminMax('')
+    setFormAdminFee('')
+    props.showToast('Aturan Admin Berhasil Disimpan!')
+  }
+
+  const handleDeleteAdminRule = (kategori: string, max: number) => {
+    setAdminRules(prev => {
+      const catRules = prev[kategori].filter(r => r.max !== max)
+      return {
+        ...prev,
+        [kategori]: catRules
+      }
+    })
+    props.showToast('Aturan Dihapus')
+  }
+
   const handleImportPresets = () => {
     if (props.onConfirm) {
       props.onConfirm(
@@ -166,14 +240,27 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", props.active ? "flex" : "hidden")}>
         {/* Header Breadcrumb */}
         <div className="flex items-center justify-between px-8 py-6 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
-          <div>
-            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">Teks Otomatis & Preset Transaksi</h1>
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">Kelola preset teks dan harga untuk mempermudah input transaksi kasir</p>
+          <div className="flex-1">
+            <h1 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-wide uppercase">
+              {activeOtoTab === 'teks' ? 'Teks Otomatis & Preset Transaksi' : 'Atur Admin Otomatis'}
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">
+              {activeOtoTab === 'teks' ? 'Kelola preset teks dan harga untuk mempermudah input transaksi kasir' : 'Atur rentang nominal dan biaya admin secara otomatis'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setActiveOtoTab('teks')} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", activeOtoTab === 'teks' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700")}>
+              <i className="fa-solid fa-bolt mr-2"></i> Teks Otomatis
+            </button>
+            <button onClick={() => setActiveOtoTab('admin')} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", activeOtoTab === 'admin' ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30" : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700")}>
+              <i className="fa-solid fa-percent mr-2"></i> Admin Otomatis
+            </button>
           </div>
         </div>
 
         {/* Content Pane */}
-        <div className="flex-grow flex overflow-hidden p-8 gap-8">
+        {activeOtoTab === 'teks' && (
+        <div className="flex-grow flex overflow-hidden p-8 gap-8 animate-in fade-in duration-300">
           {/* Left Column: Form */}
           <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
@@ -351,6 +438,148 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             </div>
           </div>
         </div>
+        )}
+
+        {activeOtoTab === 'admin' && (
+          <div className="flex-grow flex overflow-hidden p-8 gap-8 animate-in fade-in duration-300">
+            <div className="w-[380px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
+              <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-700">
+                  <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
+                    <i className="fa-solid fa-percent text-emerald-600 mr-2"></i> Atur Admin Otomatis
+                  </h4>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Kategori Transaksi</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map((kat) => (
+                        <button
+                          key={kat}
+                          onClick={() => setFormAdminKategori(kat)}
+                          className={cn(
+                            "py-2 px-3 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
+                            formAdminKategori === kat
+                              ? "bg-emerald-600 border-emerald-600 text-white shadow-md"
+                              : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300"
+                          )}
+                          style={formAdminKategori === kat ? { color: '#ffffff' } : undefined}
+                        >
+                          {kat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Nominal (Max)</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Contoh: 50.000"
+                        value={formAdminMax}
+                        onChange={(e) => setFormAdminMax(formatInputRupiah(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const next = e.currentTarget.parentElement?.nextElementSibling?.querySelector('input');
+                            next?.focus();
+                          }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Biaya Admin</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Contoh: 2.000"
+                        value={formAdminFee}
+                        onChange={(e) => setFormAdminFee(formatInputRupiah(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSimpanAdminRule();
+                          }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleSimpanAdminRule}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-4 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
+                    style={{ color: '#ffffff' }}
+                  >
+                    <i className="fa-solid fa-save"></i>
+                    Simpan Aturan Admin
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: List */}
+            <div className="flex-grow h-full flex flex-col gap-6 overflow-hidden">
+              <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 pb-6 space-y-4">
+                <div className="space-y-4">
+                  {['Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
+                    const rules = adminRules[kat] || [];
+                    if (rules.length === 0) return null;
+                    const isCollapsed = !!collapsedCategories[`pc_admin_${kat}`];
+                    
+                    return (
+                      <div key={`pc_admin_${kat}`} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm transition-all duration-300">
+                        <button
+                          onClick={() => toggleCategory(`pc_admin_${kat}`)}
+                          className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
+                        >
+                          <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            {kat}
+                            <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-lg font-black uppercase tracking-widest">
+                              {rules.length} Aturan
+                            </span>
+                          </h4>
+                          <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 group-hover:text-emerald-600 transition-colors">
+                            <i className={cn("fa-solid text-[10px] transition-transform duration-200", isCollapsed ? "fa-chevron-right" : "fa-chevron-down")}></i>
+                          </div>
+                        </button>
+
+                        {!isCollapsed && (
+                          <div className="pt-4 border-t border-slate-100 dark:border-slate-700/50 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            {rules.map((r, idx) => (
+                              <div key={idx} className="bg-slate-50 dark:bg-slate-900 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shadow-sm">
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                    {idx === 0 ? "0" : (rules[idx-1].max + 1).toLocaleString('id-ID')} - {r.max.toLocaleString('id-ID')}
+                                  </h4>
+                                </div>
+                                <div className="flex-1 text-right pr-2">
+                                  <p className="text-[12px] font-black text-emerald-600 dark:text-emerald-400">Rp {r.admin.toLocaleString('id-ID')}</p>
+                                </div>
+                                <div className="shrink-0">
+                                  <button onClick={() => handleDeleteAdminRule(kat, r.max)} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 active:scale-90 transition-all border border-transparent hover:border-rose-100 dark:hover:border-rose-900/30">
+                                    <i className="fa-solid fa-xmark text-sm"></i>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -403,160 +632,306 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
         </div>
       </div>
 
-      <div className="px-1.5 pb-8 space-y-5">
-        <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
-            </h3>
-            {!editingId && (
-              <button onClick={handleImportPresets} className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-wider">
-                <i className="fa-solid fa-download"></i> IMPORT
-              </button>
-            )}
-          </div>
+      <div className="px-4 flex gap-2 mb-4 -mt-3 relative z-20">
+        <button onClick={() => setActiveOtoTab('teks')} className={cn("flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all", activeOtoTab === 'teks' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : "bg-white text-gray-500 border border-gray-200")}>
+          <i className="fa-solid fa-bolt mr-2"></i> Teks Otomatis
+        </button>
+        <button onClick={() => setActiveOtoTab('admin')} className={cn("flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all", activeOtoTab === 'admin' ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30" : "bg-white text-gray-500 border border-gray-200")}>
+          <i className="fa-solid fa-percent mr-2"></i> Admin Otomatis
+        </button>
+      </div>
 
-          <div className="mb-2">
-            <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>
-            <div className="flex flex-wrap gap-1">
-              {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai'].map((kat) => (
-                <button
-                  key={kat}
-                  onClick={() => setFormKategori(kat)}
-                  className={cn(
-                    "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
-                    formKategori === kat ? "bg-purple-600 border-purple-600 text-white shadow-md" : "bg-white border-gray-200 text-black"
-                  )}
-                >
-                  {kat}
+      {activeOtoTab === 'teks' && (
+        <div className="px-1.5 pb-8 space-y-5 animate-in slide-in-from-left-4 duration-300">
+          <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
+                <i className="fa-solid fa-bolt text-purple-600"></i> {editingId ? 'EDIT PRESET' : 'TAMBAH PRESET BARU'}
+              </h3>
+              {!editingId && (
+                <button onClick={handleImportPresets} className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-wider">
+                  <i className="fa-solid fa-download"></i> IMPORT
                 </button>
-              ))}
+              )}
             </div>
-          </div>
 
-          <div>
-            <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-widest ml-1">Keterangan / Nama Produk</label>
-            <input
-              type="text"
-              placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"}
-              value={formKeterangan}
-              onChange={(e) => setFormKeterangan(e.target.value)}
-              className="form-input-modern w-full text-[13px] font-black px-3 h-10"
-            />
-            <p className="text-[8px] font-bold text-gray-400 mt-1 ml-1 leading-tight">Saat Kasir mengetik ini di "Keterangan Opsional", pilihan otomatis akan muncul.</p>
-          </div>
-
-          {formKategori === 'Order Kuota' && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={formModal}
-                  onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
-                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
-                />
-              </div>
-              <div>
-                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={formJual}
-                  onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
-                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
-                />
+            <div className="mb-2">
+              <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>
+              <div className="flex flex-wrap gap-1">
+                {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai'].map((kat) => (
+                  <button
+                    key={kat}
+                    onClick={() => setFormKategori(kat)}
+                    className={cn(
+                      "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
+                      formKategori === kat ? "bg-purple-600 border-purple-600 text-white shadow-md" : "bg-white border-gray-200 text-black"
+                    )}
+                  >
+                    {kat}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
 
-          <div className="flex gap-2 mt-2 pt-2">
-            {editingId && (
-              <button
-                onClick={resetForm}
-                className="flex-1 bg-gray-100 text-gray-600 text-[10px] font-black py-3 rounded-lg hover:bg-gray-200 transition-all active:scale-95 uppercase tracking-widest"
-              >
-                BATAL
-              </button>
+            <div>
+              <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-widest ml-1">Keterangan / Nama Produk</label>
+              <input
+                type="text"
+                placeholder={formKategori === 'Order Kuota' ? "Contoh: Token Listrik" : "Contoh: gopay"}
+                value={formKeterangan}
+                onChange={(e) => setFormKeterangan(e.target.value)}
+                className="form-input-modern w-full text-[13px] font-black px-3 h-10"
+              />
+              <p className="text-[8px] font-bold text-gray-400 mt-1 ml-1 leading-tight">Saat Kasir mengetik ini di "Keterangan Opsional", pilihan otomatis akan muncul.</p>
+            </div>
+
+            {formKategori === 'Order Kuota' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={formModal}
+                    onChange={(e) => setFormModal(formatInputRupiah(e.target.value))}
+                    className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={formJual}
+                    onChange={(e) => setFormJual(formatInputRupiah(e.target.value))}
+                    className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                  />
+                </div>
+              </div>
             )}
-            <button
-              onClick={handleSimpan}
-              className="flex-[2] bg-purple-600 text-white text-[10px] font-black py-3 rounded-lg hover:bg-purple-700 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
-            >
-              <i className="fa-solid fa-save"></i> SIMPAN PRESET
-            </button>
+
+            <div className="flex gap-2 mt-2 pt-2">
+              {editingId && (
+                <button
+                  onClick={resetForm}
+                  className="flex-1 bg-gray-100 text-gray-600 text-[10px] font-black py-3 rounded-lg hover:bg-gray-200 transition-all active:scale-95 uppercase tracking-widest"
+                >
+                  BATAL
+                </button>
+              )}
+              <button
+                onClick={handleSimpan}
+                className="flex-[2] bg-purple-600 text-white text-[10px] font-black py-3 rounded-lg hover:bg-purple-700 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-save"></i> SIMPAN PRESET
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-black text-gray-800 text-[11px] mb-2 flex items-center gap-2 uppercase tracking-tighter ml-1">
+              <i className="fa-solid fa-list-ul text-blue-600"></i> DAFTAR PRESET OTOMATIS
+            </h3>
+
+            {props.presets.length === 0 ? (
+              <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
+                <i className="fa-solid fa-box-open text-2xl text-gray-300 mb-2 block"></i>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada preset.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
+                  const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
+                  if (filtered.length === 0) return null;
+
+                  const isCollapsed = !!collapsedCategories[kat];
+
+                  return (
+                    <div key={kat} className="space-y-2 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
+                      {/* Category Header (Clickable Toggle) */}
+                      <button
+                        onClick={() => toggleCategory(kat)}
+                        className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
+                      >
+                        <h4 className="text-[10px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                          {kat}
+                          <span className="text-[8px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-bold">
+                            {filtered.length} preset
+                          </span>
+                        </h4>
+                        <div className="flex items-center gap-1.5 text-gray-400 group-hover:text-purple-600 transition-colors">
+                          <span className="text-[8px] font-bold uppercase tracking-tighter">
+                            {isCollapsed ? 'Tampilkan' : 'Sembunyikan'}
+                          </span>
+                          <i className={cn(
+                            "fa-solid text-[9px] transition-transform duration-200",
+                            isCollapsed ? "fa-chevron-right" : "fa-chevron-down"
+                          )}></i>
+                        </div>
+                      </button>
+
+                      {/* Presets List (Conditionally rendered/hidden) */}
+                      {!isCollapsed && (
+                        <div className={cn(
+                          "pt-2.5 border-t border-gray-100/60 animate-in fade-in duration-200",
+                          kat === 'Order Kuota' ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5"
+                        )}>
+                          {filtered.map(p => (
+                            <div key={p.id} className="bg-gray-50/50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between gap-1 shadow-sm">
+                              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                <h4 className="text-[10px] font-bold text-gray-800 truncate leading-tight">{p.keterangan}</h4>
+                                {kat === 'Order Kuota' && (
+                                  <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
+                                    <span className="text-blue-600">M:{p.modal / 1000}k</span>
+                                    <span className="text-gray-300">|</span>
+                                    <span className="text-emerald-600">J:{p.jual / 1000}k</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-0.5 shrink-0">
+                                <button onClick={() => handleEdit(p)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all">
+                                  <i className="fa-solid fa-pen text-[9px]"></i>
+                                </button>
+                                <button onClick={() => handleDelete(p.id)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
+                                  <i className="fa-solid fa-xmark text-[10px]"></i>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        <div className="space-y-2">
-          <h3 className="font-black text-gray-800 text-[11px] mb-2 flex items-center gap-2 uppercase tracking-tighter ml-1">
-            <i className="fa-solid fa-list-ul text-blue-600"></i> DAFTAR PRESET OTOMATIS
-          </h3>
-
-          {props.presets.length === 0 ? (
-            <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
-              <i className="fa-solid fa-box-open text-2xl text-gray-300 mb-2 block"></i>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada preset.</p>
+      {activeOtoTab === 'admin' && (
+        <div className="px-1.5 pb-8 space-y-5 animate-in slide-in-from-right-4 duration-300">
+          <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
+                <i className="fa-solid fa-percent text-emerald-600"></i> ATUR ADMIN OTOMATIS
+              </h3>
             </div>
-          ) : (
+            
+            <div className="mb-2">
+              <label className="block text-[9px] font-black text-gray-900 mb-1.5 uppercase tracking-widest ml-1">Kategori Transaksi</label>
+              <div className="flex flex-wrap gap-1">
+                {['Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map((kat) => (
+                  <button
+                    key={kat}
+                    onClick={() => setFormAdminKategori(kat)}
+                    className={cn(
+                      "py-1.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all outline-none",
+                      formAdminKategori === kat ? "bg-emerald-600 border-emerald-600 text-white shadow-md" : "bg-white border-gray-200 text-black"
+                    )}
+                  >
+                    {kat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">NOMINAL (MAX)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Contoh: 50.000"
+                  value={formAdminMax}
+                  onChange={(e) => setFormAdminMax(formatInputRupiah(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const next = e.currentTarget.parentElement?.nextElementSibling?.querySelector('input');
+                      next?.focus();
+                    }
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">BIAYA ADMIN</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Contoh: 2.000"
+                  value={formAdminFee}
+                  onChange={(e) => setFormAdminFee(formatInputRupiah(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSimpanAdminRule();
+                    }
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  className="form-input-modern w-full text-[13px] font-black h-10 px-3"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={handleSimpanAdminRule}
+                className="w-full bg-emerald-600 text-white text-[10px] font-black py-3 rounded-lg hover:bg-emerald-700 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-save"></i> SIMPAN ATURAN
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-black text-gray-800 text-[11px] mb-2 flex items-center gap-2 uppercase tracking-tighter ml-1">
+              <i className="fa-solid fa-list-ol text-blue-600"></i> DAFTAR ATURAN ADMIN
+            </h3>
+            
             <div className="space-y-3">
-              {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
-                const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
-                if (filtered.length === 0) return null;
-
-                const isCollapsed = !!collapsedCategories[kat];
-
+              {['Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
+                const rules = adminRules[kat] || [];
+                if (rules.length === 0) return null;
+                const isCollapsed = !!collapsedCategories[`admin_${kat}`];
+                
                 return (
-                  <div key={kat} className="space-y-2 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
-                    {/* Category Header (Clickable Toggle) */}
+                  <div key={`admin_${kat}`} className="space-y-2 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
                     <button
-                      onClick={() => toggleCategory(kat)}
+                      onClick={() => toggleCategory(`admin_${kat}`)}
                       className="w-full flex items-center justify-between text-left outline-none cursor-pointer group"
                     >
                       <h4 className="text-[10px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                         {kat}
-                        <span className="text-[8px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-bold">
-                          {filtered.length} preset
+                        <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md font-bold">
+                          {rules.length} Aturan
                         </span>
                       </h4>
-                      <div className="flex items-center gap-1.5 text-gray-400 group-hover:text-purple-600 transition-colors">
-                        <span className="text-[8px] font-bold uppercase tracking-tighter">
-                          {isCollapsed ? 'Tampilkan' : 'Sembunyikan'}
-                        </span>
-                        <i className={cn(
-                          "fa-solid text-[9px] transition-transform duration-200",
-                          isCollapsed ? "fa-chevron-right" : "fa-chevron-down"
-                        )}></i>
+                      <div className="flex items-center gap-1.5 text-gray-400 group-hover:text-emerald-600 transition-colors">
+                        <i className={cn("fa-solid text-[9px] transition-transform duration-200", isCollapsed ? "fa-chevron-right" : "fa-chevron-down")}></i>
                       </div>
                     </button>
 
-                    {/* Presets List (Conditionally rendered/hidden) */}
                     {!isCollapsed && (
-                      <div className={cn(
-                        "pt-2.5 border-t border-gray-100/60 animate-in fade-in duration-200",
-                        kat === 'Order Kuota' ? "flex flex-col gap-1.5" : "grid grid-cols-2 gap-1.5"
-                      )}>
-                        {filtered.map(p => (
-                          <div key={p.id} className="bg-gray-50/50 p-2.5 rounded-xl border border-gray-200 flex items-center justify-between gap-1 shadow-sm">
-                            <div className="flex-1 min-w-0 flex flex-col justify-center">
-                              <h4 className="text-[10px] font-bold text-gray-800 truncate leading-tight">{p.keterangan}</h4>
-                              {kat === 'Order Kuota' && (
-                                <div className="flex items-center gap-1.5 text-[8px] font-bold tracking-widest uppercase mt-0.5">
-                                  <span className="text-blue-600">M:{p.modal / 1000}k</span>
-                                  <span className="text-gray-300">|</span>
-                                  <span className="text-emerald-600">J:{p.jual / 1000}k</span>
-                                </div>
-                              )}
+                      <div className="pt-2.5 border-t border-gray-100/60 flex flex-col gap-1.5 animate-in fade-in duration-200">
+                        {rules.map((r, idx) => (
+                          <div key={idx} className="bg-gray-50/50 p-2 rounded-xl border border-gray-200 flex items-center justify-between gap-1 shadow-sm px-3">
+                            <div className="flex-1">
+                              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">
+                                {idx === 0 ? "0" : (rules[idx-1].max + 1).toLocaleString('id-ID')} - {r.max.toLocaleString('id-ID')}
+                              </p>
                             </div>
-                            <div className="flex gap-0.5 shrink-0">
-                              <button onClick={() => handleEdit(p)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all">
-                                <i className="fa-solid fa-pen text-[9px]"></i>
-                              </button>
-                              <button onClick={() => handleDelete(p.id)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
+                            <div className="flex-1 text-center">
+                              <p className="text-[11px] font-black text-emerald-600">Rp {r.admin.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="shrink-0">
+                              <button onClick={() => handleDeleteAdminRule(kat, r.max)} className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all">
                                 <i className="fa-solid fa-xmark text-[10px]"></i>
                               </button>
                             </div>
@@ -568,9 +943,9 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                 )
               })}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

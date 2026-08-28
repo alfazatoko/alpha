@@ -2100,6 +2100,7 @@ const MainApp: React.FC<MainAppProps> = ({
                               admin={formAdmin} setAdmin={setFormAdmin}
                               keterangan={formKeterangan} setKeterangan={setFormKeterangan}
                               onSave={handleSimpanTransaksi} isSaving={isSaving} presets={presets}
+                              activeStoreId={activeStoreId}
                             />
                           </div>
                         </div>

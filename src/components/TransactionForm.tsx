@@ -14,10 +14,11 @@ interface TransactionFormProps {
   isSaving?: boolean
   presets?: any[]
   onOpenVoucherJualCepat?: () => void
+  activeStoreId?: string
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat
+  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId
 }) => {
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
@@ -35,6 +36,44 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setKeterangan(autoText.toUpperCase());
     }
   }, [isKetAuto, kategori, nominal, setKeterangan]);
+  
+  // Auto Admin Logic
+  const [isAdminManuallyEdited, setIsAdminManuallyEdited] = useState(false);
+
+  React.useEffect(() => {
+    if (kategori === 'Order Kuota' || !kategori || !activeStoreId) return;
+    if (isAdminManuallyEdited) return; // Prevent overwriting if user typed manually
+    
+    try {
+      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_adminRules`);
+      if (saved) {
+        const rules = JSON.parse(saved);
+        const catRules = rules[kategori] || [];
+        const numNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+        
+        let foundAdmin = 0;
+        for (const rule of catRules) {
+          if (numNominal <= rule.max) {
+            foundAdmin = rule.admin;
+            break;
+          }
+        }
+        
+        if (foundAdmin > 0) {
+          setAdmin(formatInputRupiah(foundAdmin.toString()));
+        } else if (numNominal > 0 && catRules.length > 0) {
+           // If it exceeds all max, maybe use the highest? Or leave it alone.
+           // Let's use the last rule's admin if it exceeds the highest max.
+           const lastRule = catRules[catRules.length - 1];
+           if (numNominal > lastRule.max) {
+             setAdmin(formatInputRupiah(lastRule.admin.toString()));
+           }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse admin rules', e);
+    }
+  }, [nominal, kategori, activeStoreId, isAdminManuallyEdited, setAdmin]);
   
   // Refs for navigation
   const btnDigitalRef = useRef<HTMLButtonElement>(null)
@@ -180,6 +219,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   return;
                 }
                 setActiveMode(mode.id as any)
+                setIsAdminManuallyEdited(false)
                 if (mode.id === 'TARIK') setKategori('Tarik Tunai')
                 else if (mode.id === 'AKSESORIS') setKategori('Aksesoris')
                 else setKategori('')
@@ -236,7 +276,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <button 
                     key={cat}
                     ref={el => { catRefs.current[idx] = el }}
-                    onClick={() => { setKategori(cat); setIsKetAuto(true); nominalRef.current?.focus(); }}
+                    onClick={() => { setKategori(cat); setIsKetAuto(true); setIsAdminManuallyEdited(false); nominalRef.current?.focus(); }}
                     onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
                     className={cn(
                       "group relative py-2 px-1 rounded-xl border text-[9px] font-black uppercase tracking-tighter transition-all duration-300 outline-none overflow-hidden",
@@ -355,7 +395,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 placeholder="0" 
                 value={nominal}
                 onFocus={handleInputFocus}
-                onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
+                onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
                 className="w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
               />
             </div>
@@ -386,8 +426,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 inputMode="numeric" 
                 placeholder="0" 
                 value={admin}
-                onFocus={handleInputFocus}
-                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); }}
+                onFocus={(e) => {
+                  handleInputFocus(e);
+                  e.target.select();
+                }}
+                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
                 className={cn(
                   "w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
                   kategori === 'Order Kuota' && (() => {

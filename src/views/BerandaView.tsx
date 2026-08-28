@@ -3809,6 +3809,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
               }, 100);
             }}
+            activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
           />
         </div>
       )}
