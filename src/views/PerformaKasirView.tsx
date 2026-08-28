@@ -32,6 +32,65 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
   const [monthlyPerforma, setMonthlyPerforma] = useState<any[]>([])
   const [isLoadingMonth, setIsLoadingMonth] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  // State untuk raw tambah saldo langsung dari tabel transactions Supabase (per hari)
+  const [rawTambahSaldoMap, setRawTambahSaldoMap] = useState<Map<string, number>>(new Map())
+
+  // New States for Yearly View
+  const [subTabToko, setSubTabToko] = useState<'harian' | 'bulanan'>('harian')
+  const [yearlyPerforma, setYearlyPerforma] = useState<any[]>([])
+  const [yearlyRawTambahSaldoMap, setYearlyRawTambahSaldoMap] = useState<Map<string, number>>(new Map())
+  const [isLoadingYear, setIsLoadingYear] = useState(false)
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
+
+  // Fetch tambah saldo langsung dari raw transactions per hari (bukan dari snapshot)
+  const fetchRawTambahSaldo = async (startDate: string, endDate: string) => {
+    if (!props.googleUid) return
+    try {
+      let from = 0
+      const step = 1000
+      let hasMore = true
+      const tmpMap = new Map<string, number>()
+
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('nominal, kategori, timestamp, kasir_id')
+          .eq('user_id', props.googleUid)
+          .gte('timestamp', startDate)
+          .lt('timestamp', endDate)
+          .range(from, from + step - 1)
+
+        if (props.targetStoreId && props.targetStoreId !== 'all') {
+          query = query.eq('store_id', props.targetStoreId)
+        }
+
+        const { data: chunk, error } = await query
+        if (error) break
+
+        if (chunk && chunk.length > 0) {
+          chunk.forEach((t: any) => {
+            const cat = (t.kategori || '').toLowerCase()
+            const isIsi = cat.includes('isi saldo bank') || cat.startsWith('isi') || cat.includes('modal') || cat.includes('setor')
+            if (isIsi) {
+              const dStr = t.timestamp.substring(0, 10)
+              const kId = t.kasir_id || 'Unknown'
+              const key = `${dStr}_${kId}`
+              tmpMap.set(key, (tmpMap.get(key) || 0) + (Number(t.nominal) || 0))
+            }
+          })
+          from += step
+          if (chunk.length < step) hasMore = false
+        } else {
+          hasMore = false
+        }
+        if (from >= 50000) hasMore = false
+      }
+
+      setRawTambahSaldoMap(tmpMap)
+    } catch (err) {
+      console.error('fetchRawTambahSaldo error:', err)
+    }
+  }
 
   // Fetch data agregat dari performa_harian
   const fetchMonthly = async () => {
@@ -63,6 +122,9 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       if (!error && data) {
         setMonthlyPerforma(data)
       }
+
+      // Fetch raw tambah_saldo langsung dari tabel transactions agar kolom terisi untuk semua hari
+      await fetchRawTambahSaldo(startDate, endDate)
     } catch (err) {
       console.error(err)
     } finally {
@@ -70,10 +132,80 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     }
   }
 
+  // Fetch data agregat dari performa_harian TAHUNAN
+  const fetchYearly = async () => {
+    if (!props.googleUid) return
+    setIsLoadingYear(true)
+    try {
+      const year = selectedMonth.split('-')[0]
+      const startDate = `${year}-01-01`
+      const endDate = `${Number(year) + 1}-01-01`
+
+      let query = supabase
+        .from('performa_harian')
+        .select('*')
+        .eq('user_id', props.googleUid)
+        .gte('tanggal', startDate)
+        .lt('tanggal', endDate)
+
+      if (props.targetStoreId && props.targetStoreId !== 'all') {
+        query = query.eq('store_id', props.targetStoreId)
+      }
+
+      const { data, error } = await query
+      if (!error && data) {
+        setYearlyPerforma(data)
+      }
+
+      let from = 0
+      const step = 1000
+      let hasMore = true
+      const tmpMap = new Map<string, number>()
+
+      while (hasMore) {
+        let q = supabase
+          .from('transactions')
+          .select('nominal, kategori, timestamp, kasir_id')
+          .eq('user_id', props.googleUid)
+          .gte('timestamp', startDate)
+          .lt('timestamp', endDate)
+          .range(from, from + step - 1)
+        if (props.targetStoreId && props.targetStoreId !== 'all') {
+          q = q.eq('store_id', props.targetStoreId)
+        }
+        const { data: chunk, error: err } = await q
+        if (err) break
+        if (chunk && chunk.length > 0) {
+          chunk.forEach((t: any) => {
+            const cat = (t.kategori || '').toLowerCase()
+            const isIsi = cat.includes('isi saldo bank') || cat.startsWith('isi') || cat.includes('modal') || cat.includes('setor')
+            if (isIsi) {
+              const dStr = t.timestamp.substring(0, 7) // YYYY-MM
+              const kId = t.kasir_id || 'Unknown'
+              const key = `${dStr}_${kId}`
+              tmpMap.set(key, (tmpMap.get(key) || 0) + (Number(t.nominal) || 0))
+            }
+          })
+          from += step
+          if (chunk.length < step) hasMore = false
+        } else {
+          hasMore = false
+        }
+        if (from >= 100000) hasMore = false
+      }
+      setYearlyRawTambahSaldoMap(tmpMap)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsLoadingYear(false)
+    }
+  }
+
   useEffect(() => {
     if (!props.active || !props.googleUid) return
-    fetchMonthly()
-  }, [props.active, props.googleUid, props.targetStoreId, selectedMonth])
+    if (subTabToko === 'harian') fetchMonthly()
+    if (subTabToko === 'bulanan') fetchYearly()
+  }, [props.active, props.googleUid, props.targetStoreId, selectedMonth, subTabToko])
 
   // Helper kategori
   const isIsiCategory = (cat: string) => {
@@ -107,6 +239,63 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     })
     return Array.from(uniqueMap.values())
   }, [monthlyPerforma, filterKasir])
+
+  // Agregasi Tahunan
+  const yearlySummaryData = useMemo(() => {
+    const year = selectedMonth.split('-')[0]
+    const result = []
+    const months = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER']
+
+    for (let i = 1; i <= 12; i++) {
+      const mStr = `${year}-${String(i).padStart(2, '0')}`
+      const mLabel = `${months[i-1]}`
+
+      const kasirMap = new Map<string, { omset: number, laba: number, tambahSaldo: number }>()
+
+      yearlyPerforma.forEach(p => {
+        if (p.tanggal.startsWith(mStr)) {
+          if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
+          const kId = p.kasir_id || 'Unknown'
+          const current = kasirMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0 }
+          current.omset += Number(p.omset) || 0
+          current.laba += Number(p.laba_admin) || Number(p.laba) || 0
+          current.tambahSaldo += Number(p.tambah_saldo) || 0
+          kasirMap.set(kId, current)
+        }
+      })
+
+      yearlyRawTambahSaldoMap.forEach((val, key) => {
+        if (key.startsWith(mStr + '_')) {
+          const kId = key.split('_')[1]
+          if (filterKasir !== 'Semua' && kId !== filterKasir) return
+          const current = kasirMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0 }
+          if (val > current.tambahSaldo) {
+            current.tambahSaldo = val
+          }
+          kasirMap.set(kId, current)
+        }
+      })
+
+      let totalOmset = 0, totalLaba = 0, totalTambahSaldo = 0
+      const kasirBreakdown = Array.from(kasirMap.entries()).map(([kasirId, data]) => {
+        totalOmset += data.omset
+        totalLaba += data.laba
+        totalTambahSaldo += data.tambahSaldo
+        return { kasirId, ...data }
+      }).sort((a, b) => b.omset - a.omset)
+
+      result.push({
+        monthStr: mStr,
+        label: mLabel,
+        totalOmset,
+        totalLaba,
+        totalTambahSaldo,
+        kasirBreakdown,
+        hasData: totalOmset > 0 || totalLaba > 0 || totalTambahSaldo > 0
+      })
+    }
+    return result
+  }, [yearlyPerforma, yearlyRawTambahSaldoMap, selectedMonth, filterKasir])
 
   // --- KALKULASI FITUR PROFIT ---
   // 1. Profit Hari Ini (Live dari props.transactions & closing snapshot hari ini)
@@ -191,12 +380,12 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         const current = map.get(date)!
         const labaAdmin = Number(p.laba_admin) || Number(p.laba) || 0
         const labaVoucher = Number(p.laba_voucher) || 0
-        current.tambahSaldo += Number(p.tambah_saldo) || 0
-        current.omset += Number(p.omset) || 0
+        current.tambahSaldo += (Number(p.tambah_saldo) || 0)
+        current.omset += (Number(p.omset) || 0)
         current.labaAdmin += labaAdmin
         current.labaVoucher += labaVoucher
         current.totalLaba += (Number(p.laba) || (labaAdmin + labaVoucher))
-        current.totalTx += Number(p.total_transaksi) || 0
+        current.totalTx += (Number(p.total_transaksi) || 0)
         current.isClosed = true
       }
     })
@@ -210,6 +399,22 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         if (raw.labaAdmin > current.labaAdmin) current.labaAdmin = raw.labaAdmin
         if (raw.countTx > current.totalTx) current.totalTx = raw.countTx
       }
+      // Prioritas tertinggi: data tambahSaldo dari raw transactions Supabase
+      // Ini menjamin semua hari terisi meski performa_harian belum di-sync
+      let supabaseTambah = 0
+      if (filterKasir === 'Semua') {
+        for (const [k, v] of rawTambahSaldoMap.entries()) {
+          if (k.startsWith(dateStr + '_')) {
+            supabaseTambah += v
+          }
+        }
+      } else {
+        supabaseTambah = rawTambahSaldoMap.get(`${dateStr}_${filterKasir}`) || 0
+      }
+
+      if (supabaseTambah > current.tambahSaldo) {
+        current.tambahSaldo = supabaseTambah
+      }
     })
 
     // Merge data hari ini jika ada voucher profit
@@ -222,7 +427,7 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     }
 
     return Array.from(map.entries())
-  }, [deduplicatedMonthlyPerforma, selectedMonth, props.transactions, todayStr, profitHariIni, filterKasir])
+  }, [deduplicatedMonthlyPerforma, selectedMonth, props.transactions, todayStr, profitHariIni, filterKasir, rawTambahSaldoMap])
 
   const totalBulananSummary = useMemo(() => {
     return profitBulananData.reduce((acc, [_, data]) => {
@@ -237,57 +442,81 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
   }, [profitBulananData])
 
   // --- KALKULASI FITUR PERFORMA KASIR ---
-  // Filter transaksi kasir terpilih HANYA untuk bulan terpilih (selectedMonth)
-  const kasirTransactions = useMemo(() => {
-    return props.transactions.filter(t => {
-      const isKasirMatch = filterKasir === 'Semua' || t.kasir_id === filterKasir
-      const isMonthMatch = t.timestamp.startsWith(selectedMonth)
-      return isKasirMatch && isMonthMatch
-    })
-  }, [props.transactions, filterKasir, selectedMonth])
-
-  // 1. Riwayat Tambah Saldo Kasir (Modal/Bank/Real)
-  const kasirTambahSaldoHistory = useMemo(() => {
-    return kasirTransactions.filter(t => isIsiCategory(t.kategori))
-  }, [kasirTransactions])
-
-  const totalTambahSaldoKasir = useMemo(() => {
-    return kasirTambahSaldoHistory.reduce((s, t) => s + (Number(t.nominal) || 0), 0)
-  }, [kasirTambahSaldoHistory])
-
-  // 2. KPI Kasir (Omset, Profit Admin, Transaksi Count)
-  const kpiKasir = useMemo(() => {
-    let omset = 0, profitAdmin = 0, count = 0
-    kasirTransactions.forEach(t => {
-      if (isSalesCategory(t.kategori, t.keterangan)) {
-        count++
-        profitAdmin += Number(t.adminFee) || 0
-        omset += Number(t.nominal) || 0
-      }
-    })
-    return { omset, profitAdmin, count }
-  }, [kasirTransactions])
+  // Gunakan totalBulananSummary agar merefleksikan filter bulan & kasir
+  const totalTambahSaldoKasir = totalBulananSummary.tambahSaldo;
+  const kpiKasir = useMemo(() => ({
+    omset: totalBulananSummary.omset,
+    profitAdmin: totalBulananSummary.labaAdmin,
+    count: totalBulananSummary.totalTx
+  }), [totalBulananSummary]);
 
   // Performa Kasir Leaderboard
   const kasirLeaderboard = useMemo(() => {
-    const map = new Map<string, { omset: number, laba: number, tambahSaldo: number, count: number }>()
-    // Filter transaksi bulan terpilih
-    const monthlyTxs = props.transactions.filter(t => t.timestamp.startsWith(selectedMonth))
-    monthlyTxs.forEach(t => {
-      const kId = t.kasir_id || 'Unknown'
-      const current = map.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0, count: 0 }
+    const kMap = new Map<string, { omset: number, laba: number, tambahSaldo: number, count: number }>()
+    const [year, month] = selectedMonth.split('-').map(Number)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    let maxDay = daysInMonth
+    if (year === today.getFullYear() && month === today.getMonth() + 1) {
+      maxDay = today.getDate()
+    }
 
-      if (isIsiCategory(t.kategori)) {
-        current.tambahSaldo += Number(t.nominal) || 0
-      } else if (isSalesCategory(t.kategori, t.keterangan)) {
-        current.count++
-        current.laba += Number(t.adminFee) || 0
-        current.omset += Number(t.nominal) || 0
-      }
-      map.set(kId, current)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1].omset - a[1].omset)
-  }, [props.transactions, selectedMonth])
+    for (let i = 1; i <= maxDay; i++) {
+      const dStr = `${selectedMonth}-${String(i).padStart(2, '0')}`
+      const kasirsOnDate = new Set<string>()
+      
+      deduplicatedMonthlyPerforma.forEach(p => {
+        if (p.tanggal === dStr) kasirsOnDate.add(p.kasir_id || 'Unknown')
+      })
+      props.transactions.forEach(t => {
+        if (t.timestamp.startsWith(dStr)) kasirsOnDate.add(t.kasir_id || 'Unknown')
+      })
+      rawTambahSaldoMap.forEach((_, k) => {
+        if (k.startsWith(dStr + '_')) kasirsOnDate.add(k.split('_')[1])
+      })
+
+      kasirsOnDate.forEach(kId => {
+        const current = kMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0, count: 0 }
+        
+        const dbData = deduplicatedMonthlyPerforma.find(p => p.tanggal === dStr && p.kasir_id === kId)
+        let omset = dbData ? (Number(dbData.omset) || 0) : 0
+        let laba = dbData ? (Number(dbData.laba_admin) || Number(dbData.laba) || 0) : 0
+        let count = dbData ? (Number(dbData.total_transaksi) || 0) : 0
+        let tambah = dbData ? (Number(dbData.tambah_saldo) || 0) : 0
+
+        let rawOmset = 0, rawLaba = 0, rawCount = 0, rawTambah = 0
+        props.transactions.forEach(t => {
+           if (t.timestamp.startsWith(dStr) && (t.kasir_id || 'Unknown') === kId) {
+             if (isIsiCategory(t.kategori)) {
+               rawTambah += Number(t.nominal) || 0
+             } else if (isSalesCategory(t.kategori, t.keterangan)) {
+               rawCount++
+               rawLaba += Number(t.adminFee) || 0
+               rawOmset += Number(t.nominal) || 0
+             }
+           }
+        })
+
+        if (rawOmset > omset) omset = rawOmset
+        if (rawLaba > laba) laba = rawLaba
+        if (rawCount > count) count = rawCount
+        if (rawTambah > tambah) tambah = rawTambah
+
+        const supabaseTambah = rawTambahSaldoMap.get(`${dStr}_${kId}`)
+        if (supabaseTambah !== undefined && supabaseTambah > tambah) {
+          tambah = supabaseTambah
+        }
+
+        current.omset += omset
+        current.laba += laba
+        current.count += count
+        current.tambahSaldo += tambah
+
+        kMap.set(kId, current)
+      })
+    }
+    
+    return Array.from(kMap.entries()).sort((a, b) => b[1].omset - a[1].omset)
+  }, [deduplicatedMonthlyPerforma, props.transactions, rawTambahSaldoMap, selectedMonth, todayStr, today])
 
   // --- SINKRONISASI DATA TRANSAKSI LAMA (PULL HISTORY) ---
   const handleSyncHistory = async () => {
@@ -541,13 +770,27 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
             <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <div>
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Periode Bulan</label>
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
-                  />
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                    {subTabToko === 'harian' ? 'Periode Bulan' : 'Periode Tahun'}
+                  </label>
+                  {subTabToko === 'harian' ? (
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
+                    />
+                  ) : (
+                    <select
+                      value={selectedMonth.split('-')[0]}
+                      onChange={(e) => setSelectedMonth(`${e.target.value}-01`)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      {Array.from({length: 5}, (_, i) => today.getFullYear() - 2 + i).map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -586,12 +829,35 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
               </div>
             </div>
 
+            {/* Sub-Tab Pembukuan Toko */}
+            <div className="bg-slate-200/60 rounded-2xl p-1 flex gap-1 mb-4 mt-2">
+              <button
+                onClick={() => setSubTabToko('harian')}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
+                  subTabToko === 'harian' ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                📅 Rincian Harian
+              </button>
+              <button
+                onClick={() => setSubTabToko('bulanan')}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
+                  subTabToko === 'bulanan' ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                📊 Rekapitulasi Bulanan
+              </button>
+            </div>
+
             {/* Tabel Profit Tanggal 1 s/d 31 */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[320px]">
-              <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Riwayat Pembukuan Tanggal 1 - 31</h3>
-                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md uppercase">Singkron Riwayat</span>
-              </div>
+            {subTabToko === 'harian' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[320px] animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Riwayat Pembukuan Tanggal 1 - 31</h3>
+                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md uppercase">Singkron Riwayat</span>
+                </div>
 
               {isLoadingMonth ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-slate-400">
@@ -659,6 +925,110 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
                 </>
               )}
             </div>
+            )}
+
+            {/* Rekapitulasi Bulanan (Jan-Des) */}
+            {subTabToko === 'bulanan' && (
+              <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                {isLoadingYear ? (
+                  <div className="flex flex-col items-center justify-center p-10 bg-white rounded-3xl border border-slate-100 shadow-sm text-slate-400">
+                    <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-emerald-500"></i>
+                    <p className="text-[10px] font-black uppercase tracking-widest">Memuat Data Tahunan...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 px-1 mb-2">
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Periode</div>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Tambah Saldo & Omset</div>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-right mr-4">Profit Bersih</div>
+                    </div>
+                    {yearlySummaryData.map((m) => (
+                      <div key={m.monthStr} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div 
+                          onClick={() => {
+                            if (m.hasData) setExpandedMonth(expandedMonth === m.monthStr ? null : m.monthStr)
+                          }}
+                          className={cn(
+                            "flex items-center justify-between p-4 cursor-pointer transition-colors",
+                            m.hasData ? "hover:bg-slate-50" : "opacity-50 grayscale cursor-not-allowed"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border",
+                              m.hasData ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-slate-100 border-slate-200 text-slate-400"
+                            )}>
+                              <i className="fa-regular fa-calendar-check text-sm"></i>
+                            </div>
+                            <div>
+                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">{m.label}</h3>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {m.hasData && expandedMonth !== m.monthStr ? (
+                                  <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md"><i className="fa-solid fa-users text-[8px]"></i> {m.kasirBreakdown.length} Kasir</span>
+                                ) : (
+                                  <span className="text-[9px] font-bold text-slate-400">{m.hasData ? 'Klik untuk tutup rincian' : 'Belum ada data'}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="text-[10px] font-black text-blue-600 tracking-wider">TS: {formatRupiah(m.totalTambahSaldo).replace(',00', '')}</p>
+                            <p className="text-[10px] font-bold text-slate-600">OM: {formatRupiah(m.totalOmset).replace(',00', '')}</p>
+                          </div>
+                          
+                          <div className="text-right flex items-center gap-4">
+                            <div>
+                              <p className="text-xs font-black text-emerald-600">+{formatRupiah(m.totalLaba).replace(',00', '')}</p>
+                            </div>
+                            <div className="w-6 flex justify-end">
+                              {m.hasData && (
+                                <i className={cn("fa-solid text-slate-400 transition-transform", expandedMonth === m.monthStr ? "fa-chevron-up" : "fa-chevron-down")}></i>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {expandedMonth === m.monthStr && m.kasirBreakdown.length > 0 && (
+                          <div className="bg-slate-50 border-t border-slate-100 p-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="space-y-3">
+                              {m.kasirBreakdown.map((kb, idx) => (
+                                <div key={kb.kasirId} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200/60 shadow-sm relative group">
+                                  <div className="absolute -left-2 -top-2 w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black border-2 border-white shadow-sm">
+                                    {idx + 1}
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-wider">{props.kasirList?.[kb.kasirId]?.name || kb.kasirId}</p>
+                                    <div className="flex gap-3 mt-1">
+                                      <p className="text-[9px] font-bold text-slate-500">Omset: <span className="text-slate-800">{formatRupiah(kb.omset).replace(',00', '')}</span></p>
+                                      <p className="text-[9px] font-bold text-slate-500">TS Bank: <span className="text-blue-600">{formatRupiah(kb.tambahSaldo).replace(',00', '')}</span></p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">+{formatRupiah(kb.laba).replace(',00', '')}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    <div className="bg-gradient-to-r from-emerald-800 to-teal-900 rounded-3xl p-5 text-white shadow-lg flex justify-between items-center mt-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300/80 mb-1">TOTAL {selectedMonth.split('-')[0]}</p>
+                        <h3 className="text-xl font-black text-white">{formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalLaba, 0)).replace(',00', '')}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-emerald-100 mb-0.5">Total Omset: {formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalOmset, 0)).replace(',00', '')}</p>
+                        <p className="text-[9px] font-bold text-emerald-100">Total Tambah Saldo: {formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalTambahSaldo, 0)).replace(',00', '')}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 

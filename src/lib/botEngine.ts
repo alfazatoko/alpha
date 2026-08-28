@@ -371,6 +371,35 @@ export function answerFromKB(
       }
     } catch {}
 
+    // Cek tukang kasbon / utang terlama
+    if (c.includes('paling sering') || c.includes('paling banyak ngutang') || c.includes('tukang kasbon') || c.includes('utang paling lama') || c.includes('kasbon terlama') || c.includes('paling lama utang')) {
+      const aktif = kasbonList.filter(h => !h.lunas)
+      if (aktif.length === 0) return "🎉 **Bebas Kasbon!** Saat ini tidak ada pelanggan yang memiliki hutang/kasbon belum lunas."
+      
+      if (c.includes('lama') || c.includes('terlama')) {
+        const sorted = aktif.sort((a,b) => (a.tanggal || '').localeCompare(b.tanggal || ''))
+        let res = `⏳ **Daftar Utang Paling Lama (Belum Lunas):**\n\n`
+        sorted.slice(0, 5).forEach((h, i) => {
+          res += `${i+1}. **${h.nama}** — Rp ${h.nominal?.toLocaleString('id-ID')} _(Sejak: ${h.tanggal})_\n`
+        })
+        return res
+      } else {
+        const freq: Record<string, { count: number; nominal: number }> = {}
+        aktif.forEach(h => {
+          const name = (h.nama || '').toUpperCase()
+          if (!freq[name]) freq[name] = { count: 0, nominal: 0 }
+          freq[name].count++
+          freq[name].nominal += (h.nominal || 0)
+        })
+        const sorted = Object.entries(freq).sort((a,b) => b[1].count - a[1].count)
+        let res = `⚠️ **Pelanggan Paling Sering Kasbon (Belum Lunas):**\n\n`
+        sorted.slice(0, 5).forEach(([name, d], i) => {
+          res += `${i+1}. **${name}** — ${d.count} kali bon (Total: Rp ${d.nominal.toLocaleString('id-ID')})\n`
+        })
+        return res
+      }
+    }
+
     // Cek rekap kasbon
     if (c.includes('siapa') || c.includes('daftar') || c.includes('total') || c.includes('rekap') || c === 'kasbon' || c === 'utang' || c === 'piutang') {
       const aktif = kasbonList.filter(h => !h.lunas)
@@ -510,14 +539,208 @@ export function answerFromKB(
     return res
   }
 
+  // 4b. ANALISA KASIR TERBAIK / PROFIT TERBANYAK
+  if (c.includes('kasir siapa') || c.includes('kasir mana') || c.includes('kasir terbaik') || c.includes('paling banyak profit') || c.includes('jualan paling banyak') || c.includes('jualan terbanyak') || c.includes('profit terbanyak') || c.includes('paling besar profit')) {
+    if (transactions.length === 0) return "📊 Belum ada data transaksi untuk dianalisa."
+    const kasirMap: Record<string, { trx: number; nominal: number; admin: number }> = {}
+    transactions.forEach(t => {
+      if (t.kategori === 'Isi Saldo Bank' || t.kategori === 'Isi Saldo Real Aplikasi') return
+      const k = t.kasirName || t.kasir_id || 'Tidak diketahui'
+      if (!kasirMap[k]) kasirMap[k] = { trx: 0, nominal: 0, admin: 0 }
+      kasirMap[k].trx++
+      kasirMap[k].nominal += (t.nominal || 0)
+      kasirMap[k].admin += (t.adminFee || 0)
+    })
+    const sorted = Object.entries(kasirMap).sort((a,b) => b[1].nominal - a[1].nominal)
+    if (sorted.length === 0) return "📊 Tidak ada penjualan valid untuk dianalisa."
+    let res = `🏆 **Analisa Kasir Penjualan Terbanyak (Bulan Ini):**\n\n`
+    sorted.forEach(([k, d], i) => {
+      const p = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '🔹'
+      res += `${p} **${k}**\n   • Omset: Rp ${d.nominal.toLocaleString('id-ID')}\n   • Profit/Admin: Rp ${d.admin.toLocaleString('id-ID')} (${d.trx} trx)\n`
+    })
+    return res
+  }
+
+  // 4c. ANALISA HARI RAMAI
+  if (c.includes('hari apa yang ramai') || c.includes('hari apa jualan ramai') || c.includes('jualan ramai') || c.includes('hari paling ramai') || c.includes('hari ramai')) {
+    if (transactions.length === 0) return "📊 Belum ada data transaksi untuk dianalisa."
+    const dayMap: Record<string, { trx: number; nominal: number }> = {
+      'Minggu': { trx: 0, nominal: 0 }, 'Senin': { trx: 0, nominal: 0 },
+      'Selasa': { trx: 0, nominal: 0 }, 'Rabu': { trx: 0, nominal: 0 },
+      'Kamis': { trx: 0, nominal: 0 }, 'Jumat': { trx: 0, nominal: 0 },
+      'Sabtu': { trx: 0, nominal: 0 }
+    }
+    transactions.forEach(t => {
+      if (t.kategori === 'Isi Saldo Bank' || t.kategori === 'Isi Saldo Real Aplikasi') return
+      if (!t.timestamp) return
+      const date = new Date(t.timestamp)
+      if (isNaN(date.getTime())) return
+      const dayName = date.toLocaleDateString('id-ID', { weekday: 'long' })
+      if (dayMap[dayName]) {
+        dayMap[dayName].trx++
+        dayMap[dayName].nominal += (t.nominal || 0)
+      }
+    })
+    const sorted = Object.entries(dayMap).filter(a => a[1].trx > 0).sort((a,b) => b[1].nominal - a[1].nominal)
+    if (sorted.length === 0) return "📊 Tidak cukup data harian untuk dianalisa."
+    let res = `📈 **Analisa Hari Jualan Paling Ramai:**\n\n`
+    sorted.forEach(([day, d], i) => {
+      res += `${i === 0 ? '🔥' : '•'} **${day}** — Omset Rp ${d.nominal.toLocaleString('id-ID')} (${d.trx} trx)\n`
+    })
+    res += `\n💡 _Berdasarkan akumulasi data transaksi yang ada di sistem._`
+    return res
+  }
+
+  // 4e. ANALISA JAM SIBUK / RUSH HOUR
+  if (c.includes('jam ramai') || c.includes('jam sibuk') || c.includes('paling ramai jam') || c.includes('jam berapa ramai')) {
+    if (transactions.length === 0) return "📊 Belum ada data transaksi untuk dianalisa."
+    const hourMap: Record<string, { trx: number }> = {}
+    transactions.forEach(t => {
+      if (t.kategori === 'Isi Saldo Bank' || t.kategori === 'Isi Saldo Real Aplikasi') return
+      if (!t.timestamp) return
+      const date = new Date(t.timestamp)
+      if (isNaN(date.getTime())) return
+      const hourStr = date.toLocaleTimeString('id-ID', { hour: '2-digit' }) + ':00 - ' + 
+                      new Date(date.getTime() + 60*60*1000).toLocaleTimeString('id-ID', { hour: '2-digit' }) + ':00'
+      if (!hourMap[hourStr]) hourMap[hourStr] = { trx: 0 }
+      hourMap[hourStr].trx++
+    })
+    const sorted = Object.entries(hourMap).sort((a,b) => b[1].trx - a[1].trx)
+    if (sorted.length === 0) return "📊 Tidak cukup data waktu untuk dianalisa."
+    let res = `⏰ **Analisa Jam Sibuk (Rush Hour):**\n\n`
+    sorted.slice(0, 3).forEach(([hour, d], i) => {
+      res += `${i === 0 ? '🔥' : '•'} **Jam ${hour}** — Intensitas tinggi (${d.trx} trx)\n`
+    })
+    res += `\n💡 _Tip: Owner bisa menambah jadwal shift kasir di jam sibuk agar pelayanan optimal._`
+    return res
+  }
+
+  // 4f. PERBANDINGAN BULAN (FORECASTING)
+  if (c.includes('bulan ini vs') || c.includes('dibanding bulan lalu') || c.includes('performa bulan ini') || c.includes('naik turun omset') || c.includes('bandingkan omset')) {
+    const now = new Date()
+    const thisMonth = now.toISOString().substring(0, 7)
+    
+    let lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastMonth = lastMonthDate.toISOString().substring(0, 7)
+    
+    let tThis = 0; let tLast = 0
+    transactions.forEach(t => {
+      if (t.kategori === 'Isi Saldo Bank' || t.kategori === 'Isi Saldo Real Aplikasi') return
+      if ((t.timestamp||'').startsWith(thisMonth)) tThis += (t.nominal || 0)
+      if ((t.timestamp||'').startsWith(lastMonth)) tLast += (t.nominal || 0)
+    })
+    
+    const diff = tThis - tLast
+    const perc = tLast > 0 ? (diff / tLast) * 100 : 100
+    
+    let res = `📈 **Perbandingan Omset Penjualan:**\n\n`
+    res += `• Bulan Lalu (${lastMonthDate.toLocaleDateString('id-ID', {month:'long'})}): Rp ${tLast.toLocaleString('id-ID')}\n`
+    res += `• Bulan Ini (${now.toLocaleDateString('id-ID', {month:'long'})}): Rp ${tThis.toLocaleString('id-ID')}\n\n`
+    
+    if (tLast === 0) res += `_Belum ada data bulan lalu untuk dibandingkan._`
+    else if (diff > 0) res += `✅ **NAIK ${perc.toFixed(1)}%** (Untung Rp ${diff.toLocaleString('id-ID')})`
+    else if (diff < 0) res += `🔻 **TURUN ${Math.abs(perc).toFixed(1)}%** (Selisih -Rp ${Math.abs(diff).toLocaleString('id-ID')})`
+    else res += `➖ Omset sama persis dengan bulan lalu.`
+    return res
+  }
+
+  // 4d. TAMBAH SALDO / ISI SALDO
+  if (c.includes('tambah saldo') || c.includes('isi saldo') || c.includes('deposit kasir') || c.includes('saldo kasir')) {
+    const tambahSaldoTxs = transactions.filter(t => t.kategori === 'Isi Saldo Bank' || t.kategori === 'Isi Saldo Real Aplikasi')
+    if (tambahSaldoTxs.length === 0) return "💰 **Tambah Saldo:** Belum ada riwayat tambah saldo (Isi Saldo Bank / Real Aplikasi) yang tercatat."
+    
+    const todayStr = new Date().toISOString().split('T')[0]
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+    
+    let filtered = tambahSaldoTxs
+    let dateContext = ''
+    
+    if (c.includes('hari ini')) { filtered = filtered.filter(t => (t.timestamp||'').startsWith(todayStr)); dateContext = 'Hari Ini' }
+    else if (c.includes('kemarin')) { filtered = filtered.filter(t => (t.timestamp||'').startsWith(yesterdayStr)); dateContext = 'Kemarin' }
+    
+    const kasirNames = Object.keys(kasirList).map(k => kasirList[k].name?.toLowerCase()).filter(Boolean)
+    let matchedKasir = ''
+    for (const name of kasirNames) {
+      if (c.includes(name) || c.includes(name.split(' ')[0])) {
+        matchedKasir = name
+        filtered = filtered.filter(t => (t.kasirName || t.kasir_id || '').toLowerCase().includes(name) || (t.keterangan || '').toLowerCase().includes(name))
+        break
+      }
+    }
+    
+    if (!matchedKasir) {
+       const m = c.match(/kasir\s+([a-zA-Z0-9_]+)/)
+       if (m) {
+         matchedKasir = m[1]
+         filtered = filtered.filter(t => (t.kasirName || t.kasir_id || '').toLowerCase().includes(matchedKasir) || (t.keterangan || '').toLowerCase().includes(matchedKasir))
+       }
+    }
+    
+    if (filtered.length === 0) {
+      return `❌ Tidak ada data tambah saldo yang cocok dengan pencarianmu.`
+    }
+    
+    const total = filtered.reduce((sum, t) => sum + (t.nominal || 0), 0)
+    let res = `💰 **Rekap Tambah Saldo ${matchedKasir ? 'Kasir ' + matchedKasir.toUpperCase() : ''} ${dateContext}:**\n\n`
+    res += `• Total Transaksi: **${filtered.length} kali**\n`
+    res += `• Total Nominal: **Rp ${total.toLocaleString('id-ID')}**\n\n`
+    res += `📝 **Rincian (Top 5):**\n`
+    
+    filtered.slice(0, 5).forEach((t, i) => {
+      const time = t.timestamp ? new Date(t.timestamp).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : ''
+      const kname = t.kasirName || t.kasir_id || 'Kasir'
+      res += `- ${time} | ${kname} | Rp ${(t.nominal || 0).toLocaleString('id-ID')} (${t.kategori === 'Isi Saldo Bank' ? 'Bank' : 'Real App'})\n`
+    })
+    if (filtered.length > 5) res += `...dan ${filtered.length - 5} data lainnya.`
+    return res
+  }
+
   // 5. ABSENSI SEARCH
-  if (c.includes('absen') || c.includes('hadir') || c.includes('kehadiran') || c.includes('bolos') || c.includes('masuk kerja')) {
+  if (c.includes('absen') || c.includes('hadir') || c.includes('kehadiran') || c.includes('bolos') || c.includes('masuk kerja') || c.includes('telat') || c.includes('terlambat')) {
     if (absensiList.length === 0) {
       return "📅 **Data Absensi:** Belum ada log absensi terdaftar untuk hari ini."
     }
     
     const hadir = absensiList.filter(a => a.status === 'Hadir')
     const libur = absensiList.filter(a => a.status === 'Libur' || a.status === 'Izin')
+
+    if (c.includes('paling rajin') || c.includes('total masuk') || c.includes('berapa hari masuk') || c.includes('kehadiran bulan ini')) {
+      const thisMonth = new Date().toISOString().substring(0, 7)
+      const thisMonthAbsen = absensiList.filter(a => (a.timestamp||'').startsWith(thisMonth) || (a.date||'').startsWith(thisMonth))
+      
+      const freq: Record<string, number> = {}
+      thisMonthAbsen.forEach(a => {
+        if (a.status === 'Hadir') {
+          const name = (a.nama || a.username || '-').toUpperCase()
+          if (!freq[name]) freq[name] = 0
+          freq[name]++
+        }
+      })
+      const sorted = Object.entries(freq).sort((a,b) => b[1] - a[1])
+      
+      let res = `👥 **Rekap Kehadiran Kasir (Bulan Ini):**\n\n`
+      if (sorted.length === 0) return res + "_Belum ada data kehadiran bulan ini._"
+      
+      sorted.forEach(([name, count], i) => {
+        res += `${i === 0 ? '🏆' : '•'} **${name}**: Masuk ${count} hari\n`
+      })
+      return res
+    }
+
+    if (c.includes('telat') || c.includes('terlambat')) {
+      if (hadir.length === 0) return "📅 Belum ada data absensi untuk mengecek siapa yang telat hari ini."
+      // Urutkan dari jam masuk paling lambat
+      const sorted = hadir.filter(a => a.jam_masuk || a.time).sort((a,b) => (b.jam_masuk || b.time || '').localeCompare(a.jam_masuk || a.time || ''))
+      if (sorted.length === 0) return "📅 Data jam masuk kasir tidak ditemukan."
+      
+      let res = `⏰ **Daftar Kasir Paling Siang / Telat Hari Ini:**\n\n`
+      sorted.forEach((a, i) => {
+        res += `${i+1}. **${a.nama || a.username}** — Pukul ${a.jam_masuk || a.time}\n`
+      })
+      res += `\n💡 _(Catatan: Standar jam telat dikembalikan ke kebijakan Owner)_`
+      return res
+    }
     
     let res = `📅 **Status Kehadiran Hari Ini:**\n\n` +
               `• **Hadir (${hadir.length} kasir)**:\n`
@@ -599,7 +822,99 @@ export function answerFromKB(
     return res
   }
 
-  // 7. STOK MENIPIS — cek produk hampir habis
+  // 6b. ANALISA DEAD STOCK & PROVIDER LARIS
+  if (c.includes('produk mati') || c.includes('tidak laku') || c.includes('jarang laku') || c.includes('provider laris') || c.includes('provider paling laris') || c.includes('paling laku')) {
+    let allProducts: any[] = voucherProducts.length > 0 ? voucherProducts : []
+    let vtxs: any[] = voucherTransactions
+    try {
+      if (allProducts.length === 0) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_products')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) allProducts = [...allProducts, ...p] }
+          }
+        }
+      }
+      if (vtxs.length === 0) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_transactions')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) vtxs = [...vtxs, ...p] }
+          }
+        }
+      }
+    } catch {}
+
+    if (c.includes('tidak laku') || c.includes('jarang laku') || c.includes('produk mati')) {
+      const soldIds = new Set(vtxs.filter(t => t.type === 'PENJUALAN').map(t => t.productId))
+      const deadStock = allProducts.filter(p => !soldIds.has(p.id) && (p.currentStock ?? p.stock ?? 0) > 0)
+      if (deadStock.length === 0) return "✅ **Kabar Baik!** Semua stok barang yang ada tercatat laku dan bergerak aktif."
+      
+      let res = `🧊 **Analisa Dead Stock (Produk Mengendap / Tidak Laku):**\n\n`
+      deadStock.slice(0, 10).forEach((p, i) => {
+        res += `${i+1}. **${p.name}** — Sisa ${p.currentStock ?? p.stock} pcs\n`
+      })
+      if (deadStock.length > 10) res += `...dan ${deadStock.length - 10} produk lainnya.`
+      res += `\n💡 _Saran: Buat promo untuk produk di atas agar perputaran modal lancar._`
+      return res
+    } else {
+      const freq: Record<string, { qty: number; nominal: number }> = {}
+      vtxs.filter(t => t.type === 'PENJUALAN').forEach(t => {
+        const name = (t.productName || t.namaVoucher || '').toLowerCase()
+        let provider = 'Lainnya'
+        if (name.includes('telkomsel') || name.includes('tsel')) provider = 'Telkomsel'
+        else if (name.includes('indosat') || name.includes('im3')) provider = 'Indosat'
+        else if (name.includes('axis')) provider = 'Axis'
+        else if (name.includes('xl')) provider = 'XL'
+        else if (name.includes('tri') || name.includes('three')) provider = 'Tri'
+        else if (name.includes('smartfren')) provider = 'Smartfren'
+        
+        if (!freq[provider]) freq[provider] = { qty: 0, nominal: 0 }
+        freq[provider].qty += (t.quantity || t.qty || 1)
+        freq[provider].nominal += (t.amount || t.total || 0)
+      })
+      const sorted = Object.entries(freq).sort((a,b) => b[1].qty - a[1].qty)
+      if (sorted.length === 0) return "📊 Belum ada data penjualan per provider."
+      let res = `📈 **Analisa Penjualan Provider Terlaris:**\n\n`
+      sorted.forEach(([prov, d], i) => {
+        res += `${i === 0 ? '🏆' : '•'} **${prov}**: ${d.qty} pcs terjual (Omset Rp ${d.nominal.toLocaleString('id-ID')})\n`
+      })
+      return res
+    }
+  }
+
+  // 6c. ESTIMASI MODAL RESTOCK
+  if (c.includes('estimasi modal') || c.includes('butuh modal') || c.includes('modal restock')) {
+    let allProducts: any[] = voucherProducts.length > 0 ? voucherProducts : []
+    try {
+      if (allProducts.length === 0) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || ''
+          if (k.startsWith(`v_${storeId}`) && k.endsWith('_products')) {
+            const raw = localStorage.getItem(k)
+            if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) allProducts = [...allProducts, ...p] }
+          }
+        }
+      }
+    } catch {}
+    
+    const menipis = allProducts.filter(p => (p.currentStock ?? p.stock ?? 0) <= (p.minStockLevel ?? 3))
+    if (menipis.length === 0) return "✅ Tidak ada stok yang menipis. Belum butuh belanja restock saat ini."
+    
+    let estimasiPcs = 0
+    menipis.forEach(p => { estimasiPcs += ((p.minStockLevel ?? 3) - (p.currentStock ?? p.stock ?? 0) + 10) })
+    
+    let res = `🛒 **Estimasi Kebutuhan Belanja Restock:**\n\n`
+    res += `• Terdapat **${menipis.length} produk** yang stoknya sudah menipis/habis.\n`
+    res += `• Estimasi jumlah barang yang perlu dibeli: **~${estimasiPcs} pcs** (untuk stok aman).\n\n`
+    res += `💡 _Untuk modal uangnya, silakan kalikan estimasi pcs tersebut dengan harga rata-rata agen supplier Anda._\n`
+    res += `Ketik *"cek stok menipis"* untuk melihat detail barangnya.`
+    return res
+  }
+
+  // 7. CEK STOK MENIPIS
   const isStokWarning = c === 'stok menipis' || c === 'stok habis' || c === 'produk menipis' ||
     c.includes('stok menipis') || c.includes('hampir habis') || c.includes('mau habis') ||
     c.includes('stok kritis') || c.includes('warning stok')
@@ -727,6 +1042,107 @@ export function answerFromKB(
     return res
   }
 
+  // 9. LAPORAN SERAH TERIMA / SALDO AKHIR / KAS FISIK
+  const isLaporanHandover =
+    c.includes('saldo akhir') || c.includes('kas akhir') || c.includes('kas fisik') ||
+    c.includes('kas harusnya') || c.includes('selisih kas') || c.includes('rekap shift') ||
+    c.includes('laporan shift') || c.includes('serah terima') || c.includes('closing') ||
+    c.includes('rekap laporan') || c.includes('laporan kasir') || c.includes('saldo closing') ||
+    c.includes('total kas') || c.includes('laporan hari ini') || c.includes('rekap kasir') ||
+    c.includes('saldo harian') || c.includes('cek laporan') || c.includes('ringkasan shift') ||
+    c.includes('hasil shift') || c.includes('rekap serah terima')
+
+  if (isLaporanHandover) {
+    let handoverRecords: any[] = []
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || ''
+        if (k.endsWith('_all_detailed_handovers') && k.startsWith(`v_${storeId}`)) {
+          const raw = localStorage.getItem(k)
+          if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { handoverRecords = p; break } }
+        }
+      }
+    } catch {}
+
+    if (handoverRecords.length === 0) {
+      return `📋 **Belum Ada Data Serah Terima:**\n\nRiwayat serah terima kasir belum tersedia. Data akan muncul setelah kasir menyelesaikan minimal 1 proses serah terima di halaman **Atur Stok**.`
+    }
+
+    if (c.includes('sering selisih') || c.includes('raja selisih') || c.includes('sering minus') || c.includes('selisih terbesar')) {
+      const minus = handoverRecords.filter(r => (r.cashDifference ?? ((r.cashPhysical ?? 0) - (r.cashExpected ?? 0))) < 0)
+      if (minus.length === 0) return "✅ **Toko Aman!** Tidak ada riwayat minus (kurang kas) pada serah terima kasir."
+      
+      if (c.includes('terbesar')) {
+        const sorted = minus.sort((a,b) => (a.cashDifference ?? ((a.cashPhysical ?? 0) - (a.cashExpected ?? 0))) - (b.cashDifference ?? ((b.cashPhysical ?? 0) - (b.cashExpected ?? 0))))
+        let res = `🚨 **Top 3 Selisih Minus Terbesar (Fraud/Error Detection):**\n\n`
+        sorted.slice(0,3).forEach((r, i) => {
+          const diff = r.cashDifference ?? ((r.cashPhysical ?? 0) - (r.cashExpected ?? 0))
+          res += `${i+1}. **${r.cashierFromName || r.kasirFrom || 'Kasir'}** — Minus **Rp ${Math.abs(diff).toLocaleString('id-ID')}** _(${r.date || r.shiftName || '?'})_\n`
+        })
+        return res
+      } else {
+        const freq: Record<string, { count: number; totalMinus: number }> = {}
+        minus.forEach(r => {
+          const name = (r.cashierFromName || r.kasirFrom || 'Kasir').toUpperCase()
+          if (!freq[name]) freq[name] = { count: 0, totalMinus: 0 }
+          freq[name].count++
+          freq[name].totalMinus += Math.abs(r.cashDifference ?? ((r.cashPhysical ?? 0) - (r.cashExpected ?? 0)))
+        })
+        const sorted = Object.entries(freq).sort((a,b) => b[1].count - a[1].count)
+        let res = `⚠️ **Kasir Paling Sering Minus/Selisih:**\n\n`
+        sorted.forEach(([name, d], i) => {
+          res += `${i+1}. **${name}** — ${d.count} kali minus (Total kerugian: Rp ${d.totalMinus.toLocaleString('id-ID')})\n`
+        })
+        return res
+      }
+    }
+
+    // Filter hari ini dulu
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayRecords = handoverRecords.filter(r =>
+      r.date === todayStr || (r.timestamp || '').startsWith(todayStr)
+    )
+    const targetRecords = todayRecords.length > 0 ? todayRecords : handoverRecords.slice(0, 5)
+    const isToday = todayRecords.length > 0
+
+    let res = `📋 **Rekap ${isToday ? 'Hari Ini' : 'Shift Terakhir'} — ${isToday ? new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : ''}**\n\n`
+
+    targetRecords.forEach((r: any, i: number) => {
+      const kasFrom = r.cashierFromName || r.kasirFrom || '-'
+      const kasTo = r.cashierToName || r.kasirTo || '-'
+      const kasPhysical = r.cashPhysical ?? 0
+      const kasExpected = r.cashExpected ?? 0
+      const kasDiff = r.cashDifference ?? (kasPhysical - kasExpected)
+      const stokAkhir = r.totalFinalStock ?? 0
+      const stokAwal = r.totalInitialStock ?? 0
+      const terjual = r.totalSoldPcs ?? 0
+      const omzet = r.totalSalesAmount ?? 0
+      const qris = r.qrisAmount ?? 0
+
+      res += `**${r.shiftName || `Shift ${i + 1}`}** _(${kasFrom} → ${kasTo})_\n`
+      res += `• Stok: ${stokAwal} awal → ${stokAkhir} akhir (${terjual} terjual)\n`
+      res += `• Omzet Voucher: **Rp ${omzet.toLocaleString('id-ID')}**\n`
+      if (qris > 0) res += `• QRIS/Non-Tunai: Rp ${qris.toLocaleString('id-ID')}\n`
+      res += `• 💰 Kas Fisik: **Rp ${kasPhysical.toLocaleString('id-ID')}**\n`
+      res += `• Kas Harusnya: Rp ${kasExpected.toLocaleString('id-ID')}\n`
+      res += `• Selisih: ${kasDiff < 0 ? '⚠️' : '✅'} **Rp ${Math.abs(kasDiff).toLocaleString('id-ID')} ${kasDiff < 0 ? 'Kurang' : kasDiff > 0 ? 'Lebih' : 'Pas'}**\n`
+      if (r.note) res += `• Catatan: _${r.note}_\n`
+      res += '\n'
+    })
+
+    if (isToday && targetRecords.length > 1) {
+      const totalOmzet = targetRecords.reduce((s: number, r: any) => s + (r.totalSalesAmount ?? 0), 0)
+      const totalKasFisik = targetRecords.reduce((s: number, r: any) => s + (r.cashPhysical ?? 0), 0)
+      const totalQris = targetRecords.reduce((s: number, r: any) => s + (r.qrisAmount ?? 0), 0)
+      res += `📊 **Total Hari Ini (${targetRecords.length} shift):**\n`
+      res += `• Total Omzet: **Rp ${totalOmzet.toLocaleString('id-ID')}**\n`
+      res += `• Total Kas Fisik: **Rp ${totalKasFisik.toLocaleString('id-ID')}**\n`
+      if (totalQris > 0) res += `• Total QRIS: Rp ${totalQris.toLocaleString('id-ID')}\n`
+    }
+
+    return res.trim()
+  }
+
   // Fallback ke KB bawaan
   for (const entry of KB) {
     if (entry.test(c)) {
@@ -754,6 +1170,18 @@ export interface StoreContext {
   auditHistory?: any[]
   kasirList?: Record<string, any>
   stokRendah?: { name: string; stock: number; minStock: number }[]
+  // ── Data Laporan Voucher (Serah Terima & Saldo Akhir) ──
+  handoverRecords?: any[]   // DetailedHandoverRecord[]
+  voucherTxSummary?: {      // Ringkasan transaksi voucher hari ini
+    totalPenjualan: number;
+    totalOmzet: number;
+    totalTunai: number;
+    totalNonTunai: number;
+    totalQris: number;
+  } | null
+  absensiList?: any[]
+  voucherProducts?: any[]
+  voucherTransactions?: any[]
 }
 
 // ── Pembangun Prompt Sistem Dinamis ───────────────────────────────────────────
@@ -825,6 +1253,60 @@ Total Piutang: Rp${totalKasbon.toLocaleString('id-ID')}
 ${ctx.stokRendah.map(p => `  - ${p.name}: ${p.stock} pcs (min alert: ${p.minStock})`).join('\n')}`
   }
 
+  // ── Data Handover Voucher (Serah Terima & Saldo Akhir) ──
+  if (ctx.handoverRecords && ctx.handoverRecords.length > 0) {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayHandovers = ctx.handoverRecords.filter((r: any) => r.date === todayStr || (r.timestamp || '').startsWith(todayStr))
+    const recentHandovers = ctx.handoverRecords.slice(0, 10) // max 10 terbaru
+
+    let handoverSection = `\n\n📋 DATA SERAH TERIMA KASIR (${recentHandovers.length} shift terakhir):\n`
+    recentHandovers.forEach((r: any, i: number) => {
+      const tgl = r.date || (r.timestamp || '').split('T')[0]
+      const kasFrom = r.cashierFromName || r.kasirFrom || '-'
+      const kasTo = r.cashierToName || r.kasirTo || '-'
+      const kasPhysical = r.cashPhysical ?? r.kasPhysical ?? 0
+      const kasExpected = r.cashExpected ?? r.kasExpected ?? 0
+      const kasDiff = r.cashDifference ?? (kasPhysical - kasExpected)
+      const stokAkhir = r.totalFinalStock ?? r.stokAkhir ?? 0
+      const stokAwal = r.totalInitialStock ?? r.stokAwal ?? 0
+      const terjual = r.totalSoldPcs ?? r.stokTerjual ?? 0
+      const omzet = r.totalSalesAmount ?? r.totalOmzet ?? 0
+      const qris = r.qrisAmount ?? r.totalQris ?? 0
+
+      handoverSection += `\n--- Shift ${i + 1} | ${tgl} | ${r.shiftName || 'Shift'} ---\n`
+      handoverSection += `  Kasir: ${kasFrom} → ${kasTo}\n`
+      handoverSection += `  Stok Awal: ${stokAwal} pcs | Stok Akhir: ${stokAkhir} pcs | Terjual: ${terjual} pcs\n`
+      handoverSection += `  Omzet Voucher: Rp${omzet.toLocaleString('id-ID')}\n`
+      if (qris > 0) handoverSection += `  QRIS/Non-Tunai: Rp${qris.toLocaleString('id-ID')}\n`
+      handoverSection += `  Kas Fisik (dihitung kasir): Rp${kasPhysical.toLocaleString('id-ID')}\n`
+      handoverSection += `  Kas Harusnya: Rp${kasExpected.toLocaleString('id-ID')}\n`
+      handoverSection += `  Selisih Kas: Rp${kasDiff.toLocaleString('id-ID')} ${kasDiff < 0 ? '⚠️ Kurang' : kasDiff > 0 ? '✅ Lebih' : '✅ Pas'}\n`
+      if (r.note) handoverSection += `  Catatan: ${r.note}\n`
+    })
+
+    if (todayHandovers.length > 0) {
+      const totalOmzetToday = todayHandovers.reduce((s: number, r: any) => s + (r.totalSalesAmount ?? 0), 0)
+      const totalKasFisikToday = todayHandovers.reduce((s: number, r: any) => s + (r.cashPhysical ?? 0), 0)
+      const totalQrisToday = todayHandovers.reduce((s: number, r: any) => s + (r.qrisAmount ?? 0), 0)
+      handoverSection += `\n📊 TOTAL HARI INI (${todayHandovers.length} shift):\n`
+      handoverSection += `  Total Omzet: Rp${totalOmzetToday.toLocaleString('id-ID')}\n`
+      handoverSection += `  Total Kas Fisik: Rp${totalKasFisikToday.toLocaleString('id-ID')}\n`
+      handoverSection += `  Total QRIS: Rp${totalQrisToday.toLocaleString('id-ID')}\n`
+    }
+
+    bukuBesar += handoverSection
+  }
+
+  // ── Ringkasan Transaksi Voucher Hari Ini ──
+  if (ctx.voucherTxSummary && ctx.voucherTxSummary.totalPenjualan > 0) {
+    const s = ctx.voucherTxSummary
+    bukuBesar += `\n\n💵 TRANSAKSI VOUCHER HARI INI:\n`
+    bukuBesar += `  Jumlah Penjualan: ${s.totalPenjualan} trx\n`
+    bukuBesar += `  Total Omzet: Rp${s.totalOmzet.toLocaleString('id-ID')}\n`
+    bukuBesar += `  Tunai: Rp${s.totalTunai.toLocaleString('id-ID')}\n`
+    bukuBesar += `  Non-Tunai/QRIS: Rp${(s.totalNonTunai + s.totalQris).toLocaleString('id-ID')}\n`
+  }
+
   // Audit/selisih (owner only)
   if (isOwner && ctx.auditHistory && ctx.auditHistory.length > 0) {
     const bulanIni = new Date().toISOString().substring(0, 7)
@@ -835,6 +1317,59 @@ ${ctx.stokRendah.map(p => `  - ${p.name}: ${p.stock} pcs (min alert: ${p.minStoc
       bukuBesar += `\n\n🔍 REKAP AUDIT KASIR BULAN INI:
 Total Minus (selisih kurang): Rp${totalMinus.toLocaleString('id-ID')}
 Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
+    }
+  }
+
+  // ── Analitik Cerdas untuk Gemini (Online Context) ──
+  if (isOwner) {
+    let analyticsStr = ''
+    
+    // 1. Dead Stock
+    if (ctx.voucherProducts && ctx.voucherTransactions) {
+      const soldIds = new Set(ctx.voucherTransactions.filter((t:any) => t.type === 'PENJUALAN').map((t:any) => t.productId))
+      const deadStock = ctx.voucherProducts.filter((p:any) => !soldIds.has(p.id) && (p.currentStock ?? p.stock ?? 0) > 0)
+      if (deadStock.length > 0) {
+        analyticsStr += `- **Dead Stock (Voucher tidak laku):** Terdapat ${deadStock.length} produk mengendap. (Cth: ${deadStock.slice(0,3).map((p:any)=>p.name).join(', ')}).\n`
+      }
+    }
+    
+    // 2. Utang Paling Sering
+    if (ctx.kasbonList && ctx.kasbonList.length > 0) {
+      const aktif = ctx.kasbonList.filter((h:any) => !h.lunas)
+      const freq: Record<string, number> = {}
+      aktif.forEach((h:any) => { const n = (h.nama||'').toUpperCase(); freq[n] = (freq[n]||0) + 1 })
+      const sortedUtang = Object.entries(freq).sort((a,b) => b[1] - a[1])
+      if (sortedUtang.length > 0) {
+        analyticsStr += `- **Pelanggan Sering Utang:** ${sortedUtang.slice(0,3).map(u => u[0] + ' (' + u[1] + 'x)').join(', ')}.\n`
+      }
+    }
+    
+    // 3. Selisih Kas (Fraud)
+    if (ctx.handoverRecords && ctx.handoverRecords.length > 0) {
+      const minus = ctx.handoverRecords.filter((r:any) => (r.cashDifference ?? ((r.cashPhysical ?? 0) - (r.cashExpected ?? 0))) < 0)
+      if (minus.length > 0) {
+        const freqM: Record<string, number> = {}
+        minus.forEach((r:any) => { const n = (r.cashierFromName||r.kasirFrom||'Kasir').toUpperCase(); freqM[n] = (freqM[n]||0) + 1 })
+        const sortedM = Object.entries(freqM).sort((a,b) => b[1] - a[1])
+        analyticsStr += `- **Kasir Sering Minus Selisih:** ${sortedM.slice(0,2).map(u => u[0] + ' (' + u[1] + 'x minus)').join(', ')}.\n`
+      }
+    }
+    
+    // 4. Kasir Paling Rajin
+    if (ctx.absensiList && ctx.absensiList.length > 0) {
+      const bulanIni = new Date().toISOString().substring(0, 7)
+      const freqA: Record<string, number> = {}
+      ctx.absensiList.filter((a:any) => a.status==='Hadir' && (a.timestamp||a.date||'').startsWith(bulanIni)).forEach((a:any) => {
+        const n = (a.nama||a.username||'').toUpperCase(); freqA[n] = (freqA[n]||0) + 1
+      })
+      const sortedA = Object.entries(freqA).sort((a,b) => b[1] - a[1])
+      if (sortedA.length > 0) {
+        analyticsStr += `- **Kehadiran Kasir Terbaik (Bulan Ini):** ${sortedA.slice(0,3).map(u => u[0] + ' (' + u[1] + ' hari)').join(', ')}.\n`
+      }
+    }
+
+    if (analyticsStr) {
+      bukuBesar += `\n\n🧠 ANALITIK KECERDASAN BISNIS:\n${analyticsStr} (Catatan: Ini adalah rangkuman dari data sistem terkini, manfaatkan informasi ini untuk menjawab pertanyaan owner jika ditanya seputar data-data ini)`
     }
   }
 
@@ -876,7 +1411,9 @@ export function buildStoreContext(
   kasirName: string,
   kasirList: Record<string, any> = {},
   transactions: any[] = [],
-  absensiList: any[] = []
+  absensiList: any[] = [],
+  voucherTransactions: any[] = [],
+  voucherProducts: any[] = []
 ): StoreContext {
   // Ambil data kasbon dari localStorage
   let kasbonList: any[] = []
@@ -895,15 +1432,62 @@ export function buildStoreContext(
   // Ambil data stok voucher yang hampir habis
   let stokRendah: { name: string; stock: number; minStock: number }[] = []
   try {
-    const stokKeys = [`v_${storeId}_products`, `alphaPro_${storeId}_stok_voucher_products`]
-    let allProducts: any[] = []
-    for (const k of stokKeys) {
-      const raw = localStorage.getItem(k)
-      if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { allProducts = p; break } }
+    let allProducts: any[] = voucherProducts.length > 0 ? voucherProducts : []
+    if (allProducts.length === 0) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || ''
+        if (k.startsWith(`v_${storeId}`) && k.endsWith('_products')) {
+          const raw = localStorage.getItem(k)
+          if (raw) { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) allProducts = [...allProducts, ...p] }
+        }
+      }
+      // De-duplikasi
+      const seen = new Set()
+      allProducts = allProducts.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
     }
     stokRendah = allProducts
       .filter(p => (p.currentStock ?? p.stock ?? 0) <= (p.minStockLevel ?? 4))
       .map(p => ({ name: p.name, stock: p.currentStock ?? p.stock ?? 0, minStock: p.minStockLevel ?? 4 }))
+  } catch {}
+
+  // ── Ambil data serah terima (all_detailed_handovers — global per toko) ──
+  let handoverRecords: any[] = []
+  try {
+    const globalKey = `v_${storeId}_all_detailed_handovers`
+    const raw = localStorage.getItem(globalKey)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) handoverRecords = parsed
+    }
+  } catch {}
+
+  // ── Ringkasan transaksi voucher hari ini dari localStorage ──
+  let voucherTxSummary: StoreContext['voucherTxSummary'] = null
+  try {
+    let allVtxs: any[] = voucherTransactions.length > 0 ? voucherTransactions : []
+    if (allVtxs.length === 0) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || ''
+        if (k.startsWith(`v_${storeId}`) && k.endsWith('_transactions')) {
+          const raw = localStorage.getItem(k)
+          if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) allVtxs = [...allVtxs, ...p] }
+        }
+      }
+    }
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayVtxs = allVtxs.filter(t => (t.timestamp || '').startsWith(todayStr) && t.type === 'PENJUALAN')
+    if (todayVtxs.length > 0) {
+      const tunai = todayVtxs.filter(t => (t.paymentMethod || '') === 'TUNAI')
+      const qris = todayVtxs.filter(t => (t.paymentMethod || '') === 'QRIS')
+      const nonTunai = todayVtxs.filter(t => (t.paymentMethod || '') !== 'TUNAI' && (t.paymentMethod || '') !== 'QRIS')
+      voucherTxSummary = {
+        totalPenjualan: todayVtxs.length,
+        totalOmzet: todayVtxs.reduce((s, t) => s + (t.amount || 0), 0),
+        totalTunai: tunai.reduce((s, t) => s + (t.amount || 0), 0),
+        totalNonTunai: nonTunai.reduce((s, t) => s + (t.amount || 0), 0),
+        totalQris: qris.reduce((s, t) => s + (t.amount || 0), 0),
+      }
+    }
   } catch {}
 
   // Filter transaksi bulan ini
@@ -928,7 +1512,12 @@ export function buildStoreContext(
     kasbonList,
     auditHistory,
     kasirList: safeKasirList,
-    stokRendah
+    stokRendah,
+    handoverRecords,
+    voucherTxSummary,
+    absensiList,
+    voucherProducts,
+    voucherTransactions
   }
 }
 

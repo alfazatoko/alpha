@@ -217,7 +217,7 @@ const AssistantBot: React.FC<Props> = ({
       if (!showSettings && !showTeachModal) setTimeout(() => inputRef.current?.focus(), 120)
       // Build dynamic system prompt setiap kali bot dibuka (data selalu fresh)
       const role = kasirRole === 'owner' ? 'owner' : 'kasir'
-      const ctx = buildStoreContext(role, activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList)
+      const ctx = buildStoreContext(role, activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
       systemPromptRef.current = buildSystemPrompt(ctx)
 
       // ── Auto Stok Warning saat bot pertama kali dibuka hari ini ──

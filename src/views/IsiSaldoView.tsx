@@ -38,6 +38,40 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
+  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+
+  const toggleOption = (opt: string) => {
+    let current = props.isiKeterangan
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
+    if (current.includes(opt)) {
+      current = current.filter(c => c !== opt)
+    } else {
+      current.push(opt)
+    }
+    props.setIsiKeterangan(current.join(', '))
+  }
+
+  useEffect(() => {
+    if (!props.active) return
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Abaikan jika sedang mengetik di input atau textarea
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return
+      }
+
+      if (e.key === '1') { e.preventDefault(); toggleOption('BANK'); }
+      if (e.key === '2') { e.preventDefault(); toggleOption('FLIP'); }
+      if (e.key === '3') { e.preventDefault(); toggleOption('ORDER KUOTA'); }
+      if (e.key === '4') { e.preventDefault(); toggleOption('DANA'); }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [props.active, props.isiKeterangan])
+
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -125,6 +159,26 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
                     onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-xs font-black text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800/20 tracking-wider"
                   />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {quickOptions.map((opt, idx) => {
+                    const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
+                    return (
+                      <button 
+                        key={opt}
+                        onClick={() => toggleOption(opt)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                          isSelected 
+                            ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
+                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400/50"
+                        )}
+                      >
+                        {idx + 1}. {opt}
+                      </button>
+                    )
+                  })}
                 </div>
 
                 <div>
@@ -248,6 +302,26 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
               onKeyDown={(e) => handleKeyDown(e, keteranganRef)}
               className="form-input-modern w-full"
             />
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {quickOptions.map((opt, idx) => {
+              const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
+              return (
+                <button 
+                  key={opt}
+                  onClick={() => toggleOption(opt)}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                    isSelected 
+                      ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
+                      : "bg-white border-gray-300 text-gray-500 hover:border-blue-400"
+                  )}
+                >
+                  {idx + 1}. {opt}
+                </button>
+              )
+            })}
           </div>
 
           <div>

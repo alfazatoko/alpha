@@ -149,6 +149,45 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     {nominal: '', keterangan: ''},
     {nominal: '', keterangan: ''}
   ])
+
+  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+
+  const toggleRowOption = (opt: string) => {
+    setSaldoRealRows(prev => {
+      const existingIndex = prev.findIndex(r => r.keterangan === opt)
+      if (existingIndex !== -1) {
+        const newRows = [...prev]
+        newRows.splice(existingIndex, 1)
+        if (newRows.length === 0) return [{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]
+        if (newRows.length === 1) return [...newRows, {nominal: '', keterangan: ''}]
+        return newRows
+      } else {
+        const newRows = [...prev]
+        const emptyIndex = newRows.findIndex(r => r.keterangan === '' && (!r.nominal || r.nominal === '0' || r.nominal === ''))
+        if (emptyIndex !== -1) {
+          newRows[emptyIndex].keterangan = opt
+        } else {
+          newRows.push({ nominal: '', keterangan: opt })
+        }
+        return newRows
+      }
+    })
+  }
+
+  useEffect(() => {
+    if (!showSaldoRealModal) return
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+      if (e.key === '1') { e.preventDefault(); toggleRowOption('BANK'); }
+      if (e.key === '2') { e.preventDefault(); toggleRowOption('FLIP'); }
+      if (e.key === '3') { e.preventDefault(); toggleRowOption('ORDER KUOTA'); }
+      if (e.key === '4') { e.preventDefault(); toggleRowOption('DANA'); }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [showSaldoRealModal])
   const [catatanKasir, setCatatanKasir] = useState('')
   const [confirmSelisih, setConfirmSelisih] = useState(false)
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
@@ -1409,6 +1448,32 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
               
               <div className="p-6 flex flex-col max-h-[80vh]">
+                <datalist id="aplikasi-suggestions">
+                  {quickOptions.map(opt => (
+                    <option key={opt} value={opt} />
+                  ))}
+                </datalist>
+
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {quickOptions.map((opt, idx) => {
+                    const isSelected = saldoRealRows.some(r => r.keterangan === opt)
+                    return (
+                      <button 
+                        key={opt}
+                        onClick={() => toggleRowOption(opt)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                          isSelected 
+                            ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
+                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-400/50"
+                        )}
+                      >
+                        {idx + 1}. {opt}
+                      </button>
+                    )
+                  })}
+                </div>
+                
                 <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                   {(() => {
                     const softColors = [
@@ -1440,6 +1505,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                           <input 
                             id={`ket-${index}`}
                             type="text"
+                            list="aplikasi-suggestions"
                             value={row.keterangan}
                             onChange={(e) => {
                               const newRows = [...saldoRealRows];
@@ -2148,6 +2214,32 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
             
             <div className="p-6 flex flex-col max-h-[80vh]">
+              <datalist id="aplikasi-suggestions">
+                {quickOptions.map(opt => (
+                  <option key={opt} value={opt} />
+                ))}
+              </datalist>
+
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {quickOptions.map((opt, idx) => {
+                  const isSelected = saldoRealRows.some(r => r.keterangan === opt)
+                  return (
+                    <button 
+                      key={opt}
+                      onClick={() => toggleRowOption(opt)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                        isSelected 
+                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
+                          : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-400/50"
+                      )}
+                    >
+                      {idx + 1}. {opt}
+                    </button>
+                  )
+                })}
+              </div>
+
               <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                 {(() => {
                   const softColors = [
@@ -2179,6 +2271,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         <input 
                           id={`mobile-ket-${index}`}
                           type="text"
+                          list="aplikasi-suggestions"
                           value={row.keterangan}
                           onChange={(e) => {
                             const newRows = [...saldoRealRows];
