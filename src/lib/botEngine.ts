@@ -1232,17 +1232,93 @@ export function answerFromKB(
     }
 
     if (c.includes('telat') || c.includes('terlambat')) {
-      if (hadir.length === 0) return "📅 Belum ada data absensi untuk mengecek siapa yang telat hari ini."
-      // Urutkan dari jam masuk paling lambat
-      const sorted = hadir.filter(a => a.jam_masuk || a.time).sort((a,b) => (b.jam_masuk || b.time || '').localeCompare(a.jam_masuk || a.time || ''))
-      if (sorted.length === 0) return "📅 Data jam masuk kasir tidak ditemukan."
-      
-      let res = `⏰ **Daftar Kasir Paling Siang / Telat Hari Ini:**\n\n`
-      sorted.forEach((a, i) => {
-        res += `${i+1}. **${a.nama || a.username}** — Pukul ${a.jam_masuk || a.time}\n`
-      })
-      res += `\n💡 _(Catatan: Standar jam telat dikembalikan ke kebijakan Owner)_`
-      return res
+      // Parse target time threshold (default 07:30)
+      let targetHour = 7;
+      let targetMin = 30;
+      const timeMatch = c.match(/(\d{1,2})[\.:](\d{2})/);
+      if (timeMatch) {
+        targetHour = parseInt(timeMatch[1], 10);
+        targetMin = parseInt(timeMatch[2], 10);
+      }
+      const targetMinutes = targetHour * 60 + targetMin;
+      const timeLabel = `${targetHour.toString().padStart(2, '0')}:${targetMin.toString().padStart(2, '0')}`;
+
+      // Filter absensi list (jika pengguna menentukan hari ini / bulan ini)
+      const thisMonth = new Date().toISOString().substring(0, 7);
+      const todayStr = new Date().toISOString().split('T')[0];
+      let logsToScan = absensiList;
+
+      if (c.includes('hari ini')) {
+        logsToScan = absensiList.filter(a => (a.tanggal || a.timestamp || '').startsWith(todayStr));
+      } else if (c.includes('bulan ini')) {
+        logsToScan = absensiList.filter(a => (a.tanggal || a.timestamp || '').startsWith(thisMonth));
+      }
+
+      // Filter nama kasir spesifik jika disebut dalam teks pencarian
+      let filterKasirName = '';
+      Object.values(kasirList).forEach((k: any) => {
+        if (k.name && c.includes(k.name.toLowerCase())) {
+          filterKasirName = k.name;
+        }
+      });
+
+      // Akumulasi data telat per kasir
+      const lateByKasir: Record<string, { count: number; details: Array<{ date: string; time: string; lateMinutes: number }> }> = {};
+
+      logsToScan.forEach(a => {
+        const kasirName = a.nama_kasir || a.nama || a.username || 'Kasir';
+        if (filterKasirName && !kasirName.toLowerCase().includes(filterKasirName.toLowerCase()) && !(a.username && a.username.toLowerCase().includes(filterKasirName.toLowerCase()))) {
+          return;
+        }
+
+        const jamMasukStr = a.jam_masuk || a.time || '';
+        if (!jamMasukStr) return;
+
+        // Parse hour & minute
+        const parts = jamMasukStr.split(/[\.:]/);
+        if (parts.length >= 2) {
+          const h = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          if (!isNaN(h) && !isNaN(m)) {
+            // Evaluasi khusus shift pagi (sebelum 12:00)
+            if (h >= 4 && h < 12) {
+              const entryMinutes = h * 60 + m;
+              if (entryMinutes > targetMinutes) {
+                const lateMins = entryMinutes - targetMinutes;
+                if (!lateByKasir[kasirName]) {
+                  lateByKasir[kasirName] = { count: 0, details: [] };
+                }
+                lateByKasir[kasirName].count++;
+                lateByKasir[kasirName].details.push({
+                  date: a.tanggal || (a.timestamp ? a.timestamp.split('T')[0] : 'Unknown'),
+                  time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`,
+                  lateMinutes: lateMins
+                });
+              }
+            }
+          }
+        }
+      });
+
+      const kasirEntries = Object.entries(lateByKasir);
+      if (kasirEntries.length === 0) {
+        return `🎉 **Tidak Ada Kasir Telat!**\n\nBerdasarkan data absensi, tidak ada kasir yang absen telat lewat dari pukul **${timeLabel}** pagi. Semua masuk tepat waktu! 👏`;
+      }
+
+      let res = `⏰ **Rekap Data Kasir Telat (Lewat Jam ${timeLabel} Pagi):**\n\n`;
+      kasirEntries.forEach(([nama, data]) => {
+        res += `👤 **${nama}** — Total Telat: **${data.count} kali**\n`;
+        data.details.slice(0, 5).forEach(d => {
+          res += `   • Tgl ${d.date}: Masuk jam ${d.time} _(Telat ${d.lateMinutes} menit)_\n`;
+        });
+        if (data.details.length > 5) {
+          res += `   • ...dan ${data.details.length - 5} kali telat lainnya.\n`;
+        }
+        res += `\n`;
+      });
+
+      res += `💡 _Disaring untuk shift pagi dengan batas waktu jam ${timeLabel}._`;
+      return res;
     }
     
     let res = `📅 **Status Kehadiran Hari Ini:**\n\n` +
