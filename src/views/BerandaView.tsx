@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
@@ -669,18 +669,79 @@ const CatatanPanel: React.FC<{
   const [kategori, setKategori] = useState('Penting');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setCatatanList(JSON.parse(saved));
-      } catch(e) {}
-    }
+  const loadAllNotes = useCallback(() => {
+    try {
+      const map = new Map<string, Catatan>();
+      const addNote = (item: any) => {
+        if (!item || typeof item !== 'object' || !item.judul) return;
+        const uKey = item.id || `${item.judul}-${item.tanggal}`;
+        if (!map.has(uKey)) {
+          map.set(uKey, {
+            id: item.id || Date.now().toString() + Math.random(),
+            judul: item.judul || '',
+            isi: item.isi || '',
+            kategori: item.kategori || 'Penting',
+            tanggal: item.tanggal || new Date().toISOString(),
+            selesai: !!item.selesai
+          });
+        }
+      };
+
+      // 1. Baca dari global key
+      const globalRaw = localStorage.getItem(STORAGE_KEY);
+      if (globalRaw) {
+        try {
+          const parsed = JSON.parse(globalRaw);
+          if (Array.isArray(parsed)) parsed.forEach(addNote);
+        } catch(e) {}
+      }
+
+      // 2. Scan semua kunci toko lokal
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || '';
+        if (k.includes('catatan_owner') || k.includes('catatanOwner')) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) parsed.forEach(addNote);
+            }
+          } catch(e) {}
+        }
+      }
+
+      const list = Array.from(map.values());
+      list.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+      setCatatanList(list);
+    } catch(e) {}
   }, []);
+
+  useEffect(() => {
+    loadAllNotes();
+    const handleUpdate = () => loadAllNotes();
+    window.addEventListener('alphaSyncUpdate', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('alphaSyncUpdate', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [loadAllNotes]);
 
   const saveToStorage = (data: Catatan[]) => {
     setCatatanList(data);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      const activeSid = localStorage.getItem('alphaPro_activeStoreId');
+      if (activeSid && activeSid !== 'all') {
+        localStorage.setItem(`alphaPro_${activeSid}_catatan_owner`, JSON.stringify(data));
+        supabase.from('store_settings').upsert({
+          store_id: activeSid,
+          catatan_owner_data: data,
+          updated_at: new Date().toISOString()
+        }).then();
+      }
+    } catch(e) {}
+    window.dispatchEvent(new Event('alphaSyncUpdate'));
   };
 
   const handleSimpan = () => {

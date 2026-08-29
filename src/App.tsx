@@ -2990,12 +2990,57 @@ const MainApp: React.FC<MainAppProps> = ({
         onActionCatatan={(judul, isi) => {
           try {
             const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
-            const key = `alphaPro_${sid}_catatan_owner`
-            const existing = JSON.parse(localStorage.getItem(key) || '[]')
-            const newCatatan = { id: `catatan-${Date.now()}`, tanggal: new Date().toLocaleDateString('id-ID'), judul, isi, selesai: false }
-            const updated = [newCatatan, ...existing]
-            localStorage.setItem(key, JSON.stringify(updated))
-            localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(updated))
+            const globalKey = 'alphaPro_global_catatanOwner'
+            
+            // Deduplikasi dan akumulasi semua catatan lama
+            const map = new Map<string, any>()
+            const addNoteToMap = (item: any) => {
+              if (!item || typeof item !== 'object' || !item.judul) return
+              const uId = item.id || `${item.judul}-${item.tanggal}`
+              if (!map.has(uId)) map.set(uId, item)
+            }
+
+            try {
+              const rawGlobal = localStorage.getItem(globalKey)
+              if (rawGlobal) {
+                const parsed = JSON.parse(rawGlobal)
+                if (Array.isArray(parsed)) parsed.forEach(addNoteToMap)
+              }
+            } catch(e) {}
+
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i) || ''
+              if (k.includes('catatan_owner') || k.includes('catatanOwner')) {
+                try {
+                  const raw = localStorage.getItem(k)
+                  if (raw) {
+                    const parsed = JSON.parse(raw)
+                    if (Array.isArray(parsed)) parsed.forEach(addNoteToMap)
+                  }
+                } catch(e) {}
+              }
+            }
+
+            const newCatatan = { 
+              id: `catatan-${Date.now()}`, 
+              tanggal: new Date().toISOString(), 
+              judul, 
+              isi, 
+              kategori: 'Penting',
+              selesai: false 
+            }
+
+            const updated = [newCatatan, ...Array.from(map.values())]
+
+            localStorage.setItem(globalKey, JSON.stringify(updated))
+            if (sid && sid !== 'all') {
+              localStorage.setItem(`alphaPro_${sid}_catatan_owner`, JSON.stringify(updated))
+              supabase.from('store_settings').upsert({ 
+                store_id: sid, 
+                catatan_owner_data: updated, 
+                updated_at: new Date().toISOString() 
+              }).then()
+            }
             window.dispatchEvent(new Event('alphaSyncUpdate'))
           } catch(e) {}
         }}
