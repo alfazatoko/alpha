@@ -183,6 +183,8 @@ const AssistantBot: React.FC<Props> = ({
   const [isListening, setIsListening] = useState(false)
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled())
   const recognitionRef = useRef<any>(null)
+  const lastSpeechTextRef = useRef<string>('')
+  const handleSendRef = useRef<any>(null)
 
   const toggleVoiceRecording = useCallback(async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -217,6 +219,7 @@ const AssistantBot: React.FC<Props> = ({
 
         recognition.onstart = () => {
           setIsListening(true)
+          lastSpeechTextRef.current = ''
           playMicBeep('start')
         }
 
@@ -226,6 +229,7 @@ const AssistantBot: React.FC<Props> = ({
             transcript += event.results[i][0].transcript
           }
           if (transcript.trim()) {
+            lastSpeechTextRef.current = transcript
             setInput(transcript)
           }
         }
@@ -241,6 +245,11 @@ const AssistantBot: React.FC<Props> = ({
         recognition.onend = () => {
           setIsListening(false)
           playMicBeep('stop')
+          const autoText = lastSpeechTextRef.current.trim()
+          if (autoText && handleSendRef.current) {
+            handleSendRef.current(autoText)
+            lastSpeechTextRef.current = ''
+          }
         }
 
         recognitionRef.current = recognition
@@ -642,6 +651,8 @@ const AssistantBot: React.FC<Props> = ({
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
     }, 300)
   }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin, onActionCatatan, onActionKontak, onActionCustomFAQ])
+
+  handleSendRef.current = handleSend
 
   // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
   const requestConfirmation = useCallback((actions: BotAction[]) => {
