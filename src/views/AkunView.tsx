@@ -2213,7 +2213,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                         {/* Statistik Kehadiran */}
                         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
-                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3">ðŸ“Š Kehadiran Bulan Ini</p>
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3"><i className="fa-solid fa-chart-simple mr-1.5"></i>Kehadiran Bulan Ini</p>
                           <div className="grid grid-cols-3 gap-2">
                             <div className="bg-white rounded-xl p-3 text-center border border-emerald-100">
                               <p className="text-xl font-black text-emerald-600">{myStats.hadir}</p>
@@ -2261,7 +2261,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         {/* Masa Kerja */}
                         {myTenure && (
                           <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">ðŸ’¼ Masa Kerja</p>
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2"><i className="fa-solid fa-briefcase mr-1.5"></i>Masa Kerja</p>
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
                                 <i className="fa-solid fa-calendar-days text-indigo-500 text-sm" />
@@ -2273,7 +2273,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                 </p>
                               </div>
                               {myTenure.totalMonths > 0 && myTenure.totalMonths % 6 === 0 && (
-                                <span className="ml-auto text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-xl animate-bounce">ðŸŽ Bonus!</span>
+                                <span className="ml-auto text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-xl animate-bounce"><i className="fa-solid fa-gift mr-1"></i>Bonus!</span>
                               )}
                             </div>
                           </div>
@@ -2281,7 +2281,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                         {/* Data Pribadi */}
                         <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-3">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">ðŸ§‘ Data Pribadi</p>
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest"><i className="fa-solid fa-address-card mr-1.5"></i>Data Pribadi</p>
                           <div className="space-y-2.5">
                             {[{ label: 'Nama Lengkap', value: myName, icon: 'fa-user' },
                               { label: 'Tempat, Tgl Lahir', value: [myData.tempatLahir, myData.tanggalLahir ? new Date(myData.tanggalLahir).toLocaleDateString('id-ID') : ''].filter(Boolean).join(', ') || '-', icon: 'fa-cake-candles' },
@@ -3047,7 +3047,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                                 }}
                                                 className="w-full bg-amber-50 active:bg-amber-100 text-amber-600 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors border border-amber-100 flex items-center justify-center gap-1"
                                               >
-                                                <i className="fa-solid fa-clock"></i> Belum Dibayar â€” Ketuk untuk Lunasi
+                                                <i className="fa-solid fa-clock"></i> Belum Dibayar - Ketuk untuk Lunasi
                                               </button>
                                             ) : (
                                               <div className="w-full bg-emerald-50 text-emerald-600 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center justify-center gap-1 border border-emerald-100">
