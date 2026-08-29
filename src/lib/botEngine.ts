@@ -1232,16 +1232,65 @@ export function answerFromKB(
     }
 
     if (c.includes('telat') || c.includes('terlambat')) {
-      // Parse target time threshold (default 07:30)
       let targetHour = 7;
       let targetMin = 30;
-      const timeMatch = c.match(/(\d{1,2})[\.:](\d{2})/);
-      if (timeMatch) {
-        targetHour = parseInt(timeMatch[1], 10);
-        targetMin = parseInt(timeMatch[2], 10);
+      let timeFound = false;
+
+      // 1. Cek format "setengah X" (contoh: "setengah 8" -> 07:30, "setengah 4" -> 03:30 / 15:30)
+      const setengahMatch = c.match(/setengah\s*(\d{1,2})/i);
+      if (setengahMatch) {
+        const num = parseInt(setengahMatch[1], 10);
+        targetHour = num - 1;
+        targetMin = 30;
+        timeFound = true;
+        if (c.includes('siang') || c.includes('sore') || c.includes('malam') || c.includes('pm')) {
+          if (targetHour < 12) targetHour += 12;
+        }
+      } else {
+        // 2. Cek format jam dengan / tanpa menit + modifier AM/PM/pagi/siang/sore/malam
+        // Contoh: "jam 7", "jam 15.00", "jam 3 siang", "jam 3 PM", "15.00", "7 pagi", "3 pm"
+        const timeMatch = c.match(/(?:jam\s+)(\d{1,2})(?:[\.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?/i) ||
+                          c.match(/(\d{1,2})[\.:](\d{2})\s*(pagi|siang|sore|malam|am|pm)?/i) ||
+                          c.match(/(\d{1,2})\s*(pagi|siang|sore|malam|am|pm)/i);
+
+        if (timeMatch) {
+          let h = parseInt(timeMatch[1], 10);
+          let m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+          const modifier = (timeMatch[3] || '').toLowerCase();
+          
+          // Cek penanda waktu sore/siang/malam/PM
+          const isPM = modifier === 'pm' || modifier === 'siang' || modifier === 'sore' || modifier === 'malam' ||
+                       c.includes('siang') || c.includes('sore') || c.includes('malam') || c.includes('pm');
+          
+          if (h < 12 && isPM) {
+            h += 12; // 3 siang -> 15, 7 malam -> 19
+          } else if (h === 12 && (c.includes('pagi') || c.includes('am') || modifier === 'am')) {
+            h = 0; // 12 AM -> 00
+          }
+
+          targetHour = h;
+          targetMin = m;
+          timeFound = true;
+        }
       }
+
+      // Default jika pengguna hanya menulis "telat" tanpa menyebutkan jam:
+      // Jika menyebut kata "siang", default jam 15.00. Jika sebut "pagi" atau default, jam 07.30.
+      if (!timeFound) {
+        if (c.includes('siang') || c.includes('sore')) {
+          targetHour = 15;
+          targetMin = 0;
+        } else {
+          targetHour = 7;
+          targetMin = 30;
+        }
+      }
+
       const targetMinutes = targetHour * 60 + targetMin;
-      const timeLabel = `${targetHour.toString().padStart(2, '0')}:${targetMin.toString().padStart(2, '0')}`;
+      const displayHour = targetHour.toString().padStart(2, '0');
+      const displayMin = targetMin.toString().padStart(2, '0');
+      const timeLabel = `${displayHour}:${displayMin}`;
+      const shiftTypeLabel = targetHour >= 12 ? 'Shift Siang/Sore' : 'Shift Pagi';
 
       // Filter absensi list (jika pengguna menentukan hari ini / bulan ini)
       const thisMonth = new Date().toISOString().substring(0, 7);
@@ -1280,8 +1329,12 @@ export function answerFromKB(
           const h = parseInt(parts[0], 10);
           const m = parseInt(parts[1], 10);
           if (!isNaN(h) && !isNaN(m)) {
-            // Evaluasi khusus shift pagi (sebelum 12:00)
-            if (h >= 4 && h < 12) {
+            // Jika target shift pagi (targetHour < 12), evaluasi absen yang dilakukan antara jam 04.00 - 12.59
+            // Jika target shift siang/sore (targetHour >= 12), evaluasi absen yang dilakukan dari jam 12.00 ke atas
+            const isMorningTarget = targetHour < 12;
+            const isMatchingShift = isMorningTarget ? (h >= 4 && h < 13) : (h >= 12 && h <= 23);
+
+            if (isMatchingShift) {
               const entryMinutes = h * 60 + m;
               if (entryMinutes > targetMinutes) {
                 const lateMins = entryMinutes - targetMinutes;
@@ -1302,10 +1355,10 @@ export function answerFromKB(
 
       const kasirEntries = Object.entries(lateByKasir);
       if (kasirEntries.length === 0) {
-        return `🎉 **Tidak Ada Kasir Telat!**\n\nBerdasarkan data absensi, tidak ada kasir yang absen telat lewat dari pukul **${timeLabel}** pagi. Semua masuk tepat waktu! 👏`;
+        return `🎉 **Tidak Ada Kasir Telat!**\n\nBerdasarkan data absensi (${shiftTypeLabel}), tidak ada kasir yang absen telat lewat dari pukul **${timeLabel}**. Semua masuk tepat waktu! 👏`;
       }
 
-      let res = `⏰ **Rekap Data Kasir Telat (Lewat Jam ${timeLabel} Pagi):**\n\n`;
+      let res = `⏰ **Rekap Data Kasir Telat (Lewat Jam ${timeLabel} — ${shiftTypeLabel}):**\n\n`;
       kasirEntries.forEach(([nama, data]) => {
         res += `👤 **${nama}** — Total Telat: **${data.count} kali**\n`;
         data.details.slice(0, 5).forEach(d => {
@@ -1317,7 +1370,7 @@ export function answerFromKB(
         res += `\n`;
       });
 
-      res += `💡 _Disaring untuk shift pagi dengan batas waktu jam ${timeLabel}._`;
+      res += `💡 _Disaring untuk ${shiftTypeLabel} dengan batas toleransi jam ${timeLabel}._`;
       return res;
     }
     
@@ -1934,17 +1987,33 @@ Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
       }
     }
     
-    // 4. Kasir Paling Rajin
+    // 4. Log Kehadiran & Jam Masuk Kasir
     if (ctx.absensiList && ctx.absensiList.length > 0) {
       const bulanIni = new Date().toISOString().substring(0, 7)
       const freqA: Record<string, number> = {}
-      ctx.absensiList.filter((a:any) => a.status==='Hadir' && (a.timestamp||a.date||'').startsWith(bulanIni)).forEach((a:any) => {
-        const n = (a.nama||a.username||'').toUpperCase(); freqA[n] = (freqA[n]||0) + 1
+      ctx.absensiList.filter((a:any) => a.status==='Hadir' && (a.timestamp||a.date||a.tanggal||'').startsWith(bulanIni)).forEach((a:any) => {
+        const n = (a.nama_kasir||a.nama||a.username||'').toUpperCase(); freqA[n] = (freqA[n]||0) + 1
       })
       const sortedA = Object.entries(freqA).sort((a,b) => b[1] - a[1])
       if (sortedA.length > 0) {
         analyticsStr += `- **Kehadiran Kasir Terbaik (Bulan Ini):** ${sortedA.slice(0,3).map(u => u[0] + ' (' + u[1] + ' hari)').join(', ')}.\n`
       }
+
+      // Format log jam masuk per kasir untuk Gemini AI
+      const byKasir: Record<string, Array<string>> = {}
+      ctx.absensiList.filter((a:any) => (a.tanggal||a.timestamp||a.date||'').startsWith(bulanIni)).forEach((a:any) => {
+        const name = (a.nama_kasir || a.nama || a.username || 'Kasir').toUpperCase()
+        if (!byKasir[name]) byKasir[name] = []
+        const tgl = a.tanggal || (a.timestamp ? a.timestamp.split('T')[0] : '?')
+        const jam = a.jam_masuk || a.time || '--:--'
+        byKasir[name].push(`${tgl} (jam ${jam})`)
+      })
+
+      let logJamMasukStr = '\n\n📅 LOG ABSENSI & JAM MASUK KASIR BULAN INI:\n'
+      Object.entries(byKasir).forEach(([kName, entries]) => {
+        logJamMasukStr += `  • ${kName} (${entries.length} log): ${entries.slice(0, 15).join(', ')}\n`
+      })
+      bukuBesar += logJamMasukStr
     }
 
     if (analyticsStr) {
