@@ -1066,7 +1066,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                     <div className="space-y-4">
                                       <div>
                                         <div className="flex justify-between items-center mb-1">
-                                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Tanggal Masuk Kerja (Join)</label>
+                                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Awal Join Kerja</label>
                                           {(!isEditingJoinDate && !!editKaryawanJoin) && (
                                             <button 
                                               type="button"
@@ -1077,14 +1077,19 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             </button>
                                           )}
                                         </div>
-                                        <input
-                                          type="date"
-                                          value={editKaryawanJoin}
-                                          onChange={e => setEditKaryawanJoin(e.target.value)}
-                                          disabled={!isEditingJoinDate && !!editKaryawanJoin}
-                                          className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
+                                        {(!isEditingJoinDate && !!editKaryawanJoin) ? (
+                                          <div className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                            {new Date(editKaryawanJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                          </div>
+                                        ) : (
+                                          <input
+                                            type="date"
+                                            value={editKaryawanJoin}
+                                            onChange={e => setEditKaryawanJoin(e.target.value)}
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                                            style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                          />
+                                        )}
                                       </div>
 
                                       <div>
@@ -2208,7 +2213,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                     <div className="space-y-4 pt-2 border-t border-slate-100">
                                       <div>
                                         <div className="flex justify-between items-center mb-1">
-                                          <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block">Tgl Masuk Kerja</label>
+                                          <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block">Awal Join Kerja</label>
                                           {(!isEditingJoinDate && !!editKaryawanJoin) && (
                                             <button 
                                               type="button"
@@ -2219,14 +2224,19 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                             </button>
                                           )}
                                         </div>
-                                        <input
-                                          type="date"
-                                          value={editKaryawanJoin}
-                                          onChange={e => setEditKaryawanJoin(e.target.value)}
-                                          disabled={!isEditingJoinDate && !!editKaryawanJoin}
-                                          className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
-                                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                        />
+                                        {(!isEditingJoinDate && !!editKaryawanJoin) ? (
+                                          <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+                                            {new Date(editKaryawanJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                          </div>
+                                        ) : (
+                                          <input
+                                            type="date"
+                                            value={editKaryawanJoin}
+                                            onChange={e => setEditKaryawanJoin(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-indigo-500"
+                                            style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                          />
+                                        )}
                                       </div>
                                       <div>
                                         <label className="text-[8px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Catatan Awal Kerja</label>
@@ -2759,7 +2769,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             {[{ label: 'Nama Lengkap', value: myName, icon: 'fa-user' },
                               { label: 'Tempat, Tgl Lahir', value: [myData.tempatLahir, myData.tanggalLahir ? new Date(myData.tanggalLahir).toLocaleDateString('id-ID') : ''].filter(Boolean).join(', ') || '-', icon: 'fa-cake-candles' },
                               { label: 'Alamat', value: myData.alamat || '-', icon: 'fa-map-marker-alt' },
-                              { label: 'Tgl Masuk Kerja', value: myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Belum diatur', icon: 'fa-calendar-check' },
+                              { label: 'Awal Join Kerja', value: myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Belum diatur', icon: 'fa-calendar-check' },
                             ].map(({ label, value, icon }) => (
                               <div key={label} className="flex items-start gap-3">
                                 <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">

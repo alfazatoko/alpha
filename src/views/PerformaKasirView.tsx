@@ -69,9 +69,7 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
         if (chunk && chunk.length > 0) {
           chunk.forEach((t: any) => {
-            const cat = (t.kategori || '').toLowerCase()
-            const isIsi = cat.includes('isi saldo bank') || cat.startsWith('isi') || cat.includes('modal') || cat.includes('setor')
-            if (isIsi) {
+            if (isIsiCategory(t.kategori)) {
               const dStr = t.timestamp.substring(0, 10)
               const kId = t.kasir_id || 'Unknown'
               const key = `${dStr}_${kId}`
@@ -177,9 +175,7 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         if (err) break
         if (chunk && chunk.length > 0) {
           chunk.forEach((t: any) => {
-            const cat = (t.kategori || '').toLowerCase()
-            const isIsi = cat.includes('isi saldo bank') || cat.startsWith('isi') || cat.includes('modal') || cat.includes('setor')
-            if (isIsi) {
+            if (isIsiCategory(t.kategori)) {
               const dStr = t.timestamp.substring(0, 7) // YYYY-MM
               const kId = t.kasir_id || 'Unknown'
               const key = `${dStr}_${kId}`
@@ -209,8 +205,11 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
   // Helper kategori
   const isIsiCategory = (cat: string) => {
-    const c = (cat || '').toLowerCase()
-    return c.includes('isi saldo bank') || c.startsWith('isi') || c.includes('modal') || c.includes('setor')
+    const c = (cat || '').trim().toLowerCase()
+    if (c.includes('pulsa') || c.includes('kuota') || c.includes('token') || c.includes('voucher') || c.includes('paket') || c.includes('data')) {
+      return false
+    }
+    return c === 'isi saldo bank' || c === 'isi modal tunai kasir' || c.includes('isi saldo bank') || c.includes('setor modal') || c.includes('tambah saldo bank') || c.includes('topup saldo') || c.includes('isi modal')
   }
 
   const isSalesCategory = (cat: string, ket?: string) => {
@@ -240,6 +239,24 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     return Array.from(uniqueMap.values())
   }, [monthlyPerforma, filterKasir])
 
+  // Deduplikasi yearlyPerforma agar tidak terjadi sum ganda jika ada row duplikat di DB
+  const deduplicatedYearlyPerforma = useMemo(() => {
+    const uniqueMap = new Map<string, any>()
+    yearlyPerforma.forEach(p => {
+      if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
+      const key = `${p.tanggal}_${p.kasir_id}_${p.store_id || ''}`
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, p)
+      } else {
+        const existing = uniqueMap.get(key)
+        if ((p.id && existing.id && p.id > existing.id) || (p.timestamp && existing.timestamp && p.timestamp > existing.timestamp)) {
+          uniqueMap.set(key, p)
+        }
+      }
+    })
+    return Array.from(uniqueMap.values())
+  }, [yearlyPerforma, filterKasir])
+
   // Agregasi Tahunan
   const yearlySummaryData = useMemo(() => {
     const year = selectedMonth.split('-')[0]
@@ -252,13 +269,13 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
       const kasirMap = new Map<string, { omset: number, laba: number, tambahSaldo: number }>()
 
-      yearlyPerforma.forEach(p => {
+      deduplicatedYearlyPerforma.forEach(p => {
         if (p.tanggal.startsWith(mStr)) {
           if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
           const kId = p.kasir_id || 'Unknown'
           const current = kasirMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0 }
           current.omset += Number(p.omset) || 0
-          current.laba += Number(p.laba_admin) || Number(p.laba) || 0
+          current.laba += Number(p.laba) || Number(p.laba_admin) || 0
           current.tambahSaldo += Number(p.tambah_saldo) || 0
           kasirMap.set(kId, current)
         }
@@ -295,7 +312,7 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       })
     }
     return result
-  }, [yearlyPerforma, yearlyRawTambahSaldoMap, selectedMonth, filterKasir])
+  }, [deduplicatedYearlyPerforma, yearlyRawTambahSaldoMap, selectedMonth, filterKasir])
 
   // --- KALKULASI FITUR PROFIT ---
   // 1. Profit Hari Ini (Live dari props.transactions & closing snapshot hari ini)
@@ -478,28 +495,31 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         const current = kMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0, count: 0 }
         
         const dbData = deduplicatedMonthlyPerforma.find(p => p.tanggal === dStr && p.kasir_id === kId)
-        let omset = dbData ? (Number(dbData.omset) || 0) : 0
-        let laba = dbData ? (Number(dbData.laba_admin) || Number(dbData.laba) || 0) : 0
-        let count = dbData ? (Number(dbData.total_transaksi) || 0) : 0
-        let tambah = dbData ? (Number(dbData.tambah_saldo) || 0) : 0
+        let omset = 0, laba = 0, count = 0, tambah = 0
 
-        let rawOmset = 0, rawLaba = 0, rawCount = 0, rawTambah = 0
-        props.transactions.forEach(t => {
-           if (t.timestamp.startsWith(dStr) && (t.kasir_id || 'Unknown') === kId) {
-             if (isIsiCategory(t.kategori)) {
-               rawTambah += Number(t.nominal) || 0
-             } else if (isSalesCategory(t.kategori, t.keterangan)) {
-               rawCount++
-               rawLaba += Number(t.adminFee) || 0
-               rawOmset += Number(t.nominal) || 0
+        if (dbData) {
+          omset = Number(dbData.omset) || 0
+          laba = Number(dbData.laba) || Number(dbData.laba_admin) || 0
+          count = Number(dbData.total_transaksi) || 0
+          tambah = Number(dbData.tambah_saldo) || 0
+        } else {
+          let rawOmset = 0, rawLaba = 0, rawCount = 0, rawTambah = 0
+          props.transactions.forEach(t => {
+             if (t.timestamp.startsWith(dStr) && (t.kasir_id || 'Unknown') === kId) {
+               if (isIsiCategory(t.kategori)) {
+                 rawTambah += Number(t.nominal) || 0
+               } else if (isSalesCategory(t.kategori, t.keterangan)) {
+                 rawCount++
+                 rawLaba += Number(t.adminFee) || 0
+                 rawOmset += Number(t.nominal) || 0
+               }
              }
-           }
-        })
-
-        if (rawOmset > omset) omset = rawOmset
-        if (rawLaba > laba) laba = rawLaba
-        if (rawCount > count) count = rawCount
-        if (rawTambah > tambah) tambah = rawTambah
+          })
+          omset = rawOmset
+          laba = rawLaba
+          count = rawCount
+          tambah = rawTambah
+        }
 
         const supabaseTambah = rawTambahSaldoMap.get(`${dStr}_${kId}`)
         if (supabaseTambah !== undefined && supabaseTambah > tambah) {
@@ -515,7 +535,9 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       })
     }
     
-    return Array.from(kMap.entries()).sort((a, b) => b[1].omset - a[1].omset)
+    return Array.from(kMap.entries())
+      .filter(([_, data]) => data.omset > 0 || data.count > 0 || data.laba > 0)
+      .sort((a, b) => b[1].omset - a[1].omset)
   }, [deduplicatedMonthlyPerforma, props.transactions, rawTambahSaldoMap, selectedMonth, todayStr, today])
 
   // --- SINKRONISASI DATA TRANSAKSI LAMA (PULL HISTORY) ---
@@ -597,22 +619,30 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
       const records = Array.from(map.values())
       for (const rec of records) {
-        const { data: existing } = await supabase
+        let q = supabase
           .from('performa_harian')
           .select('id')
           .eq('user_id', props.googleUid)
           .eq('kasir_id', rec.kasir_id)
           .eq('tanggal', rec.tanggal)
-          .single()
+        if (rec.store_id) {
+          q = q.eq('store_id', rec.store_id)
+        }
+        const { data: existingRows } = await q
 
-        if (existing) {
-          await supabase.from('performa_harian').update(rec).eq('id', existing.id)
+        if (existingRows && existingRows.length > 0) {
+          await supabase.from('performa_harian').update(rec).eq('id', existingRows[0].id)
+          if (existingRows.length > 1) {
+            const extraIds = existingRows.slice(1).map(r => r.id)
+            await supabase.from('performa_harian').delete().in('id', extraIds)
+          }
         } else {
           await supabase.from('performa_harian').insert([rec])
         }
       }
       
       await fetchMonthly()
+      await fetchYearly()
       alert('Berhasil sinkronisasi riwayat transaksi ke pembukuan harian!')
     } catch (err: any) {
       console.error(err)

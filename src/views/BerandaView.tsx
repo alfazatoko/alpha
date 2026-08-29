@@ -905,259 +905,259 @@ const CatatanPanel: React.FC<{
   );
 };
 
-const ProfitPanel: React.FC<{
-  transactions: Transaction[]
-  kasirList: Record<string, KasirAccount>
+export interface OwnerNotificationItem {
+  id: string
+  title: string
+  message: string
+  date: string
+  type: 'bonus' | 'briefing' | 'audit' | 'anomaly' | 'system'
+  isRead: boolean
+  actionView?: string
+  actionLabel?: string
+}
+
+const NotificationLogPanel: React.FC<{
   activeStoreId: string | 'all'
   showToast?: (msg: string) => void
-}> = ({ transactions, kasirList, activeStoreId, showToast }) => {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [syncedData, setSyncedData] = useState<Record<string, any>>({})
-  const [isSyncing, setIsSyncing] = useState(false)
+  onConfirm?: (title: string, msg: string, onOk: () => void) => void
+  bonusKasirList?: string[]
+}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [] }) => {
+  const [filterType, setFilterType] = useState<string>('all')
+  const [notifList, setNotifList] = useState<OwnerNotificationItem[]>([])
 
   useEffect(() => {
-    const raw = localStorage.getItem(`alphaPro_${activeStoreId}_daily_profit`)
+    const storeKey = activeStoreId || 'all'
+    const raw = localStorage.getItem(`alphaPro_${storeKey}_notification_history`)
+    let items: OwnerNotificationItem[] = []
     if (raw) {
-      try {
-        setSyncedData(JSON.parse(raw))
-      } catch(e) {}
-    }
-  }, [activeStoreId])
-
-  const profitData = useMemo(() => {
-    const data: Record<string, { totalKasir: number, perKasir: Record<string, number>, totalVC: number, perKasirVC: Record<string, number> }> = JSON.parse(JSON.stringify(syncedData))
-    const todayStr = getLocalDateString()
-    const liveToday = { totalKasir: 0, perKasir: {} as Record<string, number>, totalVC: 0, perKasirVC: {} as Record<string, number> }
-    
-    // 1. Non-voucher transactions (Live for today only)
-    transactions.forEach(t => {
-      const date = t.timestamp.substring(0, 10)
-      if (date === todayStr) {
-        if (!t.kategori.startsWith('Isi ') && t.adminFee) {
-          liveToday.totalKasir += t.adminFee
-          const kasirName = t.kasir_id && kasirList[t.kasir_id] ? kasirList[t.kasir_id].name : (t.kasir_id || 'Unknown')
-          if (!liveToday.perKasir[kasirName]) liveToday.perKasir[kasirName] = 0
-          liveToday.perKasir[kasirName] += t.adminFee
-        }
-      }
-    })
-
-    // 2. Voucher transactions (Live for today only)
-    if (activeStoreId !== 'all') {
-      for(let i=1; i<=5; i++) {
-        const vTxRaw = localStorage.getItem(`v_${activeStoreId}_c${i}_transactions`)
-        if (vTxRaw) {
-          try {
-            const vTxs = JSON.parse(vTxRaw)
-            vTxs.forEach((t: any) => {
-              if (t.type === 'PENJUALAN') {
-                const date = t.timestamp.substring(0, 10)
-                if (date === todayStr) {
-                  const profitVC = t.amount - (t.cogs || 0)
-                  if (profitVC > 0) {
-                    liveToday.totalVC += profitVC
-                    const kasirName = t.cashierName || 'Unknown'
-                    if (!liveToday.perKasirVC[kasirName]) liveToday.perKasirVC[kasirName] = 0
-                    liveToday.perKasirVC[kasirName] += profitVC
-                  }
-                }
-              }
-            })
-          } catch(e) {}
-        }
-      }
+      try { items = JSON.parse(raw) } catch(e) {}
     }
 
-    // Only merge live data for today
-    if (liveToday.totalKasir > 0 || liveToday.totalVC > 0) {
-      data[todayStr] = liveToday
+    const todayStr = new Date().toISOString().split('T')[0]
+    const nowISO = new Date().toISOString()
+    let hasChanges = false
+
+    // 1. Executive Briefing Record
+    const briefingId = `briefing_${todayStr}`
+    if (!items.some(i => i.id === briefingId)) {
+      items.unshift({
+        id: briefingId,
+        title: '🌅 Executive Briefing Pagi',
+        message: 'Rekap Pagi, Forecasting Stok Voucher & Omset Toko.',
+        date: nowISO,
+        type: 'briefing',
+        isRead: false
+      })
+      hasChanges = true
     }
 
-    return data
-  }, [transactions, activeStoreId, kasirList, syncedData])
-
-  const handleSync = async () => {
-    setIsSyncing(true)
-    try {
-      const today = new Date()
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0]
-
-      // Fetch all regular transactions for the month from Supabase
-      let allMonthTxs: Transaction[] = []
-      let hasMore = true
-      let from = 0
-      const step = 1000
-
-      while (hasMore) {
-        let query = supabase
-          .from('transactions')
-          .select('*')
-          .gte('timestamp', `${firstDay}T00:00:00`)
-          .lte('timestamp', `${lastDay}T23:59:59`)
-          .order('timestamp', { ascending: false })
-          .range(from, from + step - 1)
-          
-        if (activeStoreId !== 'all') {
-          query = query.eq('store_id', activeStoreId)
-        }
-
-        const { data, error } = await query
-        if (error || !data) {
-          hasMore = false
-        } else {
-          allMonthTxs = [...allMonthTxs, ...data]
-          from += step
-          if (data.length < step) hasMore = false
-        }
-      }
-
-      const syncData: Record<string, any> = JSON.parse(JSON.stringify(syncedData))
-      const monthData: Record<string, any> = {}
-
-      // Process regular transactions
-      allMonthTxs.forEach(t => {
-        const date = t.timestamp.substring(0, 10)
-        if (!monthData[date]) monthData[date] = { totalKasir: 0, perKasir: {}, totalVC: 0, perKasirVC: {} }
-        
-        if (!t.kategori.startsWith('Isi ') && t.adminFee) {
-          monthData[date].totalKasir += t.adminFee
-          const kasirName = t.kasir_id && kasirList[t.kasir_id] ? kasirList[t.kasir_id].name : (t.kasir_id || 'Unknown')
-          if (!monthData[date].perKasir[kasirName]) monthData[date].perKasir[kasirName] = 0
-          monthData[date].perKasir[kasirName] += t.adminFee
+    // 2. Bonus 6 Bulan Kasir
+    if (bonusKasirList.length > 0) {
+      bonusKasirList.forEach(name => {
+        const bonusId = `bonus_${name}_6m_${todayStr.substring(0,7)}`
+        if (!items.some(i => i.id === bonusId)) {
+          items.unshift({
+            id: bonusId,
+            title: `🎉 Bonus 6 Bulan Kasir ${name}`,
+            message: `Kasir ${name} telah mencapai kelipatan 6 bulan kerja! Berikan bonus apresiasi.`,
+            date: nowISO,
+            type: 'bonus',
+            isRead: false
+          })
+          hasChanges = true
         }
       })
+    }
 
-      // Process voucher transactions
-      if (activeStoreId !== 'all') {
-        for(let i=1; i<=5; i++) {
-          const vTxRaw = localStorage.getItem(`v_${activeStoreId}_c${i}_transactions`)
-          if (vTxRaw) {
-            try {
-              const vTxs = JSON.parse(vTxRaw)
-              vTxs.forEach((t: any) => {
-                if (t.type === 'PENJUALAN') {
-                  const date = t.timestamp.substring(0, 10)
-                  if (date >= firstDay && date <= lastDay) {
-                    if (!monthData[date]) monthData[date] = { totalKasir: 0, perKasir: {}, totalVC: 0, perKasirVC: {} }
-                    const profitVC = t.amount - (t.cogs || 0)
-                    if (profitVC > 0) {
-                      monthData[date].totalVC += profitVC
-                      const kasirName = t.cashierName || 'Unknown'
-                      if (!monthData[date].perKasirVC[kasirName]) monthData[date].perKasirVC[kasirName] = 0
-                      monthData[date].perKasirVC[kasirName] += profitVC
-                    }
-                  }
-                }
-              })
-            } catch(e) {}
-          }
-        }
-      }
+    if (hasChanges) {
+      localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(items))
+    }
+    setNotifList(items)
+  }, [activeStoreId, bonusKasirList])
 
-      // Overwrite the month's dates in syncData
-      Object.keys(monthData).forEach(date => {
-        syncData[date] = monthData[date]
+  const handleMarkAllRead = () => {
+    const storeKey = activeStoreId || 'all'
+    const updated = notifList.map(item => ({ ...item, isRead: true }))
+    setNotifList(updated)
+    localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+    if (showToast) showToast('Semua notifikasi ditandai sudah dibaca')
+  }
+
+  const handleClearHistory = () => {
+    const storeKey = activeStoreId || 'all'
+    if (onConfirm) {
+      onConfirm('Hapus Riwayat', 'Apakah Anda yakin ingin menghapus seluruh riwayat notifikasi?', () => {
+        setNotifList([])
+        localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+        if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
       })
-
-      localStorage.setItem(`alphaPro_${activeStoreId}_daily_profit`, JSON.stringify(syncData))
-      setSyncedData(syncData)
-      if (showToast) showToast('Data profit bulan ini berhasil diunduh & disinkronkan!')
-    } catch (e) {
-      if (showToast) showToast('Gagal sinkron profit. Periksa koneksi internet.')
-    } finally {
-      setIsSyncing(false)
+    } else {
+      setNotifList([])
+      localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+      if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
     }
   }
 
-  const todayStr = getLocalDateString()
-  const currentMonthStr = todayStr.substring(0, 7)
-  
-  let profitHariIni = 0
-  let profitBulanIni = 0
+  const handleToggleRead = (id: string) => {
+    const storeKey = activeStoreId || 'all'
+    const updated = notifList.map(item => item.id === id ? { ...item, isRead: !item.isRead } : item)
+    setNotifList(updated)
+    localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+  }
 
-  Object.keys(profitData).forEach(date => {
-    const totalDay = profitData[date].totalKasir + profitData[date].totalVC
-    if (date === todayStr) profitHariIni = totalDay
-    if (date.startsWith(currentMonthStr)) profitBulanIni += totalDay
-  })
+  const filteredItems = useMemo(() => {
+    if (filterType === 'unread') return notifList.filter(i => !i.isRead)
+    if (filterType !== 'all') return notifList.filter(i => i.type === filterType)
+    return notifList
+  }, [notifList, filterType])
 
-  const sortedDates = Object.keys(profitData).sort((a, b) => b.localeCompare(a))
+  const unreadCount = useMemo(() => notifList.filter(i => !i.isRead).length, [notifList])
 
   return (
-    <div className="space-y-4 pb-10">
-      <div className="flex justify-end mb-2">
-        <button 
-          onClick={handleSync}
-          disabled={isSyncing}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-widest py-2 px-4 rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
-        >
-          <i className={cn("fa-solid fa-arrows-rotate", isSyncing && "fa-spin")}></i>
-          {isSyncing ? "Menyinkronkan..." : "Sinkron Profit"}
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl shadow-sm">
-          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Profit Bulan Ini</p>
-          <p className="text-sm font-black text-emerald-800">{formatRupiah(profitBulanIni)}</p>
+    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-4">
+      {/* Stat Summary */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">Total Catatan</p>
+          <p className="text-lg font-black text-indigo-900">{notifList.length}</p>
         </div>
-        <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl shadow-sm">
-          <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Profit Hari Ini</p>
-          <p className="text-[8px] font-bold text-blue-500 mb-0.5">Estimasi Berjalan</p>
-          <p className="text-sm font-black text-blue-800">{formatRupiah(profitHariIni)}</p>
+        <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Belum Dibaca</p>
+          <p className="text-lg font-black text-rose-900">{unreadCount}</p>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Status Sistem</p>
+          <p className="text-lg font-black text-emerald-900">Aktif</p>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-        <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-          <i className="fa-solid fa-calendar-days text-emerald-600"></i> Kalender Keuntungan
-        </h3>
-        <div className="space-y-3">
-          {sortedDates.map(date => {
-            const dayData = profitData[date]
-            const isSelected = selectedDate === date
-            const totalDay = dayData.totalKasir + dayData.totalVC
-            return (
-              <div key={date} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-                <button 
-                  onClick={() => setSelectedDate(isSelected ? null : date)}
-                  className={cn("w-full text-left p-3 flex justify-between items-center transition-all", isSelected ? "bg-emerald-50" : "bg-gray-50 hover:bg-emerald-50/50")}
-                >
-                  <div>
-                    <p className="text-xs font-black text-gray-800">{date}</p>
-                  </div>
-                  <div className="text-right flex items-center gap-3">
-                    <p className="text-sm font-black text-emerald-600">{formatRupiah(totalDay)}</p>
-                    <i className={cn("fa-solid text-[10px] text-gray-400 transition-transform", isSelected ? "fa-chevron-up" : "fa-chevron-down")}></i>
-                  </div>
-                </button>
-                {isSelected && (
-                  <div className="p-3 bg-white border-t border-gray-100 space-y-2">
-                    {Object.entries(dayData.perKasir).map(([kasirName, profit]) => (
-                      <div key={kasirName} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
-                        <p className="text-[10px] font-black text-gray-600 uppercase">Profit {kasirName}</p>
-                        <p className="text-[11px] font-black text-gray-800">{formatRupiah(profit)}</p>
-                      </div>
-                    ))}
-                    {Object.entries(dayData.perKasirVC).map(([kasirName, profit]) => (
-                      <div key={'vc-'+kasirName} className="flex justify-between items-center bg-orange-50 p-2 rounded-lg border border-orange-100">
-                        <p className="text-[10px] font-black text-orange-600 uppercase">Profit VC - {kasirName}</p>
-                        <p className="text-[11px] font-black text-orange-800">{formatRupiah(profit)}</p>
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center bg-emerald-50 p-2 rounded-lg border border-emerald-100 mt-2">
-                      <p className="text-[10px] font-black text-emerald-600 uppercase">TOTAL PROFIT VC</p>
-                      <p className="text-[11px] font-black text-emerald-800">{formatRupiah(dayData.totalVC)}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {sortedDates.length === 0 && (
-            <p className="text-xs font-bold text-gray-400 text-center py-4">Belum ada data profit tersimpan.</p>
+      {/* Control Action Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
+          {[
+            { key: 'all', label: 'Semua' },
+            { key: 'unread', label: `Belum Dibaca (${unreadCount})` },
+            { key: 'bonus', label: 'Bonus' },
+            { key: 'briefing', label: 'Briefing' },
+            { key: 'audit', label: 'Audit' }
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilterType(f.key)}
+              className={cn(
+                "px-2.5 py-1 rounded-xl text-[10px] font-black whitespace-nowrap transition-all cursor-pointer",
+                filterType === f.key
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-[9px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-check-double text-[8px]"></i> Tandai Dibaca
+            </button>
+          )}
+          {notifList.length > 0 && (
+            <button
+              onClick={handleClearHistory}
+              className="text-[9px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg border border-rose-200 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-trash text-[8px]"></i> Hapus Riwayat
+            </button>
           )}
         </div>
+      </div>
+
+      {/* Notification Timeline List */}
+      <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
+        {filteredItems.map(item => {
+          const dateObj = new Date(item.date)
+          const formattedDate = isNaN(dateObj.getTime())
+            ? item.date
+            : dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                "p-3.5 rounded-2xl border transition-all relative overflow-hidden flex items-start justify-between gap-3",
+                !item.isRead
+                  ? "bg-indigo-50/50 border-indigo-200 shadow-sm"
+                  : "bg-slate-50/60 border-slate-200/70 opacity-80 hover:opacity-100"
+              )}
+            >
+              {!item.isRead && (
+                <div className="absolute top-0 right-0 w-3 h-3 bg-rose-500 rounded-bl-lg shadow-sm"></div>
+              )}
+
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={cn(
+                  "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-sm",
+                  item.type === 'bonus' ? "bg-emerald-600" :
+                  item.type === 'briefing' ? "bg-indigo-600" :
+                  item.type === 'audit' ? "bg-rose-600" : "bg-amber-500"
+                )}>
+                  <i className={cn("fa-solid",
+                    item.type === 'bonus' ? "fa-gift" :
+                    item.type === 'briefing' ? "fa-square-poll-vertical" :
+                    item.type === 'audit' ? "fa-triangle-exclamation" : "fa-bell"
+                  )}></i>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <p className="text-[11px] font-black text-slate-800 tracking-tight">{item.title}</p>
+                    <span className="text-[8px] font-extrabold text-slate-400 bg-white px-1.5 py-0.5 rounded-md border border-slate-200">
+                      {formattedDate}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-semibold text-slate-600 leading-snug">{item.message}</p>
+
+                  {item.type === 'briefing' && (
+                    <button
+                      onClick={() => {
+                        const fabBtn = document.getElementById('bot-fab-btn')
+                        if (fabBtn) fabBtn.click()
+                      }}
+                      className="mt-2 text-[9px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-robot text-[9px]"></i> Buka Executive Briefing
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleToggleRead(item.id)}
+                title={item.isRead ? "Tandai Belum Dibaca" : "Tandai Sudah Dibaca"}
+                className={cn(
+                  "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs transition-all active:scale-90 cursor-pointer border",
+                  item.isRead
+                    ? "bg-slate-100 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 border-slate-200"
+                    : "bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 border-indigo-600"
+                )}
+              >
+                <i className={cn("fa-solid", item.isRead ? "fa-envelope-open" : "fa-check")}></i>
+              </button>
+            </div>
+          )
+        })}
+
+        {filteredItems.length === 0 && (
+          <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <i className="fa-solid fa-bell-slash text-2xl text-slate-300 mb-2 block"></i>
+            <p className="text-xs font-black text-slate-500">Belum ada riwayat notifikasi tersimpan.</p>
+            <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Semua pesan notifikasi sistem dan audit akan dicatat otomatis di sini.</p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1165,7 +1165,7 @@ const ProfitPanel: React.FC<{
 
 const DEFAULT_OWNER_MENU = [
   { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
-  { id: 'view-owner-profit', title: 'Profit', desc: 'Kalender keuntungan', icon: 'fa-calendar-check', color: 'bg-emerald-700' },
+  { id: 'view-owner-profit', title: 'Notifikasi', desc: 'Riwayat notifikasi toko', icon: 'fa-bell', color: 'bg-indigo-600' },
   { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
   { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
   { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
@@ -1177,6 +1177,27 @@ const DEFAULT_OWNER_MENU = [
   { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
   { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
 ];
+
+function calculateTenure(joinDateStr: string) {
+  if (!joinDateStr) return null;
+  const joinDate = new Date(joinDateStr);
+  const today = new Date();
+  
+  if (isNaN(joinDate.getTime())) return null;
+
+  let months = (today.getFullYear() - joinDate.getFullYear()) * 12;
+  months -= joinDate.getMonth();
+  months += today.getMonth();
+
+  let days = today.getDate() - joinDate.getDate();
+  if (days < 0) {
+    months--;
+    const tempDate = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += tempDate.getDate();
+  }
+
+  return { months, days, totalMonths: months };
+}
 
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -1196,7 +1217,78 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
+  
+  const bonusKasirList = useMemo(() => {
+    if (props.kasirRole !== 'owner' || !props.kasirList) return []
+    const list: string[] = []
+    Object.entries(props.kasirList).forEach(([username, kData]) => {
+      if (username === 'owner') return
+      const tenure = kData.tanggalJoin ? calculateTenure(kData.tanggalJoin) : null
+      if (tenure && tenure.totalMonths > 0 && tenure.totalMonths % 6 === 0) {
+        list.push(kData.name)
+      }
+    })
+    return list
+  }, [props.kasirList, props.kasirRole])
   const [currentTime, setCurrentTime] = useState(new Date())
+
+  // Controls for Owner Notification Banners (Minimize '_' & Dismiss 'X')
+  const [isNotificationsHidden, setIsNotificationsHidden] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_notifications_hidden') === 'true'
+  })
+  const [showNotifModal, setShowNotifModal] = useState(false)
+
+  const [isBonusMinimized, setIsBonusMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_bonus_minimized') === 'true'
+  })
+  const [isBonusDismissed, setIsBonusDismissed] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_bonus_dismissed') === 'true'
+  })
+
+  const [isBriefingMinimized, setIsBriefingMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_briefing_minimized') === 'true'
+  })
+  const [isBriefingDismissed, setIsBriefingDismissed] = useState(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    return localStorage.getItem(`alphaPro_owner_briefing_dismissed_${todayStr}`) === 'true'
+  })
+
+  // Read status tracking for notifications (auto-disappears bell badge on click)
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('alphaPro_owner_read_notif_ids')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  const markNotifAsRead = (id: string) => {
+    setReadNotifIds(prev => {
+      if (prev.includes(id)) return prev
+      const updated = [...prev, id]
+      localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  const markAllNotifsAsRead = () => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const briefingId = `briefing_${todayStr}`
+    const bonusIds = bonusKasirList.map(name => `bonus_${name}_6m_${todayStr.substring(0, 7)}`)
+    const allIds = Array.from(new Set([...readNotifIds, briefingId, ...bonusIds]))
+    setReadNotifIds(allIds)
+    localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(allIds))
+  }
+
+  const currentTodayStr = new Date().toISOString().split('T')[0]
+  const currentBriefingId = `briefing_${currentTodayStr}`
+  const isBriefingUnread = !isBriefingDismissed && !readNotifIds.includes(currentBriefingId)
+  const unreadBonusKasirList = bonusKasirList.filter(name => {
+    const bonusId = `bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`
+    return !readNotifIds.includes(bonusId)
+  })
+  const totalUnreadCount = (isBriefingUnread ? 1 : 0) + unreadBonusKasirList.length
 
   // STATE: Owner Menu Reordering
   const [isEditMenuMode, setIsEditMenuMode] = useState(false)
@@ -1661,47 +1753,345 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       <div className="mx-1.5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
         {props.kasirRole === 'owner' && (
           <div className="mb-3 space-y-2">
-            {/* Store Filter */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 rounded-xl border border-blue-100/50 flex items-center justify-between shadow-sm">
-              <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-store text-blue-600"></i> Pantau Toko
-              </span>
-              <div className="relative">
-                 <select 
-                   value={props.pantauStoreId || 'all'}
-                   onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
-                   className="bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6 font-bold"
-                 >
-                   <option value="all">🌐 Semua Toko (Pusat)</option>
-                   {(props.stores || []).map((store) => (
-                     <option key={store.id} value={store.id}>🏬 {store.name}</option>
-                   ))}
-                 </select>
-                 <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
-              </div>
-            </div>
+            {/* Unified Minimalist Control Bar: [1 Kolom 2 Isi Pilihan (Pantau Toko & Mode Kasir)] + [1 Icon Lonceng Button] */}
+            <div className="flex items-center gap-2">
+              {/* 1 Kolom 2 Isi Pilihan Dropdown Container */}
+              <div className="flex-1 bg-slate-50/90 hover:bg-slate-100/80 border border-slate-200/80 rounded-2xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
+                {/* Pilihan 1: Pantau Toko */}
+                <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                  <i className="fa-solid fa-store text-blue-600 text-xs shrink-0"></i>
+                  <div className="relative flex-1 min-w-0">
+                    <select
+                      value={props.pantauStoreId || 'all'}
+                      onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                      className="w-full bg-transparent text-slate-800 text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                    >
+                      <option value="all">🌐 Semua Toko (Pusat)</option>
+                      {(props.stores || []).map((store) => (
+                        <option key={store.id} value={store.id}>🏬 {store.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
 
-            {/* Cashier Filter - Only displayed if monitoring a specific store */}
-            {props.pantauStoreId !== 'all' && props.kasirList && Object.keys(props.kasirList).length > 0 && (
-              <div className="bg-blue-50/30 px-3 py-1.5 rounded-xl border border-blue-100/30 flex items-center justify-between">
-                <span className="text-[10px] font-black text-blue-800/80 uppercase tracking-widest flex items-center gap-1.5">
-                  <i className="fa-solid fa-user-tie text-blue-500"></i> Mode Pantau Kasir
-                </span>
-                <div className="relative flex-1 flex justify-end">
-                   <select 
-                     value={props.filterKasir || 'Semua'}
-                     onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                     className="bg-transparent text-blue-700/80 text-[10px] font-black outline-none border-none cursor-pointer text-right appearance-none pr-6 w-full relative z-50"
-                   >
-                     <option value="Semua">Semua Kasir</option>
-                     {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                       <option key={id} value={id}>{acc.name}</option>
-                     ))}
-                   </select>
-                   <i className="fa-solid fa-chevron-down absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-blue-500/50 pointer-events-none"></i>
+                {/* Divider Line */}
+                <div className="w-[1px] h-4 bg-slate-200 shrink-0"></div>
+
+                {/* Pilihan 2: Mode Kasir */}
+                <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                  <i className="fa-solid fa-user-tie text-indigo-600 text-xs shrink-0"></i>
+                  <div className="relative flex-1 min-w-0">
+                    <select
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      disabled={props.pantauStoreId === 'all'}
+                      className={cn(
+                        "w-full bg-transparent text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans",
+                        props.pantauStoreId === 'all' ? "text-slate-400 cursor-not-allowed" : "text-slate-800"
+                      )}
+                    >
+                      <option value="Semua">Semua Kasir</option>
+                      {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                        <option key={id} value={id}>{acc.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                  </div>
                 </div>
               </div>
+
+              {/* Sleek Minimal 1 Icon Lonceng Button (No Dark Grid Box) */}
+              <button
+                onClick={() => setShowNotifModal(true)}
+                title="Notifikasi Owner"
+                className="w-10 h-10 shrink-0 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white flex items-center justify-center relative shadow-md shadow-amber-500/20 border border-amber-400/40 transition-all cursor-pointer"
+              >
+                <i className="fa-solid fa-bell text-sm"></i>
+                {totalUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-600 text-white text-[8px] font-black flex items-center justify-center border-2 border-white shadow-xs animate-in zoom-in duration-200">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Notification Banners (Minimal & Sleek) */}
+            {!isNotificationsHidden && (
+              <div className="space-y-2 animate-in fade-in duration-300">
+                {/* 1. Bonus Notification Banner */}
+                {bonusKasirList.length > 0 && !isBonusDismissed && (
+                  <div 
+                    onClick={() => bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))}
+                    className="p-2.5 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs border border-white/30">
+                        <i className="fa-solid fa-gift text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-green-100 uppercase tracking-widest leading-none mb-0.5">🎉 Bonus 6 Bulan</p>
+                        {!isBonusMinimized ? (
+                          <p className="text-[10px] font-bold leading-tight text-white opacity-95">
+                            Kasir <span className="font-black text-yellow-200">{bonusKasirList.join(', ')}</span> mencapai kelipatan 6 bulan kerja! Berikan bonus apresiasi.
+                          </p>
+                        ) : (
+                          <p className="text-[9px] font-bold text-yellow-200 opacity-90 truncate">
+                            Kasir: {bonusKasirList.join(', ')} (Diminimize)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const next = !isBonusMinimized
+                          setIsBonusMinimized(next)
+                          localStorage.setItem('alphaPro_owner_bonus_minimized', String(next))
+                        }}
+                        title={isBonusMinimized ? "Perbesar" : "Minimize"}
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-black/40 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        {isBonusMinimized ? '➕' : '➖'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))
+                          setIsBonusDismissed(true)
+                          localStorage.setItem('alphaPro_owner_bonus_dismissed', 'true')
+                        }}
+                        title="Tutup Notifikasi"
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-rose-600 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Executive Briefing Banner */}
+                {!isBriefingDismissed && (
+                  <div 
+                    onClick={() => markNotifAsRead(currentBriefingId)}
+                    className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 rounded-xl border border-indigo-500/30 shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-indigo-600/50 rounded-lg flex items-center justify-center border border-indigo-400/30 text-indigo-200">
+                        <i className="fa-solid fa-square-poll-vertical text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[9px] font-black text-indigo-300 uppercase tracking-widest leading-none">🌅 Executive Briefing</p>
+                          <span className="bg-emerald-500/20 text-emerald-300 text-[7px] font-black px-1.5 py-0.2 rounded-full border border-emerald-500/30">HARI INI</span>
+                        </div>
+                        {!isBriefingMinimized && (
+                          <p className="text-[10px] font-extrabold text-white mt-0.5 truncate">Rekap Pagi, Forecasting Stok & Omset Toko</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          markNotifAsRead(currentBriefingId)
+                          const fabBtn = document.getElementById('bot-fab-btn')
+                          if (fabBtn) fabBtn.click()
+                        }}
+                        className="bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white text-[8px] font-black px-2.5 py-1 rounded-lg shadow-xs transition-all active:scale-95 uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-robot"></i> Briefing
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const next = !isBriefingMinimized
+                            setIsBriefingMinimized(next)
+                            localStorage.setItem('alphaPro_owner_briefing_minimized', String(next))
+                          }}
+                          title={isBriefingMinimized ? "Perbesar" : "Minimize"}
+                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-white/20 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                        >
+                          {isBriefingMinimized ? '➕' : '➖'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markNotifAsRead(currentBriefingId)
+                            const todayStr = new Date().toISOString().split('T')[0]
+                            setIsBriefingDismissed(true)
+                            localStorage.setItem(`alphaPro_owner_briefing_dismissed_${todayStr}`, 'true')
+                          }}
+                          title="Tutup Notifikasi"
+                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-rose-600 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
+
+            {/* Opsi Tampilkan Kembali jika notifikasi di-dismiss oleh Owner */}
+            {(isBonusDismissed || isBriefingDismissed) && (
+              <div className="flex justify-end gap-2 pt-0.5">
+                <button
+                  onClick={() => {
+                    setIsBonusDismissed(false)
+                    setIsBriefingDismissed(false)
+                    localStorage.removeItem('alphaPro_owner_bonus_dismissed')
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`)
+                  }}
+                  className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <i className="fa-solid fa-rotate-left text-[8px]"></i> Tampilkan Notifikasi Banner
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* QUICK NOTIFICATION MODAL (LONCENG POPUP) */}
+        {showNotifModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">
+                    <i className="fa-solid fa-bell"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Notifikasi Terbaru Owner</h3>
+                    <p className="text-[10px] font-bold text-slate-400">Peringatan & informasi penting toko Anda</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {totalUnreadCount > 0 && (
+                    <button
+                      onClick={markAllNotifsAsRead}
+                      className="text-[9px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <i className="fa-solid fa-check-double mr-1 text-[8px]"></i> Tandai Dibaca
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotifModal(false)}
+                    className="w-7 h-7 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Notification List */}
+              <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+                {bonusKasirList.length > 0 && (
+                  <div 
+                    onClick={() => bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))}
+                    className={cn(
+                      "p-3 rounded-2xl flex items-start gap-3 transition-all cursor-pointer border",
+                      unreadBonusKasirList.length > 0
+                        ? "bg-emerald-50 border-emerald-300 shadow-xs"
+                        : "bg-slate-50 border-slate-200 opacity-75"
+                    )}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-gift text-xs"></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-[11px] font-black text-emerald-900">🎉 Bonus 6 Bulan Kasir</p>
+                        {unreadBonusKasirList.length > 0 ? (
+                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
+                        ) : (
+                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-semibold text-emerald-700 mt-0.5">
+                        Kasir <span className="font-black">{bonusKasirList.join(', ')}</span> mencapai kelipatan 6 bulan kerja!
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div 
+                  onClick={() => markNotifAsRead(currentBriefingId)}
+                  className={cn(
+                    "p-3 rounded-2xl flex items-start justify-between gap-3 transition-all cursor-pointer border",
+                    isBriefingUnread
+                      ? "bg-indigo-50 border-indigo-300 shadow-xs"
+                      : "bg-slate-50 border-slate-200 opacity-75"
+                  )}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-square-poll-vertical text-xs"></i>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-black text-indigo-900">🌅 Executive Briefing Pagi</p>
+                        {isBriefingUnread ? (
+                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
+                        ) : (
+                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-semibold text-indigo-700 mt-0.5">Rekapitulasi pagi, forecasting stok & omset harian.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      markNotifAsRead(currentBriefingId)
+                      setShowNotifModal(false)
+                      const fabBtn = document.getElementById('bot-fab-btn')
+                      if (fabBtn) fabBtn.click()
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black px-2.5 py-1.5 rounded-xl shrink-0 shadow-sm cursor-pointer"
+                  >
+                    Buka
+                  </button>
+                </div>
+              </div>
+
+              {/* Toggle Text Banners Option */}
+              <div className="p-2.5 bg-slate-50 rounded-2xl flex items-center justify-between border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-600">Text Banner Beranda</span>
+                <button
+                  onClick={() => {
+                    const next = !isNotificationsHidden
+                    setIsNotificationsHidden(next)
+                    localStorage.setItem('alphaPro_owner_notifications_hidden', String(next))
+                  }}
+                  className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 bg-white px-2.5 py-1 rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <i className={cn("fa-solid text-[9px]", isNotificationsHidden ? "fa-eye" : "fa-eye-slash")}></i>
+                  {isNotificationsHidden ? "Tampilkan Text" : "Sembunyikan Text"}
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => {
+                    setShowNotifModal(false)
+                    props.setActiveView('view-owner-profit')
+                  }}
+                  className="w-full bg-slate-900 hover:bg-black text-white font-black text-xs py-2.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+                >
+                  <i className="fa-solid fa-clock-rotate-left text-xs"></i>
+                  <span>Lihat Riwayat Lengkap</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2094,7 +2484,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             case 'saldo': return { title: 'PENGATURAN SALDO', color: 'from-emerald-600 to-emerald-800', icon: 'fa-wallet', desc: 'Alokasi dan penambahan modal harian kasir.' }
             case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
             case 'catatan': return { title: 'CATATAN OWNER', color: 'from-amber-500 to-orange-600', icon: 'fa-clipboard-list', desc: 'Catat pengingat penting dan daftar belanja.' }
-            case 'profit': return { title: 'KALENDER KEUNTUNGAN', color: 'from-emerald-500 to-emerald-700', icon: 'fa-calendar-check', desc: 'Total keuntungan harian dan rincian per kasir.' }
+            case 'profit': return { title: 'RIWAYAT NOTIFIKASI TOKO', color: 'from-indigo-600 to-blue-800', icon: 'fa-bell', desc: 'Riwayat lengkap notifikasi sistem, bonus kasir, dan audit toko.' }
             default: return { title: 'BACKUP & RESET', color: 'from-red-600 to-red-800', icon: 'fa-database', desc: 'Cadangkan data dan kembalikan ke pengaturan awal.' }
           }
         };
@@ -3776,11 +4166,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 <CatatanPanel showToast={props.showToast} onConfirm={props.onConfirm} />
               )}
               {activeOwnerSubView === 'profit' && (
-                <ProfitPanel
-                  transactions={props.allTransactions || []}
-                  kasirList={props.kasirList}
+                <NotificationLogPanel
                   activeStoreId={currentTargetStoreId}
                   showToast={props.showToast}
+                  onConfirm={props.onConfirm}
+                  bonusKasirList={bonusKasirList}
                 />
               )}
             </div>

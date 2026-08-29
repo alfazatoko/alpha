@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, generateExecutiveBriefing, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
 import { supabase } from '../lib/supabase'
 import { motion } from 'motion/react'
+import { playSuccessChime, playNotificationChime, playMicBeep, playBotPop, isSoundEnabled, setSoundEnabled } from '../lib/soundFX'
+import { cn } from '../lib/utils'
 
 export type CustomIntent = {
   question: string;
@@ -56,6 +58,7 @@ interface Props {
   onActionKontak?: (nama: string, nomor: string, keterangan: string) => void
   onActionIzin?: (username: string, tanggal: string, alasan: string) => void
   onActionCatatan?: (judul: string, isi: string) => void
+  onActionCustomFAQ?: (tanya: string, jawab: string) => void
 }
 
 // ── Mode Badge ────────────────────────────────────────────────────────────────
@@ -127,7 +130,8 @@ const AssistantBot: React.FC<Props> = ({
   onActionKasbon,
   onActionKontak,
   onActionIzin,
-  onActionCatatan
+  onActionCatatan,
+  onActionCustomFAQ
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -174,6 +178,65 @@ const AssistantBot: React.FC<Props> = ({
   const [showHistoryMenu, setShowHistoryMenu] = useState(false)
   const [pendingActions, setPendingActions] = useState<BotAction[] | null>(null)
   const [pendingActionSummary, setPendingActionSummary] = useState<string>('')
+
+  // ── Voice Input & Sound States ─────────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false)
+  const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled())
+  const recognitionRef = useRef<any>(null)
+
+  const toggleVoiceRecording = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Browser ini belum mendukung perintah suara (Speech Recognition). Gunakan Google Chrome atau Microsoft Edge.')
+      return
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop() } catch {}
+      }
+      setIsListening(false)
+      playMicBeep('stop')
+    } else {
+      try {
+        const recognition = new SpeechRecognition()
+        recognition.lang = 'id-ID'
+        recognition.interimResults = true
+        recognition.continuous = false
+
+        recognition.onstart = () => {
+          setIsListening(true)
+          playMicBeep('start')
+        }
+
+        recognition.onresult = (event: any) => {
+          let transcript = ''
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript
+          }
+          if (transcript.trim()) {
+            setInput(transcript)
+          }
+        }
+
+        recognition.onerror = () => {
+          setIsListening(false)
+          playMicBeep('stop')
+        }
+
+        recognition.onend = () => {
+          setIsListening(false)
+          playMicBeep('stop')
+        }
+
+        recognitionRef.current = recognition
+        recognition.start()
+      } catch (e) {
+        setIsListening(false)
+        playMicBeep('stop')
+      }
+    }
+  }, [isListening])
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -258,10 +321,32 @@ const AssistantBot: React.FC<Props> = ({
           }, 800)
         }
       }
-    }
-  }, [isOpen, messages, showSettings, showTeachModal, kasirRole, activeStoreId, kasirName, currentUsername, kasirList, transactions, absensiList, voucherProducts])
 
-  // Load Custom Intents
+      // ── Auto Executive Briefing untuk Owner saat pertama kali membuka bot hari ini ──
+      if (kasirRole === 'owner') {
+        const briefKey = `alphaPro_${activeStoreId}_exec_briefing_${new Date().toISOString().split('T')[0]}`
+        if (!localStorage.getItem(briefKey)) {
+          setTimeout(() => {
+            const briefingText = generateExecutiveBriefing(activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
+            setMessages(prev => {
+              const briefMsg: BotMessage = {
+                id: 'exec-brief-' + Date.now(),
+                from: 'bot',
+                mode: 'app',
+                text: briefingText,
+                timestamp: Date.now()
+              }
+              return [...prev, briefMsg]
+            })
+            localStorage.setItem(briefKey, '1')
+            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+          }, 1200)
+        }
+      }
+    }
+  }, [isOpen, messages, showSettings, showTeachModal, kasirRole, activeStoreId, kasirName, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts])
+
+  // Load Custom Intents & Cloud Sound Settings
   useEffect(() => {
     if (!activeStoreId) return
     try {
@@ -274,6 +359,27 @@ const AssistantBot: React.FC<Props> = ({
         setCustomIntents(data.voucher_app_data.bot_knowledge)
         localStorage.setItem(`alphaPro_${activeStoreId}_bot_knowledge`, JSON.stringify(data.voucher_app_data.bot_knowledge))
       }
+      if (data?.voucher_app_data?.sound_enabled !== undefined) {
+        const isEnabled = !!data.voucher_app_data.sound_enabled
+        setSoundEnabledState(isEnabled)
+        setSoundEnabled(isEnabled)
+      }
+    })
+  }, [activeStoreId])
+
+  const handleToggleSound = useCallback((nextEnabled: boolean) => {
+    setSoundEnabledState(nextEnabled)
+    setSoundEnabled(nextEnabled)
+    if (nextEnabled) playSuccessChime()
+
+    if (!activeStoreId) return
+    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+      const existing = data?.voucher_app_data || {}
+      const updated = { ...existing, sound_enabled: nextEnabled }
+      supabase.from('store_settings').upsert({
+        store_id: activeStoreId,
+        voucher_app_data: updated
+      }, { onConflict: 'store_id' }).then()
     })
   }, [activeStoreId])
 
@@ -283,6 +389,9 @@ const AssistantBot: React.FC<Props> = ({
   }, [isOpen])
 
   const addMessage = useCallback((from: 'user'|'bot', text: string, mode?: BotMessage['mode']) => {
+    if (from === 'bot') {
+      playBotPop()
+    }
     setMessages(prev => {
       const newMsg: BotMessage = { id: Date.now()+Math.random()+'', from, text, mode, timestamp: Date.now() }
       const newMsgs = [...prev, newMsg]
@@ -324,21 +433,28 @@ const AssistantBot: React.FC<Props> = ({
       } catch (e) {}
     }
 
-    // ⓪Cek apakah user secara spesifik memanggil Gemini (Bypass Offline DB)
-    const isForceGemini = queryLower.startsWith('gemini') || queryLower.startsWith('hey gemini') || queryLower.startsWith('halo gemini') || queryLower.startsWith('tanya gemini')
+    // ⓪Cek apakah user secara spesifik memanggil Gemini (termasuk awalan G. / G: / G )
+    const isForceGemini = queryLower.startsWith('gemini') || 
+                          queryLower.startsWith('hey gemini') || 
+                          queryLower.startsWith('halo gemini') || 
+                          queryLower.startsWith('tanya gemini') ||
+                          queryLower.startsWith('g.') ||
+                          queryLower.startsWith('g:') ||
+                          queryLower.startsWith('g ')
+
     const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
 
     if (isForceGemini) {
       if (!activeKey) {
         setIsTyping(false)
-        addMessage('bot', '⚠️ Kamu mencoba memanggil Gemini, tapi API Key Gemini belum dipasang.\n\nSilakan klik ikon gerigi (⚙️) di atas untuk memasukkan API Key terlebih dahulu.', 'error')
+        addMessage('bot', '⚠️ Kamu memanggil Gemini (G.), tapi API Key Gemini belum dipasang.\n\nSilakan klik ikon gerigi (⚙️) di atas untuk memasukkan API Key terlebih dahulu.', 'error')
         setSuggestions(getDynamicSuggestions())
         return
       }
       
       try {
-        // Hilangkan kata panggilannya agar prompt ke Gemini lebih bersih
-        const cleanQuery = text.replace(/^(hey gemini|halo gemini|tanya gemini|gemini)[,\s]*/i, '').trim() || text
+        // Hilangkan kata panggilannya (termasuk G., G:, G) agar prompt ke Gemini lebih bersih
+        const cleanQuery = text.replace(/^(hey gemini|halo gemini|tanya gemini|gemini|g\.|g:|g\s)[,\s]*/i, '').trim() || text
         const rawReply = await callGeminiAPI(cleanQuery, geminiHistory.current, activeKey, systemPromptRef.current || undefined)
         const { cleanText, actions } = parseBotActions(rawReply)
         geminiHistory.current = [
@@ -468,9 +584,12 @@ const AssistantBot: React.FC<Props> = ({
     await new Promise(r => setTimeout(r, 400))
     const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
     if (kbAnswer) {
+      const { cleanText, actions } = parseBotActions(kbAnswer)
       setIsTyping(false)
-      addMessage('bot', kbAnswer, 'kb')
-      if (kbAnswer.includes('tidak ditemukan')) {
+      addMessage('bot', cleanText, 'kb')
+      if (actions.length > 0) {
+        setTimeout(() => requestConfirmation(actions), 400)
+      } else if (cleanText.includes('tidak ditemukan')) {
         setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
       } else {
         setSuggestions(getDynamicSuggestions())
@@ -508,7 +627,7 @@ const AssistantBot: React.FC<Props> = ({
     addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
     }, 300)
-  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin, onActionCatatan, onActionKontak])
+  }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin, onActionCatatan, onActionKontak, onActionCustomFAQ])
 
   // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
   const requestConfirmation = useCallback((actions: BotAction[]) => {
@@ -526,6 +645,8 @@ const AssistantBot: React.FC<Props> = ({
         return `📅 Izin kasir **${action.payload.username}** tanggal ${action.payload.tanggal}${action.payload.alasan ? ` — ${action.payload.alasan}` : ''}`
       } else if (action.type === 'catatan') {
         return `📝 Buat catatan baru dengan judul **${action.payload.judul}**`
+      } else if (action.type === 'custom_faq') {
+        return `💡 Ajari Jawaban FAQ: Pertanyaan **"${action.payload.tanya}"** → Jawaban: **"${action.payload.jawab}"**`
       }
       return ''
     }).filter(Boolean).join('\n')
@@ -537,6 +658,7 @@ const AssistantBot: React.FC<Props> = ({
   // ── AI Action: Konfirmasi OK — Eksekusi Sekarang ──────────────────────────────
   const confirmExecuteActions = useCallback(() => {
     if (!pendingActions) return
+    playSuccessChime()
     for (const action of pendingActions) {
       if (action.type === 'kasbon') {
         const nominal = parseInt(action.payload.nominal?.replace(/\D/g, '') || '0', 10)
@@ -565,11 +687,16 @@ const AssistantBot: React.FC<Props> = ({
           onActionCatatan(action.payload.judul, action.payload.isi)
           addMessage('bot', `✅ **Berhasil!** Catatan "**${action.payload.judul}**" sudah disimpan ke buku catatan Owner.`, 'app')
         }
+      } else if (action.type === 'custom_faq') {
+        if (onActionCustomFAQ && action.payload.tanya && action.payload.jawab) {
+          onActionCustomFAQ(action.payload.tanya, action.payload.jawab)
+          addMessage('bot', `✅ **Berhasil!** Jawaban FAQ untuk **"${action.payload.tanya}"** telah dipelajari dan disimpan ke database toko.`, 'app')
+        }
       }
     }
     setPendingActions(null)
     setPendingActionSummary('')
-  }, [pendingActions, onActionKasbon, onActionKontak, onActionIzin, onActionCatatan, setActiveView, addMessage])
+  }, [pendingActions, onActionKasbon, onActionKontak, onActionIzin, onActionCatatan, onActionCustomFAQ, setActiveView, addMessage])
 
   // ── AI Action: Konfirmasi Batal ───────────────────────────────────────────────
   const cancelActions = useCallback(() => {
@@ -690,8 +817,30 @@ const AssistantBot: React.FC<Props> = ({
         {/* Settings Panel */}
         {showSettings && (
           <div className="px-4 py-3 border-b border-white/10 shrink-0 space-y-3" style={{ background:'rgba(255,255,255,0.04)' }}>
-            <p className="text-white font-black text-[10px] uppercase tracking-widest">⚙️ Gemini API Key</p>
+            <p className="text-white font-black text-[10px] uppercase tracking-widest">⚙️ Pengaturan Bot & Suara</p>
+            
+            {/* Toggle Sound FX */}
+            <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs">🔊</span>
+                <div>
+                  <p className="text-[10px] font-bold text-white">Auditori Sound FX</p>
+                  <p className="text-[8.5px] text-indigo-200/70">Efek suara transaksi, alert, & bot pop</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleToggleSound(!soundEnabled)}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                  soundEnabled ? "bg-emerald-600 text-white shadow shadow-emerald-500/30" : "bg-white/10 text-white/40"
+                )}
+              >
+                {soundEnabled ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+              <p className="text-white font-black text-[9.5px] uppercase tracking-wider">🔑 Gemini API Key</p>
               <p className="text-indigo-200 text-[9px] leading-relaxed">
                 Dapatkan key gratis di{' '}
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-300 underline font-bold">aistudio.google.com</a>
@@ -977,8 +1126,42 @@ const AssistantBot: React.FC<Props> = ({
               ))}
             </div>
 
-            {/* Input */}
-            <div className="px-3 pb-3 pt-1 shrink-0 flex gap-2 items-center">
+            {/* Dynamic Gemini Prefix (G.) Mode Badge Indicator */}
+            {input.trim().toLowerCase().startsWith('g.') || input.trim().toLowerCase().startsWith('g:') || input.trim().toLowerCase().startsWith('g ') ? (
+              <div className="mx-3 mb-1.5 px-2.5 py-1 bg-gradient-to-r from-violet-600/40 to-indigo-600/40 border border-violet-400/50 rounded-xl flex items-center justify-between text-[9px] font-black text-violet-200 shadow-sm animate-in fade-in duration-200">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping"></span>
+                  ✨ Mode Gemini AI (G.) — Tugas/Chat Dijawab Gemini
+                </span>
+                <span className="text-[8px] bg-violet-500/40 text-violet-100 px-1.5 py-0.5 rounded-full uppercase tracking-wider font-mono">ONLINE</span>
+              </div>
+            ) : null}
+
+            {/* Input Bar */}
+            <div className="px-3 pb-3 pt-1 shrink-0 flex gap-1.5 items-center">
+              {/* Mic Voice Command Button */}
+              <button
+                type="button"
+                onClick={toggleVoiceRecording}
+                title={isListening ? "Mendengarkan... Klik untuk berhenti" : "Perintah Suara (Voice Input)"}
+                className={cn(
+                  "w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border",
+                  isListening
+                    ? "bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-600/50 animate-pulse"
+                    : "bg-white/10 hover:bg-white/20 text-indigo-200 border-white/20"
+                )}
+              >
+                {isListening ? (
+                  <span className="text-xs font-black animate-bounce">🔴</span>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="22"/>
+                  </svg>
+                )}
+              </button>
+
               <input
                 ref={inputRef}
                 id="bot-chat-input"
@@ -986,14 +1169,17 @@ const AssistantBot: React.FC<Props> = ({
                 value={input}
                 onChange={e=>setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={hasGeminiKey ? 'Tanya apa saja...' : 'Ketik perintah atau pertanyaan...'}
-                className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-3 py-2.5 text-[11px] font-medium text-white placeholder:text-indigo-300/60 focus:outline-none focus:border-indigo-400/70 focus:bg-white/15 transition-all"
+                placeholder={isListening ? '🎙️ Mendengarkan suara...' : (hasGeminiKey ? 'Ketik G. [tugas] atau tanya...' : 'Ketik perintah atau pertanyaan...')}
+                className={cn(
+                  "flex-1 bg-white/10 border border-white/20 rounded-2xl px-3 py-2.5 text-[11px] font-medium text-white placeholder:text-indigo-300/60 focus:outline-none focus:border-indigo-400/70 focus:bg-white/15 transition-all",
+                  isListening && "border-rose-400/80 bg-rose-500/10 placeholder:text-rose-200"
+                )}
               />
               <button
                 id="bot-send-btn"
                 onClick={()=>handleSend()}
                 disabled={!input.trim()||isTyping}
-                className="w-9 h-9 rounded-2xl shrink-0 bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 active:scale-90 transition-all disabled:opacity-40 disabled:scale-100"
+                className="w-9 h-9 rounded-2xl shrink-0 bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 active:scale-90 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>

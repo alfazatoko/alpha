@@ -647,7 +647,8 @@ const MainApp: React.FC<MainAppProps> = ({
   }
 
   const handleSaveCashierSelf = async (targetUsername: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
-    if (activeStoreId === 'all') return
+    const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
+    if (!effectiveStoreId) return
     const updatedList = {
       ...kasirList,
       [targetUsername]: {
@@ -656,7 +657,7 @@ const MainApp: React.FC<MainAppProps> = ({
       }
     }
     setKasirList(updatedList)
-    localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(updatedList))
+    localStorage.setItem(`alphaPro_${effectiveStoreId}_kasir_list`, JSON.stringify(updatedList))
     
     // Update active session locally only if we are modifying the currently logged-in cashier
     if (targetUsername === username) {
@@ -665,9 +666,9 @@ const MainApp: React.FC<MainAppProps> = ({
     }
 
     // Sync directly to cloud
-    const isPin = localStorage.getItem(`alphaPro_${activeStoreId}_isPinEnabled`) !== 'false'
+    const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
     const { error } = await supabase.from('store_settings').upsert({
-      store_id: activeStoreId,
+      store_id: effectiveStoreId,
       cashiers: updatedList,
       presets: presets,
       running_texts: runningTexts,
@@ -2949,31 +2950,67 @@ const MainApp: React.FC<MainAppProps> = ({
           return all
         })()}
         onActionKasbon={(nama, nominal, keterangan) => {
-          // Simpan kasbon baru ke localStorage secara langsung (tersinkron saat buka halaman kasbon)
           try {
-            const key = `alphaPro_${targetStoreId !== 'all' ? targetStoreId : activeStoreId}_kasbon_list`
+            const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+            if (!sid || sid === 'all') return
+            const key = `alphaPro_${sid}_kasbon_list`
             const existing = JSON.parse(localStorage.getItem(key) || '[]')
-            const newKasbon = { id: `kb-${Date.now()}`, nama, nominal, keterangan, tanggal: new Date().toLocaleDateString('id-ID'), lunas: false }
-            localStorage.setItem(key, JSON.stringify([newKasbon, ...existing]))
+            const newKasbon = { id: `kb-${Date.now()}`, nama, nominal, keterangan, tanggal: new Date().toLocaleDateString('id-ID'), lunas: false, kasir: account.name || username }
+            const updated = [newKasbon, ...existing]
+            localStorage.setItem(key, JSON.stringify(updated))
+            window.dispatchEvent(new Event('alphaSyncUpdate'))
+            supabase.from('store_settings').upsert({ store_id: sid, kasbon_data: updated, updated_at: new Date().toISOString() }).then()
           } catch {}
         }}
         onActionKontak={(nama, nomor, keterangan) => {
-          // Simpan kontak baru ke localStorage buku kontak
           try {
-            const key = `alphaPro_${targetStoreId !== 'all' ? targetStoreId : activeStoreId}_buku_kontak`
+            const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+            if (!sid || sid === 'all') return
+            const key = `alphaPro_${sid}_kontak_list`
             const existing = JSON.parse(localStorage.getItem(key) || '[]')
             const newKontak = { id: `kontak-${Date.now()}`, nama, nomor, keterangan, tanggal: new Date().toLocaleDateString('id-ID') }
-            localStorage.setItem(key, JSON.stringify([newKontak, ...existing]))
+            const updated = [newKontak, ...existing]
+            localStorage.setItem(key, JSON.stringify(updated))
+            window.dispatchEvent(new Event('alphaSyncUpdate'))
+            supabase.from('store_settings').upsert({ store_id: sid, kontak_data: updated, updated_at: new Date().toISOString() }).then()
+          } catch {}
+        }}
+        onActionIzin={(username, tanggal, alasan) => {
+          try {
+            const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+            if (!sid || sid === 'all') return
+            const key = `alphaPro_${sid}_catatanIzin`
+            const existing = JSON.parse(localStorage.getItem(key) || '[]')
+            const newIzin = { nama: username, tanggal, alasan, dicatatPada: new Date().toISOString() }
+            const updated = [newIzin, ...existing]
+            localStorage.setItem(key, JSON.stringify(updated))
+            window.dispatchEvent(new Event('alphaSyncUpdate'))
           } catch {}
         }}
         onActionCatatan={(judul, isi) => {
           try {
-            const key = 'alphaPro_global_catatanOwner'
+            const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+            const key = `alphaPro_${sid}_catatan_owner`
             const existing = JSON.parse(localStorage.getItem(key) || '[]')
             const newCatatan = { id: `catatan-${Date.now()}`, tanggal: new Date().toLocaleDateString('id-ID'), judul, isi, selesai: false }
-            existing.unshift(newCatatan)
-            localStorage.setItem(key, JSON.stringify(existing))
+            const updated = [newCatatan, ...existing]
+            localStorage.setItem(key, JSON.stringify(updated))
+            localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(updated))
+            window.dispatchEvent(new Event('alphaSyncUpdate'))
           } catch(e) {}
+        }}
+        onActionCustomFAQ={(tanya, jawab) => {
+          try {
+            const sid = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+            if (!sid || sid === 'all') return
+            const key = `alphaPro_${sid}_custom_faq`
+            const existing = JSON.parse(localStorage.getItem(key) || '[]')
+            const newFAQ = { id: `faq-${Date.now()}`, question: tanya, answer: jawab, createdAt: new Date().toISOString() }
+            const updated = [newFAQ, ...existing]
+            localStorage.setItem(key, JSON.stringify(updated))
+            window.dispatchEvent(new Event('alphaSyncUpdate'))
+            supabase.from('store_settings').upsert({ store_id: sid, custom_faq: updated, updated_at: new Date().toISOString() }).then()
+          } catch {}
         }}
       />
 

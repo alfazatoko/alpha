@@ -145,6 +145,12 @@ const initialDataVoucher: Record<string, VoucherItem[]> = {
 const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showSaldoRealModal, setShowSaldoRealModal] = useState(false)
+  const [isAuditBannerMinimized, setIsAuditBannerMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_audit_banner_minimized') === 'true'
+  })
+  const [isAuditBannerDismissed, setIsAuditBannerDismissed] = useState(() => {
+    return localStorage.getItem('alphaPro_audit_banner_dismissed') === 'true'
+  })
   const [saldoRealRows, setSaldoRealRows] = useState<{nominal: string, keterangan: string}[]>([
     {nominal: '', keterangan: ''},
     {nominal: '', keterangan: ''}
@@ -1813,13 +1819,13 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
       <div className="px-1.5 pb-5 space-y-2.5">
         {/* BANNER NOTIFIKASI AUDIT SERAH TERIMA SHIFT */}
-        {auditDiscrepancies.length > 0 && (
+        {auditDiscrepancies.length > 0 && !isAuditBannerDismissed && (
           <div className="p-3.5 bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/40 dark:to-orange-950/40 border-2 border-rose-300 dark:border-rose-800 rounded-2xl shadow-sm flex items-center justify-between gap-3 animate-in fade-in duration-300">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/30">
                 <i className="fa-solid fa-triangle-exclamation text-base"></i>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider">
                     ⚠️ Peringatan Audit Shift
@@ -1828,17 +1834,47 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                     {auditDiscrepancies.length} Selisih
                   </span>
                 </div>
-                <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300 mt-0.5">
-                  Ditemukan selisih input antara Saldo Closing Penyerah & Saldo Awal Shift Penerima!
-                </p>
+                {!isAuditBannerMinimized && (
+                  <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300 mt-0.5">
+                    Ditemukan selisih input antara Saldo Closing Penyerah & Saldo Awal Shift Penerima!
+                  </p>
+                )}
               </div>
             </div>
-            <button
-              onClick={() => setShowAuditModal(true)}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shrink-0 shadow-md active:scale-95 transition-all"
-            >
-              Cek Audit
-            </button>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowAuditModal(true)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md active:scale-95 transition-all cursor-pointer"
+              >
+                Cek Audit
+              </button>
+
+              {/* Controls _ and X */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const next = !isAuditBannerMinimized
+                    setIsAuditBannerMinimized(next)
+                    localStorage.setItem('alphaPro_audit_banner_minimized', String(next))
+                  }}
+                  title={isAuditBannerMinimized ? "Perbesar (Expand)" : "Minimize"}
+                  className="w-6 h-6 rounded-lg bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-300 text-rose-900 dark:text-white font-black text-[11px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                >
+                  {isAuditBannerMinimized ? '➕' : '➖'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAuditBannerDismissed(true)
+                    localStorage.setItem('alphaPro_audit_banner_dismissed', 'true')
+                  }}
+                  title="Tutup Notifikasi"
+                  className="w-6 h-6 rounded-lg bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-600 hover:text-white text-rose-900 dark:text-white font-black text-xs flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
