@@ -1775,6 +1775,79 @@ export function answerFromKB(
     return res.trim()
   }
 
+  // 10. BEBAN OPERASIONAL & FINANSIAL TOKO (Offline)
+  if (c.includes('sewa') || c.includes('biaya toko') || c.includes('beban') || c.includes('operasional') ||
+      c.includes('listrik') || c.includes('wifi') || c.includes('internet') || c.includes('jatuh tempo') ||
+      c.includes('pengeluaran toko') || c.includes('biaya bulanan') || c.includes('laba bersih') || c.includes('net profit')) {
+    try {
+      const finKey = `alphaPro_${storeId}_financial`
+      const rawFin = localStorage.getItem(finKey)
+      if (rawFin) {
+        const fin = JSON.parse(rawFin)
+        const rentAmt = fin.rentAmount ? parseInt(fin.rentAmount) : 0
+        const elecAmt = fin.electricityBill ? parseInt(fin.electricityBill) : 0
+        const wifiAmt = fin.wifiBill ? parseInt(fin.wifiBill) : 0
+        const rentPeriod = fin.rentPeriod || 'bulanan'
+        const dueDate = fin.rentDueDate || '-'
+        const startDate = fin.startDate ? new Date(fin.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'
+
+        // Calculate monthly operational cost
+        const monthlyRent = rentPeriod === 'tahunan' ? Math.round(rentAmt / 12) : rentAmt
+        const totalMonthly = monthlyRent + elecAmt + wifiAmt
+
+        // Calculate rent due date proximity
+        let dueDateInfo = ''
+        if (fin.rentDueDate) {
+          const today = new Date()
+          const dueDay = parseInt(fin.rentDueDate)
+          const currentDay = today.getDate()
+          let targetDate = new Date(today.getFullYear(), today.getMonth(), dueDay)
+          if (currentDay > dueDay) targetDate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay)
+          const diffDays = Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+          if (diffDays <= 7) dueDateInfo = `\n⚠️ **Perhatian:** Jatuh tempo sewa **${diffDays === 0 ? 'HARI INI' : `dalam ${diffDays} hari`}!**`
+          else dueDateInfo = `\n📅 Jatuh tempo berikutnya: **${diffDays} hari lagi** (tanggal ${dueDay}).`
+        }
+
+        // If asking about net profit / laba bersih
+        if (c.includes('laba bersih') || c.includes('net profit')) {
+          const bulanIni = new Date().toISOString().substring(0, 7)
+          const monthTxs = transactions.filter(t => (t.timestamp || '').startsWith(bulanIni))
+          const totalAdmin = monthTxs.reduce((s, t) => s + (t.adminFee || 0), 0)
+
+          const netProfit = totalAdmin - totalMonthly
+          let res = `💰 **Estimasi Laba Bersih Bulan Ini:**\n\n`
+          res += `📈 **Pendapatan Admin Fee:** Rp ${totalAdmin.toLocaleString('id-ID')}\n\n`
+          res += `📉 **Beban Operasional Bulanan:**\n`
+          if (monthlyRent > 0) res += `  • Sewa Toko: Rp ${monthlyRent.toLocaleString('id-ID')}${rentPeriod === 'tahunan' ? ' (/bln dari tahunan)' : ''}\n`
+          if (elecAmt > 0) res += `  • Listrik/Air: Rp ${elecAmt.toLocaleString('id-ID')}\n`
+          if (wifiAmt > 0) res += `  • WiFi: Rp ${wifiAmt.toLocaleString('id-ID')}\n`
+          res += `  • **Total Beban: Rp ${totalMonthly.toLocaleString('id-ID')}**\n\n`
+          res += `${netProfit >= 0 ? '✅' : '🔴'} **Laba Bersih: Rp ${netProfit.toLocaleString('id-ID')}**\n`
+          if (netProfit < 0) res += `\n⚠️ _Bulan ini masih rugi. Admin fee belum cukup menutup beban operasional._`
+          else res += `\n💡 _Ini adalah estimasi. Laba bersih sebenarnya juga dipengaruhi profit voucher dan pengeluaran lain._`
+          return res
+        }
+
+        let res = `🏪 **Beban Operasional Toko:**\n\n`
+        res += `📍 Toko beroperasi sejak: **${startDate}**\n\n`
+        if (rentAmt > 0) {
+          res += `🏠 **Sewa Toko:**\n`
+          res += `  • Nominal: **Rp ${rentAmt.toLocaleString('id-ID')}** (${rentPeriod})\n`
+          if (rentPeriod === 'tahunan') res += `  • Setara Rp ${monthlyRent.toLocaleString('id-ID')}/bulan\n`
+          res += `  • Jatuh Tempo: Tanggal **${dueDate}** tiap bulan\n`
+        }
+        if (elecAmt > 0) res += `⚡ **Listrik/Air:** Rp ${elecAmt.toLocaleString('id-ID')}/bulan\n`
+        if (wifiAmt > 0) res += `📶 **WiFi/Internet:** Rp ${wifiAmt.toLocaleString('id-ID')}/bulan\n`
+        res += `\n💵 **Total Beban Bulanan: Rp ${totalMonthly.toLocaleString('id-ID')}**`
+        res += dueDateInfo
+        res += `\n\n💡 _Ketik "laba bersih" untuk melihat estimasi profit setelah dikurangi beban._`
+        return res
+      } else {
+        return `📋 **Data Beban Operasional Belum Diatur.**\n\nSilakan isi data sewa toko, listrik, dan WiFi di menu **Akun → Pengaturan Beban & Finansial** terlebih dahulu.`
+      }
+    } catch { return null }
+  }
+
   // Fallback ke KB bawaan
   for (const entry of KB) {
     if (entry.test(c)) {
@@ -1814,6 +1887,7 @@ export interface StoreContext {
   absensiList?: any[]
   voucherProducts?: any[]
   voucherTransactions?: any[]
+  financialSettings?: any
 }
 
 // ── Pembangun Prompt Sistem Dinamis ───────────────────────────────────────────
@@ -2016,8 +2090,22 @@ Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
       bukuBesar += logJamMasukStr
     }
 
+    // 5. Beban Operasional & Finansial Toko
+    if (ctx.financialSettings) {
+      const { rentAmount, rentDueDate, rentPeriod, electricityBill, wifiBill, startDate } = ctx.financialSettings
+      if (rentAmount || electricityBill || wifiBill) {
+        analyticsStr += `- **Beban Operasional Toko:**\n`
+        if (rentAmount) {
+          analyticsStr += `  • Sewa Toko: Rp ${parseInt(rentAmount).toLocaleString('id-ID')} (${rentPeriod||'bulanan'}), Jatuh tempo tgl ${rentDueDate||'-'} tiap bulan.\n`
+        }
+        if (electricityBill) analyticsStr += `  • Estimasi Listrik/Air: Rp ${parseInt(electricityBill).toLocaleString('id-ID')}/bln.\n`
+        if (wifiBill) analyticsStr += `  • Biaya WiFi/Internet: Rp ${parseInt(wifiBill).toLocaleString('id-ID')}/bln.\n`
+        if (startDate) analyticsStr += `  • Toko Beroperasi Sejak: ${new Date(startDate).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}.\n`
+      }
+    }
+
     if (analyticsStr) {
-      bukuBesar += `\n\n🧠 ANALITIK KECERDASAN BISNIS:\n${analyticsStr} (Catatan: Ini adalah rangkuman dari data sistem terkini, manfaatkan informasi ini untuk menjawab pertanyaan owner jika ditanya seputar data-data ini)`
+      bukuBesar += `\n\n🧠 ANALITIK KECERDASAN BISNIS:\n${analyticsStr} (Catatan: Ini adalah rangkuman dari data sistem terkini, manfaatkan informasi ini untuk menjawab pertanyaan owner jika ditanya seputar data-data ini atau operasional toko, laba bersih/pengeluaran toko)`
     }
   }
 
@@ -2150,6 +2238,13 @@ export function buildStoreContext(
     )
   }
 
+  // ── Ambil Data Finansial & Operasional Toko ──
+  let financialSettings = null
+  try {
+    const rawFin = localStorage.getItem(`alphaPro_${storeId}_financial`)
+    if (rawFin) financialSettings = JSON.parse(rawFin)
+  } catch {}
+
   return {
     role,
     storeName: 'ALFAZA CELL',
@@ -2165,7 +2260,8 @@ export function buildStoreContext(
     voucherTxSummary,
     absensiList,
     voucherProducts,
-    voucherTransactions
+    voucherTransactions,
+    financialSettings
   }
 }
 
