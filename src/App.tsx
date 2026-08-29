@@ -569,6 +569,21 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   })
 
+  // Admin Rules State
+  const [adminRules, setAdminRules] = useState<Record<string, any>>(() => {
+    try {
+      const key = activeStoreId !== 'all' ? `alphaPro_${googleUid}_${activeStoreId}_adminRules` : `alphaPro_${googleUid}_adminRules`
+      const saved = localStorage.getItem(key)
+      if (saved) return JSON.parse(saved)
+    } catch(e) {}
+    return {
+      'Transfer Bank': [],
+      'DANA': [],
+      'FLIP': [],
+      'Tarik Tunai': []
+    }
+  })
+
   useEffect(() => {
     if (googleUid) {
       const key = activeStoreId !== 'all' ? `alphaPro_${googleUid}_${activeStoreId}_presets` : `alphaPro_${googleUid}_presets`
@@ -579,6 +594,16 @@ const MainApp: React.FC<MainAppProps> = ({
         } catch(e){}
       } else {
         setPresets([])
+      }
+      
+      const adminKey = activeStoreId !== 'all' ? `alphaPro_${googleUid}_${activeStoreId}_adminRules` : `alphaPro_${googleUid}_adminRules`
+      const savedAdmin = localStorage.getItem(adminKey)
+      if (savedAdmin) {
+        try {
+          setAdminRules(JSON.parse(savedAdmin))
+        } catch(e){}
+      } else {
+        setAdminRules({ 'Transfer Bank': [], 'DANA': [], 'FLIP': [], 'Tarik Tunai': [] })
       }
     }
   }, [googleUid, activeStoreId])
@@ -594,10 +619,12 @@ const MainApp: React.FC<MainAppProps> = ({
 
     const isPin = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`) !== 'false'
 
+    const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: adminRules }]
+
     const { error } = await supabase.from('store_settings').upsert({
       store_id: targetStoreId,
       cashiers: kasirList,
-      presets: presets,
+      presets: combinedPresets,
       running_texts: runningTexts,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
@@ -667,10 +694,11 @@ const MainApp: React.FC<MainAppProps> = ({
 
     // Sync directly to cloud
     const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
+    const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: adminRules }]
     const { error } = await supabase.from('store_settings').upsert({
       store_id: effectiveStoreId,
       cashiers: updatedList,
-      presets: presets,
+      presets: combinedPresets,
       running_texts: runningTexts,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
@@ -714,12 +742,32 @@ const MainApp: React.FC<MainAppProps> = ({
         }
       }
       if (data.presets) {
+        let incomingPresets = data.presets
+        let incomingAdminRules = null
+        if (Array.isArray(incomingPresets)) {
+          const adminIdx = incomingPresets.findIndex((p: any) => p.id === '_ADMIN_RULES_')
+          if (adminIdx >= 0) {
+            incomingAdminRules = incomingPresets[adminIdx].data
+            incomingPresets = incomingPresets.filter((p: any) => p.id !== '_ADMIN_RULES_')
+          }
+        }
+
         const local = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`)
-        const remoteStr = JSON.stringify(data.presets)
+        const remoteStr = JSON.stringify(incomingPresets)
         if (local !== remoteStr) {
           localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_presets`, remoteStr)
-          setPresets(data.presets)
+          setPresets(incomingPresets)
           changed = true
+        }
+
+        if (incomingAdminRules) {
+          const localAdmin = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`)
+          const remoteAdminStr = JSON.stringify(incomingAdminRules)
+          if (localAdmin !== remoteAdminStr) {
+            localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`, remoteAdminStr)
+            setAdminRules(incomingAdminRules)
+            changed = true
+          }
         }
       }
       if (data.running_texts) {
@@ -792,6 +840,16 @@ const MainApp: React.FC<MainAppProps> = ({
         changed = true;
       }
 
+      // Sync Financial Settings
+      if (data.financial_settings) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_financial`)
+        const remoteStr = JSON.stringify(data.financial_settings)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_financial`, remoteStr)
+          changed = true
+        }
+      }
+
       if (changed) {
         window.dispatchEvent(new Event('alphaSyncUpdate'))
       }
@@ -809,11 +867,13 @@ const MainApp: React.FC<MainAppProps> = ({
       if (targetStoreId === 'all') {
         setKasirList({})
         setPresets([])
+        setAdminRules({ 'Transfer Bank': [], 'DANA': [], 'FLIP': [], 'Tarik Tunai': [] })
         setRunningTexts(Array(15).fill(''))
         setMainAnnouncement('Selamat Datang di ALFAZA CELL')
       } else {
         try { const lk = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`); setKasirList(lk ? JSON.parse(lk) : {}); } catch(e){}
         try { const lp = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`); setPresets(lp ? JSON.parse(lp) : []); } catch(e){}
+        try { const la = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`); setAdminRules(la ? JSON.parse(la) : { 'Transfer Bank': [], 'DANA': [], 'FLIP': [], 'Tarik Tunai': [] }); } catch(e){}
         try { const lr = localStorage.getItem(`alphaPro_${targetStoreId}_runningTexts`); setRunningTexts(lr ? JSON.parse(lr) : Array(15).fill('')); } catch(e){}
         setMainAnnouncement(localStorage.getItem(`alphaPro_${targetStoreId}_mainAnnouncement`) || 'Selamat Datang di ALFAZA CELL')
       }
@@ -826,17 +886,39 @@ const MainApp: React.FC<MainAppProps> = ({
     setPresets(newPresets)
     const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
     if (googleUid) {
-      // Simpan ke localStorage
       const key = targetId !== 'all' ? `alphaPro_${googleUid}_${targetId}_presets` : `alphaPro_${googleUid}_presets`
       localStorage.setItem(key, JSON.stringify(newPresets))
       
-      // Auto-sync ke Supabase cloud agar tidak hilang saat app update
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+        const combinedPresets = [...newPresets, { id: '_ADMIN_RULES_', data: adminRules }]
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
-          presets: newPresets,
+          presets: combinedPresets,
+          running_texts: runningTexts,
+          main_announcement: mainAnnouncement,
+          is_pin_enabled: isPin,
+          updated_at: new Date().toISOString()
+        })
+      }
+    }
+  }
+
+  const saveAdminRules = async (newRules: Record<string, any>) => {
+    setAdminRules(newRules)
+    const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+    if (googleUid) {
+      const key = targetId !== 'all' ? `alphaPro_${googleUid}_${targetId}_adminRules` : `alphaPro_${googleUid}_adminRules`
+      localStorage.setItem(key, JSON.stringify(newRules))
+      
+      if (targetId && targetId !== 'all') {
+        const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+        const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: newRules }]
+        await supabase.from('store_settings').upsert({
+          store_id: targetId,
+          cashiers: kasirList,
+          presets: combinedPresets,
           running_texts: runningTexts,
           main_announcement: mainAnnouncement,
           is_pin_enabled: isPin,
@@ -975,6 +1057,24 @@ const MainApp: React.FC<MainAppProps> = ({
         is_pin_enabled: isPin,
         updated_at: new Date().toISOString()
       })
+    }
+  }
+
+  // Save Financial Settings (Beban Operasional) online ke Supabase
+  const saveFinancial = async (settings: Record<string, string>) => {
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    if (!targetId || targetId === 'all') return
+    // Simpan lokal dulu
+    localStorage.setItem(`alphaPro_${targetId}_financial`, JSON.stringify(settings))
+    // Upload ke Supabase via store_settings kolom financial_settings
+    try {
+      await supabase.from('store_settings').upsert({
+        store_id: targetId,
+        financial_settings: settings,
+        updated_at: new Date().toISOString()
+      })
+    } catch (e) {
+      console.error('Gagal simpan financial ke cloud:', e)
     }
   }
 
@@ -2100,8 +2200,7 @@ const MainApp: React.FC<MainAppProps> = ({
                               nominal={formNominal} setNominal={setFormNominal}
                               admin={formAdmin} setAdmin={setFormAdmin}
                               keterangan={formKeterangan} setKeterangan={setFormKeterangan}
-                              onSave={handleSimpanTransaksi} isSaving={isSaving} presets={presets}
-                              activeStoreId={activeStoreId}
+                              onSave={handleSimpanTransaksi} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
                             />
                           </div>
                         </div>
@@ -2242,6 +2341,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       transactions={transactions}
                       forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
                       absensiList={absensi}
+                      onSaveFinancial={saveFinancial}
                     />
                   );
                 case 'view-isi-saldo':
@@ -2286,6 +2386,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       showToast={showToast}
                       presets={presets}
                       setPresets={savePresets}
+                      adminRules={adminRules}
+                      setAdminRules={saveAdminRules}
                       storeName={storeName}
                       storeSubtext={storeSubtext}
                       storePhoto={storePhoto}
@@ -2541,6 +2643,7 @@ const MainApp: React.FC<MainAppProps> = ({
             transactions={transactions}
             forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
             absensiList={absensi}
+            onSaveFinancial={saveFinancial}
           />
 
           <IsiSaldoView 
@@ -2574,6 +2677,8 @@ const MainApp: React.FC<MainAppProps> = ({
             showToast={showToast} 
             presets={presets}
             setPresets={savePresets}
+            adminRules={adminRules}
+            setAdminRules={saveAdminRules}
             storeName={storeName}
             storeSubtext={storeSubtext}
             storePhoto={storePhoto}

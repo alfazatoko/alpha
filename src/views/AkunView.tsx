@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
 
 interface AkunViewProps {
@@ -32,6 +32,7 @@ interface AkunViewProps {
   transactions?: any[]
   forceTab?: string
   absensiList?: any[]
+  onSaveFinancial?: (settings: Record<string, string>) => void
 }
 
 function calculateTenure(joinDateStr: string) {
@@ -260,7 +261,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [paymentType, setPaymentType] = useState<'gaji' | 'bonus'>('gaji')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentNote, setPaymentNote] = useState('')
-
+  const [isEditingFinancialStart, setIsEditingFinancialStart] = useState(false)
 
 
   // State untuk edit PIN Owner
@@ -408,6 +409,33 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
       setEditKasirAvatar(data.avatar || '')
     }
   }, [props.currentUsername, props.kasirList])
+
+  // State for Financial Settings
+  const defaultFinancial = { startDate: '', rentPeriod: 'bulanan', rentAmount: '', rentDueDate: '', electricityBill: '', wifiBill: '' }
+  const [financialSettings, setFinancialSettings] = useState(defaultFinancial)
+
+  useEffect(() => {
+    try {
+      const key = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        setFinancialSettings({ ...defaultFinancial, ...JSON.parse(saved) })
+      } else {
+        setFinancialSettings(defaultFinancial)
+      }
+    } catch (e) { console.error('Failed to load financial settings', e) }
+  }, [props.activeStoreId])
+
+  const handleSaveFinancial = (key: string, value: string) => {
+    const newSettings = { ...financialSettings, [key]: value }
+    setFinancialSettings(newSettings)
+    const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
+    localStorage.setItem(storeKey, JSON.stringify(newSettings))
+    // Sync online
+    if (props.onSaveFinancial) {
+      props.onSaveFinancial(newSettings)
+    }
+  }
 
   // State for local smooth typing in Store Profile
   const [localStoreName, setLocalStoreName] = useState(props.storeName || '')
@@ -773,6 +801,139 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     <div>
                       <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Akun Cloud Terhubung</h4>
                       <p className="text-sm font-black text-slate-800 dark:text-slate-100 mt-0.5">{props.googleEmail || 'Tidak terhubung'}</p>
+                    </div>
+                  </div>
+
+                  {/* Pengaturan Beban & Finansial Toko */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 dark:bg-emerald-900/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                    <div className="relative">
+                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1 flex items-center gap-2">
+                        <i className="fa-solid fa-wallet text-emerald-500"></i>
+                        Pengaturan Finansial & Operasional
+                      </h3>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-6 font-bold uppercase">
+                        Catat beban rutin seperti sewa, listrik & WiFi untuk auto-kalkulasi Laba Bersih
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Tanggal Mulai Buka Toko */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1 flex justify-between items-center">
+                            Tanggal Mulai Sewa / Buka Toko
+                            {financialSettings.startDate && !isEditingFinancialStart && (
+                              <button onClick={() => setIsEditingFinancialStart(true)} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700">
+                                <i className="fa-solid fa-pen-to-square"></i> Edit
+                              </button>
+                            )}
+                          </label>
+                          {financialSettings.startDate && !isEditingFinancialStart ? (
+                            <div 
+                              onClick={() => setIsEditingFinancialStart(true)}
+                              className="w-full bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl px-4 py-3 text-xs font-black text-emerald-700 dark:text-emerald-400 flex items-center gap-3 cursor-pointer"
+                            >
+                              <i className="fa-solid fa-calendar-check text-emerald-500"></i>
+                              {new Date(financialSettings.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </div>
+                          ) : (
+                            <input
+                              type="date"
+                              value={financialSettings.startDate}
+                              onChange={(e) => {
+                                handleSaveFinancial('startDate', e.target.value)
+                                setIsEditingFinancialStart(false)
+                              }}
+                              disabled={props.activeStoreId === 'all'}
+                              autoFocus
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            />
+                          )}
+                        </div>
+
+                        {/* Periode Sewa */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Periode Sewa Toko</label>
+                          <select
+                            value={financialSettings.rentPeriod}
+                            onChange={(e) => handleSaveFinancial('rentPeriod', e.target.value)}
+                            disabled={props.activeStoreId === 'all'}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer appearance-none"
+                          >
+                            <option value="bulanan">Bulanan (Per Bulan)</option>
+                            <option value="tahunan">Tahunan (Per Tahun)</option>
+                          </select>
+                        </div>
+
+                        {/* Nominal Sewa */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Biaya Sewa ({financialSettings.rentPeriod === 'tahunan' ? 'Per Tahun' : 'Per Bulan'})</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={financialSettings.rentAmount ? Number(financialSettings.rentAmount).toLocaleString('id-ID') : ''}
+                              onChange={(e) => handleSaveFinancial('rentAmount', e.target.value.replace(/\D/g, ''))}
+                              disabled={props.activeStoreId === 'all'}
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tanggal Jatuh Tempo */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Tgl Jatuh Tempo (1-31)</label>
+                          <input
+                            type="number"
+                            min="1" max="31"
+                            placeholder="Contoh: 10"
+                            value={financialSettings.rentDueDate}
+                            onChange={(e) => {
+                              let val = parseInt(e.target.value);
+                              if (val > 31) val = 31;
+                              if (val < 1) val = 1;
+                              handleSaveFinancial('rentDueDate', isNaN(val) ? '' : val.toString());
+                            }}
+                            disabled={props.activeStoreId === 'all'}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          />
+                        </div>
+
+                        {/* Estimasi Listrik & Air */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Estimasi Listrik & Air / Bulan</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={financialSettings.electricityBill ? Number(financialSettings.electricityBill).toLocaleString('id-ID') : ''}
+                              onChange={(e) => handleSaveFinancial('electricityBill', e.target.value.replace(/\D/g, ''))}
+                              disabled={props.activeStoreId === 'all'}
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Biaya WiFi */}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Biaya WiFi / Internet / Bulan</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={financialSettings.wifiBill ? Number(financialSettings.wifiBill).toLocaleString('id-ID') : ''}
+                              onChange={(e) => handleSaveFinancial('wifiBill', e.target.value.replace(/\D/g, ''))}
+                              disabled={props.activeStoreId === 'all'}
+                              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1231,33 +1392,110 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                 </button>
                               </div>
                             ) : (
-                              <div className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden animate-in fade-in duration-200">
-                                <div className="bg-slate-50 dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700">
-                                  <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Riwayat Pembayaran Karyawan</h4>
+                              <div className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden animate-in fade-in duration-200 shadow-sm bg-white dark:bg-slate-800">
+                                <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                                  <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                                    <i className="fa-solid fa-clock-rotate-left text-indigo-500"></i>
+                                    Riwayat Pembayaran & Bonus
+                                  </h4>
                                 </div>
-                                <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-60 overflow-y-auto">
+                                
+                                {/* Summary Cards */}
+                                <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-slate-700">
+                                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-500 flex items-center justify-center shrink-0">
+                                      <i className="fa-solid fa-hourglass-half"></i>
+                                    </div>
+                                    <div>
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Belum Dibayar</p>
+                                      <p className="text-sm font-black text-amber-600 dark:text-amber-400">
+                                        Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
+                                          .filter((p: any) => p.status === 'pending')
+                                          .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500 flex items-center justify-center shrink-0">
+                                      <i className="fa-solid fa-check-double"></i>
+                                    </div>
+                                    <div>
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Sudah Dibayar</p>
+                                      <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                                        Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
+                                          .filter((p: any) => p.status === 'paid' || !p.status)
+                                          .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="p-4 max-h-[350px] overflow-y-auto">
                                   {props.kasirList[selectedKaryawan].paymentHistory?.length ? (
-                                    props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => (
-                                      <div key={ph.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${ph.type === 'bonus' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                            <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'}`}></i>
+                                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 dark:before:via-slate-700 before:to-transparent">
+                                      {props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => {
+                                        const isPending = ph.status === 'pending';
+                                        return (
+                                          <div key={ph.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                            <div className={cn(
+                                              "flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-800 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10",
+                                              isPending ? "bg-amber-100 text-amber-500" : "bg-emerald-100 text-emerald-500"
+                                            )}>
+                                              <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'} text-[10px]`}></i>
+                                            </div>
+                                            <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow">
+                                              <div className="flex items-start justify-between mb-2">
+                                                <div>
+                                                  <span className={cn(
+                                                    "inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest mb-1",
+                                                    ph.type === 'bonus' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
+                                                  )}>
+                                                    {ph.type}
+                                                  </span>
+                                                  <p className="text-xs font-black text-slate-800 dark:text-slate-200">Rp {ph.amount.toLocaleString('id-ID')}</p>
+                                                </div>
+                                                <p className="text-[8px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded">
+                                                  {new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}
+                                                </p>
+                                              </div>
+                                              {ph.note && <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-3">{ph.note}</p>}
+                                              
+                                              {isPending ? (
+                                                <button
+                                                  onClick={async () => {
+                                                    if(window.confirm('Tandai bonus ini sudah dibayarkan ke kasir?')) {
+                                                      try {
+                                                        const kData = props.kasirList![selectedKaryawan];
+                                                        const updatedHistory = kData.paymentHistory.map((item: any) => 
+                                                          item.id === ph.id ? { ...item, status: 'paid', paidAt: new Date().toISOString() } : item
+                                                        );
+                                                        if (props.onSaveCashierSelf) {
+                                                          await props.onSaveCashierSelf(selectedKaryawan, { ...kData, paymentHistory: updatedHistory });
+                                                          alert('Berhasil ditandai sudah dibayar!');
+                                                        }
+                                                      } catch(e) { alert('Gagal memproses'); }
+                                                    }
+                                                  }}
+                                                  className="w-full bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5"
+                                                >
+                                                  <i className="fa-solid fa-clock"></i> Belum Dibayar (Klik utk Lunasi)
+                                                </button>
+                                              ) : (
+                                                <div className="w-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 border border-emerald-100 dark:border-emerald-900/30">
+                                                  <i className="fa-solid fa-circle-check"></i> Sudah Dibayar {ph.paidAt && `(${new Date(ph.paidAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})`}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
-                                          <div>
-                                            <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">{ph.type}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-0.5">{new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p>
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
-                                          <p className="text-sm font-black text-slate-800 dark:text-slate-200">Rp {ph.amount.toLocaleString('id-ID')}</p>
-                                          {ph.note && <p className="text-[9px] font-bold text-slate-400 mt-0.5 max-w-[120px] truncate">{ph.note}</p>}
-                                        </div>
-                                      </div>
-                                    ))
+                                        );
+                                      })}
+                                    </div>
                                   ) : (
-                                    <div className="p-8 text-center text-slate-400">
-                                      <i className="fa-solid fa-clock-rotate-left text-2xl mb-2 opacity-50"></i>
-                                      <p className="text-[9px] font-bold uppercase tracking-widest">Belum ada riwayat pembayaran</p>
+                                    <div className="py-12 text-center flex flex-col items-center">
+                                      <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3 text-slate-300 dark:text-slate-600">
+                                        <i className="fa-solid fa-folder-open text-2xl"></i>
+                                      </div>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Belum ada riwayat</p>
                                     </div>
                                   )}
                                 </div>
@@ -1816,7 +2054,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             return (
             <div className="mb-4 space-y-3">
 
-              {/* ── KARTU PROFIL OWNER ── */}
+              {/* KARTU PROFIL OWNER */}
               <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-4 shadow-lg">
                 <div className="flex items-center gap-3.5">
                   <div className="relative shrink-0">
@@ -1864,9 +2102,228 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <p className="text-[11px] font-black text-gray-800 truncate">{props.googleEmail || 'Tidak diketahui'}</p>
                 </div>
               </div>
+            </div>
+            );
+          })()}
 
-              {/* ── MENU PENGATURAN FLAT LIST ── */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          {/* PROFIL KASIR CARD (di atas Sinkronisasi Cloud) */}
+          {props.kasirRole === 'kasir' && (() => {
+            const myData = props.kasirList?.[props.currentUsername || ''] || {};
+            const myName = myData.name || props.kasirName || props.currentUsername || 'Kasir';
+            const myAvatar = myData.avatar || '';
+            const myJoin = myData.tanggalJoin || '';
+            const myTenure = myJoin ? calculateTenure(myJoin) : null;
+            const myStats = calculateAttendanceStats(
+              props.currentUsername || '',
+              myName,
+              myJoin,
+              props.absensiList || [],
+              props.activeStoreId || ''
+            );
+            // Hitung badge kinerja
+            const totalDays = myStats.hadir + myStats.izin + myStats.tidakAbsen;
+            const hadirRate = totalDays > 0 ? (myStats.hadir / totalDays) * 100 : 0;
+            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-500' };
+            if (hadirRate >= 95) badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
+            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
+
+            return (
+              <div className="mb-4">
+                {/* Profil Card */}
+                <button
+                  onClick={() => setShowProfilPanel(true)}
+                  className="w-full bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-center gap-3.5 active:scale-[0.98] transition-all text-left hover:shadow-md"
+                >
+                  {/* Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-sm">
+                      {myAvatar ? (
+                        <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    {/* Online dot */}
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">PROFIL KASIR</p>
+                    <p className="text-sm font-black text-gray-900 leading-tight truncate">{myName}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                        KASIR
+                      </span>
+                      <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
+                        {badge.icon} {badge.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Chevron */}
+                  <i className="fa-solid fa-chevron-right text-[11px] text-gray-300 shrink-0" />
+                </button>
+
+                {/* Bottom Sheet: Detail Profil */}
+                {showProfilPanel && (
+                  <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowProfilPanel(false)}>
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                    {/* Sheet */}
+                    <div
+                      className="relative w-full max-w-md mx-auto bg-white rounded-t-[2rem] max-h-[90dvh] overflow-y-auto pb-10 animate-in slide-in-from-bottom-4 duration-300"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {/* Handle bar */}
+                      <div className="flex justify-center pt-3 pb-1">
+                        <div className="w-10 h-1 bg-gray-200 rounded-full" />
+                      </div>
+
+                      {/* Header */}
+                      <div className="px-5 pt-3 pb-4 border-b border-gray-100">
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-md shrink-0">
+                            {myAvatar ? (
+                              <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-3xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                🧑‍💼 KASIR
+                              </span>
+                              <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
+                                {badge.icon} {badge.label}
+                              </span>
+                            </div>
+                          </div>
+                          <button onClick={() => setShowProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-xmark text-gray-500 text-xs" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="px-5 pt-4 space-y-4">
+
+                        {/* Statistik Kehadiran */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3">ðŸ“Š Kehadiran Bulan Ini</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-white rounded-xl p-3 text-center border border-emerald-100">
+                              <p className="text-xl font-black text-emerald-600">{myStats.hadir}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">HADIR</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 text-center border border-amber-100">
+                              <p className="text-xl font-black text-amber-500">{myStats.izin}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">IZIN</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 text-center border border-rose-100">
+                              <p className="text-xl font-black text-rose-500">{myStats.tidakAbsen}</p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">ABSEN</p>
+                            </div>
+                          </div>
+                          {totalDays > 0 && (
+                            <div className="mt-3">
+                              <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
+                                <span>Tingkat Kehadiran</span>
+                                <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
+                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Badge Kinerja */}
+                        <div className={cn('rounded-2xl p-4 border flex items-center gap-3', badge.color.replace('text-', 'border-').replace('bg-', 'bg-') + '/40')}>
+                          <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm border', badge.color)}>
+                            {badge.icon}
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-widest opacity-70 mb-0.5">Badge Kinerja</p>
+                            <p className="font-black text-sm">{badge.label}</p>
+                            <p className="text-[9px] font-bold opacity-60 mt-0.5">
+                              {hadirRate >= 95 ? 'Kehadiran sempurna! Luar biasa.' :
+                               hadirRate >= 80 ? 'Kehadiran sangat baik, pertahankan!' :
+                               hadirRate >= 60 ? 'Kehadiran cukup baik, bisa ditingkatkan.' :
+                               totalDays > 0 ? 'Kehadiran rendah, perlu evaluasi.' : 'Belum ada data kehadiran.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Masa Kerja */}
+                        {myTenure && (
+                          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">ðŸ’¼ Masa Kerja</p>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                <i className="fa-solid fa-calendar-days text-indigo-500 text-sm" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-gray-900">{myTenure.months} Bulan {myTenure.days} Hari</p>
+                                <p className="text-[9px] text-gray-400 font-bold">
+                                  Mulai {myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                                </p>
+                              </div>
+                              {myTenure.totalMonths > 0 && myTenure.totalMonths % 6 === 0 && (
+                                <span className="ml-auto text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-xl animate-bounce">ðŸŽ Bonus!</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Data Pribadi */}
+                        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-3">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">ðŸ§‘ Data Pribadi</p>
+                          <div className="space-y-2.5">
+                            {[{ label: 'Nama Lengkap', value: myName, icon: 'fa-user' },
+                              { label: 'Tempat, Tgl Lahir', value: [myData.tempatLahir, myData.tanggalLahir ? new Date(myData.tanggalLahir).toLocaleDateString('id-ID') : ''].filter(Boolean).join(', ') || '-', icon: 'fa-cake-candles' },
+                              { label: 'Alamat', value: myData.alamat || '-', icon: 'fa-map-marker-alt' },
+                              { label: 'Awal Join Kerja', value: myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Belum diatur', icon: 'fa-calendar-check' },
+                            ].map(({ label, value, icon }) => (
+                              <div key={label} className="flex items-start gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                                  <i className={cn('fa-solid text-slate-400 text-[10px]', icon)} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</p>
+                                  <p className="text-xs font-bold text-gray-800 leading-snug break-words">{value}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Tombol Edit Profil */}
+                        <button
+                          onClick={() => { setShowProfilPanel(false); setOpenCategory('kasirSelf'); }}
+                          className="w-full bg-indigo-600 text-white font-black py-3 rounded-2xl text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md shadow-indigo-200"
+                          style={{ color: '#ffffff' }}
+                        >
+                          <i className="fa-solid fa-pen-to-square" />
+                          Edit Profil Saya
+                        </button>
+
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* â”€â”€ MENU PENGATURAN FLAT LIST (TERGABUNG) â”€â”€ */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+            
+            {props.kasirRole === 'owner' && (
+              <>
                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-4 pt-3.5 pb-2">Pengaturan Toko</p>
 
                 {/* Edit Profil Toko */}
@@ -1939,8 +2396,149 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
 
-                {/* Divider navy */}
-                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
+
+                {/* Pengaturan Beban & Finansial Toko */}
+                <button
+                  onClick={() => setOpenCategory(openCategory === 'finansial' ? null : 'finansial')}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-wallet text-xs"></i>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Beban &amp; Finansial Toko</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Sewa toko, listrik, WiFi (Otomatis Laba Bersih)</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'finansial' && "rotate-180")} />
+                </button>
+                {openCategory === 'finansial' && (
+                  <div className="mt-2 p-5 bg-orange-50/30 border border-orange-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
+                    <div className="flex flex-col gap-1 pb-2">
+                      <p className="text-[11px] font-black text-orange-800 uppercase tracking-widest">Pengaturan Operasional</p>
+                      <p className="text-[9px] text-orange-600/80 font-bold">Catat pengeluaran rutin agar Bot AI dapat kalkulasi Laba Bersih toko secara otomatis.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 block">Mulai Buka/Sewa Toko</label>
+                        {financialSettings.startDate && !isEditingFinancialStart && (
+                          <button onClick={() => setIsEditingFinancialStart(true)} className="text-[10px] font-bold text-orange-600 pr-1">
+                            <i className="fa-solid fa-pen-to-square"></i> Edit
+                          </button>
+                        )}
+                      </div>
+                      {financialSettings.startDate && !isEditingFinancialStart ? (
+                        <div 
+                          onClick={() => setIsEditingFinancialStart(true)}
+                          className="w-full bg-orange-50/50 border border-orange-200 rounded-xl px-4 py-3 text-xs font-black text-orange-700 flex items-center gap-3 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-calendar-check text-orange-500"></i>
+                          {new Date(financialSettings.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
+                      ) : (
+                        <input
+                          type="date"
+                          value={financialSettings.startDate}
+                          onChange={(e) => {
+                            handleSaveFinancial('startDate', e.target.value)
+                            setIsEditingFinancialStart(false)
+                          }}
+                          autoFocus
+                          className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Periode Sewa</label>
+                      <select
+                        value={financialSettings.rentPeriod}
+                        onChange={(e) => handleSaveFinancial('rentPeriod', e.target.value)}
+                        className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none appearance-none cursor-pointer"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      >
+                        <option value="bulanan">Bulanan (Per Bulan)</option>
+                        <option value="tahunan">Tahunan (Per Tahun)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Biaya Sewa ({financialSettings.rentPeriod === 'tahunan' ? 'Per Tahun' : 'Per Bulan'})</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={financialSettings.rentAmount ? Number(financialSettings.rentAmount).toLocaleString('id-ID') : ''}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            handleSaveFinancial('rentAmount', val)
+                          }}
+                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Tgl Jatuh Tempo Sewa</label>
+                      <select
+                        value={financialSettings.rentDueDate}
+                        onChange={(e) => handleSaveFinancial('rentDueDate', e.target.value)}
+                        className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none appearance-none cursor-pointer"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      >
+                        <option value="">-- Pilih Tanggal --</option>
+                        {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                          <option key={d} value={d}>Tanggal {d}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Listrik/Air (Bulan)</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={financialSettings.electricityBill ? Number(financialSettings.electricityBill).toLocaleString('id-ID') : ''}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            handleSaveFinancial('electricityBill', val)
+                          }}
+                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">WiFi/Internet (Bulan)</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={financialSettings.wifiBill ? Number(financialSettings.wifiBill).toLocaleString('id-ID') : ''}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            handleSaveFinancial('wifiBill', val)
+                          }}
+                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
                 {/* Keamanan & Akses */}
                 <button
@@ -2052,8 +2650,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
 
-                {/* Divider navy */}
-                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
                 {/* Manajemen Kasir */}
                 <button
@@ -2348,7 +2945,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                           date: new Date().toISOString(),
                                           type: paymentType,
                                           amount: Number(paymentAmount),
-                                          note: paymentNote
+                                          note: paymentNote,
+                                          status: paymentType === 'bonus' ? 'pending' : 'paid' // Bonus default pending, gaji default paid
                                         };
                                         if (props.onSaveCashierSelf) {
                                           await props.onSaveCashierSelf(selectedKaryawan, {
@@ -2372,31 +2970,98 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="border border-slate-100 rounded-xl overflow-hidden mt-4 animate-in fade-in duration-200">
-                                  <div className="bg-slate-50 p-3 border-b border-slate-100">
-                                    <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Riwayat Pembayaran</h4>
+                                <div className="border border-slate-100 rounded-xl overflow-hidden mt-4 animate-in fade-in duration-200 bg-white shadow-sm">
+                                  <div className="bg-slate-50 p-3 border-b border-slate-100 flex items-center gap-2">
+                                    <i className="fa-solid fa-clock-rotate-left text-indigo-500 text-[10px]"></i>
+                                    <h4 className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Riwayat Pembayaran & Bonus</h4>
                                   </div>
-                                  <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                                  
+                                  {/* Mobile Summary Cards */}
+                                  <div className="flex gap-2 p-3 bg-slate-50/50 border-b border-slate-100">
+                                    <div className="flex-1 bg-white p-2.5 rounded-xl border border-amber-100 flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center shrink-0">
+                                        <i className="fa-solid fa-hourglass-half text-[9px]"></i>
+                                      </div>
+                                      <div>
+                                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Belum Dibayar</p>
+                                        <p className="text-[11px] font-black text-amber-600">
+                                          Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
+                                            .filter((p: any) => p.status === 'pending')
+                                            .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 bg-white p-2.5 rounded-xl border border-emerald-100 flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+                                        <i className="fa-solid fa-check-double text-[9px]"></i>
+                                      </div>
+                                      <div>
+                                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Sudah Dibayar</p>
+                                        <p className="text-[11px] font-black text-emerald-600">
+                                          Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
+                                            .filter((p: any) => p.status === 'paid' || !p.status)
+                                            .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
                                     {props.kasirList[selectedKaryawan].paymentHistory?.length ? (
-                                      props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => (
-                                        <div key={ph.id} className="p-3 flex items-center justify-between bg-white">
-                                          <div className="flex items-center gap-2">
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${ph.type === 'bonus' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                              <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'}`}></i>
+                                      props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => {
+                                        const isPending = ph.status === 'pending';
+                                        return (
+                                          <div key={ph.id} className="p-3 bg-white">
+                                            <div className="flex items-start gap-2 mb-2">
+                                              <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[9px] ${isPending ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'}`}></i>
+                                              </div>
+                                              <div className="flex-1">
+                                                <div className="flex justify-between items-center">
+                                                  <div>
+                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${ph.type === 'bonus' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                                      {ph.type}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-[11px] font-black text-slate-800">Rp {ph.amount.toLocaleString('id-ID')}</p>
+                                                </div>
+                                                <p className="text-[8px] font-bold text-slate-400 mt-0.5">{new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}</p>
+                                                {ph.note && <p className="text-[8px] font-bold text-slate-500 mt-0.5">{ph.note}</p>}
+                                              </div>
                                             </div>
-                                            <div>
-                                              <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{ph.type}</p>
-                                              <p className="text-[8px] font-bold text-slate-400 mt-0.5">{new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: '2-digit'})}</p>
-                                            </div>
+                                            {isPending ? (
+                                              <button
+                                                onClick={async () => {
+                                                  if(window.confirm('Tandai bonus ini sudah dibayarkan ke kasir?')) {
+                                                    try {
+                                                      const kData = props.kasirList![selectedKaryawan];
+                                                      const updatedHistory = kData.paymentHistory.map((item: any) =>
+                                                        item.id === ph.id ? { ...item, status: 'paid', paidAt: new Date().toISOString() } : item
+                                                      );
+                                                      if (props.onSaveCashierSelf) {
+                                                        await props.onSaveCashierSelf(selectedKaryawan, { ...kData, paymentHistory: updatedHistory });
+                                                        alert('Berhasil ditandai sudah dibayar!');
+                                                      }
+                                                    } catch(e) { alert('Gagal memproses'); }
+                                                  }
+                                                }}
+                                                className="w-full bg-amber-50 active:bg-amber-100 text-amber-600 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors border border-amber-100 flex items-center justify-center gap-1"
+                                              >
+                                                <i className="fa-solid fa-clock"></i> Belum Dibayar â€” Ketuk untuk Lunasi
+                                              </button>
+                                            ) : (
+                                              <div className="w-full bg-emerald-50 text-emerald-600 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center justify-center gap-1 border border-emerald-100">
+                                                <i className="fa-solid fa-circle-check"></i> Sudah Dibayar {ph.paidAt && `(${new Date(ph.paidAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})`}
+                                              </div>
+                                            )}
                                           </div>
-                                          <div className="text-right">
-                                            <p className="text-xs font-black text-slate-800">Rp {ph.amount.toLocaleString('id-ID')}</p>
-                                            {ph.note && <p className="text-[8px] font-bold text-slate-400 mt-0.5 max-w-[80px] truncate">{ph.note}</p>}
-                                          </div>
-                                        </div>
-                                      ))
+                                        );
+                                      })
                                     ) : (
-                                      <div className="p-4 text-center text-slate-400 bg-white">
+                                      <div className="p-8 text-center text-slate-400 bg-white flex flex-col items-center">
+                                        <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-2 text-slate-300">
+                                          <i className="fa-solid fa-folder-open text-xl"></i>
+                                        </div>
                                         <p className="text-[8px] font-bold uppercase tracking-widest">Belum ada riwayat</p>
                                       </div>
                                     )}
@@ -2410,8 +3075,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </div>
                   )}
 
-                {/* Divider navy */}
-                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
                 {/* Tampilan & Promo */}
                 <button
@@ -2475,8 +3139,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
 
-                {/* Divider navy */}
-                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
                 {/* Pantau Dashboard */}
                 <button
@@ -2529,8 +3192,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </div>
                 )}
 
-                {/* Divider navy */}
-                <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
                 {/* Backup & Keamanan */}
                 <button
@@ -2593,227 +3255,12 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     </p>
                   </div>
                 )}
-              </div>
-            </div>
-            );
-          })()}
-
-          {/* ── PROFIL KASIR CARD (di atas Sinkronisasi Cloud) ── */}
-          {props.kasirRole === 'kasir' && (() => {
-            const myData = props.kasirList?.[props.currentUsername || ''] || {};
-            const myName = myData.name || props.kasirName || props.currentUsername || 'Kasir';
-            const myAvatar = myData.avatar || '';
-            const myJoin = myData.tanggalJoin || '';
-            const myTenure = myJoin ? calculateTenure(myJoin) : null;
-            const myStats = calculateAttendanceStats(
-              props.currentUsername || '',
-              myName,
-              myJoin,
-              props.absensiList || [],
-              props.activeStoreId || ''
-            );
-            // Hitung badge kinerja
-            const totalDays = myStats.hadir + myStats.izin + myStats.tidakAbsen;
-            const hadirRate = totalDays > 0 ? (myStats.hadir / totalDays) * 100 : 0;
-            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-500' };
-            if (hadirRate >= 95) badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
-            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
-            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
-            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
-
-            return (
-              <>
-                {/* Profil Card */}
-                <button
-                  onClick={() => setShowProfilPanel(true)}
-                  className="w-full bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-center gap-3.5 active:scale-[0.98] transition-all text-left hover:shadow-md"
-                >
-                  {/* Avatar */}
-                  <div className="relative shrink-0">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-sm">
-                      {myAvatar ? (
-                        <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-2xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
-                      )}
-                    </div>
-                    {/* Online dot */}
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">PROFIL KASIR</p>
-                    <p className="text-sm font-black text-gray-900 leading-tight truncate">{myName}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                        KASIR
-                      </span>
-                      <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
-                        {badge.icon} {badge.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Chevron */}
-                  <i className="fa-solid fa-chevron-right text-[11px] text-gray-300 shrink-0" />
-                </button>
-
-                {/* Bottom Sheet: Detail Profil */}
-                {showProfilPanel && (
-                  <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowProfilPanel(false)}>
-                    {/* Backdrop */}
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-                    {/* Sheet */}
-                    <div
-                      className="relative w-full max-w-md mx-auto bg-white rounded-t-[2rem] max-h-[90dvh] overflow-y-auto pb-10 animate-in slide-in-from-bottom-4 duration-300"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {/* Handle bar */}
-                      <div className="flex justify-center pt-3 pb-1">
-                        <div className="w-10 h-1 bg-gray-200 rounded-full" />
-                      </div>
-
-                      {/* Header */}
-                      <div className="px-5 pt-3 pb-4 border-b border-gray-100">
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-md shrink-0">
-                            {myAvatar ? (
-                              <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
-                            ) : (
-                              <span className="text-3xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                                🧑‍💼 KASIR
-                              </span>
-                              <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
-                                {badge.icon} {badge.label}
-                              </span>
-                            </div>
-                          </div>
-                          <button onClick={() => setShowProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                            <i className="fa-solid fa-xmark text-gray-500 text-xs" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="px-5 pt-4 space-y-4">
-
-                        {/* Statistik Kehadiran */}
-                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
-                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3">📊 Kehadiran Bulan Ini</p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="bg-white rounded-xl p-3 text-center border border-emerald-100">
-                              <p className="text-xl font-black text-emerald-600">{myStats.hadir}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">HADIR</p>
-                            </div>
-                            <div className="bg-white rounded-xl p-3 text-center border border-amber-100">
-                              <p className="text-xl font-black text-amber-500">{myStats.izin}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">IZIN</p>
-                            </div>
-                            <div className="bg-white rounded-xl p-3 text-center border border-rose-100">
-                              <p className="text-xl font-black text-rose-500">{myStats.tidakAbsen}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">ABSEN</p>
-                            </div>
-                          </div>
-                          {totalDays > 0 && (
-                            <div className="mt-3">
-                              <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
-                                <span>Tingkat Kehadiran</span>
-                                <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
-                              </div>
-                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Badge Kinerja */}
-                        <div className={cn('rounded-2xl p-4 border flex items-center gap-3', badge.color.replace('text-', 'border-').replace('bg-', 'bg-') + '/40')}>
-                          <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm border', badge.color)}>
-                            {badge.icon}
-                          </div>
-                          <div>
-                            <p className="text-[8px] font-black uppercase tracking-widest opacity-70 mb-0.5">Badge Kinerja</p>
-                            <p className="font-black text-sm">{badge.label}</p>
-                            <p className="text-[9px] font-bold opacity-60 mt-0.5">
-                              {hadirRate >= 95 ? 'Kehadiran sempurna! Luar biasa.' :
-                               hadirRate >= 80 ? 'Kehadiran sangat baik, pertahankan!' :
-                               hadirRate >= 60 ? 'Kehadiran cukup baik, bisa ditingkatkan.' :
-                               totalDays > 0 ? 'Kehadiran rendah, perlu evaluasi.' : 'Belum ada data kehadiran.'}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Masa Kerja */}
-                        {myTenure && (
-                          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">💼 Masa Kerja</p>
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                <i className="fa-solid fa-calendar-days text-indigo-500 text-sm" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-gray-900">{myTenure.months} Bulan {myTenure.days} Hari</p>
-                                <p className="text-[9px] text-gray-400 font-bold">
-                                  Mulai {myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
-                                </p>
-                              </div>
-                              {myTenure.totalMonths > 0 && myTenure.totalMonths % 6 === 0 && (
-                                <span className="ml-auto text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-xl animate-bounce">🎁 Bonus!</span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Data Pribadi */}
-                        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-3">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">🧑 Data Pribadi</p>
-                          <div className="space-y-2.5">
-                            {[{ label: 'Nama Lengkap', value: myName, icon: 'fa-user' },
-                              { label: 'Tempat, Tgl Lahir', value: [myData.tempatLahir, myData.tanggalLahir ? new Date(myData.tanggalLahir).toLocaleDateString('id-ID') : ''].filter(Boolean).join(', ') || '-', icon: 'fa-cake-candles' },
-                              { label: 'Alamat', value: myData.alamat || '-', icon: 'fa-map-marker-alt' },
-                              { label: 'Awal Join Kerja', value: myJoin ? new Date(myJoin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Belum diatur', icon: 'fa-calendar-check' },
-                            ].map(({ label, value, icon }) => (
-                              <div key={label} className="flex items-start gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-                                  <i className={cn('fa-solid text-slate-400 text-[10px]', icon)} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</p>
-                                  <p className="text-xs font-bold text-gray-800 leading-snug break-words">{value}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Tombol Edit Profil */}
-                        <button
-                          onClick={() => { setShowProfilPanel(false); setOpenCategory('kasirSelf'); }}
-                          className="w-full bg-indigo-600 text-white font-black py-3 rounded-2xl text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md shadow-indigo-200"
-                          style={{ color: '#ffffff' }}
-                        >
-                          <i className="fa-solid fa-pen-to-square" />
-                          Edit Profil Saya
-                        </button>
-
-                      </div>
-                    </div>
-                  </div>
-                )}
               </>
-            );
-          })()}
+            )}
 
           {/* Kategori: Pengaturan PIN & Nama Kasir Mandiri */}
           {props.kasirRole === 'kasir' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4 mt-2">
+            <>
               <button
                 onClick={() => setOpenCategory(openCategory === 'kasirSelf' ? null : 'kasirSelf')}
                 className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
@@ -2953,12 +3400,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   </button>
                 </div>
               )}
-            </div>
+            </>
           )}
+            <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
-          {/* ── KELOMPOK PENGATURAN SISTEM & APLIKASI ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
-            
             {/* Sinkronisasi Cloud */}
             <button
               onClick={() => setOpenCategory(openCategory === 'cloud' ? null : 'cloud')}
@@ -2998,7 +3443,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             )}
 
-            <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+            <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
             {/* Printer Bluetooth */}
             <button
@@ -3127,7 +3572,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             )}
 
-            <div className="h-px mx-4" style={{background:'rgba(15,23,42,0.12)'}} />
+            <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
             {/* Teks Otomatis */}
             <button
@@ -3185,7 +3630,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
         <p className="text-center text-[10px] text-gray-300 mt-10">Versi 1.2.0 (Production)</p>
       </div>
 
-      {/* ── Avatar Crop & Detail Modal ── */}
+      {/* â”€â”€ Avatar Crop & Detail Modal â”€â”€ */}
       {showAvatarEditor && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center z-[999] p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-6 max-w-sm w-full shadow-2xl border border-slate-100 dark:border-slate-700 flex flex-col items-center">
@@ -3293,7 +3738,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
         </div>
       )}
 
-      {/* ── Karyawan Avatar Zoom Lightbox ── */}
+      {/* â”€â”€ Karyawan Avatar Zoom Lightbox â”€â”€ */}
       {showKaryawanAvatarZoom && (
         <div 
           onClick={() => setShowKaryawanAvatarZoom(false)}

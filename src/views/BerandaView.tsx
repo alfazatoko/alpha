@@ -1313,6 +1313,71 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     return localStorage.getItem(`alphaPro_owner_briefing_dismissed_${todayStr}`) === 'true'
   })
 
+  // Rent Reminder State
+  const [rentReminder, setRentReminder] = useState<{ isDueSoon: boolean, amount: number, dueDateStr: string, diffDays: number } | null>(null)
+  const [isRentMinimized, setIsRentMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_rent_minimized') === 'true'
+  })
+  const [isRentDismissed, setIsRentDismissed] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_rent_dismissed') === 'true'
+  })
+
+  useEffect(() => {
+    if (props.kasirRole !== 'owner') return;
+    try {
+      const activeSid = props.activeStoreId === 'all' ? (props.pantauStoreId === 'all' ? null : props.pantauStoreId) : props.activeStoreId
+      if (!activeSid) return;
+      const key = `alphaPro_${activeSid}_financial`
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        const fin = JSON.parse(saved)
+        if (fin.rentDueDate && fin.rentAmount) {
+          const dueDay = parseInt(fin.rentDueDate)
+          const today = new Date()
+          const currentDay = today.getDate()
+          const currentMonth = today.getMonth()
+          const currentYear = today.getFullYear()
+          
+          let targetDate = new Date(currentYear, currentMonth, dueDay)
+          
+          if (fin.rentPeriod === 'tahunan' && fin.startDate) {
+            const startD = new Date(fin.startDate)
+            const dueMonth = startD.getMonth()
+            targetDate = new Date(currentYear, dueMonth, dueDay)
+            if (targetDate.getTime() < today.getTime() && currentDay > dueDay) {
+              targetDate = new Date(currentYear + 1, dueMonth, dueDay)
+            }
+          } else {
+            if (currentDay > dueDay) {
+              targetDate = new Date(currentYear, currentMonth + 1, dueDay)
+            }
+          }
+
+          const diffTime = targetDate.getTime() - today.getTime()
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          
+          if (diffDays <= 7 && diffDays >= 0) {
+            setRentReminder({
+              isDueSoon: true,
+              amount: parseInt(fin.rentAmount),
+              dueDateStr: targetDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+              diffDays
+            })
+            // Reset dismiss status if it's a new month/year
+            const savedDismissDate = localStorage.getItem('alphaPro_owner_rent_dismissed_date')
+            if (savedDismissDate !== targetDate.toISOString()) {
+              setIsRentDismissed(false)
+              localStorage.setItem('alphaPro_owner_rent_dismissed', 'false')
+              localStorage.setItem('alphaPro_owner_rent_dismissed_date', targetDate.toISOString())
+            }
+          } else {
+            setRentReminder(null)
+          }
+        }
+      }
+    } catch (e) {}
+  }, [props.kasirRole, props.activeStoreId, props.pantauStoreId])
+
   // Read status tracking for notifications (auto-disappears bell badge on click)
   const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
     try {
@@ -1336,7 +1401,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     const todayStr = new Date().toISOString().split('T')[0]
     const briefingId = `briefing_${todayStr}`
     const bonusIds = bonusKasirList.map(name => `bonus_${name}_6m_${todayStr.substring(0, 7)}`)
-    const allIds = Array.from(new Set([...readNotifIds, briefingId, ...bonusIds]))
+    const rentId = rentReminder ? `rent_${rentReminder.dueDateStr}` : ''
+    const allIds = Array.from(new Set([...readNotifIds, briefingId, ...bonusIds, rentId].filter(Boolean)))
     setReadNotifIds(allIds)
     localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(allIds))
   }
@@ -1348,7 +1414,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     const bonusId = `bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`
     return !readNotifIds.includes(bonusId)
   })
-  const totalUnreadCount = (isBriefingUnread ? 1 : 0) + unreadBonusKasirList.length
+  const currentRentId = `rent_${rentReminder?.dueDateStr}`
+  const isRentUnread = rentReminder && !isRentDismissed && !readNotifIds.includes(currentRentId)
+  const totalUnreadCount = (isBriefingUnread ? 1 : 0) + unreadBonusKasirList.length + (isRentUnread ? 1 : 0)
 
   // STATE: Owner Menu Reordering
   const [isEditMenuMode, setIsEditMenuMode] = useState(false)
@@ -1996,6 +2064,59 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     </div>
                   </div>
                 )}
+
+                {/* 3. Rent Warning Banner */}
+                {rentReminder && !isRentDismissed && (
+                  <div 
+                    onClick={() => markNotifAsRead(`rent_${rentReminder.dueDateStr}`)}
+                    className="p-2.5 bg-gradient-to-r from-red-500 to-rose-600 rounded-xl shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs border border-white/30">
+                        <i className="fa-solid fa-file-invoice-dollar text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-rose-100 uppercase tracking-widest leading-none mb-0.5">⚠️ Jatuh Tempo Sewa</p>
+                        {!isRentMinimized ? (
+                          <p className="text-[10px] font-bold leading-tight text-white opacity-95">
+                            Sewa Toko senilai <span className="font-black text-yellow-200">Rp {rentReminder.amount.toLocaleString('id-ID')}</span> jatuh tempo {rentReminder.diffDays === 0 ? 'HARI INI' : `dalam ${rentReminder.diffDays} hari`} ({rentReminder.dueDateStr}).
+                          </p>
+                        ) : (
+                          <p className="text-[9px] font-bold text-yellow-200 opacity-90 truncate">
+                            Jatuh tempo: {rentReminder.diffDays === 0 ? 'Hari Ini' : `H-${rentReminder.diffDays}`} (Diminimize)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const next = !isRentMinimized
+                          setIsRentMinimized(next)
+                          localStorage.setItem('alphaPro_owner_rent_minimized', String(next))
+                        }}
+                        title={isRentMinimized ? "Perbesar" : "Minimize"}
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-black/40 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        {isRentMinimized ? '➕' : '➖'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          markNotifAsRead(`rent_${rentReminder.dueDateStr}`)
+                          setIsRentDismissed(true)
+                          localStorage.setItem('alphaPro_owner_rent_dismissed', 'true')
+                        }}
+                        title="Tutup Notifikasi"
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-rose-900 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2172,7 +2293,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       {/* Running Text Column — BELOW Saldo card */}
       {(props.mainAnnouncement || (props.runningTexts && props.runningTexts.some(t => t.trim() !== ''))) && (
-        <div className="mx-1.5 bg-blue-50/50 rounded-xl py-2.5 px-4 shadow-sm mb-4 border border-blue-100/50 flex items-center overflow-hidden">
+        <div className="mx-1.5 bg-blue-50/50 rounded-xl py-2.5 px-4 shadow-sm mb-4 border border-blue-100/50 flex items-center overflow-hidden relative">
           <style>{`
             @keyframes marquee-center {
               0% { transform: translateX(100%); opacity: 0; }
@@ -2189,7 +2310,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               white-space: nowrap;
             }
           `}</style>
-          <div className="w-full">
+          <div className="w-full min-w-0 relative overflow-hidden">
             {(() => {
               const activeTexts = [
                 props.mainAnnouncement ? { text: props.mainAnnouncement, isMain: true } : null,

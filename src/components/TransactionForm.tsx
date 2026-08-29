@@ -15,10 +15,11 @@ interface TransactionFormProps {
   presets?: any[]
   onOpenVoucherJualCepat?: () => void
   activeStoreId?: string
+  adminRules?: Record<string, any>
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId
+  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules
 }) => {
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
@@ -45,10 +46,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (isAdminManuallyEdited) return; // Prevent overwriting if user typed manually
     
     try {
-      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_adminRules`);
-      if (saved) {
-        const rules = JSON.parse(saved);
-        const catRules = rules[kategori] || [];
+      if (adminRules) {
+        const catRules = adminRules[kategori] || [];
         const numNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
         
         let foundAdmin = 0;
@@ -62,8 +61,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         if (foundAdmin > 0) {
           setAdmin(formatInputRupiah(foundAdmin.toString()));
         } else if (numNominal > 0 && catRules.length > 0) {
-           // If it exceeds all max, maybe use the highest? Or leave it alone.
-           // Let's use the last rule's admin if it exceeds the highest max.
+           // If it exceeds all max, use the last rule's admin
            const lastRule = catRules[catRules.length - 1];
            if (numNominal > lastRule.max) {
              setAdmin(formatInputRupiah(lastRule.admin.toString()));
@@ -73,7 +71,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     } catch (e) {
       console.error('Failed to parse admin rules', e);
     }
-  }, [nominal, kategori, activeStoreId, isAdminManuallyEdited, setAdmin]);
+  }, [nominal, kategori, activeStoreId, isAdminManuallyEdited, setAdmin, adminRules]);
   
   // Refs for navigation
   const btnDigitalRef = useRef<HTMLButtonElement>(null)
@@ -181,7 +179,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/20 rounded-full blur-3xl -z-10 pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
       <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl -z-10 pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
       {/* Main Categories */}
-      <div className="flex gap-1 mb-3">
+      <div className="grid grid-cols-4 gap-1 mb-3">
         {[
           { id: 'DIGITAL', label: 'TRANSFER', icon: 'fa-paper-plane', ref: btnDigitalRef },
           { id: 'TARIK', label: 'TARIK TUNAI', icon: 'fa-money-bill-transfer', ref: btnTarikRef },
@@ -226,8 +224,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               }}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
               className={cn(
-                "relative flex-1 flex flex-col items-center justify-center p-3 rounded-[1.25rem] border-2 transition-all duration-300 gap-2 outline-none overflow-hidden",
+                "relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-[1.25rem] border-2 transition-all duration-300 gap-1.5 sm:gap-2 outline-none overflow-hidden min-w-0",
                 activeMode === mode.id 
+
                   ? activeStyles
                   : cn("bg-white border-gray-100", hoverStyles)
               )}

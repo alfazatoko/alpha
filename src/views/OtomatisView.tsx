@@ -23,6 +23,8 @@ interface OtomatisViewProps {
   onConfirm?: (title: string, message: string, onConfirm: () => void) => void
   isPc?: boolean
   activeStoreId?: string
+  adminRules?: Record<string, AdminRule[]>
+  setAdminRules?: (rules: Record<string, AdminRule[]>) => void
 }
 
 const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
@@ -34,31 +36,34 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({})
 
-  // New states for Admin Otomatis
   const [activeOtoTab, setActiveOtoTab] = useState<'teks' | 'admin'>('teks')
-  const [adminRules, setAdminRules] = useState<Record<string, AdminRule[]>>(() => {
-    try {
-      const saved = localStorage.getItem(`alphaPro_${props.activeStoreId || 'all'}_adminRules`)
-      if (saved) return JSON.parse(saved)
-    } catch(e) {}
-    return {
+  const [adminRules, setLocalAdminRules] = useState<Record<string, AdminRule[]>>(
+    props.adminRules || {
       'Transfer Bank': [],
       'DANA': [],
       'FLIP': [],
       'Tarik Tunai': []
     }
-  })
+  )
+
+  useEffect(() => {
+    if (props.adminRules) {
+      setLocalAdminRules(props.adminRules)
+    }
+  }, [props.adminRules])
 
   // State for Admin Form
   const [formAdminKategori, setFormAdminKategori] = useState('Transfer Bank')
   const [formAdminMax, setFormAdminMax] = useState('')
   const [formAdminFee, setFormAdminFee] = useState('')
 
-  useEffect(() => {
-    if (props.activeStoreId && props.activeStoreId !== 'all') {
-      localStorage.setItem(`alphaPro_${props.activeStoreId}_adminRules`, JSON.stringify(adminRules))
+  // Update via props when changed locally
+  const updateAdminRules = (newRules: Record<string, AdminRule[]>) => {
+    setLocalAdminRules(newRules)
+    if (props.setAdminRules) {
+      props.setAdminRules(newRules)
     }
-  }, [adminRules, props.activeStoreId])
+  }
 
   const toggleCategory = (kat: string) => {
     setCollapsedCategories(prev => ({
@@ -155,24 +160,22 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
       return props.showToast('Nominal maksimal dan biaya admin harus lebih dari 0!')
     }
 
-    setAdminRules(prev => {
-      const catRules = prev[formAdminKategori] ? [...prev[formAdminKategori]] : []
-      // Check if max already exists
-      const existingIdx = catRules.findIndex(r => r.max === maxNum)
-      if (existingIdx >= 0) {
-        catRules[existingIdx].admin = adminNum
-      } else {
-        catRules.push({ max: maxNum, admin: adminNum })
-      }
-      
-      // Sort ascending by max
-      catRules.sort((a, b) => a.max - b.max)
-      
-      return {
-        ...prev,
-        [formAdminKategori]: catRules
-      }
-    })
+    const newRules = { ...adminRules }
+    const catRules = newRules[formAdminKategori] ? [...newRules[formAdminKategori]] : []
+    // Check if max already exists
+    const existingIdx = catRules.findIndex(r => r.max === maxNum)
+    if (existingIdx >= 0) {
+      catRules[existingIdx].admin = adminNum
+    } else {
+      catRules.push({ max: maxNum, admin: adminNum })
+    }
+    
+    // Sort ascending by max
+    catRules.sort((a, b) => a.max - b.max)
+    
+    newRules[formAdminKategori] = catRules
+    
+    updateAdminRules(newRules)
 
     setFormAdminMax('')
     setFormAdminFee('')
@@ -180,13 +183,10 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
   }
 
   const handleDeleteAdminRule = (kategori: string, max: number) => {
-    setAdminRules(prev => {
-      const catRules = prev[kategori].filter(r => r.max !== max)
-      return {
-        ...prev,
-        [kategori]: catRules
-      }
-    })
+    const newRules = { ...adminRules }
+    const catRules = newRules[kategori].filter(r => r.max !== max)
+    newRules[kategori] = catRules
+    updateAdminRules(newRules)
     props.showToast('Aturan Dihapus')
   }
 
