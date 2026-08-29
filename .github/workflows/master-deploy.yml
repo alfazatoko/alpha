@@ -68,6 +68,7 @@ jobs:
 
       - name: Run Signing Report (Untuk Ambil SHA-1)
         working-directory: ./android
+        continue-on-error: true
         run: |
           chmod +x gradlew
           ./gradlew signingReport
@@ -79,7 +80,9 @@ jobs:
 
       - name: Build APK (Mode Release)
         working-directory: ./android
-        run: ./gradlew assembleRelease
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
         env:
           KEYSTORE_PATH: release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
