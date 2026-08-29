@@ -184,10 +184,10 @@ const AssistantBot: React.FC<Props> = ({
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled())
   const recognitionRef = useRef<any>(null)
 
-  const toggleVoiceRecording = useCallback(() => {
+  const toggleVoiceRecording = useCallback(async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      alert('Browser ini belum mendukung perintah suara (Speech Recognition). Gunakan Google Chrome atau Microsoft Edge.')
+      alert('Fitur Perintah Suara (Speech Recognition) membutuhkan Google Chrome, Microsoft Edge, atau Browser Android modern.')
       return
     }
 
@@ -198,6 +198,17 @@ const AssistantBot: React.FC<Props> = ({
       setIsListening(false)
       playMicBeep('stop')
     } else {
+      // Minta izin mikrofon secara eksplisit jika navigator.mediaDevices tersedia
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach(track => track.stop())
+        } catch (permErr: any) {
+          alert('🔑 Izin Mikrofon Belum Diizinkan!\n\nHarap izinkan akses Mikrofon pada dialog Izin Browser/Aplikasi HP Anda.')
+          return
+        }
+      }
+
       try {
         const recognition = new SpeechRecognition()
         recognition.lang = 'id-ID'
@@ -219,9 +230,12 @@ const AssistantBot: React.FC<Props> = ({
           }
         }
 
-        recognition.onerror = () => {
+        recognition.onerror = (event: any) => {
           setIsListening(false)
           playMicBeep('stop')
+          if (event?.error === 'not-allowed' || event?.error === 'service-not-allowed') {
+            alert('🔑 Akses Mikrofon Dibatasi!\n\nHarap buka Pengaturan HP -> Aplikasi -> ALFAZA CELL -> Izin (Permissions) -> Mikrofon -> Pilih "Izinkan".')
+          }
         }
 
         recognition.onend = () => {
