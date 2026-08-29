@@ -60,6 +60,7 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth(); // 0-indexed
   const todayDate = today.getDate();
+  const todayDateStr = today.toLocaleDateString('en-CA');
 
   // Read izin list from localStorage
   let izinList: any[] = [];
@@ -72,12 +73,20 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
     console.error('Failed to parse izin', e);
   }
 
+  // Cek apakah kasir sudah ada data absen hari ini
+  const hasAbsenToday = (absensiList || []).some(
+    a => (a.username === username || a.nama_kasir === cashierName) && a.tanggal === todayDateStr
+  );
+
+  // Jika hari ini belum absen, batas hari yang sudah selesai diringkas sampai kemarin (todayDate - 1)
+  const limitDay = hasAbsenToday ? todayDate : Math.max(0, todayDate - 1);
+
   let hadir = 0;
   let izin = 0;
   let tidakAbsen = 0;
 
-  // Loop from day 1 to todayDate of the current month
-  for (let day = 1; day <= todayDate; day++) {
+  // Loop from day 1 to limitDay of the current month
+  for (let day = 1; day <= limitDay; day++) {
     const date = new Date(currentYear, currentMonth, day);
     const dateStr = date.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
@@ -92,9 +101,9 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
       }
     }
 
-    // Check check-in (matching the logic in BerandaView which uses jam_masuk or just checks entry existence)
+    // Check check-in
     const hasAbsen = (absensiList || []).some(
-      a => a.username === username && a.tanggal === dateStr
+      a => (a.username === username || a.nama_kasir === cashierName) && a.tanggal === dateStr
     );
 
     if (hasAbsen) {

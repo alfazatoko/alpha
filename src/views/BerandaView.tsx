@@ -149,8 +149,7 @@ const GajiPanel: React.FC<{
   }, [kasirArr, selectedKasir])
 
   const selectedName = kasirList[selectedKasir]?.name || ''
-
-  const absenCount = (absensiList || []).filter(a => a.username === selectedKasir && a.tanggal.startsWith(month)).length
+  const absenCount = new Set((absensiList || []).filter(a => (a.username === selectedKasir || a.nama_kasir === selectedName) && a.tanggal && a.tanggal.startsWith(month)).map(a => a.tanggal)).size
   const izinCount = izinList.filter(iz => iz.nama === selectedName && iz.tanggal.startsWith(month)).length
 
   const hariKerja = editHariKerja ? (parseInt(hariKerjaManual) || 0) : absenCount
@@ -3146,17 +3145,36 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             {cashiers.map(([id, acc]) => {
                               // Data absensi bulan ini untuk kasir ini
                               const monthData = (props.absensiList || []).filter(a => 
-                                a.username === id && a.tanggal.startsWith(absenFilterMonth)
+                                (a.username === id || a.nama_kasir === acc.name) && a.tanggal && a.tanggal.startsWith(absenFilterMonth)
                               )
                               
-                              const totalHadir = monthData.length
-                              const totalLibur = Math.max(0, daysPassed - totalHadir)
+                              // Hadir berdasarkan tanggal unik
+                              const uniqueAttendedDates = new Set(monthData.map(a => a.tanggal))
+                              const totalHadir = uniqueAttendedDates.size
+
+                              // Evaluasi hari berlalu efektif (jika hari ini belum absen, hari ini tidak dihitung sebagai libur)
+                              const todayStr = getLocalDateString()
+                              const hasAttendedToday = uniqueAttendedDates.has(todayStr)
+                              let effectiveDaysPassed = daysPassed
+                              if (isCurrentMonth && !hasAttendedToday) {
+                                effectiveDaysPassed = Math.max(0, today.getDate() - 1)
+                              }
+                              
+                              const totalLibur = Math.max(0, effectiveDaysPassed - totalHadir)
                               
                               let pagi = 0
                               let siang = 0
                               
+                              // Hitung shift pagi vs siang dari setiap tanggal unik (ambil entri pertama tiap hari)
+                              const dailyFirstEntries = new Map<string, any>()
                               monthData.forEach(entry => {
-                                const hour = parseInt(entry.jam_masuk.split(':')[0])
+                                if (!dailyFirstEntries.has(entry.tanggal)) {
+                                  dailyFirstEntries.set(entry.tanggal, entry)
+                                }
+                              })
+
+                              dailyFirstEntries.forEach(entry => {
+                                const hour = parseInt((entry.jam_masuk || '00:00').split(':')[0])
                                 if (hour < 10) pagi++
                                 else siang++ // Termasuk Normal (10-14) dan Siang (15+)
                               })
