@@ -56,6 +56,7 @@ interface BerandaViewProps {
   showToast: (m: string) => void
   onConfirm: (t: string, m: string, c: () => void) => void
   presets?: any[]
+  adminRules?: Record<string, any>
   activeStoreId?: string | 'all'
   pantauStoreId?: string | 'all'
   setPantauStoreId?: (id: string | 'all') => void
@@ -4400,6 +4401,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               }, 100);
             }}
             activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+            adminRules={props.adminRules}
           />
         </div>
       )}
