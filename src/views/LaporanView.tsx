@@ -2311,7 +2311,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </button>
             </div>
             
-            <div className="p-6 flex flex-col max-h-[80vh]">
+            <div className="p-6 pb-10 sm:pb-6 flex flex-col max-h-[80vh]">
               <datalist id="aplikasi-suggestions">
                 {quickOptions.map(opt => (
                   <option key={opt} value={opt} />
@@ -2765,7 +2765,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
             
             {/* Body / List */}
-            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar">
+            <div className="p-4 pb-12 sm:pb-4 max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar">
               {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => {
                 const isSelected = targetKasirId === username;
                 const kasirName = data.name || username;
@@ -2786,10 +2786,14 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   >
                     {/* Avatar */}
                     <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black shadow-sm",
-                      isSelected ? "bg-gradient-to-br from-blue-500 to-indigo-600" : "bg-gradient-to-br from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700"
+                      "w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black shadow-sm overflow-hidden",
+                      isSelected && !data.avatar ? "bg-gradient-to-br from-blue-500 to-indigo-600" : !data.avatar ? "bg-gradient-to-br from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700" : ""
                     )}>
-                      {initial}
+                      {data.avatar ? (
+                        <img src={data.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        initial
+                      )}
                     </div>
                     
                     {/* Name */}
