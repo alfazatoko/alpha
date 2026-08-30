@@ -1792,7 +1792,13 @@ export function answerFromKB(
         const startDate = fin.startDate ? new Date(fin.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'
 
         // Calculate monthly operational cost
-        const monthlyRent = rentPeriod === 'tahunan' ? Math.round(rentAmt / 12) : rentAmt
+        let divisor = 1;
+        if (rentPeriod === 'tahunan') divisor = 12;
+        else if (rentPeriod === 'per6bulan') divisor = 6;
+        else if (rentPeriod === 'per3bulan') divisor = 3;
+        else if (rentPeriod === 'per2bulan') divisor = 2;
+        
+        const monthlyRent = Math.round(rentAmt / divisor)
         const totalMonthly = monthlyRent + elecAmt + wifiAmt
 
         // Calculate rent due date proximity
@@ -1818,7 +1824,7 @@ export function answerFromKB(
           let res = `💰 **Estimasi Laba Bersih Bulan Ini:**\n\n`
           res += `📈 **Pendapatan Admin Fee:** Rp ${totalAdmin.toLocaleString('id-ID')}\n\n`
           res += `📉 **Beban Operasional Bulanan:**\n`
-          if (monthlyRent > 0) res += `  • Sewa Toko: Rp ${monthlyRent.toLocaleString('id-ID')}${rentPeriod === 'tahunan' ? ' (/bln dari tahunan)' : ''}\n`
+          if (monthlyRent > 0) res += `  • Sewa Toko: Rp ${monthlyRent.toLocaleString('id-ID')}${divisor > 1 ? ` (/bln dari ${rentPeriod})` : ''}\n`
           if (elecAmt > 0) res += `  • Listrik/Air: Rp ${elecAmt.toLocaleString('id-ID')}\n`
           if (wifiAmt > 0) res += `  • WiFi: Rp ${wifiAmt.toLocaleString('id-ID')}\n`
           res += `  • **Total Beban: Rp ${totalMonthly.toLocaleString('id-ID')}**\n\n`
@@ -1833,7 +1839,7 @@ export function answerFromKB(
         if (rentAmt > 0) {
           res += `🏠 **Sewa Toko:**\n`
           res += `  • Nominal: **Rp ${rentAmt.toLocaleString('id-ID')}** (${rentPeriod})\n`
-          if (rentPeriod === 'tahunan') res += `  • Setara Rp ${monthlyRent.toLocaleString('id-ID')}/bulan\n`
+          if (divisor > 1) res += `  • Setara Rp ${monthlyRent.toLocaleString('id-ID')}/bulan\n`
           res += `  • Jatuh Tempo: Tanggal **${dueDate}** tiap bulan\n`
         }
         if (elecAmt > 0) res += `⚡ **Listrik/Air:** Rp ${elecAmt.toLocaleString('id-ID')}/bulan\n`
@@ -2109,12 +2115,25 @@ Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
     }
   }
 
-  // ── SISTEM PROMPT FINAL ──
   const basePrompt = `Kamu adalah Bot Alpha, asisten AI cerdas untuk toko ${storeName}.
 Kamu berperan sebagai "Karyawan Analis Toko" yang memahami pembukuan, stok voucher, dan operasional toko konter pulsa.
 Jawab dalam Bahasa Indonesia yang ringkas, cerdas, dan ramah. Gunakan emoji secukupnya.
 Format jawaban: gunakan baris baru dan poin jika perlu, maksimal 200 kata kecuali diminta analisa detail.
-Jika tidak tahu, katakan jujur. Jangan jawab hal berbahaya atau SARA.`
+Jika tidak tahu, katakan jujur. Jangan jawab hal berbahaya atau SARA.
+
+PENGETAHUAN HALAMAN APLIKASI (MANUAL BOOK):
+- Halaman "Kasir" (Kelola Data Kasir): Tempat mengelola data profil toko dan akun kasir. Digunakan untuk menambah kasir baru, mengatur PIN, melihat identitas kasir, dan mengatur absensi.
+- Halaman "Notifikasi" (Riwayat Notifikasi Toko): Tempat melihat riwayat aktivitas penting (log event) seperti peringatan stok menipis, peringatan jatuh tempo sewa, absensi, dan transaksi abnormal.
+- Halaman "Audit" (Audit Uang Laci): Tempat mengecek riwayat serah terima shift antar kasir. Berfungsi mencocokkan "Uang Laci" (Kas Fisik) dengan hitungan sistem untuk melacak selisih (minus/plus) demi mencegah kebocoran dana.
+- Halaman "Gajih" (Data Gaji Kasir): Tempat khusus Owner untuk mengatur nominal Gaji Pokok (Bisa Harian atau Bulanan), mencatat pembayaran gaji & bonus bulanan, serta memantau masa kerja (tenure) karyawan.
+  ATURAN CARA HITUNG GAJI (PENTING!):
+  - Jika ditanya perhitungan gaji harian: Hitung berdasarkan (Jumlah Hari Hadir x Nominal Gaji Harian) + Bonus - Potongan.
+  - Jika user minta menghitung gaji, otomatis periksa data log absensi kasir di bulan ini (berapa kali hadir), kalikan dengan gaji per hari yang diminta user, lalu berikan total akhirnya.
+- Halaman "Absen" (Kehadiran Kasir): Tempat melihat rekaman jam masuk kasir setiap harinya secara rinci.
+- Halaman "Izin" (Kelola Izin): Tempat mencatat, memantau, dan menyetujui alasan ketidakhadiran (izin/cuti) kasir.
+- Halaman "Performa" (Performa Kasir): Tempat mengevaluasi omset yang dihasilkan oleh masing-masing kasir.
+  ATURAN PERFORMA: Jika ditanya "Siapa kasir terbaik?" atau "Berapa penjualan Budi?", periksa bagian 'Data Penjualan Bulan Ini (Breakdown per Kasir)' atau 'Analitik Kecerdasan Bisnis' di bawah.
+- Halaman "Catatan" (Catatan & Belanja): Tempat mencatat hal-hal penting operasional toko atau daftar pengeluaran belanja (kulakan).`
 
   const roleSection = isOwner
     ? `\n\nKAMU SEDANG BERBICARA DENGAN: OWNER (${ctx.kasirName || 'Pemilik Toko'})

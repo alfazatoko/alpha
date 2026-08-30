@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
 
 interface AkunViewProps {
@@ -860,13 +860,18 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer appearance-none"
                           >
                             <option value="bulanan">Bulanan (Per Bulan)</option>
+                            <option value="per2bulan">Per 2 Bulan</option>
+                            <option value="per3bulan">Per 3 Bulan</option>
+                            <option value="per6bulan">Per 6 Bulan</option>
                             <option value="tahunan">Tahunan (Per Tahun)</option>
                           </select>
                         </div>
 
                         {/* Nominal Sewa */}
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">Biaya Sewa ({financialSettings.rentPeriod === 'tahunan' ? 'Per Tahun' : 'Per Bulan'})</label>
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block ml-1">
+                            Biaya Sewa / {financialSettings.rentPeriod === 'tahunan' ? 'Tahun' : financialSettings.rentPeriod === 'per6bulan' ? '6 Bulan' : financialSettings.rentPeriod === 'per3bulan' ? '3 Bulan' : financialSettings.rentPeriod === 'per2bulan' ? '2 Bulan' : 'Bulan'}
+                          </label>
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
                             <input
@@ -2341,57 +2346,77 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'profil' && "rotate-180")} />
                 </button>
                 {openCategory === 'profil' && (
-                  <div className="mt-2 p-5 bg-emerald-50/30 border border-emerald-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
-                    {/* Photo Upload */}
-                    <div className="flex flex-col items-center gap-3 pb-2">
-                      <div className="relative group cursor-pointer" onClick={() => document.getElementById('photoInput')?.click()}>
-                        {props.storePhoto ? (
-                          <img src={props.storePhoto} alt="Store" className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md transition-transform group-hover:scale-105" />
-                        ) : (
-                          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 border-4 border-white shadow-md">
-                            <i className="fa-solid fa-camera text-2xl"></i>
-                          </div>
-                        )}
-                        <div className="absolute bottom-0 right-0 w-7 h-7 bg-emerald-600 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg">
-                          <i className="fa-solid fa-plus text-[10px]"></i>
-                        </div>
-                        <input id="photoInput" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                  <div className="mt-2 p-5 bg-emerald-50 border border-emerald-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-200">
+                        <i className="fa-solid fa-store"></i>
                       </div>
-                      <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Ganti Logo Toko</p>
+                      <div>
+                        <p className="text-[11px] font-black text-emerald-900 uppercase tracking-widest">Identitas Toko</p>
+                        <p className="text-[9px] text-emerald-700 font-bold mt-0.5">Ubah nama, slogan, dan logo toko Anda.</p>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-[9px] font-black text-emerald-600 uppercase tracking-tight ml-1 mb-2 block">Nama Toko</label>
-                      <input
-                        type="text"
-                        value={localStoreName}
-                        onChange={(e) => setLocalStoreName(e.target.value)}
-                        onBlur={() => {
-                          if (localStoreName !== props.storeName) {
-                            props.onSaveStoreName?.(localStoreName)
-                          }
-                        }}
-                        placeholder="Nama Toko Anda"
-                        className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      />
-                    </div>
+                    <div className="space-y-4">
+                      {/* Logo Section */}
+                      <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm flex items-center gap-5">
+                        <div className="relative group cursor-pointer shrink-0" onClick={() => document.getElementById('photoInput')?.click()}>
+                          {props.storePhoto ? (
+                            <img src={props.storePhoto} alt="Store" className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-50 shadow-sm transition-transform group-hover:scale-105" />
+                          ) : (
+                            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-400 border-2 border-emerald-100 shadow-sm">
+                              <i className="fa-solid fa-camera text-xl"></i>
+                            </div>
+                          )}
+                          <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-emerald-600 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg">
+                            <i className="fa-solid fa-pen text-[10px]"></i>
+                          </div>
+                          <input id="photoInput" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-1">Logo Utama Toko</p>
+                          <p className="text-[9px] font-bold text-gray-500 leading-snug">Gunakan gambar dengan rasio 1:1 agar logo terlihat lebih proporsional.</p>
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="text-[9px] font-black text-emerald-600 uppercase tracking-tight ml-1 mb-2 block">Sub-Teks / Slogan</label>
-                      <input
-                        type="text"
-                        value={localStoreSubtext}
-                        onChange={(e) => setLocalStoreSubtext(e.target.value)}
-                        onBlur={() => {
-                          if (localStoreSubtext !== props.storeSubtext) {
-                            props.onSaveStoreSubtext?.(localStoreSubtext)
-                          }
-                        }}
-                        placeholder="Contoh: Pembukuan Agen brilink & Konter"
-                        className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-emerald-100 transition-all outline-none"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      />
+                      {/* Text Inputs */}
+                      <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm space-y-4">
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Nama Toko</label>
+                            <input
+                              type="text"
+                              value={localStoreName}
+                              onChange={(e) => setLocalStoreName(e.target.value)}
+                              onBlur={() => {
+                                if (localStoreName !== props.storeName) {
+                                  props.onSaveStoreName?.(localStoreName)
+                                }
+                              }}
+                              placeholder="Ketik Nama Toko"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Sub-Teks / Slogan</label>
+                            <input
+                              type="text"
+                              value={localStoreSubtext}
+                              onChange={(e) => setLocalStoreSubtext(e.target.value)}
+                              onBlur={() => {
+                                if (localStoreSubtext !== props.storeSubtext) {
+                                  props.onSaveStoreSubtext?.(localStoreSubtext)
+                                }
+                              }}
+                              placeholder="Contoh: Konter Pulsa & Aksesoris"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2413,126 +2438,154 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'finansial' && "rotate-180")} />
                 </button>
                 {openCategory === 'finansial' && (
-                  <div className="mt-2 p-5 bg-orange-50/30 border border-orange-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
-                    <div className="flex flex-col gap-1 pb-2">
-                      <p className="text-[11px] font-black text-orange-800 uppercase tracking-widest">Pengaturan Operasional</p>
-                      <p className="text-[9px] text-orange-600/80 font-bold">Catat pengeluaran rutin agar Bot AI dapat kalkulasi Laba Bersih toko secara otomatis.</p>
+                  <div className="mt-2 p-5 bg-orange-50 border border-orange-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shadow-sm border border-orange-200">
+                        <i className="fa-solid fa-store"></i>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black text-orange-900 uppercase tracking-widest">Pengaturan Operasional</p>
+                        <p className="text-[9px] text-orange-700 font-bold mt-0.5">Catat pengeluaran rutin untuk kalkulasi otomatis.</p>
+                      </div>
                     </div>
 
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 block">Mulai Buka/Sewa Toko</label>
-                        {financialSettings.startDate && !isEditingFinancialStart && (
-                          <button onClick={() => setIsEditingFinancialStart(true)} className="text-[10px] font-bold text-orange-600 pr-1">
-                            <i className="fa-solid fa-pen-to-square"></i> Edit
-                          </button>
-                        )}
-                      </div>
-                      {financialSettings.startDate && !isEditingFinancialStart ? (
-                        <div 
-                          onClick={() => setIsEditingFinancialStart(true)}
-                          className="w-full bg-orange-50/50 border border-orange-200 rounded-xl px-4 py-3 text-xs font-black text-orange-700 flex items-center gap-3 cursor-pointer"
-                        >
-                          <i className="fa-solid fa-calendar-check text-orange-500"></i>
-                          {new Date(financialSettings.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    <div className="space-y-4">
+                      {/* SECTION: SEWA TOKO */}
+                      <div className="bg-white rounded-2xl p-4 border border-orange-100 shadow-sm space-y-4">
+                        <h4 className="text-[9px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-1.5 border-b border-orange-50 pb-2">
+                          <i className="fa-solid fa-house-chimney"></i> Info Sewa Toko
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <div className="flex justify-between items-center mb-1.5">
+                              <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 block">Mulai Buka/Sewa</label>
+                              {financialSettings.startDate && !isEditingFinancialStart && (
+                                <button onClick={() => setIsEditingFinancialStart(true)} className="text-[9px] font-black text-orange-600 hover:underline">Edit</button>
+                              )}
+                            </div>
+                            {financialSettings.startDate && !isEditingFinancialStart ? (
+                              <div 
+                                onClick={() => setIsEditingFinancialStart(true)}
+                                className="w-full bg-orange-50 border border-orange-100 rounded-xl px-3 py-2.5 text-xs font-black text-orange-800 flex items-center gap-2.5 cursor-pointer shadow-sm"
+                              >
+                                <i className="fa-solid fa-calendar-check text-orange-500"></i>
+                                {new Date(financialSettings.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                            ) : (
+                              <input
+                                type="date"
+                                value={financialSettings.startDate}
+                                onChange={(e) => {
+                                  handleSaveFinancial('startDate', e.target.value)
+                                  setIsEditingFinancialStart(false)
+                                }}
+                                autoFocus
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none"
+                                style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Periode Sewa</label>
+                            <select
+                              value={financialSettings.rentPeriod}
+                              onChange={(e) => handleSaveFinancial('rentPeriod', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none appearance-none cursor-pointer"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            >
+                              <option value="bulanan">Bulanan</option>
+                              <option value="per2bulan">Per 2 Bulan</option>
+                              <option value="per3bulan">Per 3 Bulan</option>
+                              <option value="per6bulan">Per 6 Bulan</option>
+                              <option value="tahunan">Tahunan</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">
+                              Biaya Sewa / {financialSettings.rentPeriod === 'tahunan' ? 'Tahun' : financialSettings.rentPeriod === 'per6bulan' ? '6 Bulan' : financialSettings.rentPeriod === 'per3bulan' ? '3 Bulan' : financialSettings.rentPeriod === 'per2bulan' ? '2 Bulan' : 'Bulan'}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-400">Rp</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={financialSettings.rentAmount ? Number(financialSettings.rentAmount).toLocaleString('id-ID') : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, '')
+                                  handleSaveFinancial('rentAmount', val)
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none"
+                                style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Tgl Jatuh Tempo</label>
+                            <select
+                              value={financialSettings.rentDueDate}
+                              onChange={(e) => handleSaveFinancial('rentDueDate', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none appearance-none cursor-pointer"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            >
+                              <option value="">-- Pilih --</option>
+                              {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                                <option key={d} value={d}>Tgl {d}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
-                      ) : (
-                        <input
-                          type="date"
-                          value={financialSettings.startDate}
-                          onChange={(e) => {
-                            handleSaveFinancial('startDate', e.target.value)
-                            setIsEditingFinancialStart(false)
-                          }}
-                          autoFocus
-                          className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
-                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                        />
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Periode Sewa</label>
-                      <select
-                        value={financialSettings.rentPeriod}
-                        onChange={(e) => handleSaveFinancial('rentPeriod', e.target.value)}
-                        className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none appearance-none cursor-pointer"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      >
-                        <option value="bulanan">Bulanan (Per Bulan)</option>
-                        <option value="tahunan">Tahunan (Per Tahun)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Biaya Sewa ({financialSettings.rentPeriod === 'tahunan' ? 'Per Tahun' : 'Per Bulan'})</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={financialSettings.rentAmount ? Number(financialSettings.rentAmount).toLocaleString('id-ID') : ''}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '')
-                            handleSaveFinancial('rentAmount', val)
-                          }}
-                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
-                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                        />
                       </div>
-                    </div>
 
-                    <div>
-                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Tgl Jatuh Tempo Sewa</label>
-                      <select
-                        value={financialSettings.rentDueDate}
-                        onChange={(e) => handleSaveFinancial('rentDueDate', e.target.value)}
-                        className="w-full bg-white border border-orange-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none appearance-none cursor-pointer"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      >
-                        <option value="">-- Pilih Tanggal --</option>
-                        {Array.from({length: 31}, (_, i) => i + 1).map(d => (
-                          <option key={d} value={d}>Tanggal {d}</option>
-                        ))}
-                      </select>
-                    </div>
+                      {/* SECTION: TAGIHAN UTILITAS */}
+                      <div className="bg-white rounded-2xl p-4 border border-orange-100 shadow-sm space-y-4">
+                        <h4 className="text-[9px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-1.5 border-b border-orange-50 pb-2">
+                          <i className="fa-solid fa-plug"></i> Tagihan Utilitas (Bulan)
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Listrik/Air</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-400">Rp</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={financialSettings.electricityBill ? Number(financialSettings.electricityBill).toLocaleString('id-ID') : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, '')
+                                  handleSaveFinancial('electricityBill', val)
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none"
+                                style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                              />
+                            </div>
+                          </div>
 
-                    <div>
-                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Listrik/Air (Bulan)</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={financialSettings.electricityBill ? Number(financialSettings.electricityBill).toLocaleString('id-ID') : ''}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '')
-                            handleSaveFinancial('electricityBill', val)
-                          }}
-                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
-                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">WiFi/Internet (Bulan)</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="0"
-                          value={financialSettings.wifiBill ? Number(financialSettings.wifiBill).toLocaleString('id-ID') : ''}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '')
-                            handleSaveFinancial('wifiBill', val)
-                          }}
-                          className="w-full bg-white border border-orange-100 rounded-xl pl-9 pr-4 py-3 text-xs font-black text-gray-900 focus:ring-4 focus:ring-orange-100 transition-all outline-none"
-                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                        />
+                          <div>
+                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">WiFi/Internet</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-400">Rp</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={financialSettings.wifiBill ? Number(financialSettings.wifiBill).toLocaleString('id-ID') : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, '')
+                                  handleSaveFinancial('wifiBill', val)
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-orange-200 transition-all outline-none"
+                                style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

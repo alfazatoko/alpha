@@ -1341,12 +1341,23 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           
           let targetDate = new Date(currentYear, currentMonth, dueDay)
           
-          if (fin.rentPeriod === 'tahunan' && fin.startDate) {
+          if (fin.startDate && fin.rentPeriod !== 'bulanan') {
+            let monthStep = 1;
+            if (fin.rentPeriod === 'tahunan') monthStep = 12;
+            else if (fin.rentPeriod === 'per6bulan') monthStep = 6;
+            else if (fin.rentPeriod === 'per3bulan') monthStep = 3;
+            else if (fin.rentPeriod === 'per2bulan') monthStep = 2;
+
             const startD = new Date(fin.startDate)
-            const dueMonth = startD.getMonth()
-            targetDate = new Date(currentYear, dueMonth, dueDay)
-            if (targetDate.getTime() < today.getTime() && currentDay > dueDay) {
-              targetDate = new Date(currentYear + 1, dueMonth, dueDay)
+            let dueMonth = startD.getMonth()
+            let dueYear = startD.getFullYear()
+            
+            targetDate = new Date(dueYear, dueMonth, dueDay)
+            const todayReset = new Date(currentYear, currentMonth, currentDay).getTime()
+            
+            while (targetDate.getTime() < todayReset) {
+              dueMonth += monthStep;
+              targetDate = new Date(dueYear, dueMonth, dueDay);
             }
           } else {
             if (currentDay > dueDay) {
@@ -1549,6 +1560,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
+  const [absenLateHistoryId, setAbsenLateHistoryId] = useState<string | null>(null)
   const [absenFilterMonth, setAbsenFilterMonth] = useState(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -3286,6 +3298,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               
                               let pagi = 0
                               let siang = 0
+                              const latePagiDates: {tanggal: string, jam: string}[] = []
                               
                               // Hitung shift pagi vs siang dari setiap tanggal unik (ambil entri pertama tiap hari)
                               const dailyFirstEntries = new Map<string, any>()
@@ -3296,10 +3309,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               })
 
                               dailyFirstEntries.forEach(entry => {
-                                const hour = parseInt((entry.jam_masuk || '00:00').split(':')[0])
-                                if (hour < 10) pagi++
+                                // Ganti titik menjadi titik dua untuk memastikan split konsisten
+                                const safeJam = (entry.jam_masuk || '00:00').replace(/\./g, ':')
+                                const [hStr, mStr] = safeJam.split(':')
+                                const hour = parseInt(hStr || '0')
+                                const min = parseInt(mStr || '0')
+                                
+                                if (hour < 10) {
+                                  pagi++
+                                  // Hitung telat pagi jika lebih dari 07:15
+                                  if (hour > 7 || (hour === 7 && min > 15)) {
+                                    latePagiDates.push({tanggal: entry.tanggal, jam: entry.jam_masuk})
+                                  }
+                                }
                                 else siang++ // Termasuk Normal (10-14) dan Siang (15+)
                               })
+                              
+                              // Urutkan riwayat telat dari yang terbaru
+                              latePagiDates.sort((a, b) => b.tanggal.localeCompare(a.tanggal))
                               
                               return (
                                 <div key={`rekap-${id}`} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
@@ -3313,8 +3340,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                       <p className="text-[8px] font-bold text-teal-600 uppercase mb-1">Hadir</p>
                                       <p className="text-[12px] font-black text-teal-700">{totalHadir}</p>
                                     </div>
-                                    <div className="bg-orange-50/50 rounded-xl p-2 border border-orange-50">
-                                      <p className="text-[8px] font-bold text-orange-600 uppercase mb-1">Pagi</p>
+                                    <div 
+                                      className={cn("bg-orange-50/50 rounded-xl p-2 border transition-all", latePagiDates.length > 0 ? "border-orange-300 cursor-pointer active:scale-95 shadow-sm" : "border-orange-50")}
+                                      onClick={() => latePagiDates.length > 0 ? setAbsenLateHistoryId(absenLateHistoryId === id ? null : id) : undefined}
+                                    >
+                                      <div className="flex items-center justify-center gap-1 mb-1">
+                                        <p className="text-[8px] font-bold text-orange-600 uppercase">Pagi</p>
+                                        {latePagiDates.length > 0 && <i className="fa-solid fa-circle-exclamation text-[8px] text-red-500 animate-pulse" title="Ada riwayat telat"></i>}
+                                      </div>
                                       <p className="text-[12px] font-black text-orange-700">{pagi}</p>
                                     </div>
                                     <div className="bg-indigo-50/50 rounded-xl p-2 border border-indigo-50">
@@ -3326,6 +3359,27 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                       <p className="text-[12px] font-black text-rose-700">{totalLibur}</p>
                                     </div>
                                   </div>
+                                  
+                                  {absenLateHistoryId === id && latePagiDates.length > 0 && (
+                                    <div className="mt-3 p-3 bg-red-50/80 rounded-xl border border-red-100 animate-in slide-in-from-top-2 fade-in duration-300">
+                                      <p className="text-[9px] font-black text-red-800 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                        <i className="fa-solid fa-clock-rotate-left text-red-600"></i> Riwayat Telat Pagi (&gt; 07:15) <span className="lowercase font-bold opacity-80">({latePagiDates.length} x telat)</span>
+                                      </p>
+                                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                                        {latePagiDates.map((late, idx) => {
+                                          const [y, m, d] = late.tanggal.split('-');
+                                          const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                          const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+                                          return (
+                                            <div key={idx} className="flex justify-between items-center text-[10px] bg-white px-2.5 py-2 rounded-lg border border-red-50/50 shadow-sm">
+                                              <span className="font-bold text-gray-700">{dateStr}</span>
+                                              <span className="font-black text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded">{late.jam}</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             })}

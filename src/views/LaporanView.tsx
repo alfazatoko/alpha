@@ -198,7 +198,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [confirmSelisih, setConfirmSelisih] = useState(false)
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
   const [isOperkanSaldo, setIsOperkanSaldo] = useState(false)
+  const [editingSaldoIndex, setEditingSaldoIndex] = useState<number | null>(null)
   const [targetKasirId, setTargetKasirId] = useState('')
+  const [showKasirPenerimaSheet, setShowKasirPenerimaSheet] = useState(false)
   const [showAuditModal, setShowAuditModal] = useState(false)
 
   // Logika pasangan kronologis audit shift (Berkelanjutan Pagi -> Malam -> Pagi Besok)
@@ -1480,7 +1482,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   })}
                 </div>
                 
-                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                   {(() => {
                     const softColors = [
                       'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
@@ -1489,8 +1491,48 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
                       'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
                     ];
-                    return saldoRealRows.map((row, index) => (
-                      <div key={index} className={cn("p-3 rounded-2xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
+                    return saldoRealRows.map((row, index) => {
+                      const isFilled = row.keterangan.trim() !== '' && row.nominal.trim() !== '';
+                      const isEditing = editingSaldoIndex === index || !isFilled;
+
+                      if (!isEditing) {
+                        return (
+                          <div 
+                            key={index}
+                            onClick={() => setEditingSaldoIndex(index)}
+                            className={cn("px-4 py-2.5 rounded-xl border relative group flex items-center justify-between cursor-pointer hover:opacity-80 transition-all shadow-sm", softColors[index % softColors.length])}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase">{row.keterangan}</span>
+                              <span className="text-[10px] font-bold text-slate-400">=</span>
+                              <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">Rp {row.nominal}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-100 dark:border-emerald-900/50">
+                                <i className="fa-solid fa-pen text-[10px]"></i>
+                              </span>
+                              {index > 0 && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newRows = [...saldoRealRows];
+                                    newRows.splice(index, 1);
+                                    setSaldoRealRows(newRows);
+                                    setConfirmSelisih(false);
+                                    setSelisihNotification({show: false, selisih: 0});
+                                  }}
+                                  className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all"
+                                >
+                                  <i className="fa-solid fa-xmark text-[11px]"></i>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                      <div key={index} className={cn("p-2.5 rounded-xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
                         {index > 0 && (
                           <button 
                             onClick={() => {
@@ -1500,9 +1542,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                               setConfirmSelisih(false);
                               setSelisihNotification({show: false, selisih: 0});
                             }}
-                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
+                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
                           >
-                            <i className="fa-solid fa-xmark text-[10px]"></i>
+                            <i className="fa-solid fa-xmark text-[9px]"></i>
                           </button>
                         )}
                         
@@ -1513,6 +1555,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             type="text"
                             list="aplikasi-suggestions"
                             value={row.keterangan}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
+                              }, 150);
+                            }}
+                            onFocus={() => setEditingSaldoIndex(index)}
                             onChange={(e) => {
                               const newRows = [...saldoRealRows];
                               newRows[index].keterangan = e.target.value;
@@ -1526,6 +1574,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             }}
                             className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
                             placeholder="BCA, Dana.."
+                            autoFocus={editingSaldoIndex === index}
                           />
                         </div>
 
@@ -1538,6 +1587,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                               type="text"
                               inputMode="numeric"
                               value={row.nominal}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
+                                }, 150);
+                              }}
+                              onFocus={() => setEditingSaldoIndex(index)}
                               onChange={(e) => {
                                 const newRows = [...saldoRealRows];
                                 newRows[index].nominal = formatInputRupiah(e.target.value);
@@ -1548,6 +1603,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
+                                  setEditingSaldoIndex(null);
                                   const nextKet = document.getElementById(`ket-${index + 1}`);
                                   if (nextKet) {
                                     nextKet.focus();
@@ -1563,7 +1619,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                           </div>
                         </div>
                       </div>
-                    ));
+                    );
+                    });
                   })()}
 
                   <button 
@@ -1595,18 +1652,23 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
                           Pilih Kasir Penerima (Shift Selanjutnya)
                         </label>
-                        <select
-                          value={targetKasirId}
-                          onChange={(e) => setTargetKasirId(e.target.value)}
-                          className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer"
+                        <button
+                          type="button"
+                          onClick={() => setShowKasirPenerimaSheet(true)}
+                          className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
                         >
-                          <option value="">-- Pilih Kasir Penerima --</option>
-                          {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
-                            <option key={username} value={username}>
-                              {data.name || username}
-                            </option>
-                          ))}
-                        </select>
+                          {targetKasirId ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-sm uppercase">
+                                {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
+                              </div>
+                              <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
+                            </div>
+                          ) : (
+                            <span className="opacity-70">-- Pilih Kasir Penerima --</span>
+                          )}
+                          <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -2276,7 +2338,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 })}
               </div>
 
-              <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                 {(() => {
                   const softColors = [
                     'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
@@ -2285,8 +2347,48 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                     'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
                     'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
                   ];
-                  return saldoRealRows.map((row, index) => (
-                    <div key={index} className={cn("p-3 rounded-2xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
+                  return saldoRealRows.map((row, index) => {
+                    const isFilled = row.keterangan.trim() !== '' && row.nominal.trim() !== '';
+                    const isEditing = editingSaldoIndex === index || !isFilled;
+
+                    if (!isEditing) {
+                      return (
+                        <div 
+                          key={index}
+                          onClick={() => setEditingSaldoIndex(index)}
+                          className={cn("px-4 py-2.5 rounded-xl border relative group flex items-center justify-between cursor-pointer hover:opacity-80 transition-all shadow-sm", softColors[index % softColors.length])}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase">{row.keterangan}</span>
+                            <span className="text-[10px] font-bold text-slate-400">=</span>
+                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">Rp {row.nominal}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-100 dark:border-emerald-900/50">
+                              <i className="fa-solid fa-pen text-[10px]"></i>
+                            </span>
+                            {index > 0 && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newRows = [...saldoRealRows];
+                                  newRows.splice(index, 1);
+                                  setSaldoRealRows(newRows);
+                                  setConfirmSelisih(false);
+                                  setSelisihNotification({show: false, selisih: 0});
+                                }}
+                                className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all"
+                              >
+                                <i className="fa-solid fa-xmark text-[11px]"></i>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                    <div key={index} className={cn("p-2.5 rounded-xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
                       {index > 0 && (
                         <button 
                           onClick={() => {
@@ -2296,9 +2398,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             setConfirmSelisih(false);
                             setSelisihNotification({show: false, selisih: 0});
                           }}
-                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
+                          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
                         >
-                          <i className="fa-solid fa-xmark text-[10px]"></i>
+                          <i className="fa-solid fa-xmark text-[9px]"></i>
                         </button>
                       )}
                       
@@ -2309,6 +2411,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                           type="text"
                           list="aplikasi-suggestions"
                           value={row.keterangan}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
+                            }, 150);
+                          }}
+                          onFocus={() => setEditingSaldoIndex(index)}
                           onChange={(e) => {
                             const newRows = [...saldoRealRows];
                             newRows[index].keterangan = e.target.value;
@@ -2322,6 +2430,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                           }}
                           className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
                           placeholder="BCA, Dana.."
+                          autoFocus={editingSaldoIndex === index}
                         />
                       </div>
 
@@ -2334,6 +2443,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             type="text"
                             inputMode="numeric"
                             value={row.nominal}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
+                              }, 150);
+                            }}
+                            onFocus={() => setEditingSaldoIndex(index)}
                             onChange={(e) => {
                               const newRows = [...saldoRealRows];
                               newRows[index].nominal = formatInputRupiah(e.target.value);
@@ -2344,6 +2459,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
+                                setEditingSaldoIndex(null);
                                 const nextKet = document.getElementById(`mobile-ket-${index + 1}`);
                                 if (nextKet) {
                                   nextKet.focus();
@@ -2359,7 +2475,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         </div>
                       </div>
                     </div>
-                  ));
+                  );
+                  });
                 })()}
 
                 <button 
@@ -2391,18 +2508,23 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
                         Pilih Kasir Penerima (Shift Selanjutnya)
                       </label>
-                      <select
-                        value={targetKasirId}
-                        onChange={(e) => setTargetKasirId(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer"
+                      <button
+                        type="button"
+                        onClick={() => setShowKasirPenerimaSheet(true)}
+                        className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
                       >
-                        <option value="">-- Pilih Kasir Penerima --</option>
-                        {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
-                          <option key={username} value={username}>
-                            {data.name || username}
-                          </option>
-                        ))}
-                      </select>
+                        {targetKasirId ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-sm uppercase">
+                              {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
+                            </div>
+                            <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
+                          </div>
+                        ) : (
+                          <span className="opacity-70">-- Pilih Kasir Penerima --</span>
+                        )}
+                        <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2619,6 +2741,75 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM SHEET: PILIH KASIR PENERIMA */}
+      {showKasirPenerimaSheet && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowKasirPenerimaSheet(false)}></div>
+          <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl relative z-10 overflow-hidden animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-4 duration-300">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-white dark:bg-slate-800">
+              <div>
+                <h3 className="font-black text-[13px] uppercase tracking-widest text-slate-800 dark:text-white">Pilih Kasir Penerima</h3>
+                <p className="text-[9px] text-slate-500 font-bold mt-0.5 uppercase tracking-wider">Shift Selanjutnya</p>
+              </div>
+              <button 
+                onClick={() => setShowKasirPenerimaSheet(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm text-slate-600 dark:text-slate-300"></i>
+              </button>
+            </div>
+            
+            {/* Body / List */}
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar">
+              {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => {
+                const isSelected = targetKasirId === username;
+                const kasirName = data.name || username;
+                const initial = kasirName.charAt(0).toUpperCase();
+                return (
+                  <button
+                    key={username}
+                    onClick={() => {
+                      setTargetKasirId(username);
+                      setTimeout(() => setShowKasirPenerimaSheet(false), 200);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-3 rounded-2xl border transition-all active:scale-[0.98]",
+                      isSelected 
+                        ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 shadow-sm" 
+                        : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-blue-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                    )}
+                  >
+                    {/* Avatar */}
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black shadow-sm",
+                      isSelected ? "bg-gradient-to-br from-blue-500 to-indigo-600" : "bg-gradient-to-br from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700"
+                    )}>
+                      {initial}
+                    </div>
+                    
+                    {/* Name */}
+                    <div className="flex-1 text-left">
+                      <p className={cn("text-xs font-black uppercase tracking-wider", isSelected ? "text-blue-900 dark:text-blue-300" : "text-slate-700 dark:text-slate-200")}>
+                        {kasirName}
+                      </p>
+                    </div>
+
+                    {/* Radio Indicator */}
+                    <div className={cn(
+                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                      isSelected ? "border-blue-500" : "border-slate-300 dark:border-slate-600"
+                    )}>
+                      {isSelected && <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-in zoom-in duration-200"></div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
