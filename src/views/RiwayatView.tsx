@@ -943,13 +943,35 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         </div>
 
-        {/* DAFTAR TRANSAKSI SECTION */}
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-1 h-4 bg-violet-600 rounded-full"></div>
-          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Daftar Transaksi</h3>
+        {/* TABS TRANSAKSI & SALDO */}
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+          <button 
+            onClick={() => setActivePcTab('transaksi')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
+              activePcTab === 'transaksi' 
+                ? "bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-500/20" 
+                : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
+            )}
+          >
+            Riwayat Transaksi
+          </button>
+          <button 
+            onClick={() => setActivePcTab('tambah-saldo')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
+              activePcTab === 'tambah-saldo' 
+                ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20" 
+                : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
+            )}
+          >
+            Riwayat Tambah Saldo
+          </button>
         </div>
 
-        <div className="flex flex-col">
+        {activePcTab === 'transaksi' && (
+          <>
+          <div className="flex flex-col">
           <div className="divide-y divide-slate-200 border-t border-slate-200">
             {paginatedTransactions.length === 0 ? (
               <div className="py-16 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
@@ -1004,15 +1026,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             ))}
           </div>
         )}
+          </>
+        )}
 
         {/* RIWAYAT TAMBAH SALDO SECTION (Rapat) */}
-        <div className="mt-4 pt-4 border-t border-slate-100">
-          <div className="flex items-center gap-2 mb-4">
-            <i className="fa-solid fa-wallet text-blue-600 text-xs"></i>
-            <h3 className="text-[10px] font-black text-slate-800 tracking-widest">RIWAYAT TAMBAH SALDO</h3>
-          </div>
-
-          <div className="flex gap-1 mb-4">
+        {activePcTab === 'tambah-saldo' && (
+          <div className="mt-0">
+            <div className="flex gap-1 mb-4">
             {['Semua', 'Saldo Bank', 'Saldo Real', 'Modal Tunai'].map(f => (
               <button 
                 key={f}
@@ -1102,7 +1122,8 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        )}
       </div>
       {/* FILTER BOTTOM SHEET (PHOTO 3 STYLE) */}
       {isFilterOpen && (
