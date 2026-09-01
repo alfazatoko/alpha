@@ -52,7 +52,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [tema3Step, isTema3SheetOpen]);
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
-  const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY','BANK']
+  const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY']
   const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
@@ -502,8 +502,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Tujuan:</p>
               <p className="text-[9px] font-black text-emerald-600">Pilih Cepat Klik (1-5)</p>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {['QRIS','ATM','DANA','GOPAY','BANK'].map((src, idx) => (
+            <div className="grid grid-cols-4 gap-1.5">
+              {['QRIS','ATM','DANA','GOPAY'].map((src, idx) => (
                 <button
                   key={src}
                   onClick={() => { setSelectedSumber(src); setIsKetAuto(true) }}
@@ -860,8 +860,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {activeMode === 'TARIK' && (
           <>
 
-            <div className="grid grid-cols-5 gap-2 mb-4">
-               {['QRIS','ATM','DANA','GOPAY','BANK'].map(s => {
+            <div className="grid grid-cols-4 gap-2 mb-4">
+               {['QRIS','ATM','DANA','GOPAY'].map(s => {
                  const isAct = selectedSumber === s;
                  return (
                    <button 
@@ -1421,7 +1421,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Metode Tarik</h3>
                 </div>
                 <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
-                  {['QRIS','ATM','DANA','GOPAY','BANK'].map((s, idx) => {
+                  {['QRIS','ATM','DANA','GOPAY'].map((s, idx) => {
                     const icon = s === 'QRIS' ? 'fa-qrcode' : s === 'ATM' ? 'fa-credit-card' : s === 'DANA' ? 'fa-wallet' : s === 'GOPAY' ? 'fa-wallet' : 'fa-building-columns';
                     const isSelected = activeMode === 'TARIK' && selectedSumber === s;
                     return (
