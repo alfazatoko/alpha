@@ -56,6 +56,61 @@ function calculateTenure(joinDateStr: string) {
   return { months, days, totalMonths: months };
 }
 
+const getShiftInfo = (jam_masuk: string, finSettings?: Record<string, string>) => {
+  const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
+  const [hStr, mStr] = safeJam.split(':');
+  const hour = parseInt(hStr || '0', 10);
+  const min = parseInt(mStr || '0', 10);
+  const currentMins = hour * 60 + min;
+
+  const mode = finSettings?.shiftMode || '1-shift';
+  let isLate = false;
+  let lateMins = 0;
+  let shiftName = 'PAGI';
+  let isPagi = true;
+
+  if (mode === '1-shift') {
+    const startStr = finSettings?.shiftPagiStart || '08:00';
+    const tol = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const [h, m] = startStr.split(':').map(Number);
+    const startMins = h * 60 + m;
+    if (currentMins > startMins + tol) {
+      isLate = true;
+      lateMins = currentMins - startMins;
+    }
+    shiftName = 'PAGI';
+    isPagi = true;
+  } else {
+    const startPagiStr = finSettings?.shiftPagiStart || '08:00';
+    const tolPagi = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const startSiangStr = finSettings?.shiftSiangStart || '15:00';
+    const tolSiang = parseInt(finSettings?.shiftSiangTolerance || '15', 10);
+
+    const [hP, mP] = startPagiStr.split(':').map(Number);
+    const [hS, mS] = startSiangStr.split(':').map(Number);
+    const startPagiMins = hP * 60 + mP;
+    const startSiangMins = hS * 60 + mS;
+
+    if (currentMins < 13 * 60 + 30) {
+      shiftName = 'PAGI';
+      isPagi = true;
+      if (currentMins > startPagiMins + tolPagi) {
+        isLate = true;
+        lateMins = currentMins - startPagiMins;
+      }
+    } else {
+      shiftName = 'SIANG';
+      isPagi = false;
+      if (currentMins > startSiangMins + tolSiang) {
+        isLate = true;
+        lateMins = currentMins - startSiangMins;
+      }
+    }
+  }
+
+  return { isLate, lateMins, shiftName, isPagi };
+}
+
 function calculateAttendanceStats(username: string, cashierName: string, joinDateStr: string, absensiList: any[], activeStoreId: string) {
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -251,6 +306,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   // State for owner managing karyawans
   const [showProfilPanel, setShowProfilPanel] = useState(false)
+  const [showSelfLateHistory, setShowSelfLateHistory] = useState(false)
+  const [showEditProfilPanel, setShowEditProfilPanel] = useState(false)
   const [selectedKaryawan, setSelectedKaryawan] = useState<string | null>(null)
   const [editKaryawanGaji, setEditKaryawanGaji] = useState('')
   const [editKaryawanJoin, setEditKaryawanJoin] = useState('')
@@ -2136,6 +2193,50 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
             else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
 
+            // --- COMPUTATION UNTUK SHIFT ---
+            const todayD = new Date();
+            const currentFilterMonth = todayD.toLocaleDateString('en-CA').substring(0, 7);
+            const myAbsensi = (props.absensiList || []).filter(a => 
+              (a.username === props.currentUsername || a.nama_kasir === myName) && a.tanggal && a.tanggal.startsWith(currentFilterMonth)
+            );
+            const uniqueAttendedDates = new Set(myAbsensi.map(a => a.tanggal));
+            const totalHadir = uniqueAttendedDates.size;
+            
+            const joinD = myJoin ? new Date(myJoin) : new Date(todayD.getFullYear(), todayD.getMonth(), 1);
+            const startD = joinD > new Date(todayD.getFullYear(), todayD.getMonth(), 1) ? joinD : new Date(todayD.getFullYear(), todayD.getMonth(), 1);
+            const daysPassed = Math.max(0, Math.floor((todayD.getTime() - startD.getTime()) / (1000 * 3600 * 24)) + 1);
+            
+            let effectiveDaysPassed = daysPassed;
+            if (!uniqueAttendedDates.has(todayD.toLocaleDateString('en-CA'))) {
+              effectiveDaysPassed = Math.max(0, todayD.getDate() - 1);
+            }
+            const totalLibur = Math.max(0, effectiveDaysPassed - totalHadir);
+
+            let pagi = 0;
+            let siang = 0;
+            const latePagiDates: {tanggal: string, jam: string}[] = [];
+
+            const dailyFirstEntries = new Map<string, any>();
+            myAbsensi.forEach(entry => {
+              if (!dailyFirstEntries.has(entry.tanggal)) {
+                dailyFirstEntries.set(entry.tanggal, entry);
+              }
+            });
+
+            dailyFirstEntries.forEach(entry => {
+              const info = getShiftInfo(entry.jam_masuk, financialSettings);
+              if (info.isPagi) {
+                pagi++;
+                if (info.isLate) {
+                  latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`});
+                }
+              } else {
+                siang++;
+              }
+            });
+            latePagiDates.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+            // -----------------------------------------------------------
+
             return (
               <div className="mb-4">
                 {/* Profil Card */}
@@ -2192,12 +2293,23 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       {/* Header */}
                       <div className="px-5 pt-3 pb-4 border-b border-gray-100">
                         <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-md shrink-0">
+                          <div 
+                            className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-200 flex items-center justify-center shadow-md shrink-0 cursor-pointer relative group"
+                            onClick={() => {
+                              setAvatarEditorSrc(editKasirAvatar || myAvatar || '');
+                              setEditorZoom(1);
+                              setEditorOffset({ x: 0, y: 0 });
+                              setShowAvatarEditor(true);
+                            }}
+                          >
                             {myAvatar ? (
                               <img src={myAvatar} alt="Avatar" className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-3xl font-black text-indigo-400">{myName.charAt(0).toUpperCase()}</span>
                             )}
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <i className="fa-solid fa-camera text-white text-lg"></i>
+                            </div>
                           </div>
                           <div className="flex-1 min-w-0">
                             <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
@@ -2210,7 +2322,15 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               </span>
                             </div>
                           </div>
-                          <button onClick={() => setShowProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                          
+                          <button 
+                            onClick={() => setShowEditProfilPanel(true)} 
+                            className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm active:scale-95 transition-all"
+                          >
+                            <i className="fa-solid fa-pen-to-square text-xs" />
+                          </button>
+                          
+                          <button onClick={() => setShowProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 active:scale-95 transition-all ml-1">
                             <i className="fa-solid fa-xmark text-gray-500 text-xs" />
                           </button>
                         </div>
@@ -2218,35 +2338,71 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                       <div className="px-5 pt-4 space-y-4">
 
-                        {/* Statistik Kehadiran */}
-                        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
-                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-3"><i className="fa-solid fa-chart-simple mr-1.5"></i>Kehadiran Bulan Ini</p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="bg-white rounded-xl p-3 text-center border border-emerald-100">
-                              <p className="text-xl font-black text-emerald-600">{myStats.hadir}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">HADIR</p>
+                        {/* Statistik Kehadiran (UI Baru) */}
+                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
+                          <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                          <h4 className="text-[11px] font-black text-gray-800 uppercase tracking-widest mb-3 pl-1">
+                            {myName}
+                          </h4>
+                          
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div className="bg-teal-50/50 rounded-xl p-2 border border-teal-50">
+                              <p className="text-[8px] font-bold text-teal-600 uppercase mb-1">Hadir</p>
+                              <p className="text-[12px] font-black text-teal-700">{totalHadir}</p>
                             </div>
-                            <div className="bg-white rounded-xl p-3 text-center border border-amber-100">
-                              <p className="text-xl font-black text-amber-500">{myStats.izin}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">IZIN</p>
+                            <div 
+                              className={cn("bg-orange-50/50 rounded-xl p-2 border transition-all", latePagiDates.length > 0 ? "border-orange-300 cursor-pointer active:scale-95 shadow-sm" : "border-orange-50")}
+                              onClick={() => latePagiDates.length > 0 ? setShowSelfLateHistory(!showSelfLateHistory) : undefined}
+                            >
+                              <div className="flex items-center justify-center gap-1 mb-1">
+                                <p className="text-[8px] font-bold text-orange-600 uppercase">Pagi</p>
+                                {latePagiDates.length > 0 && <i className="fa-solid fa-circle-exclamation text-[8px] text-red-500 animate-pulse" title="Ada riwayat telat"></i>}
+                              </div>
+                              <p className="text-[12px] font-black text-orange-700">{pagi}</p>
                             </div>
-                            <div className="bg-white rounded-xl p-3 text-center border border-rose-100">
-                              <p className="text-xl font-black text-rose-500">{myStats.tidakAbsen}</p>
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">ABSEN</p>
+                            <div className="bg-indigo-50/50 rounded-xl p-2 border border-indigo-50">
+                              <p className="text-[8px] font-bold text-indigo-600 uppercase mb-1">Siang</p>
+                              <p className="text-[12px] font-black text-indigo-700">{siang}</p>
+                            </div>
+                            <div className="bg-rose-50/50 rounded-xl p-2 border border-rose-50">
+                              <p className="text-[8px] font-bold text-rose-600 uppercase mb-1">Libur</p>
+                              <p className="text-[12px] font-black text-rose-700">{totalLibur}</p>
                             </div>
                           </div>
-                          {totalDays > 0 && (
-                            <div className="mt-3">
-                              <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
-                                <span>Tingkat Kehadiran</span>
-                                <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
-                              </div>
-                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
+                          
+                          {showSelfLateHistory && latePagiDates.length > 0 && (
+                            <div className="mt-3 p-3 bg-red-50/80 rounded-xl border border-red-100 animate-in slide-in-from-top-2 fade-in duration-300">
+                              <p className="text-[9px] font-black text-red-800 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                <i className="fa-solid fa-clock-rotate-left text-red-600"></i> Riwayat Telat <span className="lowercase font-bold opacity-80">({latePagiDates.length} x telat)</span>
+                              </p>
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                                {latePagiDates.map((late, idx) => {
+                                  const [y, m, d] = late.tanggal.split('-');
+                                  const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                  const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+                                  return (
+                                    <div key={idx} className="flex justify-between items-center text-[10px] bg-white px-2.5 py-2 rounded-lg border border-red-50/50 shadow-sm">
+                                      <span className="font-bold text-gray-700">{dateStr}</span>
+                                      <span className="font-black text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded">{late.jam}</span>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}
                         </div>
+
+                        {totalDays > 0 && (
+                          <div className="mt-3">
+                            <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
+                              <span>Tingkat Kehadiran</span>
+                              <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
+                            </div>
+                          </div>
+                        )}
 
                         {/* Badge Kinerja */}
                         <div className={cn('rounded-2xl p-4 border flex items-center gap-3', badge.color.replace('text-', 'border-').replace('bg-', 'bg-') + '/40')}>
@@ -2310,7 +2466,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                         {/* Tombol Edit Profil */}
                         <button
-                          onClick={() => { setShowProfilPanel(false); setOpenCategory('kasirSelf'); }}
+                          onClick={() => { setShowProfilPanel(false); setShowEditProfilPanel(true); }}
                           className="w-full bg-indigo-600 text-white font-black py-3 rounded-2xl text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md shadow-indigo-200"
                           style={{ color: '#ffffff' }}
                         >
@@ -2325,6 +2481,137 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </div>
             );
           })()}
+
+          {/* Bottom Sheet: Edit Profil Kasir */}
+          {showEditProfilPanel && (
+            <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowEditProfilPanel(false)}>
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+              <div
+                className="relative w-full max-w-md mx-auto bg-white rounded-t-[2rem] max-h-[90dvh] overflow-y-auto pb-10 animate-in slide-in-from-bottom-4 duration-300"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex justify-center pt-3 pb-1">
+                  <div className="w-10 h-1 bg-gray-200 rounded-full" />
+                </div>
+                
+                <div className="px-5 pt-3 pb-4 border-b border-gray-100 flex justify-between items-center">
+                  <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest"><i className="fa-solid fa-pen-to-square mr-2 text-indigo-500"></i>Edit Profil Saya</h3>
+                  <button onClick={() => setShowEditProfilPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 active:scale-95 transition-all">
+                    <i className="fa-solid fa-xmark text-gray-500 text-xs" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {/* Nama Kasir */}
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Nama Lengkap</label>
+                    <input
+                      type="text"
+                      value={editKasirName}
+                      onChange={e => setEditKasirName(e.target.value)}
+                      className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                    />
+                  </div>
+
+                  {/* PIN */}
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">PIN Kasir (Minimal 4 angka)</label>
+                    <div className="relative">
+                      <input
+                        type={showKasirPin ? "text" : "password"}
+                        inputMode="numeric"
+                        maxLength={8}
+                        value={editKasirPin}
+                        onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
+                        className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold tracking-widest"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKasirPin(!showKasirPin)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <i className={showKasirPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Alamat */}
+                  <div>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Alamat Domisili</label>
+                    <input
+                      type="text"
+                      value={editKasirAlamat}
+                      onChange={e => setEditKasirAlamat(e.target.value)}
+                      placeholder="Opsional"
+                      className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                    />
+                  </div>
+
+                  {/* Tempat, Tgl Lahir */}
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tempat Lahir</label>
+                      <input
+                        type="text"
+                        value={editKasirTempatLahir}
+                        onChange={e => setEditKasirTempatLahir(e.target.value)}
+                        placeholder="Opsional"
+                        className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tgl Lahir</label>
+                      <input
+                        type="date"
+                        value={editKasirTanggalLahir}
+                        onChange={e => setEditKasirTanggalLahir(e.target.value)}
+                        className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!editKasirName.trim()) {
+                        alert("Nama kasir tidak boleh kosong!");
+                        return;
+                      }
+                      if (editKasirPin.length < 4) {
+                        alert("PIN minimal harus 4 digit angka!");
+                        return;
+                      }
+                      try {
+                        if (props.onSaveCashierSelf && props.currentUsername) {
+                          await props.onSaveCashierSelf(props.currentUsername, {
+                            name: editKasirName.trim(),
+                            pin: editKasirPin,
+                            alamat: editKasirAlamat,
+                            tempatLahir: editKasirTempatLahir,
+                            tanggalLahir: editKasirTanggalLahir,
+                            avatar: editKasirAvatar
+                          });
+                          setSavedStatus(true);
+                          setTimeout(() => { setSavedStatus(false); setShowEditProfilPanel(false); }, 1500);
+                        }
+                      } catch (err: any) {
+                        alert(err.message || "Gagal menyimpan perubahan kasir");
+                      }
+                    }}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-4"
+                    style={{ color: '#ffffff' }}
+                  >
+                    <i className="fa-solid fa-save text-sm"></i>
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* â”€â”€ MENU PENGATURAN FLAT LIST (TERGABUNG) â”€â”€ */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
@@ -3453,150 +3740,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               </>
             )}
 
-          {/* Kategori: Pengaturan PIN & Nama Kasir Mandiri */}
-          {props.kasirRole === 'kasir' && (
-            <>
-              <button
-                onClick={() => setOpenCategory(openCategory === 'kasirSelf' ? null : 'kasirSelf')}
-                className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
-              >
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mr-3">
-                  <i className="fa-solid fa-user-lock text-xs"></i>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-black text-gray-900 leading-tight">PIN &amp; NAMA KASIR</p>
-                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">Edit nama dan PIN kasir Anda</p>
-                </div>
-                <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'kasirSelf' && "rotate-180")} />
-              </button>
 
-              {openCategory === 'kasirSelf' && (
-                <div className="p-5 bg-indigo-50/30 border-t border-indigo-50 animate-in slide-in-from-top-2 duration-300 space-y-4">
-                  {/* Avatar Upload */}
-                  <div className="flex justify-center mb-4">
-                    <div 
-                      onClick={() => {
-                        setAvatarEditorSrc(editKasirAvatar || '');
-                        setEditorZoom(1);
-                        setEditorOffset({ x: 0, y: 0 });
-                        setShowAvatarEditor(true);
-                      }}
-                      className="w-20 h-20 rounded-full border-4 border-white shadow-sm overflow-hidden bg-indigo-100 flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95 transition-all"
-                    >
-                      {editKasirAvatar ? (
-                        <img src={editKasirAvatar} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <i className="fa-solid fa-user text-2xl text-indigo-300"></i>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Nama Kasir</label>
-                    <input
-                      type="text"
-                      value={editKasirName}
-                      onChange={e => setEditKasirName(e.target.value)}
-                      className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
-                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">PIN Kasir (Minimal 4 angka)</label>
-                    <div className="relative">
-                      <input
-                        type={showKasirPin ? "text" : "password"}
-                        inputMode="numeric"
-                        maxLength={8}
-                        value={editKasirPin}
-                        onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
-                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold tracking-widest"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowKasirPin(!showKasirPin)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <i className={showKasirPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Alamat Domisili</label>
-                    <input
-                      type="text"
-                      value={editKasirAlamat}
-                      onChange={e => setEditKasirAlamat(e.target.value)}
-                      placeholder="Opsional"
-                      className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
-                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tempat Lahir</label>
-                      <input
-                        type="text"
-                        value={editKasirTempatLahir}
-                        onChange={e => setEditKasirTempatLahir(e.target.value)}
-                        placeholder="Opsional"
-                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Tanggal Lahir</label>
-                      <input
-                        type="date"
-                        value={editKasirTanggalLahir}
-                        onChange={e => setEditKasirTanggalLahir(e.target.value)}
-                        className="w-full bg-white border border-indigo-100 rounded-xl px-4 py-2.5 text-xs text-black outline-none focus:border-indigo-400 font-bold"
-                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      if (!editKasirName.trim()) {
-                        alert("Nama kasir tidak boleh kosong!");
-                        return;
-                      }
-                      if (editKasirPin.length < 4) {
-                        alert("PIN minimal harus 4 digit angka!");
-                        return;
-                      }
-                      try {
-                        if (props.onSaveCashierSelf && props.currentUsername) {
-                          await props.onSaveCashierSelf(props.currentUsername, {
-                            name: editKasirName.trim(),
-                            pin: editKasirPin,
-                            alamat: editKasirAlamat,
-                            tempatLahir: editKasirTempatLahir,
-                            tanggalLahir: editKasirTanggalLahir,
-                            avatar: editKasirAvatar
-                          });
-                          setSavedStatus(true);
-                          setTimeout(() => setSavedStatus(false), 2000);
-                        }
-                      } catch (err: any) {
-                        alert(err.message || "Gagal menyimpan perubahan kasir");
-                      }
-                    }}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
-                    style={{ color: '#ffffff' }}
-                  >
-                    <i className="fa-solid fa-circle-check"></i>
-                    Simpan Perubahan
-                  </button>
-                </div>
-              )}
-            </>
-          )}
             <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
 
             {/* Sinkronisasi Cloud */}
