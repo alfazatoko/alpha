@@ -52,7 +52,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [tema3Step, isTema3SheetOpen]);
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
-  const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY']
+  const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY','BANK']
   const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
@@ -502,8 +502,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Tujuan:</p>
               <p className="text-[9px] font-black text-emerald-600">Pilih Cepat Klik (1-5)</p>
             </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {['QRIS','ATM','DANA','GOPAY'].map((src, idx) => (
+            <div className="grid grid-cols-5 gap-1.5">
+              {['QRIS','ATM','DANA','GOPAY','BANK'].map((src, idx) => (
                 <button
                   key={src}
                   onClick={() => { setSelectedSumber(src); setIsKetAuto(true) }}
@@ -860,8 +860,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {activeMode === 'TARIK' && (
           <>
 
-            <div className="grid grid-cols-4 gap-2 mb-4">
-               {['QRIS','ATM','DANA','GOPAY'].map(s => {
+            <div className="grid grid-cols-5 gap-2 mb-4">
+               {['QRIS','ATM','DANA','GOPAY','BANK'].map(s => {
                  const isAct = selectedSumber === s;
                  return (
                    <button 
@@ -1319,10 +1319,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     return (
                     <button 
                       key={m.id}
-                      disabled={m.id === 'TARIK'}
                       data-autofocus={m.id === 'DIGITAL' ? "true" : "false"}
                       onClick={() => {
-                        if (m.id === 'TARIK') return;
                         if (m.id === 'VOUCHER') { 
                           setActiveMode('VOUCHER');
                           if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); 
@@ -1341,11 +1339,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                       className={cn(
                         "group px-5 py-4 rounded-[20px] border transition-all text-left flex items-center gap-4 shadow-sm outline-none focus:outline-none",
-                        m.id === 'TARIK'
-                          ? "opacity-40 cursor-not-allowed bg-gray-50 border-gray-100" 
-                          : isSelected 
-                            ? "bg-orange-500 border-orange-500 text-white active:scale-95" 
-                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200 active:scale-95"
+                        isSelected 
+                          ? "bg-orange-500 border-orange-500 text-white active:scale-95" 
+                          : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200 active:scale-95"
                       )}
                     >
                       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
@@ -1370,16 +1366,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
               {/* LAYAR 2: SUB MENU TRANSFER / DIGITAL */}
               <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", 
-                tema3Step === 'DIGITAL' ? "translate-x-0" : 
+                tema3Step === 'TARIK' ? "translate-x-0" : 
                 tema3Step === 'BANK_SELECTION' ? "-translate-x-full" : "translate-x-full"
               )}>
-                <div className="flex items-center gap-3 mb-4 shrink-0 relative z-10">
+                <div className="flex items-center gap-3 mb-3 shrink-0 relative z-10">
                   <button type="button" onClick={() => { setActiveMode(''); setTema3Step('MAIN'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
                     <i className="fa-solid fa-chevron-left"></i>
                   </button>
                   <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Pilihan Transfer</h3>
                 </div>
-                <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
+                <div className="flex flex-col gap-1.5 overflow-y-auto pb-4 px-2 -mx-2 pt-1">
                   {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx) => {
                     const label = s === 'BANK' ? 'TRANSFER BANK' : s;
                     const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
@@ -1396,22 +1392,69 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           setIsTema3SheetOpen(false);
                         }}
                         className={cn(
-                          "group px-5 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
+                          "group px-4 py-2.5 rounded-[12px] border transition-all text-left flex items-center gap-3 shadow-sm active:scale-95 outline-none focus:outline-none",
                           isSelected 
                             ? "bg-orange-500 border-orange-500 text-white" 
                             : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
                         )}
                       >
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
+                        <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
                           isSelected ? "bg-white/20 text-white" : "bg-blue-100 text-blue-600 group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white"
                         )}>
-                          <i className={cn("fa-solid text-lg", icon)}></i>
+                          <i className={cn("fa-solid text-base", icon)}></i>
                         </div>
-                        <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
+                        <span className={cn("text-[12px] font-black uppercase tracking-widest transition-colors", 
                           isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
                         )}>{label}</span>
                       </button>
                     )
+                  })}
+                </div>
+              </div>
+
+              {/* LAYAR 3: SUB MENU TARIK TUNAI */}
+              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", 
+                tema3Step === 'DIGITAL' ? "translate-x-0" : 
+                tema3Step === 'BANK_SELECTION' ? "-translate-x-full" : "translate-x-full"
+              )}>
+                <div className="flex items-center gap-3 mb-3 shrink-0 relative z-10">
+                  <button type="button" onClick={() => { setActiveMode(''); setTema3Step('MAIN'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Metode Tarik</h3>
+                </div>
+                <div className="flex flex-col gap-1.5 overflow-y-auto pb-4 px-2 -mx-2 pt-1">
+                  {['QRIS','DANA','ATM','GOPAY','BANK'].map((s, idx) => {
+                    const icon = s === 'QRIS' ? 'fa-qrcode' : s === 'ATM' ? 'fa-credit-card' : s === 'DANA' ? 'fa-wallet' : s === 'GOPAY' ? 'fa-wallet' : 'fa-building-columns';
+                    const isSelected = activeMode === 'TARIK' && selectedSumber === s;
+                    return (
+                      <button 
+                        key={s}
+                        data-autofocus={idx === 0 ? "true" : "false"}
+                        onClick={() => {
+                          setActiveMode('TARIK');
+                          setSelectedSumber(s);
+                          setIsKetAuto(true);
+                          setIsAdminManuallyEdited(false);
+                          setIsTema3SheetOpen(false);
+                        }}
+                        className={cn(
+                          "group px-4 py-2.5 rounded-[12px] border transition-all text-left flex items-center gap-3 shadow-sm active:scale-95 outline-none focus:outline-none",
+                          isSelected 
+                            ? "bg-orange-500 border-orange-500 text-white" 
+                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                        )}
+                      >
+                        <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
+                          isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-600 group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white"
+                        )}>
+                          <i className={cn("fa-solid text-base", icon)}></i>
+                        </div>
+                        <span className={cn("text-[12px] font-black uppercase tracking-widest transition-colors", 
+                          isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
+                        )}>{s}</span>
+                      </button>
+                    );
                   })}
                 </div>
               </div>
