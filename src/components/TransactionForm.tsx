@@ -1319,8 +1319,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     return (
                     <button 
                       key={m.id}
+                      disabled={m.id === 'TARIK'}
                       data-autofocus={m.id === 'DIGITAL' ? "true" : "false"}
                       onClick={() => {
+                        if (m.id === 'TARIK') return;
                         if (m.id === 'VOUCHER') { 
                           setActiveMode('VOUCHER');
                           if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); 
@@ -1338,10 +1340,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         setTema3Step(m.id as any);
                       }}
                       className={cn(
-                        "group px-5 py-4 rounded-[20px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
-                        isSelected 
-                          ? "bg-orange-500 border-orange-500 text-white" 
-                          : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                        "group px-5 py-4 rounded-[20px] border transition-all text-left flex items-center gap-4 shadow-sm outline-none focus:outline-none",
+                        m.id === 'TARIK' 
+                          ? "opacity-40 cursor-not-allowed bg-gray-50 border-gray-100" 
+                          : isSelected 
+                            ? "bg-orange-500 border-orange-500 text-white active:scale-95" 
+                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200 active:scale-95"
                       )}
                     >
                       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
@@ -1409,57 +1413,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </div>
               </div>
 
-              {/* LAYAR 3: SUB MENU TARIK TUNAI */}
-              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", 
-                tema3Step === 'TARIK' ? "translate-x-0" : 
-                tema3Step === 'BANK_SELECTION' ? "-translate-x-full" : "translate-x-full"
-              )}>
-                <div className="flex items-center gap-3 mb-4 shrink-0 relative z-10">
-                  <button type="button" onClick={() => { setActiveMode(''); setTema3Step('MAIN'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
-                    <i className="fa-solid fa-chevron-left"></i>
-                  </button>
-                  <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Metode Tarik</h3>
-                </div>
-                <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
-                  {['QRIS','ATM','DANA','GOPAY'].map((s, idx) => {
-                    const icon = s === 'QRIS' ? 'fa-qrcode' : s === 'ATM' ? 'fa-credit-card' : s === 'DANA' ? 'fa-wallet' : s === 'GOPAY' ? 'fa-wallet' : 'fa-building-columns';
-                    const isSelected = activeMode === 'TARIK' && selectedSumber === s;
-                    return (
-                      <button 
-                        key={s}
-                        data-autofocus={idx === 0 ? "true" : "false"}
-                        onClick={() => {
-                          setActiveMode('TARIK');
-                          setSelectedSumber(s);
-                          setIsKetAuto(true);
-                          setIsAdminManuallyEdited(false);
-                          setIsTema3SheetOpen(false);
-                        }}
-                        className={cn(
-                          "group px-5 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
-                          isSelected 
-                            ? "bg-orange-500 border-orange-500 text-white" 
-                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
-                        )}
-                      >
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
-                          isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-600 group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white"
-                        )}>
-                          <i className={cn("fa-solid text-lg", icon)}></i>
-                        </div>
-                        <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
-                          isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
-                        )}>{s}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              
               {/* LAYAR 4: SUB MENU PILIH BANK */}
               <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", tema3Step === 'BANK_SELECTION' ? "translate-x-0" : "translate-x-full")}>
                 <div className="flex items-center gap-3 mb-3 shrink-0 relative z-10">
-                  <button type="button" onClick={() => { setTema3Step(activeMode === 'DIGITAL' ? 'DIGITAL' : 'TARIK'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
+                  <button type="button" onClick={() => { setTema3Step('DIGITAL'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
                     <i className="fa-solid fa-chevron-left"></i>
                   </button>
                   <div>
