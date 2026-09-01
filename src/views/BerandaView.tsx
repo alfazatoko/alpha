@@ -1260,8 +1260,73 @@ function calculateTenure(joinDateStr: string) {
   return { months, days, totalMonths: months };
 }
 
+const getShiftInfo = (jam_masuk: string, finSettings?: Record<string, string>) => {
+  const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
+  const [hStr, mStr] = safeJam.split(':');
+  const hour = parseInt(hStr || '0', 10);
+  const min = parseInt(mStr || '0', 10);
+  const currentMins = hour * 60 + min;
+
+  const mode = finSettings?.shiftMode || '1-shift';
+  let isLate = false;
+  let lateMins = 0;
+  let shiftName = 'PAGI';
+  let isPagi = true;
+
+  if (mode === '1-shift') {
+    const startStr = finSettings?.shiftPagiStart || '08:00';
+    const tol = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const [h, m] = startStr.split(':').map(Number);
+    const startMins = h * 60 + m;
+    if (currentMins > startMins + tol) {
+      isLate = true;
+      lateMins = currentMins - startMins;
+    }
+    shiftName = 'PAGI'; // Label as Pagi but it means full day
+    isPagi = true;
+  } else {
+    const startPagiStr = finSettings?.shiftPagiStart || '08:00';
+    const tolPagi = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const startSiangStr = finSettings?.shiftSiangStart || '15:00';
+    const tolSiang = parseInt(finSettings?.shiftSiangTolerance || '15', 10);
+
+    const [hP, mP] = startPagiStr.split(':').map(Number);
+    const [hS, mS] = startSiangStr.split(':').map(Number);
+    const startPagiMins = hP * 60 + mP;
+    const startSiangMins = hS * 60 + mS;
+
+    // Shift Pagi boundary is 13:30 (13*60+30), so Kasir Siang can clock in slightly early
+    if (currentMins < 13 * 60 + 30) {
+      shiftName = 'PAGI';
+      isPagi = true;
+      if (currentMins > startPagiMins + tolPagi) {
+        isLate = true;
+        lateMins = currentMins - startPagiMins;
+      }
+    } else {
+      shiftName = 'SIANG';
+      isPagi = false;
+      if (currentMins > startSiangMins + tolSiang) {
+        isLate = true;
+        lateMins = currentMins - startSiangMins;
+      }
+    }
+  }
+
+  return { isLate, lateMins, shiftName, isPagi };
+}
+
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
+  const financialSettings = useMemo(() => {
+    try {
+      const key = currentTargetStoreId !== 'all' ? `alphaPro_${currentTargetStoreId}_financial` : 'alphaPro_financial';
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch(e) {}
+    return {};
+  }, [currentTargetStoreId]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -1278,7 +1343,63 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
-  
+  const [showKasirNotif, setShowKasirNotif] = useState(false)
+  const [dismissedLatePopup, setDismissedLatePopup] = useState(false)
+  const [dismissedPesanPopup, setDismissedPesanPopup] = useState(() => {
+    return sessionStorage.getItem('alphaPro_pesan_dismissed') === 'true'
+  })
+
+  const activePesanMendadak = useMemo(() => {
+    if (!financialSettings.pesanMendadak) return null;
+    if (financialSettings.pesanDurasi === 'selamanya') return financialSettings.pesanMendadak;
+    if (!financialSettings.pesanStartDate) return financialSettings.pesanMendadak;
+    
+    const todayStr = getLocalDateString();
+    const startStr = financialSettings.pesanStartDate;
+    if (todayStr === startStr) return financialSettings.pesanMendadak;
+    
+    const today = new Date(todayStr);
+    const start = new Date(startStr);
+    const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return financialSettings.pesanMendadak; 
+    const durasi = parseInt(financialSettings.pesanDurasi) || 1;
+    if (diffDays >= durasi) return null; 
+    
+    return financialSettings.pesanMendadak;
+  }, [financialSettings]);
+
+
+  const kasirLateHistory = useMemo(() => {
+    if (props.kasirRole === 'owner') return [];
+    const entries = (props.absensiList || []).filter(a => a.kasir_id === props.username);
+    const byDate: Record<string, any> = {};
+    entries.forEach(e => {
+      if (!byDate[e.tanggal] || e.jam_masuk < byDate[e.tanggal].jam_masuk) {
+        byDate[e.tanggal] = e;
+      }
+    });
+
+    const lates: any[] = [];
+    Object.values(byDate).forEach(e => {
+      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      if (info.isLate) {
+        lates.push({
+          tanggal: e.tanggal,
+          jam: e.jam_masuk,
+          lateMins: info.lateMins,
+          shiftName: info.shiftName
+        });
+      }
+    });
+    return lates.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  }, [props.absensiList, props.username, props.kasirRole, financialSettings]);
+
+  const todayLateness = useMemo(() => {
+    const todayStr = getLocalDateString();
+    return kasirLateHistory.find(l => l.tanggal === todayStr) || null;
+  }, [kasirLateHistory]);
+
   const bonusKasirList = useMemo(() => {
     if (props.kasirRole !== 'owner' || !props.kasirList) return []
     const list: string[] = []
@@ -1550,7 +1671,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [izinNamaKasir, setIzinNamaKasir] = useState('')
   const [izinTanggal, setIzinTanggal] = useState(getLocalDateString())
   const [izinAlasan, setIzinAlasan] = useState('')
-  const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
   const [catatanIzin, setCatatanIzin] = useState<any[]>([])
   const STORAGE_KEY_IZIN = `alphaPro_${currentTargetStoreId}_catatanIzin`
   const [expandedMonthIzin, setExpandedMonthIzin] = useState<string | null>(null)
@@ -1878,17 +1998,129 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               </div>
             </div>
 
-            <div className="text-right">
+            <div className="text-right hidden sm:block">
               <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
               <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
               <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
             </div>
-          </div>
 
-          <button onClick={() => props.setIsSidePanelOpen(true)} className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
-            <i className="fa-solid fa-ellipsis-vertical text-sm"></i>
-          </button>
+            <div className="flex flex-col items-end gap-2">
+              {props.kasirRole !== 'owner' && (
+                <div className="relative z-50">
+                  <button 
+                    onClick={() => setShowKasirNotif(!showKasirNotif)}
+                    className="relative w-9 h-9 rounded-[14px] bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all"
+                  >
+                    <i className="fa-solid fa-bell text-sm"></i>
+                    {(kasirLateHistory.length > 0 || activePesanMendadak) && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-black shadow-sm border border-red-400">
+                        {kasirLateHistory.length + (activePesanMendadak ? 1 : 0)}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Popup Dropdown Notifikasi Kasir */}
+                  {showKasirNotif && (
+                    <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
+                      <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
+                        <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                          <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+                        </h4>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
+                        
+                        {/* Show Pesan Mendadak if exists */}
+                        {activePesanMendadak && (
+                          <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
+                            <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
+                              <i className="fa-solid fa-bullhorn text-[10px]"></i>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Pesan Owner</p>
+                              <p className="text-xs font-bold text-gray-900 whitespace-pre-wrap">{activePesanMendadak}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {kasirLateHistory.length === 0 && !activePesanMendadak ? (
+                          <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
+                        ) : (
+                          kasirLateHistory.map((late, i) => (
+                            <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex items-center justify-between">
+                              <div>
+                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                                <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
+                                <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button onClick={() => props.setIsSidePanelOpen(true)} className="w-9 h-9 rounded-[14px] bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
+                <i className="fa-solid fa-bars text-sm"></i>
+              </button>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div className="mx-1.5 mb-3 relative z-50 space-y-3" style={{ marginTop: '-2.5rem' }}>
+        
+        {/* Pesan Mendadak Popup */}
+        {props.kasirRole !== 'owner' && activePesanMendadak && !dismissedPesanPopup && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-72 max-w-[92vw] bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-gray-100 overflow-hidden z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className="p-3.5 bg-red-50/80 border-b border-red-100/50 flex items-center justify-between">
+              <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+              </h4>
+              <button onClick={() => {
+                setDismissedPesanPopup(true)
+                sessionStorage.setItem('alphaPro_pesan_dismissed', 'true')
+              }} className="w-6 h-6 rounded-full bg-red-100/80 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shadow-sm">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+            <div className="p-2.5 bg-gray-50/50">
+              <div className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 shrink-0 mt-0.5">
+                  <i className="fa-solid fa-bullhorn text-[11px]"></i>
+                </div>
+                <div className="flex-1">
+                  <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Pesan Owner</p>
+                  <p className="text-[12px] font-bold text-gray-900 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lateness Popup */}
+        {props.kasirRole !== 'owner' && todayLateness && !dismissedLatePopup && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 shadow-xl animate-in fade-in">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-600 shrink-0 shadow-inner">
+                  <i className="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-red-700 uppercase tracking-widest">Peringatan Terlambat!</h4>
+                  <p className="text-[9px] text-red-600 font-bold mt-0.5 leading-snug">Absen Anda tercatat jam {todayLateness.jam} (Telat {todayLateness.lateMins} menit) pada sesi {todayLateness.shiftName}.</p>
+                </div>
+              </div>
+              <button onClick={() => setDismissedLatePopup(true)} className="w-6 h-6 rounded-full bg-red-100/50 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shrink-0">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mx-1.5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
@@ -3309,20 +3541,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               })
 
                               dailyFirstEntries.forEach(entry => {
-                                // Ganti titik menjadi titik dua untuk memastikan split konsisten
-                                const safeJam = (entry.jam_masuk || '00:00').replace(/\./g, ':')
-                                const [hStr, mStr] = safeJam.split(':')
-                                const hour = parseInt(hStr || '0')
-                                const min = parseInt(mStr || '0')
-                                
-                                if (hour < 10) {
+                                const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                if (info.isPagi) {
                                   pagi++
-                                  // Hitung telat pagi jika lebih dari 07:15
-                                  if (hour > 7 || (hour === 7 && min > 15)) {
-                                    latePagiDates.push({tanggal: entry.tanggal, jam: entry.jam_masuk})
+                                  if (info.isLate) {
+                                    latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`})
                                   }
                                 }
-                                else siang++ // Termasuk Normal (10-14) dan Siang (15+)
+                                else siang++
                               })
                               
                               // Urutkan riwayat telat dari yang terbaru
@@ -3363,7 +3589,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                   {absenLateHistoryId === id && latePagiDates.length > 0 && (
                                     <div className="mt-3 p-3 bg-red-50/80 rounded-xl border border-red-100 animate-in slide-in-from-top-2 fade-in duration-300">
                                       <p className="text-[9px] font-black text-red-800 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                        <i className="fa-solid fa-clock-rotate-left text-red-600"></i> Riwayat Telat Pagi (&gt; 07:15) <span className="lowercase font-bold opacity-80">({latePagiDates.length} x telat)</span>
+                                        <i className="fa-solid fa-clock-rotate-left text-red-600"></i> Riwayat Telat <span className="lowercase font-bold opacity-80">({latePagiDates.length} x telat)</span>
                                       </p>
                                       <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                                         {latePagiDates.map((late, idx) => {
@@ -3414,10 +3640,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 let shiftColor = 'text-gray-400 bg-gray-50'
                                 
                                 if (entry) {
-                                  const hour = parseInt(entry.jam_masuk.split(':')[0])
-                                  if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-600 bg-orange-50'; }
-                                  else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-600 bg-indigo-50'; }
-                                  else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600 bg-purple-50'; }
+                                  const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                  shiftLabel = info.shiftName;
+                                  if (info.isPagi) shiftColor = 'text-orange-600 bg-orange-50';
+                                  else shiftColor = 'text-purple-600 bg-purple-50';
+                                  
+                                  if (info.isLate) {
+                                     shiftLabel += ` (TELAT ${info.lateMins}M)`;
+                                     shiftColor = 'text-red-600 bg-red-50';
+                                  }
                                 }
 
                                 return (
@@ -3493,10 +3724,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                   let shiftColor = 'text-gray-300'
                                   
                                   if (entry) {
-                                    const hour = parseInt(entry.jam_masuk.split(':')[0])
-                                    if (hour < 10) { shiftLabel = 'PAGI'; shiftColor = 'text-orange-500'; }
-                                    else if (hour < 15) { shiftLabel = 'NORMAL'; shiftColor = 'text-indigo-500'; }
-                                    else { shiftLabel = 'SIANG'; shiftColor = 'text-purple-600'; }
+                                    const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                    shiftLabel = info.shiftName;
+                                    if (info.isPagi) shiftColor = 'text-orange-500';
+                                    else shiftColor = 'text-purple-600';
+                                    
+                                    if (info.isLate) {
+                                       shiftLabel += ` (TELAT ${info.lateMins}M)`;
+                                       shiftColor = 'text-red-500';
+                                    }
                                   }
 
                                   return (

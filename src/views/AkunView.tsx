@@ -411,8 +411,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }, [props.currentUsername, props.kasirList])
 
   // State for Financial Settings
-  const defaultFinancial = { startDate: '', rentPeriod: 'bulanan', rentAmount: '', rentDueDate: '', electricityBill: '', wifiBill: '' }
-  const [financialSettings, setFinancialSettings] = useState(defaultFinancial)
+  const defaultFinancial: Record<string, string> = { startDate: '', rentPeriod: 'bulanan', rentAmount: '', rentDueDate: '', electricityBill: '', wifiBill: '' }
+  const [financialSettings, setFinancialSettings] = useState<Record<string, string>>(defaultFinancial)
+  const [isEditingShift, setIsEditingShift] = useState(false)
+  const [isEditingPesan, setIsEditingPesan] = useState(false)
 
   useEffect(() => {
     try {
@@ -2346,76 +2348,214 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'profil' && "rotate-180")} />
                 </button>
                 {openCategory === 'profil' && (
-                  <div className="mt-2 p-5 bg-emerald-50 border border-emerald-200 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-200">
-                        <i className="fa-solid fa-store"></i>
+                  <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-[1.5rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-200 shrink-0">
+                        <i className="fa-solid fa-store text-xs"></i>
                       </div>
                       <div>
-                        <p className="text-[11px] font-black text-emerald-900 uppercase tracking-widest">Identitas Toko</p>
-                        <p className="text-[9px] text-emerald-700 font-bold mt-0.5">Ubah nama, slogan, dan logo toko Anda.</p>
+                        <p className="text-[10px] font-black text-emerald-900 uppercase tracking-widest">Identitas Toko</p>
+                        <p className="text-[8px] text-emerald-700 font-bold mt-0.5 leading-snug">Ubah nama, slogan, logo, & shift.</p>
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {/* Logo Section */}
-                      <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm flex items-center gap-5">
-                        <div className="relative group cursor-pointer shrink-0" onClick={() => document.getElementById('photoInput')?.click()}>
+                    <div className="space-y-3">
+                      {/* Identitas (Logo & Teks) */}
+                      <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                        <div className="relative group cursor-pointer shrink-0 mx-auto sm:mx-0" onClick={() => document.getElementById('photoInput')?.click()}>
                           {props.storePhoto ? (
-                            <img src={props.storePhoto} alt="Store" className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-50 shadow-sm transition-transform group-hover:scale-105" />
+                            <img src={props.storePhoto} alt="Store" className="w-12 h-12 rounded-xl object-cover border border-emerald-50 shadow-sm transition-transform group-hover:scale-105" />
                           ) : (
-                            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-400 border-2 border-emerald-100 shadow-sm">
-                              <i className="fa-solid fa-camera text-xl"></i>
+                            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-100 shadow-sm">
+                              <i className="fa-solid fa-camera"></i>
                             </div>
                           )}
-                          <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-emerald-600 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg">
-                            <i className="fa-solid fa-pen text-[10px]"></i>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-600 text-white rounded-full border-2 border-white flex items-center justify-center shadow-md">
+                            <i className="fa-solid fa-pen text-[7px]"></i>
                           </div>
                           <input id="photoInput" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                         </div>
-                        <div>
-                          <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-1">Logo Utama Toko</p>
-                          <p className="text-[9px] font-bold text-gray-500 leading-snug">Gunakan gambar dengan rasio 1:1 agar logo terlihat lebih proporsional.</p>
-                        </div>
-                      </div>
-
-                      {/* Text Inputs */}
-                      <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm space-y-4">
-                        <div className="grid grid-cols-1 gap-4">
+                        
+                        <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Nama Toko</label>
+                            <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Nama Toko</label>
                             <input
                               type="text"
                               value={localStoreName}
                               onChange={(e) => setLocalStoreName(e.target.value)}
-                              onBlur={() => {
-                                if (localStoreName !== props.storeName) {
-                                  props.onSaveStoreName?.(localStoreName)
-                                }
-                              }}
+                              onBlur={() => { if (localStoreName !== props.storeName) props.onSaveStoreName?.(localStoreName) }}
                               placeholder="Ketik Nama Toko"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
                               style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                             />
                           </div>
-
                           <div>
-                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1.5 block">Sub-Teks / Slogan</label>
+                            <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Slogan Utama</label>
                             <input
                               type="text"
                               value={localStoreSubtext}
                               onChange={(e) => setLocalStoreSubtext(e.target.value)}
-                              onBlur={() => {
-                                if (localStoreSubtext !== props.storeSubtext) {
-                                  props.onSaveStoreSubtext?.(localStoreSubtext)
-                                }
-                              }}
+                              onBlur={() => { if (localStoreSubtext !== props.storeSubtext) props.onSaveStoreSubtext?.(localStoreSubtext) }}
                               placeholder="Contoh: Konter Pulsa & Aksesoris"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
                               style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                             />
                           </div>
                         </div>
+                      </div>
+
+                      {/* SECTION: PENGATURAN JAM KERJA / SHIFT */}
+                      <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm space-y-3">
+                        <h4 className="text-[9px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 border-b border-emerald-50 pb-1.5">
+                          <i className="fa-solid fa-clock"></i> Pengaturan Shift
+                        </h4>
+                        
+                        {isEditingShift ? (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Mode Jam Kerja</label>
+                                <select
+                                  value={financialSettings.shiftMode || '1-shift'}
+                                  onChange={(e) => handleSaveFinancial('shiftMode', e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none appearance-none cursor-pointer"
+                                  style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                >
+                                  <option value="1-shift">1 Shift (Full Day)</option>
+                                  <option value="2-shift">2 Shift (Pagi & Siang)</option>
+                                </select>
+                              </div>
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">
+                                    Masuk {financialSettings.shiftMode === '2-shift' ? 'Pagi' : 'Kerja'}
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftPagiStart || '08:00'}
+                                    onChange={(e) => handleSaveFinancial('shiftPagiStart', e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                  />
+                                </div>
+                                <div className="w-16">
+                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Telat(m)</label>
+                                  <input
+                                    type="text" inputMode="numeric" placeholder="15"
+                                    value={financialSettings.shiftPagiTolerance ?? '15'}
+                                    onChange={(e) => handleSaveFinancial('shiftPagiTolerance', e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 text-center transition-all outline-none"
+                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {financialSettings.shiftMode === '2-shift' && (
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Masuk Siang</label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftSiangStart || '15:00'}
+                                    onChange={(e) => handleSaveFinancial('shiftSiangStart', e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
+                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                  />
+                                </div>
+                                <div className="w-16">
+                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Telat(m)</label>
+                                  <input
+                                    type="text" inputMode="numeric" placeholder="15"
+                                    value={financialSettings.shiftSiangTolerance ?? '15'}
+                                    onChange={(e) => handleSaveFinancial('shiftSiangTolerance', e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 text-center transition-all outline-none"
+                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            <button onClick={() => setIsEditingShift(false)} className="w-full bg-emerald-600 text-white font-black py-1.5 rounded-lg text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                              <i className="fa-solid fa-check"></i> Simpan
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row gap-2 items-center">
+                            <div className="flex-1 w-full flex items-center justify-between bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100/50">
+                              <div>
+                                <p className="text-[8px] font-black text-emerald-800 uppercase tracking-widest">Status Shift</p>
+                                <p className="text-xs font-black text-emerald-900 mt-0.5">
+                                  {financialSettings.shiftMode === '2-shift' ? '2 Shift' : '1 Shift'} 
+                                  <span className="text-[9px] text-emerald-600 ml-1">
+                                    ({financialSettings.shiftPagiStart || '08:00'}{financialSettings.shiftMode === '2-shift' ? ` & ${financialSettings.shiftSiangStart || '15:00'}` : ''})
+                                  </span>
+                                </p>
+                              </div>
+                              <button onClick={() => setIsEditingShift(true)} className="w-8 h-8 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 flex items-center justify-center active:scale-90 transition-all">
+                                <i className="fa-solid fa-pen-to-square text-[10px]"></i>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECTION: PESAN PEMBERITAHUAN MENDADAK */}
+                      <div className="bg-white rounded-xl p-3 border border-rose-100 shadow-sm space-y-3">
+                        <h4 className="text-[9px] font-black uppercase tracking-widest text-rose-500 flex items-center gap-1.5 border-b border-rose-50 pb-1.5">
+                          <i className="fa-solid fa-bullhorn"></i> Pesan Kasir
+                        </h4>
+                        
+                        {isEditingPesan ? (
+                          <div className="space-y-2.5">
+                            <textarea
+                              value={financialSettings.pesanMendadak || ''}
+                              onChange={(e) => handleSaveFinancial('pesanMendadak', e.target.value)}
+                              placeholder="Tulis pesan (Kosongkan utk hapus)"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-rose-200 transition-all outline-none resize-none h-16"
+                              style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                            />
+                            <div className="flex gap-2">
+                              <select
+                                value={financialSettings.pesanDurasi || '1'}
+                                onChange={(e) => {
+                                  handleSaveFinancial('pesanDurasi', e.target.value)
+                                  handleSaveFinancial('pesanStartDate', new Date().toISOString().split('T')[0])
+                                }}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] font-black text-gray-900 focus:ring-2 focus:ring-rose-200 transition-all outline-none appearance-none cursor-pointer"
+                                style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                              >
+                                <option value="1">1 Hari</option>
+                                <option value="3">3 Hari</option>
+                                <option value="7">7 Hari</option>
+                                <option value="selamanya">Selamanya</option>
+                              </select>
+                              <button onClick={() => {
+                                if (!financialSettings.pesanStartDate && financialSettings.pesanMendadak) {
+                                  handleSaveFinancial('pesanStartDate', new Date().toISOString().split('T')[0])
+                                }
+                                setIsEditingPesan(false)
+                              }} className="px-4 bg-rose-600 text-white font-black rounded-lg text-[9px] uppercase tracking-widest active:scale-95 transition-all">
+                                Simpan
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row gap-2 items-center">
+                            <div className="flex-1 w-full flex items-center justify-between bg-rose-50 px-3 py-2 rounded-lg border border-rose-100/50">
+                              <div className="flex-1 mr-2 min-w-0">
+                                <p className="text-[8px] font-black text-rose-800 uppercase tracking-widest">
+                                  {financialSettings.pesanMendadak ? 'Pesan Aktif' : 'Tidak Ada Pesan'}
+                                </p>
+                                {financialSettings.pesanMendadak && (
+                                  <p className="text-xs font-bold text-rose-900 mt-0.5 truncate">{financialSettings.pesanMendadak}</p>
+                                )}
+                              </div>
+                              <button onClick={() => setIsEditingPesan(true)} className="w-8 h-8 shrink-0 bg-white text-rose-600 rounded-lg shadow-sm border border-rose-100 flex items-center justify-center active:scale-90 transition-all">
+                                <i className="fa-solid fa-pen-to-square text-[10px]"></i>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2587,6 +2727,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </div>
                         </div>
                       </div>
+
+
                     </div>
                   </div>
                 )}

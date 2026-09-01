@@ -21,7 +21,7 @@ interface TransactionFormProps {
 const TransactionForm: React.FC<TransactionFormProps> = ({
   kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules
 }) => {
-  const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
+  const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | ''>('')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
   const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
   const [isKetAuto, setIsKetAuto] = useState(true)
@@ -32,10 +32,71 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
   const [isSumberModalOpen, setIsSumberModalOpen] = useState(false)
   const [isTujuanModalOpen, setIsTujuanModalOpen] = useState(false)
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
+  const [activeTheme, setActiveTheme] = useState('TEMA_2')
+  const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
+  const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
+
+  // Effect untuk auto-focus saat ganti layar di Tema 3
+  React.useEffect(() => {
+    if (isTema3SheetOpen) {
+      const timer = setTimeout(() => {
+        const activeSlide = document.querySelector('#tema3-bottom-sheet .translate-x-0');
+        if (activeSlide) {
+           const focusBtn = activeSlide.querySelector('button[data-autofocus="true"]') as HTMLElement;
+           if (focusBtn) focusBtn.focus();
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [tema3Step, isTema3SheetOpen]);
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
   const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY','BANK']
   const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
+
+  // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
+  React.useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (isSumberModalOpen || isTujuanModalOpen) return;
+      
+      const active = document.activeElement;
+      const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+
+      if (!isTyping && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'Escape') {
+          if (isTema3SheetOpen) setIsTema3SheetOpen(false);
+        }
+        if (e.key === 'q' || e.key === 'Q') { 
+          e.preventDefault(); 
+          if (activeTheme === 'TEMA_3') {
+            if (isTema3SheetOpen) setIsTema3SheetOpen(false);
+            else { setTema3Step('MAIN'); setIsTema3SheetOpen(true); }
+          } else {
+            setActiveMode('DIGITAL'); setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank'); setIsAdminManuallyEdited(false);
+          }
+          return;
+        }
+        if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setActiveMode('TARIK'); setKategori('Tarik Tunai'); setIsAdminManuallyEdited(false); return; }
+        if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setActiveMode('AKSESORIS'); setKategori('Aksesoris'); setIsAdminManuallyEdited(false); return; }
+        if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
+        if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setIsSumberModalOpen(true); return; }
+        if (e.key === 's' || e.key === 'S') { e.preventDefault(); setIsTujuanModalOpen(true); return; }
+        if (['1','2','3','4','5'].includes(e.key)) {
+          const idx = parseInt(e.key) - 1;
+          if (activeMode === 'DIGITAL' && sumberAplikasi === 'BANK') { setSelectedBank(BANK_LIST[idx] || 'BRI'); setIsAdminManuallyEdited(false); }
+          else if (activeMode === 'TARIK') setSelectedSumber(SUMBER_LIST[idx] || 'QRIS');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown);
+  }, [
+    isSumberModalOpen, isTujuanModalOpen, isTema3SheetOpen, activeTheme, 
+    activeMode, sumberAplikasi, onOpenVoucherJualCepat
+  ]);
 
   // Sync sumberAplikasi → kategori
   React.useEffect(() => {
@@ -52,7 +113,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!isKetAuto) return
     let autoText = ''
     if (activeMode === 'DIGITAL') {
-      if (sumberAplikasi === 'BANK') autoText = `Transfer Bank ${selectedBank}`
+      if (sumberAplikasi === 'BANK') autoText = `Transfer Bank`
       else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`
       else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` = ${nominal}` : ''}`
       else autoText = `Transfer ${sumberAplikasi}`
@@ -112,6 +173,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const optTunaiRef = useRef<HTMLSelectElement>(null)
   const sumberRef = useRef<HTMLSelectElement>(null)
   const btnSimpanRef = useRef<HTMLButtonElement>(null)
+  const btnTema3MainRef = useRef<HTMLButtonElement>(null)
 
   const handleGlobalKeyDown = (e: React.KeyboardEvent) => {
     // Intercept when modals are open
@@ -142,47 +204,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     const active = document.activeElement
-    const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
-
-    // Letter/Number Shortcuts (only when not typing)
-    if (!isTyping && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); setActiveMode('DIGITAL'); setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank'); setIsAdminManuallyEdited(false); return }
-      if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setActiveMode('TARIK'); setKategori('Tarik Tunai'); setIsAdminManuallyEdited(false); return }
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setActiveMode('AKSESORIS'); setKategori('Aksesoris'); setIsAdminManuallyEdited(false); return }
-      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return }
-      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setIsSumberModalOpen(true); return }
-      if (e.key === 's' || e.key === 'S') { e.preventDefault(); setIsTujuanModalOpen(true); return }
-      if (['1','2','3','4','5'].includes(e.key)) {
-        const idx = parseInt(e.key) - 1
-        if (activeMode === 'DIGITAL' && sumberAplikasi === 'BANK') { setSelectedBank(BANK_LIST[idx] || 'BRI'); setIsAdminManuallyEdited(false) }
-        else if (activeMode === 'TARIK') setSelectedSumber(SUMBER_LIST[idx] || 'QRIS')
-        return
-      }
-    }
 
     // Arrow Keys Navigation
     if (e.key === 'ArrowRight') {
-      if (active === btnDigitalRef.current) btnTarikRef.current?.focus()
-      else if (active === btnTarikRef.current) btnAksesorisRef.current?.focus()
-      else if (active === btnAksesorisRef.current) btnVoucherRef.current?.focus()
-      else if (active === nominalRef.current) adminRef.current?.focus()
+      if (active === nominalRef.current) adminRef.current?.focus()
+      else if (activeTheme !== 'TEMA_3') {
+        if (active === btnDigitalRef.current) btnTarikRef.current?.focus()
+        else if (active === btnTarikRef.current) btnAksesorisRef.current?.focus()
+        else if (active === btnAksesorisRef.current) btnVoucherRef.current?.focus()
+      }
     } else if (e.key === 'ArrowLeft') {
-      if (active === btnTarikRef.current) btnDigitalRef.current?.focus()
-      else if (active === btnAksesorisRef.current) btnTarikRef.current?.focus()
-      else if (active === btnVoucherRef.current) btnAksesorisRef.current?.focus()
-      else if (active === adminRef.current) nominalRef.current?.focus()
+      if (active === adminRef.current) nominalRef.current?.focus()
+      else if (activeTheme !== 'TEMA_3') {
+        if (active === btnTarikRef.current) btnDigitalRef.current?.focus()
+        else if (active === btnAksesorisRef.current) btnTarikRef.current?.focus()
+        else if (active === btnVoucherRef.current) btnAksesorisRef.current?.focus()
+      }
     } else if (e.key === 'ArrowDown') {
-      if ([btnDigitalRef,btnTarikRef,btnAksesorisRef,btnVoucherRef].some(r=>active===r.current)) sumberRef.current?.focus()
-      else if (active === sumberRef.current) optTunaiRef.current?.focus()
-      else if (active === optTunaiRef.current) keteranganRef.current?.focus()
-      else if (active === keteranganRef.current) nominalRef.current?.focus()
-      else if (active === nominalRef.current || active === adminRef.current) btnSimpanRef.current?.focus()
+      if (activeTheme === 'TEMA_3') {
+         if (active === btnTema3MainRef.current) keteranganRef.current?.focus()
+         else if (active === keteranganRef.current) nominalRef.current?.focus()
+         else if (active === nominalRef.current || active === adminRef.current) btnSimpanRef.current?.focus()
+      } else {
+         if ([btnDigitalRef,btnTarikRef,btnAksesorisRef,btnVoucherRef].some(r=>active===r.current)) sumberRef.current?.focus()
+         else if (active === sumberRef.current) optTunaiRef.current?.focus()
+         else if (active === optTunaiRef.current) keteranganRef.current?.focus()
+         else if (active === keteranganRef.current) nominalRef.current?.focus()
+         else if (active === nominalRef.current || active === adminRef.current) btnSimpanRef.current?.focus()
+      }
     } else if (e.key === 'ArrowUp') {
-      if (active === sumberRef.current) btnDigitalRef.current?.focus()
-      else if (active === optTunaiRef.current) sumberRef.current?.focus()
-      else if (active === keteranganRef.current) optTunaiRef.current?.focus()
-      else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
-      else if (active === btnSimpanRef.current) nominalRef.current?.focus()
+      if (activeTheme === 'TEMA_3') {
+         if (active === btnSimpanRef.current) nominalRef.current?.focus()
+         else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
+         else if (active === keteranganRef.current) btnTema3MainRef.current?.focus()
+      } else {
+         if (active === sumberRef.current) btnDigitalRef.current?.focus()
+         else if (active === optTunaiRef.current) sumberRef.current?.focus()
+         else if (active === keteranganRef.current) optTunaiRef.current?.focus()
+         else if (active === nominalRef.current || active === adminRef.current) keteranganRef.current?.focus()
+         else if (active === btnSimpanRef.current) nominalRef.current?.focus()
+      }
     }
 
     if (e.key === 'Enter') {
@@ -198,6 +259,58 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setTimeout(() => {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
+  };
+
+  const handleSlideKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      setIsTema3SheetOpen(false);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Backspace'].includes(e.key)) {
+      e.stopPropagation(); // Mencegah bentrok dengan global handler
+    } else {
+      return;
+    }
+
+    const activeSlide = document.querySelector('#tema3-bottom-sheet .translate-x-0') as HTMLElement;
+    if (!activeSlide) return;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const buttons = Array.from(activeSlide.querySelectorAll('button')) as HTMLElement[];
+      let current = document.activeElement as HTMLElement;
+      
+      if (current && current.tagName !== 'BUTTON') {
+         const closest = current.closest('button');
+         if (closest) current = closest;
+      }
+      
+      let index = buttons.indexOf(current);
+      if (index === -1 && buttons.length > 0) {
+        buttons[0].focus();
+        return;
+      }
+      
+      if (e.key === 'ArrowDown') {
+        const next = index >= 0 && index < buttons.length - 1 ? buttons[index + 1] : buttons[0];
+        if (next) next.focus();
+      } else if (e.key === 'ArrowUp') {
+        const prev = index > 0 ? buttons[index - 1] : buttons[buttons.length - 1];
+        if (prev) prev.focus();
+      }
+    } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+      e.preventDefault();
+      if (tema3Step === 'DIGITAL' || tema3Step === 'TARIK') setTema3Step('MAIN');
+      else if (tema3Step === 'BANK_SELECTION') setTema3Step(activeMode === 'DIGITAL' ? 'DIGITAL' : 'TARIK');
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const current = document.activeElement as HTMLElement;
+      const btn = current.tagName === 'BUTTON' ? current : current.closest('button');
+      if (btn) btn.click();
+    }
   };
 
   const onSaveInternal = () => {
@@ -239,8 +352,38 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     <div className="relative p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 rounded-[2.5rem] bg-white/80 backdrop-blur-2xl outline-none" onKeyDown={handleGlobalKeyDown} tabIndex={0}>
       <div className="absolute top-0 right-0 w-40 h-40 bg-blue-400/20 rounded-full blur-3xl -z-10 pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
       <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl -z-10 pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
-      {/* KATEGORI LAYANAN */}
-      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 px-1">Kategori Layanan</p>
+      
+      {/* HEADER BARU */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col">
+            <h2 className="text-[15px] font-black text-[#1e293b] leading-tight">FORM TRANSAKSI</h2>
+            <p className="text-[12px] font-bold text-blue-600 leading-tight">Kategori Layanan</p>
+          </div>
+        </div>
+
+        <div className="relative z-50">
+          <button 
+            onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+            className="h-10 px-3.5 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center gap-2 hover:shadow-lg hover:shadow-purple-300 transition-all shadow-md group border border-purple-400/50"
+          >
+            <i className="fa-solid fa-palette text-[13px] text-white group-hover:rotate-12 transition-transform"></i>
+            <span className="text-[11px] font-black tracking-widest text-white uppercase">Tema</span>
+          </button>
+          
+          {isThemeMenuOpen && (
+            <div className="absolute right-0 top-12 w-40 bg-white rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] border border-gray-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <p className="px-3 pb-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 mb-1">Pilih Tema</p>
+              <button onClick={() => { setActiveTheme('TEMA_2'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_2' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 1 (Utama)</button>
+              <button onClick={() => { setActiveTheme('TEMA_3'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_3' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 2 (Sidebar)</button>
+              <button onClick={() => { setActiveTheme('TEMA_1'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_1' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 3 (Classic)</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {activeTheme === 'TEMA_1' ? (
+      <>
       <div className="grid grid-cols-4 gap-1.5 mb-2.5">
         {([
           { id: 'DIGITAL', label: 'Transfer', icon: 'fa-paper-plane', key: 'Q', ref: btnDigitalRef, active: 'from-blue-500 to-blue-700 shadow-blue-500/40', ic: 'text-blue-500', hov: 'hover:bg-blue-50 hover:border-blue-200' },
@@ -403,7 +546,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               onFocus={handleInputFocus}
               onChange={(e) => {
                 setKeterangan(e.target.value);
-                if (isKetAuto) setIsKetAuto(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  nominalRef.current?.focus();
+                }
               }}
               className="w-full resize-none text-[11px] font-black py-1.5 min-h-[36px] px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
             ></textarea>
@@ -475,6 +623,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={nominal}
                 onFocus={handleInputFocus}
                 onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    else adminRef.current?.focus();
+                  }
+                }}
                 className="w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
               />
             </div>
@@ -510,6 +665,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   e.target.select();
                 }}
                 onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    btnSimpanRef.current?.click();
+                  }
+                }}
                 className={cn(
                   "w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
                   kategori === 'Order Kuota' && (() => {
@@ -618,6 +779,452 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
         </button>
       </div>
+      </>
+      ) : activeTheme === 'TEMA_2' ? (
+      <>
+        {/* TEMA 2 LAYOUT */}
+        {/* Label Subteks: Pilih Mode Utama */}
+
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          {([
+            { id: 'DIGITAL',   label: 'TRANSFER',     icon: 'fa-paper-plane',        accentBg: 'bg-[#3b82f6]', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(59,130,246,0.5)]' },
+            { id: 'TARIK',     label: 'TARIK TUNAI',  icon: 'fa-money-bill-transfer', accentBg: 'bg-red-500',   accentShadow: 'shadow-[0_8px_16px_-6px_rgba(239,68,68,0.5)]' },
+            { id: 'AKSESORIS', label: 'AKSESORIS',    icon: 'fa-headset',             accentBg: 'bg-emerald-500', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(16,185,129,0.5)]' },
+            { id: 'VOUCHER',   label: 'JUAL VOUCHER', icon: 'fa-ticket',              accentBg: 'bg-orange-500', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(249,115,22,0.5)]' },
+          ] as const).map(mode => {
+            const isAct = activeMode === mode.id;
+            return (
+              <button
+                 key={mode.id}
+                 onClick={() => {
+                   if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
+                   setActiveMode(mode.id as any);
+                   setIsAdminManuallyEdited(false);
+                   if (mode.id === 'TARIK') { setKategori('Tarik Tunai'); }
+                   else if (mode.id === 'AKSESORIS') { setKategori('Aksesoris'); }
+                   else if (mode.id === 'DIGITAL') { setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank'); }
+                 }}
+                 className={cn(
+                   "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-300 gap-1.5",
+                   isAct
+                     ? `${mode.accentBg} ${mode.accentShadow} border-transparent scale-[1.02]`
+                     : "bg-white border-gray-100 hover:border-gray-200 shadow-sm"
+                 )}
+              >
+                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", isAct ? "bg-white/20" : "bg-gray-100")}>
+                   <i className={cn("fa-solid text-base", mode.icon, isAct ? "text-white" : "text-gray-400")}></i>
+                </div>
+                <span className={cn("text-[8px] font-black uppercase text-center leading-tight", isAct ? "text-white" : "text-[#1e293b]")}>{mode.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* KATEGORI ROW */}
+        <div className="flex items-center justify-between mb-4 bg-white border border-gray-100 rounded-2xl p-2 shadow-sm">
+          <span className="text-[11px] font-black text-[#1e293b] tracking-widest pl-3">KATEGORI</span>
+          <button 
+            onClick={() => setIsTujuanModalOpen(true)}
+            className="bg-white text-blue-700 text-[10px] font-bold px-3 py-2 rounded-xl border border-gray-100 flex items-center gap-2 hover:bg-blue-50 shadow-sm transition-colors"
+          >
+            {tujuanMasuk} <i className="fa-solid fa-chevron-down text-[9px] bg-[#eff4ff] p-1 rounded-full text-blue-600"></i>
+          </button>
+        </div>
+
+        {/* SUMBER APLIKASI (DIGITAL) ATAU METODE (TARIK) */}
+        {activeMode === 'DIGITAL' && (
+          <>
+
+            <div className="grid grid-cols-4 gap-2 mb-4">
+            {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s) => {
+               const isAct = sumberAplikasi === s;
+               const label = s === 'BANK' ? 'TRANSFER BANK' : s;
+               return (
+                 <button 
+                   key={s}
+                   onClick={() => {
+                     setSumberAplikasi(s); setIsKetAuto(true); setIsAdminManuallyEdited(false);
+                   }}
+                   className={cn(
+                     "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-200",
+                     isAct ? "border-slate-800 bg-slate-800 shadow-md scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
+                   )}
+                 >
+                   <span className={cn("text-[9px] font-black uppercase text-center", isAct ? "text-white" : "text-[#1e293b]")}>{label}</span>
+                 </button>
+               )
+            })}
+            </div>
+          </>
+        )}
+        {activeMode === 'TARIK' && (
+          <>
+
+            <div className="grid grid-cols-5 gap-2 mb-4">
+               {['QRIS','ATM','DANA','GOPAY','BANK'].map(s => {
+                 const isAct = selectedSumber === s;
+                 return (
+                   <button 
+                     key={s}
+                     onClick={() => { setSelectedSumber(s); setIsKetAuto(true); }}
+                     className={cn(
+                       "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-200",
+                       isAct ? "border-slate-800 bg-slate-800 shadow-md scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
+                     )}
+                   >
+                     <span className={cn("text-[9px] font-black uppercase text-center", isAct ? "text-white" : "text-[#1e293b]")}>{s}</span>
+                   </button>
+                 )
+               })}
+            </div>
+          </>
+        )}
+
+        {/* KETERANGAN ROW */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2 px-1">
+            <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+              <i className="fa-solid fa-align-left text-gray-400"></i> KETERANGAN
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3.5 h-3.5 accent-[#3b82f6] rounded-sm" />
+              <span className="text-[8px] font-black text-[#334155] tracking-widest uppercase">OTOMATIS</span>
+            </label>
+          </div>
+          <div className="relative">
+            <textarea 
+              ref={keteranganRef}
+              rows={1}
+              value={keterangan}
+              onChange={(e) => {
+                setKeterangan(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  nominalRef.current?.focus();
+                }
+              }}
+              className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
+            ></textarea>
+          </div>
+
+          {/* Autocomplete Suggestions */}
+          {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
+              {(() => {
+                const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+                if (searchQuery.length === 0) return null;
+                const filtered = presets.filter(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+                });
+                if (filtered.length === 0) return null;
+                return filtered.map(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                        if (pCat === 'Order Kuota') {
+                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                          adminRef.current?.focus();
+                        } else {
+                          nominalRef.current?.focus();
+                        }
+                        setIsKetAuto(false);
+                      }}
+                      className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-wide px-2.5 py-1.5 rounded-xl transition-all text-left shadow-sm"
+                    >
+                      {pCat === 'Order Kuota' 
+                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
+                        : p.keterangan}
+                    </button>
+                  );
+                })
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* NOMINAL & ADMIN ROW */}
+        <div className="flex gap-3 mb-5">
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-coins text-yellow-500"></i> NOMINAL
+              </label>
+              <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+            </div>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={nominalRef}
+                type="text"
+                inputMode="numeric" 
+                value={nominal}
+                onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    else adminRef.current?.focus();
+                  }
+                }}
+                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> ADMIN
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
+                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase">DALAM</span>
+              </label>
+            </div>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={adminRef}
+                type="text"
+                inputMode="numeric" 
+                value={admin}
+                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    btnSimpanRef.current?.click();
+                  }
+                }}
+                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ERROR MESSAGES & ALERTS */}
+        {errorMsg && (
+          <div className="mb-4 bg-red-50/80 border border-red-200 p-3 rounded-xl">
+            <p className="text-[10px] font-black text-red-600 uppercase text-center tracking-widest flex items-center justify-center gap-2">
+              <i className="fa-solid fa-triangle-exclamation text-base"></i> {errorMsg}
+            </p>
+          </div>
+        )}
+
+        <button 
+           ref={btnSimpanRef}
+           onClick={onSaveInternal}
+           disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
+           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+           className="w-full bg-gradient-to-r from-[#94a3b8] via-[#818cf8] to-[#8ca5ff] text-white text-[13px] font-black py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(129,140,248,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50"
+        >
+           {isSaving ? (
+             <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
+           ) : (
+             <div className="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center">
+                <i className="fa-solid fa-paper-plane text-[10px]"></i>
+             </div>
+           )}
+           {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
+        </button>
+      </>
+      ) : (
+      <>
+        {/* TEMA 3 LAYOUT (KOMPAK & SIDEBAR) */}
+        <button 
+          ref={btnTema3MainRef}
+          onClick={() => { 
+            setTema3Step('MAIN'); 
+            setIsTema3SheetOpen(true); 
+            setActiveMode('');
+            setSumberAplikasi('');
+            setSelectedSumber('');
+            setKategori('');
+            setKeterangan('');
+          }}
+          className="w-full bg-white border-2 border-gray-100 rounded-[24px] p-3 flex items-center justify-between mb-6 shadow-sm active:scale-[0.98] transition-all group hover:border-blue-300"
+        >
+           <div className="flex items-center gap-4">
+             <div className="relative w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:shadow-lg group-hover:scale-105 transition-all">
+               <i className="fa-solid fa-bars text-2xl"></i>
+               <span className="absolute top-1.5 right-1.5 text-[9px] font-black text-white bg-white/20 px-1.5 py-0.5 rounded backdrop-blur-sm">Q</span>
+             </div>
+             <div className="flex flex-col items-start gap-1">
+               <span className="text-[10px] font-black text-[#64748b] tracking-widest uppercase">Mode Layanan Aktif</span>
+               <span className="text-[15px] font-black text-[#1e293b] uppercase tracking-wider leading-none">
+                 {activeMode === 'DIGITAL' && sumberAplikasi ? `TRANSFER - ${sumberAplikasi}` : 
+                  activeMode === 'DIGITAL' ? 'TRANSFER BANK' :
+                  activeMode === 'TARIK' && selectedSumber ? `TARIK TUNAI - ${selectedSumber}` : 
+                  activeMode === 'TARIK' ? 'TARIK TUNAI' :
+                  activeMode === 'AKSESORIS' ? 'AKSESORIS' : 
+                  activeMode === 'VOUCHER' ? 'JUAL VOUCHER' : 'PILIH LAYANAN'}
+               </span>
+             </div>
+           </div>
+           <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center mr-1">
+             <i className="fa-solid fa-chevron-right text-[#64748b] text-[12px]"></i>
+           </div>
+        </button>
+
+        {/* KETERANGAN ROW */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2 px-1">
+            <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+              <i className="fa-solid fa-align-left text-gray-400"></i> KETERANGAN
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3.5 h-3.5 accent-[#3b82f6] rounded-sm" />
+              <span className="text-[8px] font-black text-[#334155] tracking-widest uppercase">OTOMATIS</span>
+            </label>
+          </div>
+          <div className="relative">
+            <textarea 
+              ref={keteranganRef}
+              rows={1}
+              value={keterangan}
+              onChange={(e) => {
+                setKeterangan(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  nominalRef.current?.focus();
+                }
+              }}
+              className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
+            ></textarea>
+          </div>
+          {/* Autocomplete Suggestions */}
+          {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
+              {(() => {
+                const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+                if (searchQuery.length === 0) return null;
+                const filtered = presets.filter(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+                });
+                if (filtered.length === 0) return null;
+                return filtered.map(p => {
+                  const pCat = p.kategori || 'Order Kuota';
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                        if (pCat === 'Order Kuota') {
+                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                          adminRef.current?.focus();
+                        } else {
+                          nominalRef.current?.focus();
+                        }
+                        setIsKetAuto(false);
+                      }}
+                      className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-wide px-2.5 py-1.5 rounded-xl transition-all text-left shadow-sm"
+                    >
+                      {pCat === 'Order Kuota' 
+                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
+                        : p.keterangan}
+                    </button>
+                  );
+                })
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* NOMINAL & ADMIN ROW */}
+        <div className="flex gap-3 mb-5">
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-coins text-yellow-500"></i> NOMINAL
+              </label>
+              <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+            </div>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={nominalRef}
+                type="text" 
+                inputMode="numeric"
+                value={nominal}
+                onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    else adminRef.current?.focus();
+                  }
+                }}
+                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
+              />
+            </div>
+          </div>
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> ADMIN
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
+                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase">DALAM</span>
+              </label>
+            </div>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <input 
+                ref={adminRef}
+                type="text" 
+                inputMode="numeric"
+                value={admin}
+                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    btnSimpanRef.current?.click();
+                  }
+                }}
+                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ERROR MESSAGES & ALERTS */}
+        {errorMsg && (
+          <div className="mb-4 bg-red-50/80 border border-red-200 p-3 rounded-xl">
+            <p className="text-[10px] font-black text-red-600 uppercase text-center tracking-widest flex items-center justify-center gap-2">
+              <i className="fa-solid fa-triangle-exclamation text-base"></i> {errorMsg}
+            </p>
+          </div>
+        )}
+
+        <button 
+           ref={btnSimpanRef}
+           onClick={onSaveInternal}
+           disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
+           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+           className="w-full bg-slate-900 text-white text-[13px] font-black py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50 hover:bg-slate-800"
+        >
+           {isSaving ? (
+             <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
+           ) : (
+             <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                <i className="fa-solid fa-check text-[10px]"></i>
+             </div>
+           )}
+           {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
+        </button>
+      </>
+      )}
 
       {/* Modal Sumber Aplikasi */}
       {isSumberModalOpen && (
@@ -680,6 +1287,218 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   )}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tema 3 Bottom Sheet / Drill-down Modal */}
+      {isTema3SheetOpen && (
+        <div id="tema3-bottom-sheet" className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsTema3SheetOpen(false)}>
+          <div 
+            className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl transform transition-transform animate-in slide-in-from-bottom-full duration-300 relative overflow-hidden flex flex-col" 
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={handleSlideKeyDown}
+            style={{ height: '480px' }}
+          >
+            {/* Header Handle */}
+            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 shrink-0"></div>
+            
+            <div className="relative flex-1 w-full h-full overflow-hidden">
+              {/* LAYAR 1: MAIN MENU */}
+              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", tema3Step === 'MAIN' ? "translate-x-0" : "-translate-x-full")}>
+                <h3 className="text-center text-[15px] font-black text-slate-800 mb-4 tracking-widest uppercase shrink-0">Pilih Mode Utama</h3>
+                <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
+                  {[
+                    { id: 'DIGITAL', label: 'TRANSFER', icon: 'fa-paper-plane', color: 'text-blue-500', bg: 'bg-blue-50' },
+                    { id: 'TARIK', label: 'TARIK TUNAI', icon: 'fa-money-bill-transfer', color: 'text-red-500', bg: 'bg-red-50' },
+                    { id: 'AKSESORIS', label: 'AKSESORIS', icon: 'fa-headset', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                    { id: 'VOUCHER', label: 'VOUCHER', icon: 'fa-ticket', color: 'text-orange-500', bg: 'bg-orange-50' },
+                  ].map(m => {
+                    const isSelected = activeMode === m.id;
+                    return (
+                    <button 
+                      key={m.id}
+                      data-autofocus={m.id === 'DIGITAL' ? "true" : "false"}
+                      onClick={() => {
+                        if (m.id === 'VOUCHER') { 
+                          setActiveMode('VOUCHER');
+                          if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); 
+                          setIsTema3SheetOpen(false); 
+                          return; 
+                        }
+                        if (m.id === 'AKSESORIS') {
+                          setActiveMode('AKSESORIS');
+                          setKategori('Aksesoris');
+                          setIsAdminManuallyEdited(false);
+                          setIsTema3SheetOpen(false);
+                          return;
+                        }
+                        setActiveMode(m.id as any);
+                        setTema3Step(m.id as any);
+                      }}
+                      className={cn(
+                        "group px-5 py-4 rounded-[20px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
+                        isSelected 
+                          ? "bg-orange-500 border-orange-500 text-white" 
+                          : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                      )}
+                    >
+                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
+                        isSelected ? "bg-white/20 text-white" : `${m.bg} ${m.color} group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white`
+                      )}>
+                        <i className={cn("fa-solid text-lg", m.icon)}></i>
+                      </div>
+                      <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
+                        isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
+                      )}>{m.label}</span>
+                    </button>
+                  )})}
+                </div>
+              </div>
+
+              {/* LAYAR 2: SUB MENU TRANSFER / DIGITAL */}
+              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", 
+                tema3Step === 'DIGITAL' ? "translate-x-0" : 
+                tema3Step === 'BANK_SELECTION' ? "-translate-x-full" : "translate-x-full"
+              )}>
+                <div className="flex items-center gap-3 mb-4 shrink-0 relative z-10">
+                  <button type="button" onClick={() => { setActiveMode(''); setTema3Step('MAIN'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Pilihan Transfer</h3>
+                </div>
+                <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
+                  {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx) => {
+                    const label = s === 'BANK' ? 'TRANSFER BANK' : s;
+                    const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
+                    const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;
+                    return (
+                      <button 
+                        key={s}
+                        data-autofocus={idx === 0 ? "true" : "false"}
+                        onClick={() => {
+                          setActiveMode('DIGITAL');
+                          setSumberAplikasi(s);
+                          setIsKetAuto(true);
+                          setIsAdminManuallyEdited(false);
+                          if (s === 'BANK') {
+                            setTema3Step('BANK_SELECTION');
+                          } else {
+                            setIsTema3SheetOpen(false);
+                          }
+                        }}
+                        className={cn(
+                          "group px-5 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
+                          isSelected 
+                            ? "bg-orange-500 border-orange-500 text-white" 
+                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                        )}
+                      >
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
+                          isSelected ? "bg-white/20 text-white" : "bg-blue-100 text-blue-600 group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white"
+                        )}>
+                          <i className={cn("fa-solid text-lg", icon)}></i>
+                        </div>
+                        <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
+                          isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
+                        )}>{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* LAYAR 3: SUB MENU TARIK TUNAI */}
+              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", 
+                tema3Step === 'TARIK' ? "translate-x-0" : 
+                tema3Step === 'BANK_SELECTION' ? "-translate-x-full" : "translate-x-full"
+              )}>
+                <div className="flex items-center gap-3 mb-4 shrink-0 relative z-10">
+                  <button type="button" onClick={() => { setActiveMode(''); setTema3Step('MAIN'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase">Metode Tarik</h3>
+                </div>
+                <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
+                  {['QRIS','ATM','DANA','GOPAY','BANK'].map((s, idx) => {
+                    const icon = s === 'QRIS' ? 'fa-qrcode' : s === 'ATM' ? 'fa-credit-card' : s === 'DANA' ? 'fa-wallet' : s === 'GOPAY' ? 'fa-wallet' : 'fa-building-columns';
+                    const isSelected = activeMode === 'TARIK' && selectedSumber === s;
+                    return (
+                      <button 
+                        key={s}
+                        data-autofocus={idx === 0 ? "true" : "false"}
+                        onClick={() => {
+                          setActiveMode('TARIK');
+                          setSelectedSumber(s);
+                          setIsKetAuto(true);
+                          setIsAdminManuallyEdited(false);
+                          setIsTema3SheetOpen(false);
+                        }}
+                        className={cn(
+                          "group px-5 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
+                          isSelected 
+                            ? "bg-orange-500 border-orange-500 text-white" 
+                            : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                        )}
+                      >
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors", 
+                          isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-600 group-hover:bg-white/20 group-hover:text-white group-focus:bg-white/20 group-focus:text-white"
+                        )}>
+                          <i className={cn("fa-solid text-lg", icon)}></i>
+                        </div>
+                        <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
+                          isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
+                        )}>{s}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* LAYAR 4: SUB MENU PILIH BANK */}
+              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", tema3Step === 'BANK_SELECTION' ? "translate-x-0" : "translate-x-full")}>
+                <div className="flex items-center gap-3 mb-3 shrink-0 relative z-10">
+                  <button type="button" onClick={() => { setTema3Step(activeMode === 'DIGITAL' ? 'DIGITAL' : 'TARIK'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <div>
+                    <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest block leading-none mb-0.5">⬇ Pilih Bank</span>
+                    <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase leading-none">{activeMode === 'DIGITAL' ? 'Transfer Bank' : 'Tarik Tunai Bank'}</h3>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 overflow-y-auto pb-4 pr-1">
+                  {BANK_LIST.map((b) => {
+                     const prefix = activeMode === 'DIGITAL' ? 'TRANSFER BANK' : 'TARIK TUNAI BANK';
+                     const isSelected = keterangan === `${prefix} ${b}`;
+                     return (
+                       <button
+                         key={b}
+                         data-autofocus={b === 'BRI' ? "true" : "false"}
+                         onClick={() => {
+                           setSelectedBank(b);
+                           setIsTema3SheetOpen(false);
+                           setTimeout(() => nominalRef.current?.focus(), 150);
+                         }}
+                         className={cn(
+                           "group flex items-center justify-between p-3.5 rounded-[16px] border transition-all text-left active:scale-[0.98] outline-none focus:outline-none",
+                           isSelected 
+                             ? "bg-orange-500 border-orange-500 text-white" 
+                             : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
+                         )}
+                       >
+                         <span className={cn("text-[14px] font-black uppercase tracking-widest transition-colors", 
+                           isSelected ? "text-white" : "text-slate-800 group-hover:text-white group-focus:text-white"
+                         )}>{b}</span>
+                         <i className={cn("fa-solid fa-check-circle text-lg transition-colors", 
+                           isSelected ? "text-white" : "opacity-0 group-hover:opacity-100 group-hover:text-white/40 group-focus:opacity-100 group-focus:text-white/40"
+                         )}></i>
+                       </button>
+                     )
+                  })}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
