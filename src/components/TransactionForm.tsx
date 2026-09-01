@@ -1310,10 +1310,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <h3 className="text-center text-[15px] font-black text-slate-800 mb-4 tracking-widest uppercase shrink-0">Pilih Mode Utama</h3>
                 <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
                   {[
-                    { id: 'DIGITAL', label: 'TRANSFER', icon: 'fa-paper-plane', color: 'text-blue-500', bg: 'bg-blue-50' },
-                    { id: 'TARIK', label: 'TARIK TUNAI', icon: 'fa-money-bill-transfer', color: 'text-red-500', bg: 'bg-red-50' },
-                    { id: 'AKSESORIS', label: 'AKSESORIS', icon: 'fa-headset', color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                    { id: 'VOUCHER', label: 'VOUCHER', icon: 'fa-ticket', color: 'text-orange-500', bg: 'bg-orange-50' },
+                    { id: 'DIGITAL', label: 'TRANSFER', subtext: 'Transfer, Ewallet dan PPOB', icon: 'fa-paper-plane', color: 'text-blue-500', bg: 'bg-blue-50' },
+                    { id: 'TARIK', label: 'TARIK TUNAI', subtext: '', icon: 'fa-money-bill-transfer', color: 'text-red-500', bg: 'bg-red-50' },
+                    { id: 'AKSESORIS', label: 'AKSESORIS', subtext: '', icon: 'fa-headset', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                    { id: 'VOUCHER', label: 'VOUCHER', subtext: '', icon: 'fa-ticket', color: 'text-orange-500', bg: 'bg-orange-50' },
                   ].map(m => {
                     const isSelected = activeMode === m.id;
                     return (
@@ -1341,7 +1341,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                       className={cn(
                         "group px-5 py-4 rounded-[20px] border transition-all text-left flex items-center gap-4 shadow-sm outline-none focus:outline-none",
-                        m.id === 'TARIK' 
+                        m.id === 'TARIK'
                           ? "opacity-40 cursor-not-allowed bg-gray-50 border-gray-100" 
                           : isSelected 
                             ? "bg-orange-500 border-orange-500 text-white active:scale-95" 
@@ -1353,9 +1353,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       )}>
                         <i className={cn("fa-solid text-lg", m.icon)}></i>
                       </div>
-                      <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
-                        isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
-                      )}>{m.label}</span>
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className={cn("text-[13px] font-black uppercase tracking-widest transition-colors", 
+                          isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
+                        )}>{m.label}</span>
+                        {m.subtext && (
+                          <span className={cn("text-[10px] font-medium transition-colors", 
+                            isSelected ? "text-white/80" : "text-slate-500 group-hover:text-white/80 group-focus:text-white/80"
+                          )}>{m.subtext}</span>
+                        )}
+                      </div>
                     </button>
                   )})}
                 </div>
@@ -1386,11 +1393,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           setSumberAplikasi(s);
                           setIsKetAuto(true);
                           setIsAdminManuallyEdited(false);
-                          if (s === 'BANK') {
-                            setTema3Step('BANK_SELECTION');
-                          } else {
-                            setIsTema3SheetOpen(false);
-                          }
+                          setIsTema3SheetOpen(false);
                         }}
                         className={cn(
                           "group px-5 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-4 shadow-sm active:scale-95 outline-none focus:outline-none",
@@ -1409,49 +1412,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         )}>{label}</span>
                       </button>
                     )
-                  })}
-                </div>
-              </div>
-
-              {/* LAYAR 4: SUB MENU PILIH BANK */}
-              <div className={cn("absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out bg-white flex flex-col", tema3Step === 'BANK_SELECTION' ? "translate-x-0" : "translate-x-full")}>
-                <div className="flex items-center gap-3 mb-3 shrink-0 relative z-10">
-                  <button type="button" onClick={() => { setTema3Step('DIGITAL'); }} className="relative z-50 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-slate-600 hover:bg-gray-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 focus:outline-none cursor-pointer active:scale-90 transition-all">
-                    <i className="fa-solid fa-chevron-left"></i>
-                  </button>
-                  <div>
-                    <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest block leading-none mb-0.5">⬇ Pilih Bank</span>
-                    <h3 className="text-[15px] font-black text-slate-800 tracking-widest uppercase leading-none">{activeMode === 'DIGITAL' ? 'Transfer Bank' : 'Tarik Tunai Bank'}</h3>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 overflow-y-auto pb-4 pr-1">
-                  {BANK_LIST.map((b) => {
-                     const prefix = activeMode === 'DIGITAL' ? 'TRANSFER BANK' : 'TARIK TUNAI BANK';
-                     const isSelected = keterangan === `${prefix} ${b}`;
-                     return (
-                       <button
-                         key={b}
-                         data-autofocus={b === 'BRI' ? "true" : "false"}
-                         onClick={() => {
-                           setSelectedBank(b);
-                           setIsTema3SheetOpen(false);
-                           setTimeout(() => nominalRef.current?.focus(), 150);
-                         }}
-                         className={cn(
-                           "group flex items-center justify-between p-3.5 rounded-[16px] border transition-all text-left active:scale-[0.98] outline-none focus:outline-none",
-                           isSelected 
-                             ? "bg-orange-500 border-orange-500 text-white" 
-                             : "border-gray-100 bg-white hover:bg-orange-500 hover:border-orange-500 focus:bg-orange-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200"
-                         )}
-                       >
-                         <span className={cn("text-[14px] font-black uppercase tracking-widest transition-colors", 
-                           isSelected ? "text-white" : "text-slate-800 group-hover:text-white group-focus:text-white"
-                         )}>{b}</span>
-                         <i className={cn("fa-solid fa-check-circle text-lg transition-colors", 
-                           isSelected ? "text-white" : "opacity-0 group-hover:opacity-100 group-hover:text-white/40 group-focus:opacity-100 group-focus:text-white/40"
-                         )}></i>
-                       </button>
-                     )
                   })}
                 </div>
               </div>
