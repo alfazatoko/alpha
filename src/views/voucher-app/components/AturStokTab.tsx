@@ -59,6 +59,7 @@ interface AturStokTabProps {
   onRecordHandover: (handoverData: any) => void;
   onSwitchCashier: () => void;
   onBackToDashboard: () => void;
+  onTakeoverStock?: () => void;
 }
 
 /**
@@ -143,7 +144,8 @@ export default function AturStokTab({
   onBulkUpdateProductStock,
   onRecordHandover,
   onSwitchCashier,
-  onBackToDashboard
+  onBackToDashboard,
+  onTakeoverStock
 }: AturStokTabProps) {
 
   // ─── SESSION PERSISTENCE KEY ───────────────────────────────────────────────
@@ -151,6 +153,19 @@ export default function AturStokTab({
   const SK = sessionKey || `audit_session_default`;
   const isOwnerMode = userRole === 'owner';
   const isReadOnly = isOwnerMode || !isActiveCashierOnDuty;
+
+  // ─── PIN DARURAT (AMBIL ALIH STOK) ─────────────────────────────────────────
+  // Dibaca dari localStorage yang di-set di halaman Akun Owner (Keamanan & Akses)
+  // Format key: alphaPro_{storeId}_takeoverPin, dengan fallback '1234'
+  const takeoverPinKey = (() => {
+    // sessionKey format: audit_{storeId}_{cashierId}
+    const parts = SK.split('_');
+    const storeId = parts.length >= 3 ? parts[1] : null;
+    return storeId ? `alphaPro_${storeId}_takeoverPin` : 'alphaPro_takeoverPin';
+  })();
+  const getValidTakeoverPin = () => {
+    try { return localStorage.getItem(takeoverPinKey) || '1234'; } catch { return '1234'; }
+  };
 
   // ─── LOAD SESSION DARI LOCALSTORAGE (sekali saat mount) ────────────────────
   const loadedSession = (() => {
@@ -167,13 +182,23 @@ export default function AturStokTab({
         catatanSelisih: string;
         selectedToCashierId: string;
         sessionStartedAt: string;
+        isBukaTokoCompleted?: boolean;
       };
     } catch { return null; }
   })();
 
   const [isRestoredSession] = useState(!!loadedSession);
+  const [isBukaTokoCompleted, setIsBukaTokoCompleted] = useState(loadedSession?.isBukaTokoCompleted ?? false);
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(loadedSession?.currentStep as any ?? 1);
+  const [viewMode, setViewMode] = useState<'lobby' | 'buka' | 'tutup'>(
+    loadedSession ? (loadedSession.currentStep <= 2 ? 'buka' : 'tutup') : 'lobby'
+  );
+  const [showTakeoverPin, setShowTakeoverPin] = useState(false);
+  const [takeoverPinInput, setTakeoverPinInput] = useState('');
+  
+  const isStep1ReadOnly = isReadOnly || viewMode === 'lobby';
+
   const [items, setItems] = useState<StockAuditItem[]>(loadedSession?.items ?? []);
   const [isInitialLocked, setIsInitialLocked] = useState(loadedSession?.isInitialLocked ?? false);
   const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2 | 3; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
@@ -270,12 +295,13 @@ export default function AturStokTab({
       cashPhysical,
       catatanSelisih,
       selectedToCashierId,
-      sessionStartedAt: loadedSession?.sessionStartedAt ?? new Date().toISOString()
+      sessionStartedAt: loadedSession?.sessionStartedAt ?? new Date().toISOString(),
+      isBukaTokoCompleted
     };
     try {
       localStorage.setItem(SK, JSON.stringify(session));
     } catch { /* storage penuh atau private mode */ }
-  }, [currentStep, items, isInitialLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess]);
+  }, [currentStep, items, isInitialLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess, isBukaTokoCompleted]);
 
 
   // Initialize items from products — hanya jika TIDAK ada sesi yang di-restore
@@ -453,6 +479,25 @@ export default function AturStokTab({
     });
   };
 
+  const handleTakeoverSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validPin = getValidTakeoverPin();
+    if (takeoverPinInput === validPin) {
+      if (onTakeoverStock) {
+        onTakeoverStock();
+      }
+      setShowTakeoverPin(false);
+      setTakeoverPinInput('');
+      setViewMode('buka');
+      setCurrentStep(1);
+      // Reset isBukaTokoCompleted agar sesi baru bisa dimulai
+      setIsBukaTokoCompleted(false);
+    } else {
+      alert('PIN Darurat Salah!');
+      setTakeoverPinInput('');
+    }
+  };
+
   const handleCompleteHandover = () => {
     // Hapus sesi dari localStorage — serah terima sudah selesai
     try { localStorage.removeItem(SK); } catch { }
@@ -520,7 +565,11 @@ export default function AturStokTab({
       )}
       
       {/* BANNER: Sesi Dilanjutkan (jika restore dari localStorage) */}
-      {isRestoredSession && !isHandoverSuccess && (
+      {isRestoredSession && !isHandoverSuccess && viewMode !== 'lobby' && (() => {
+        const isUnfinishedBukaToko = currentStep <= 2 && !isBukaTokoCompleted;
+        const isUnfinishedTutupToko = currentStep > 2;
+        if (!isUnfinishedBukaToko && !isUnfinishedTutupToko) return null;
+        return (
         <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${
           isLight
             ? 'bg-amber-50 border-amber-300 text-amber-800'
@@ -534,7 +583,10 @@ export default function AturStokTab({
           <div className="flex-1 min-w-0">
             <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Melanjutkan Sesi Sebelumnya</p>
             <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
-              Step {currentStep}/4 tersimpan
+              {viewMode === 'buka'
+                ? `Step ${currentStep}/2 tersimpan`
+                : `Step ${currentStep - 2}/3 tersimpan`
+              }
               {loadedSession?.sessionStartedAt ? ` · Dimulai ${new Date(loadedSession.sessionStartedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB` : ''}
             </p>
           </div>
@@ -553,10 +605,188 @@ export default function AturStokTab({
             Reset
           </button>
         </div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* 0. LOBBY: PILIH MODE BUKA / TUTUP TOKO */}
+      {/* ========================================================================= */}
+      {viewMode === 'lobby' && !isHandoverSuccess && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 mt-4">
+          <div className="text-center px-4">
+            <h2 className={`text-lg font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Alur Shift Kasir</h2>
+            <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Pilih proses yang ingin Anda lakukan saat ini.</p>
+          </div>
+
+          <div className="relative max-w-sm mx-auto px-4 flex flex-col gap-8">
+            {/* Curved Arrow connecting the two buttons visually */}
+            <svg className="absolute left-[20%] top-[30%] w-[60%] h-[60%] -z-10 text-slate-300 dark:text-slate-700" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M 10,0 Q 90,0 90,90" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="8 8" />
+              <polygon points="85,85 95,85 90,95" fill="currentColor" />
+            </svg>
+
+            {/* BUKA TOKO BUTTON (Kiri Atas) */}
+            <div className="w-[85%] self-start">
+              <button
+                onClick={() => {
+                  setViewMode('buka');
+                  setCurrentStep(1);
+                }}
+                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border-2 transition-all cursor-pointer group hover:-translate-y-1 hover:shadow-xl ${
+                  isLight 
+                    ? 'bg-blue-50 border-blue-200 hover:border-blue-400 hover:shadow-blue-200/50' 
+                    : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/60 hover:shadow-blue-900/40'
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                    isLight ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'
+                  }`}>
+                    <PackagePlus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className={`text-base font-black uppercase tracking-wide ${isLight ? 'text-blue-900' : 'text-blue-100'}`}>
+                      Buka Toko
+                    </h3>
+                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${isLight ? 'text-blue-700/80' : 'text-blue-300/80'}`}>
+                      Atur stok awal & tambah stok baru
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* TUTUP TOKO BUTTON (Kanan Bawah) */}
+            <div className="w-[85%] self-end relative">
+              {/* Ambil Alih Stok (Darurat) - Top Right of Tutup Toko area */}
+              <div className="absolute -top-6 right-1 z-10">
+                <button
+                  type="button"
+                  onClick={() => setShowTakeoverPin(true)}
+                  className={`text-[9px] font-bold underline transition cursor-pointer px-1 py-0.5 ${
+                    isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Ambil Alih Stok (Darurat)
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (!isBukaTokoCompleted) return; // Kunci jika Buka Toko belum selesai
+                  setViewMode('tutup');
+                  setCurrentStep(3);
+                }}
+                disabled={!isBukaTokoCompleted}
+                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border-2 transition-all group ${
+                  isBukaTokoCompleted
+                    ? `cursor-pointer hover:-translate-y-1 hover:shadow-xl ${
+                        isLight
+                          ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-200/50'
+                          : 'bg-emerald-950/40 border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-900/40'
+                      }`
+                    : `cursor-not-allowed opacity-50 ${
+                        isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-800/40 border-slate-700/50'
+                      }`
+                }`}
+                title={!isBukaTokoCompleted ? 'Selesaikan Buka Toko terlebih dahulu' : ''}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                    isBukaTokoCompleted
+                      ? (isLight ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white')
+                      : (isLight ? 'bg-slate-400 text-white' : 'bg-slate-600 text-slate-400')
+                  }`}>
+                    {isBukaTokoCompleted ? (
+                      <ClipboardCheck className="w-6 h-6" />
+                    ) : (
+                      <Lock className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className={`text-base font-black uppercase tracking-wide ${
+                      isBukaTokoCompleted
+                        ? (isLight ? 'text-emerald-900' : 'text-emerald-100')
+                        : (isLight ? 'text-slate-500' : 'text-slate-400')
+                    }`}>
+                      Tutup Toko
+                    </h3>
+                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${
+                      isBukaTokoCompleted
+                        ? (isLight ? 'text-emerald-700/80' : 'text-emerald-300/80')
+                        : (isLight ? 'text-slate-400' : 'text-slate-500')
+                    }`}>
+                      {isBukaTokoCompleted
+                        ? 'Hitung stok akhir & serah terima'
+                        : '🔒 Selesaikan Buka Toko terlebih dahulu'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </motion.div>
       )}
 
-      {/* 1. TOP CARD: KELOLA STOK & TUTUP SHIFT */}
-      <div className={`rounded-xl p-3 shadow-xs relative overflow-hidden border ${
+      {/* TAKEOVER PIN MODAL */}
+      <AnimatePresence>
+        {showTakeoverPin && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`w-full max-w-xs rounded-2xl shadow-2xl p-5 ${
+                isLight ? 'bg-white' : 'bg-slate-900 border border-slate-700'
+              }`}
+            >
+              <h3 className={`text-sm font-black text-center ${isLight ? 'text-slate-900' : 'text-white'}`}>Otorisasi Darurat</h3>
+              <p className={`text-xs text-center mt-1 mb-4 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Masukkan PIN Owner untuk mengambil alih stok.</p>
+              
+              <form onSubmit={handleTakeoverSubmit} className="space-y-4">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="PIN (1234)"
+                  value={takeoverPinInput}
+                  onChange={(e) => setTakeoverPinInput(e.target.value)}
+                  className={`w-full text-center text-lg font-black tracking-[0.5em] py-3 rounded-xl border focus:outline-none transition ${
+                    isLight ? 'bg-slate-50 border-slate-300 focus:border-blue-500' : 'bg-slate-950 border-slate-700 focus:border-blue-500 text-white'
+                  }`}
+                />
+                
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTakeoverPin(false);
+                      setTakeoverPinInput('');
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      isLight ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20 transition cursor-pointer"
+                  >
+                    Ambil Alih
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 1. TOP CARD & STEPPER (HANYA MUNCUL JIKA BUKAN DI LOBBY) */}
+      {viewMode !== 'lobby' && (
+        <>
+          <div className={`rounded-xl p-3 shadow-xs relative overflow-hidden border ${
         isLight 
           ? 'bg-white border-slate-200' 
           : 'bg-gradient-to-r from-[#172554] via-[#0f172a] to-[#0a0f1d] border-blue-500/20 shadow-md'
@@ -641,65 +871,86 @@ export default function AturStokTab({
 
       {/* 2. COMPACT STEPPER BAR DENGAN IKON */}
       <div className="px-1 py-1 sm:py-2">
-        <div className="relative flex items-center justify-between max-w-sm mx-auto px-2">
-          {/* Background Line */}
-          <div className={`absolute left-6 right-6 top-[16px] sm:top-[18px] h-[2px] ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
-          
-          {/* Active Line Fill */}
-          <div 
-            className="absolute left-6 top-[16px] sm:top-[18px] h-[2px] bg-blue-500 transition-all duration-300"
-            style={{ width: `calc(${((currentStep - 1) / 4) * 100}% - 1.5rem)` }}
-          />
-
-          {[
-            { id: 1, label: 'Awal', icon: ClipboardList },
-            { id: 2, label: 'Masuk', icon: PackagePlus },
-            { id: 3, label: 'Akhir', icon: ClipboardCheck },
-            { id: 4, label: 'Kas', icon: Wallet },
-            { id: 5, label: 'Selesai', icon: Handshake }
-          ].map((step) => {
-            const isActive = currentStep === step.id;
-            const isPassed = currentStep > step.id;
-            const Icon = step.icon;
+        <div className="relative flex items-center justify-between max-w-sm mx-auto px-4 sm:px-8">
+          {(() => {
+            const allSteps = [
+              { id: 1, label: 'Awal', icon: ClipboardList },
+              { id: 2, label: 'Masuk', icon: PackagePlus },
+              { id: 3, label: 'Akhir', icon: ClipboardCheck },
+              { id: 4, label: 'Kas', icon: Wallet },
+              { id: 5, label: 'Selesai', icon: Handshake }
+            ];
             
+            const visibleSteps = viewMode === 'buka' 
+              ? allSteps.slice(0, 2) 
+              : viewMode === 'tutup' 
+                ? allSteps.slice(2, 5) 
+                : allSteps;
+
+            const currentIndex = Math.max(0, visibleSteps.findIndex(s => s.id === currentStep));
+            const maxIndex = Math.max(1, visibleSteps.length - 1);
+            const progressPercentage = (currentIndex / maxIndex) * 100;
+
             return (
-              <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (step.id === 1 || isInitialLocked) {
-                      setCurrentStep(step.id as any);
-                    }
-                  }}
-                  className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-300 cursor-pointer ${
-                    isActive 
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110 ring-2 ring-white dark:ring-slate-900' 
-                      : isPassed
-                        ? (isLight ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-900/40 text-blue-400 border border-blue-500/30')
-                        : (isLight ? 'bg-white text-slate-400 border border-slate-200 shadow-sm' : 'bg-slate-800 text-slate-500 border border-slate-700')
-                  }`}
-                >
-                  <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" strokeWidth={isActive ? 2.5 : 2} />
-                </button>
-                <span className={`text-[9px] sm:text-[10px] font-bold tracking-tight transition-colors ${
-                  isActive ? (isLight ? 'text-blue-700' : 'text-blue-400') : (isPassed ? (isLight ? 'text-slate-700' : 'text-slate-300') : (isLight ? 'text-slate-400' : 'text-slate-500'))
-                }`}>
-                  {step.label}
-                </span>
-              </div>
+              <>
+                {/* Background Line */}
+                <div className={`absolute left-8 right-8 sm:left-12 sm:right-12 top-[16px] sm:top-[18px] h-[2px] ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
+                
+                {/* Active Line Fill */}
+                <div 
+                  className="absolute left-8 sm:left-12 top-[16px] sm:top-[18px] h-[2px] bg-blue-500 transition-all duration-300"
+                  style={{ width: `calc(${progressPercentage}% - ${progressPercentage === 100 ? '2rem' : progressPercentage === 0 ? '0px' : '1rem'})` }}
+                />
+
+                {visibleSteps.map((step) => {
+                  const isActive = currentStep === step.id;
+                  const isPassed = currentStep > step.id;
+                  const Icon = step.icon;
+                  
+                  return (
+                    <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (step.id === 1 || isInitialLocked) {
+                            setCurrentStep(step.id as any);
+                          }
+                        }}
+                        className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-300 cursor-pointer ${
+                          isActive 
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110 ring-2 ring-white dark:ring-slate-900' 
+                            : isPassed
+                              ? (isLight ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-900/40 text-blue-400 border border-blue-500/30')
+                              : (isLight ? 'bg-white text-slate-400 border border-slate-200 shadow-sm' : 'bg-slate-800 text-slate-500 border border-slate-700')
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" strokeWidth={isActive ? 2.5 : 2} />
+                      </button>
+                      <span className={`text-[9px] sm:text-[10px] font-bold tracking-tight transition-colors ${
+                        isActive ? (isLight ? 'text-blue-700' : 'text-blue-400') : (isPassed ? (isLight ? 'text-slate-700' : 'text-slate-300') : (isLight ? 'text-slate-400' : 'text-slate-500'))
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
         </div>
       </div>
+      </>
+      )}
 
       {/* ========================================================================= */}
-      {/* 1. LANGKAH 1: HITUNG STOK AWAL (BUKA SHIFT) */}
+      {/* 1. LANGKAH 1: HITUNG STOK AWAL (BUKA SHIFT) / LOBBY TABLE */}
       {/* ========================================================================= */}
-      {currentStep === 1 && !isHandoverSuccess && (
+      {(currentStep === 1 || viewMode === 'lobby') && !isHandoverSuccess && (() => {
+        return (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-2.5"
+          className={`space-y-2.5 ${viewMode === 'lobby' ? 'mt-8 pt-4 border-t border-slate-200 dark:border-slate-800' : ''}`}
         >
           {/* Outer Header Text */}
           <div className="px-1 flex items-start justify-between gap-2">
@@ -709,10 +960,10 @@ export default function AturStokTab({
               </div>
               <div>
                 <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                  Hitung Stok Awal (Buka Shift)
+                  {viewMode === 'lobby' ? 'Catatan Stok Shift Lalu' : 'Hitung Stok Awal (Buka Shift)'}
                 </h3>
                 <p className={`text-[9.5px] sm:text-[10px] mt-0.5 leading-tight ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
-                  Cocokkan fisik etalase dengan sisa stok shift sebelumnya. Ketuk baris untuk mengatur jumlah.
+                  {viewMode === 'lobby' ? 'Berikut adalah sisa stok yang ditinggalkan oleh kasir sebelumnya.' : 'Cocokkan fisik etalase dengan sisa stok shift sebelumnya. Ketuk baris untuk mengatur jumlah.'}
                 </p>
               </div>
             </div>
@@ -886,8 +1137,8 @@ export default function AturStokTab({
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => !isInitialLocked && !isOwnerMode && setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId })}
-                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
+                      onClick={() => !isStep1ReadOnly && !isInitialLocked && !isOwnerMode && setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId })}
+                      className={`transition-colors ${isStep1ReadOnly || isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingThis 
                           ? (isLight ? 'bg-blue-100/70 ring-1 ring-blue-400' : 'bg-blue-900/40 ring-1 ring-blue-500/50')
                           : (isLight ? 'hover:bg-blue-50/60 bg-white' : 'hover:bg-blue-950/30')
@@ -927,16 +1178,17 @@ export default function AturStokTab({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!isInitialLocked) {
+                            if (!isStep1ReadOnly && !isInitialLocked) {
                               setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId });
                             }
                           }}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition cursor-pointer active:scale-95 ${
+                          disabled={isStep1ReadOnly || isInitialLocked}
+                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isStep1ReadOnly || isInitialLocked ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
                             isLight 
                               ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' 
                               : 'bg-blue-950/40 hover:bg-blue-900/50 border-blue-500/30 text-blue-400'
                           }`}
-                          title="Ketuk untuk ubah stok awal"
+                          title={isStep1ReadOnly || isInitialLocked ? 'Tidak bisa diedit saat ini' : 'Ketuk untuk ubah stok awal'}
                         >
                           <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
                             {item.initialStock}
@@ -1013,7 +1265,9 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {!isOwnerMode && (isInitialLocked ? (
+            {viewMode === 'lobby' ? (
+              <div className="pt-2"></div>
+            ) : !isOwnerMode && (isInitialLocked ? (
               <div className="flex gap-1.5">
                 <button 
                   onClick={() => setIsInitialLocked(false)} 
@@ -1042,7 +1296,8 @@ export default function AturStokTab({
             ))}
           </div>
         </motion.div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* 2. LANGKAH 2: TAMBAH STOK BARU (BARANG MASUK) */}
@@ -1185,13 +1440,27 @@ export default function AturStokTab({
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Awal
             </button>
-            <button
-              type="button"
-              onClick={() => setCurrentStep(3)}
-              className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
-            >
-              Tutup Shift & Mulai Closing <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            {viewMode === 'buka' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBukaTokoCompleted(true);
+                  alert('Toko Berhasil Dibuka! Selamat Bertugas dan Semoga Laris Manis hari ini! 🎉');
+                  onBackToDashboard();
+                }}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                Selesai Buka Toko <CheckCircle2 className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                Tutup Shift & Mulai Closing <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </motion.div>
       )}
@@ -1440,17 +1709,21 @@ export default function AturStokTab({
           {/* Bottom Actions - hidden for owner */}
           {!isOwnerMode && (
           <div className="flex items-center justify-between gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setCurrentStep(2)}
-              className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
-                isLight 
-                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Tambah Stok
-            </button>
+            {viewMode === 'tutup' ? (
+              <div className="flex-1" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
+                  isLight 
+                    ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
+                    : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Tambah Stok
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setCurrentStep(4)}

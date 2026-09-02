@@ -1227,6 +1227,38 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setShowHandoverModal(false);
   };
 
+  const handleTakeoverStock = () => {
+    const storeKey = activeStoreId || 'default';
+    const toPrefix = `v_${storeKey}_${activeCashier.id}`;
+    
+    const currentActiveId = activeShiftCashierId || 'c1';
+    
+    if (currentActiveId !== activeCashier.id) {
+      const fromPrefix = `v_${storeKey}_${currentActiveId}`;
+      let theirProducts = null;
+      try {
+        const raw = localStorage.getItem(`${fromPrefix}_products`);
+        if (raw) theirProducts = JSON.parse(raw) as VoucherProduct[];
+      } catch (e) {}
+
+      if (theirProducts && theirProducts.length > 0) {
+        localStorage.setItem(`${toPrefix}_products`, JSON.stringify(theirProducts));
+        setProducts(theirProducts);
+        const zeroed = theirProducts.map(p => ({ ...p, currentStock: 0 }));
+        localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroed));
+      }
+      
+      localStorage.setItem(`v_${storeKey}_active_shift_cashier_id`, activeCashier.id);
+      setActiveShiftCashierId(activeCashier.id);
+    }
+    
+    localStorage.removeItem(`${toPrefix}_pending_handover`);
+    setPendingHandoverInfo(null);
+    
+    const updatedNotifs = pushNotification('success', 'Ambil Alih Berhasil', `Stok telah berhasil ditarik paksa ke laci Anda.`, notifications);
+    setNotifications(updatedNotifs);
+  };
+
   const handleQuickSaleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formProductId) return;
@@ -1626,7 +1658,12 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       kasirList={kasirList}
                       hasActiveAuditSession={isActiveCashierOnDuty && (() => {
                         try {
-                          return !!localStorage.getItem(`audit_${activeStoreId || 'default'}_${activeCashier.id}`);
+                          const raw = localStorage.getItem(`audit_${activeStoreId || 'default'}_${activeCashier.id}`);
+                          if (!raw) return false;
+                          const session = JSON.parse(raw);
+                          const isUnfinishedBukaToko = session.currentStep <= 2 && !session.isBukaTokoCompleted;
+                          const isUnfinishedTutupToko = session.currentStep > 2;
+                          return isUnfinishedBukaToko || isUnfinishedTutupToko;
                         } catch { return false; }
                       })()}
                       onResumeAudit={() => setActiveTab('stok')}
@@ -1726,6 +1763,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       theme={theme}
                       isActiveCashierOnDuty={isActiveCashierOnDuty}
                       activeShiftCashierName={activeShiftCashierName}
+                      onTakeoverStock={handleTakeoverStock}
                       onUpdateProductStock={(productId, newStock, subReason) => {
                         const p = products.find(prod => prod.id === productId);
                         if (p) {

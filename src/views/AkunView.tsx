@@ -327,6 +327,18 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
   const [showOwnerPin, setShowOwnerPin] = useState(false)
 
+  // State untuk PIN Darurat (Ambil Alih Stok)
+  const takeoverPinKey = props.activeStoreId && props.activeStoreId !== 'all'
+    ? `alphaPro_${props.activeStoreId}_takeoverPin`
+    : 'alphaPro_takeoverPin'
+  const [takeoverPinValue, setTakeoverPinValue] = useState(() => {
+    try { return localStorage.getItem(takeoverPinKey) || '1234'; } catch { return '1234'; }
+  })
+  const [takeoverPinInput, setTakeoverPinInput] = useState('')
+  const [takeoverPinConfirmInput, setTakeoverPinConfirmInput] = useState('')
+  const [showTakeoverPinField, setShowTakeoverPinField] = useState(false)
+  const [takeoverPinSaved, setTakeoverPinSaved] = useState(false)
+
   // States for Native Bluetooth via Capacitor
   const [btConnected, setBtConnected] = useState(false);
   const [btConnecting, setBtConnecting] = useState(false);
@@ -3848,6 +3860,80 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         </div>
                       </div>
                     )}
+
+                      {/* PIN DARURAT AMBIL ALIH STOK */}
+                      <div className="border-t border-blue-100 pt-4 space-y-3 mt-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-7 h-7 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
+                            <i className="fa-solid fa-lock-open text-xs"></i>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">PIN Darurat Ambil Alih Stok</p>
+                            <p className="text-[9px] text-gray-500 font-medium">Digunakan kasir saat "Ambil Alih Stok (Darurat)"</p>
+                          </div>
+                        </div>
+
+                        {/* Current PIN display */}
+                        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2.5 border border-rose-100">
+                          <div>
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PIN Aktif Saat Ini</p>
+                            <p className="text-sm font-black text-rose-600 tracking-[0.4em] mt-0.5">
+                              {showTakeoverPinField ? takeoverPinValue : '•'.repeat(takeoverPinValue.length)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowTakeoverPinField(v => !v)}
+                            className="text-gray-400 hover:text-gray-700 transition"
+                          >
+                            <i className={showTakeoverPinField ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
+                          </button>
+                        </div>
+
+                        {/* New PIN inputs */}
+                        <input
+                          type={showTakeoverPinField ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={takeoverPinInput}
+                          onChange={e => setTakeoverPinInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="PIN Darurat Baru (min. 4 digit)"
+                          className="w-full bg-white border border-rose-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-rose-50 tracking-widest"
+                        />
+                        <input
+                          type={showTakeoverPinField ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={takeoverPinConfirmInput}
+                          onChange={e => setTakeoverPinConfirmInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Konfirmasi PIN Darurat"
+                          className="w-full bg-white border border-rose-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-rose-50 tracking-widest"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!takeoverPinInput || takeoverPinInput.length < 4) return alert('PIN Darurat minimal 4 digit!');
+                            if (takeoverPinInput !== takeoverPinConfirmInput) return alert('Konfirmasi PIN tidak cocok!');
+                            try {
+                              localStorage.setItem(takeoverPinKey, takeoverPinInput);
+                              setTakeoverPinValue(takeoverPinInput);
+                              setTakeoverPinInput('');
+                              setTakeoverPinConfirmInput('');
+                              setTakeoverPinSaved(true);
+                              setTimeout(() => setTakeoverPinSaved(false), 2000);
+                            } catch { alert('Gagal menyimpan PIN Darurat!'); }
+                          }}
+                          className={cn(
+                            "w-full font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
+                            takeoverPinSaved
+                              ? "bg-emerald-600 text-white"
+                              : "bg-rose-600 hover:bg-rose-700 text-white"
+                          )}
+                          style={{ color: '#ffffff' }}
+                        >
+                          <i className={takeoverPinSaved ? 'fa-solid fa-circle-check' : 'fa-solid fa-lock-open'}></i>
+                          {takeoverPinSaved ? 'PIN Darurat Tersimpan!' : 'Simpan PIN Darurat'}
+                        </button>
+                      </div>
                  </div>
 
                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
