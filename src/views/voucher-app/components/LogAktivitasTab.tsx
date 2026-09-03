@@ -69,17 +69,23 @@ export default function LogAktivitasTab({
   const [showFilters, setShowFilters] = useState(false);
   const [filterPascaClosing, setFilterPascaClosing] = useState(false);
 
-  // Stats calculation
+  // Helper: cek apakah notif adalah jual cepat (tidak boleh dihapus)
+  const isQuickSaleNotif = (n: LiveNotification) => 
+    n.type === 'transfer' && (n.title.includes('Penjualan') || n.title.includes('Voucher Digital'));
+
+  // Stats calculation — HANYA HARI INI
   const stats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayNotifs = notifications.filter(n => n.timestamp.startsWith(today));
+    const today = new Date();
+    const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    const todayNotifs = notifications.filter(n => n.timestamp.startsWith(todayStr));
     
     return {
-      total: notifications.length,
-      unread: notifications.filter(n => !n.isRead).length,
-      highRisk: notifications.filter(n => n.metadata?.isHighRisk || n.type === 'warning').length,
+      total: todayNotifs.length,
+      unread: todayNotifs.filter(n => !n.isRead).length,
+      highRisk: todayNotifs.filter(n => n.metadata?.isHighRisk || n.type === 'warning').length,
       todayCount: todayNotifs.length,
-      potentialLoss: notifications.reduce((sum, n) => {
+      allTotal: notifications.length,
+      potentialLoss: todayNotifs.reduce((sum, n) => {
         if (n.metadata?.reason === 'audit' && n.metadata.delta && n.metadata.delta < 0) {
           return sum + (Math.abs(n.metadata.delta) * (n.metadata.unitPrice || 0));
         }
@@ -241,7 +247,7 @@ export default function LogAktivitasTab({
           }`}>
             <span className={`text-[8px] font-bold uppercase tracking-wide leading-none ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Total</span>
             <span className={`text-xl font-black leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>{stats.todayCount}</span>
-            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>dari {stats.total}</span>
+            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>Hari Ini</span>
           </button>
 
           <button 
@@ -251,7 +257,7 @@ export default function LogAktivitasTab({
           }`}>
             <span className={`text-[8px] font-bold uppercase tracking-wide leading-none ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>Peringatan</span>
             <span className={`text-xl font-black leading-tight ${isLight ? 'text-rose-700' : 'text-rose-400'}`}>{stats.highRisk}</span>
-            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-rose-400' : 'text-rose-500'}`}>Restock</span>
+            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-rose-400' : 'text-rose-500'}`}>Hari Ini</span>
           </button>
 
           <button 
@@ -261,7 +267,7 @@ export default function LogAktivitasTab({
           }`}>
             <span className={`text-[8px] font-bold uppercase tracking-wide leading-none ${isLight ? 'text-blue-600' : 'text-cyan-400'}`}>Blm Baca</span>
             <span className={`text-xl font-black leading-tight ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>{stats.unread}</span>
-            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-blue-400' : 'text-cyan-500'}`}>Notif</span>
+            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-blue-400' : 'text-cyan-500'}`}>Hari Ini</span>
           </button>
 
           <button 
@@ -273,7 +279,7 @@ export default function LogAktivitasTab({
             <span className={`text-sm font-black leading-tight font-mono ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>
               {stats.potentialLoss > 0 ? `${(stats.potentialLoss/1000).toFixed(0)}K` : 'Rp0'}
             </span>
-            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-amber-500' : 'text-amber-500'}`}>Audit</span>
+            <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-amber-500' : 'text-amber-500'}`}>Hari Ini</span>
           </button>
         </div>
       </div>

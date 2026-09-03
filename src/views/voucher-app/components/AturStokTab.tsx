@@ -28,7 +28,8 @@ import {
   ClipboardList,
   PackagePlus,
   ClipboardCheck,
-  Wallet
+  Wallet,
+  Pencil
 } from 'lucide-react';
 import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
 
@@ -176,6 +177,7 @@ export default function AturStokTab({
         currentStep: 1 | 2 | 3 | 4;
         items: StockAuditItem[];
         isInitialLocked: boolean;
+        isIncomingLocked?: boolean;
         showIncomingStock: boolean;
         showStatusColumn: boolean;
         cashPhysical: string;
@@ -201,6 +203,7 @@ export default function AturStokTab({
 
   const [items, setItems] = useState<StockAuditItem[]>(loadedSession?.items ?? []);
   const [isInitialLocked, setIsInitialLocked] = useState(loadedSession?.isInitialLocked ?? false);
+  const [isIncomingLocked, setIsIncomingLocked] = useState(loadedSession?.isIncomingLocked ?? false);
   const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2 | 3; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
   const [showIncomingStock, setShowIncomingStock] = useState(loadedSession?.showIncomingStock ?? false);
   const [showStatusColumn, setShowStatusColumn] = useState(loadedSession?.showStatusColumn ?? false);
@@ -290,6 +293,7 @@ export default function AturStokTab({
       currentStep,
       items,
       isInitialLocked,
+      isIncomingLocked,
       showIncomingStock,
       showStatusColumn,
       cashPhysical,
@@ -301,7 +305,7 @@ export default function AturStokTab({
     try {
       localStorage.setItem(SK, JSON.stringify(session));
     } catch { /* storage penuh atau private mode */ }
-  }, [currentStep, items, isInitialLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess, isBukaTokoCompleted]);
+  }, [currentStep, items, isInitialLocked, isIncomingLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess, isBukaTokoCompleted]);
 
 
   // Initialize items from products — hanya jika TIDAK ada sesi yang di-restore
@@ -630,26 +634,41 @@ export default function AturStokTab({
               <button
                 onClick={() => {
                   setViewMode('buka');
-                  setCurrentStep(1);
+                  // Jika Buka Toko sudah selesai, langsung ke step 2 (stok masuk)
+                  setCurrentStep(isBukaTokoCompleted ? 2 : 1);
                 }}
                 className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border-2 transition-all cursor-pointer group hover:-translate-y-1 hover:shadow-xl ${
                   isLight 
-                    ? 'bg-blue-50 border-blue-200 hover:border-blue-400 hover:shadow-blue-200/50' 
-                    : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/60 hover:shadow-blue-900/40'
+                    ? (isBukaTokoCompleted 
+                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-200/50' 
+                        : 'bg-blue-50 border-blue-200 hover:border-blue-400 hover:shadow-blue-200/50')
+                    : (isBukaTokoCompleted
+                        ? 'bg-emerald-950/40 border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-900/40'
+                        : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/60 hover:shadow-blue-900/40')
                 }`}
               >
                 <div className="flex items-center gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
-                    isLight ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'
+                    isBukaTokoCompleted
+                      ? (isLight ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white')
+                      : (isLight ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white')
                   }`}>
-                    <PackagePlus className="w-6 h-6" />
+                    {isBukaTokoCompleted ? <CheckCircle2 className="w-6 h-6" /> : <PackagePlus className="w-6 h-6" />}
                   </div>
                   <div>
-                    <h3 className={`text-base font-black uppercase tracking-wide ${isLight ? 'text-blue-900' : 'text-blue-100'}`}>
-                      Buka Toko
+                    <h3 className={`text-base font-black uppercase tracking-wide ${
+                      isBukaTokoCompleted
+                        ? (isLight ? 'text-emerald-900' : 'text-emerald-100')
+                        : (isLight ? 'text-blue-900' : 'text-blue-100')
+                    }`}>
+                      {isBukaTokoCompleted ? '✅ Toko Sudah Dibuka' : 'Buka Toko'}
                     </h3>
-                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${isLight ? 'text-blue-700/80' : 'text-blue-300/80'}`}>
-                      Atur stok awal & tambah stok baru
+                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${
+                      isBukaTokoCompleted
+                        ? (isLight ? 'text-emerald-700/80' : 'text-emerald-300/80')
+                        : (isLight ? 'text-blue-700/80' : 'text-blue-300/80')
+                    }`}>
+                      {isBukaTokoCompleted ? 'Lihat / edit stok masuk' : 'Atur stok awal & tambah stok baru'}
                     </p>
                   </div>
                 </div>
@@ -1308,22 +1327,6 @@ export default function AturStokTab({
           animate={{ opacity: 1, y: 0 }}
           className="space-y-2.5"
         >
-          {/* Sesi 1: Banner Buka Shift */}
-          <div className={`p-3 sm:p-4 rounded-xl border flex gap-3 items-start shadow-sm ${
-            isLight ? 'bg-indigo-50 border-indigo-200' : 'bg-indigo-950/40 border-indigo-900/50'
-          }`}>
-            <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${isLight ? 'bg-indigo-100 text-indigo-600' : 'bg-indigo-900/60 text-indigo-400'}`}>
-              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div>
-              <h4 className={`text-xs sm:text-sm font-bold ${isLight ? 'text-indigo-900' : 'text-indigo-100'}`}>
-                Pembukuan Awal Selesai! 🎉
-              </h4>
-              <p className={`text-[9px] sm:text-[10px] mt-0.5 leading-relaxed ${isLight ? 'text-indigo-700' : 'text-indigo-300'}`}>
-                Selamat bertugas dan semoga hari ini laris manis. Anda bisa membiarkan halaman ini tetap terbuka jika ingin mencatat barang masuk sewaktu-waktu tanpa mengganggu pembukuan awal.
-              </p>
-            </div>
-          </div>
 
           {/* Header */}
           <div className="px-1 flex items-start justify-between gap-2">
@@ -1371,8 +1374,8 @@ export default function AturStokTab({
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId })}
-                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
+                      onClick={() => !isOwnerMode && !isIncomingLocked && setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode || isIncomingLocked ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingIncoming 
                           ? (isLight ? 'bg-indigo-50 ring-1 ring-indigo-400' : 'bg-indigo-900/40 ring-1 ring-indigo-500/50')
                           : (isLight ? 'hover:bg-slate-50 bg-white' : 'hover:bg-blue-950/30')
@@ -1401,10 +1404,10 @@ export default function AturStokTab({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!isOwnerMode) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
+                            if (!isOwnerMode && !isIncomingLocked) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
                           }}
-                          disabled={isOwnerMode}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
+                          disabled={isOwnerMode || isIncomingLocked}
+                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isIncomingLocked ? 'cursor-default opacity-70' : 'cursor-pointer active:scale-95'} ${
                             isLight 
                               ? (item.incomingStock > 0 ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700')
                               : (item.incomingStock > 0 ? 'bg-indigo-900/60 border-indigo-400/50 text-indigo-300' : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-400')
@@ -1428,6 +1431,31 @@ export default function AturStokTab({
             </table>
           </div>
           
+          {/* Edit toggle for locked incoming stock */}
+          {isIncomingLocked && viewMode === 'buka' && (
+            <div className={`flex items-center justify-between gap-2 px-2 py-2 rounded-xl border shadow-xs ${
+              isLight ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-500/20'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Lock className={`w-3.5 h-3.5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
+                <span className={`text-[10px] font-bold ${isLight ? 'text-emerald-800' : 'text-emerald-300'}`}>
+                  Stok masuk terkunci. Ketuk Edit untuk mengubah.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIncomingLocked(false)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold transition cursor-pointer border ${
+                  isLight 
+                    ? 'bg-white border-emerald-300 text-emerald-700 hover:bg-emerald-100' 
+                    : 'bg-slate-800 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/40'
+                }`}
+              >
+                <Pencil className="w-3 h-3" /> Edit
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
@@ -1445,12 +1473,19 @@ export default function AturStokTab({
                 type="button"
                 onClick={() => {
                   setIsBukaTokoCompleted(true);
-                  alert('Toko Berhasil Dibuka! Selamat Bertugas dan Semoga Laris Manis hari ini! 🎉');
-                  onBackToDashboard();
+                  setIsIncomingLocked(true);
+                  // Simpan stok masuk ke parent
+                  items.forEach(item => {
+                    if (item.incomingStock > 0) {
+                      onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
+                    }
+                  });
+                  alert('Stok berhasil disimpan & Toko Dibuka! 🎉\nSelamat bertugas dan semoga laris manis hari ini!');
+                  setViewMode('lobby');
                 }}
-                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide"
               >
-                Selesai Buka Toko <CheckCircle2 className="w-3.5 h-3.5" />
+                Simpan Stok & Buka Toko <CheckCircle2 className="w-3.5 h-3.5" />
               </button>
             ) : (
               <button

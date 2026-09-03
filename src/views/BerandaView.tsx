@@ -982,9 +982,21 @@ const NotificationLogPanel: React.FC<{
   showToast?: (msg: string) => void
   onConfirm?: (title: string, msg: string, onOk: () => void) => void
   bonusKasirList?: string[]
-}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [] }) => {
+  ownerLateKasirs?: { date: string, name: string, lateMins: number, shift: string, time: string }[]
+}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [], ownerLateKasirs = [] }) => {
   const [filterType, setFilterType] = useState<string>('all')
   const [notifList, setNotifList] = useState<OwnerNotificationItem[]>([])
+
+  const syncToCloud = (items: OwnerNotificationItem[] | null) => {
+    const storeKey = activeStoreId || 'all'
+    if (storeKey !== 'all') {
+      supabase.from('store_settings').upsert({
+        store_id: storeKey,
+        owner_notifications_data: items,
+        updated_at: new Date().toISOString()
+      }).then()
+    }
+  }
 
   useEffect(() => {
     const storeKey = activeStoreId || 'all'
@@ -992,6 +1004,11 @@ const NotificationLogPanel: React.FC<{
     let items: OwnerNotificationItem[] = []
     if (raw) {
       try { items = JSON.parse(raw) } catch(e) {}
+    }
+
+    // AUTO-PRUNING: Batasi maksimal 100 notifikasi terbaru agar tidak menyebabkan lag
+    if (items.length > 100) {
+      items = items.slice(0, 100);
     }
 
     const todayStr = new Date().toISOString().split('T')[0]
@@ -1030,17 +1047,42 @@ const NotificationLogPanel: React.FC<{
       })
     }
 
+    // 3. Late Kasirs (Absen Telat)
+    if (ownerLateKasirs.length > 0) {
+      ownerLateKasirs.forEach(late => {
+        const lateId = `late_${late.name}_${late.date}`
+        if (!items.some(i => i.id === lateId)) {
+          // Buat date object tiruan untuk tanggal + waktu terlambat
+          const notifDate = new Date(`${late.date}T${late.time}:00`).toISOString();
+          
+          items.unshift({
+            id: lateId,
+            title: `⏰ Kasir Telat: ${late.name}`,
+            message: `${late.name} (Shift ${late.shift}) absen masuk pukul ${late.time} (Telat ${late.lateMins} menit).`,
+            date: notifDate,
+            type: 'anomaly',
+            isRead: false
+          })
+          hasChanges = true
+        }
+      })
+    }
+
     if (hasChanges) {
+      // Sort ulang berdasarkan date descending
+      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(items))
+      syncToCloud(items)
     }
     setNotifList(items)
-  }, [activeStoreId, bonusKasirList])
+  }, [activeStoreId, bonusKasirList, ownerLateKasirs])
 
   const handleMarkAllRead = () => {
     const storeKey = activeStoreId || 'all'
     const updated = notifList.map(item => ({ ...item, isRead: true }))
     setNotifList(updated)
     localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+    syncToCloud(updated)
     if (showToast) showToast('Semua notifikasi ditandai sudah dibaca')
   }
 
@@ -1050,11 +1092,13 @@ const NotificationLogPanel: React.FC<{
       onConfirm('Hapus Riwayat', 'Apakah Anda yakin ingin menghapus seluruh riwayat notifikasi?', () => {
         setNotifList([])
         localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+        syncToCloud(null)
         if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
       })
     } else {
       setNotifList([])
       localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+      syncToCloud(null)
       if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
     }
   }
@@ -1064,6 +1108,7 @@ const NotificationLogPanel: React.FC<{
     const updated = notifList.map(item => item.id === id ? { ...item, isRead: !item.isRead } : item)
     setNotifList(updated)
     localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+    syncToCloud(updated)
   }
 
   const filteredItems = useMemo(() => {
@@ -1099,6 +1144,7 @@ const NotificationLogPanel: React.FC<{
             { key: 'all', label: 'Semua' },
             { key: 'unread', label: `Belum Dibaca (${unreadCount})` },
             { key: 'bonus', label: 'Bonus' },
+            { key: 'anomaly', label: 'Absen/Telat' },
             { key: 'briefing', label: 'Briefing' },
             { key: 'audit', label: 'Audit' }
           ].map(f => (
@@ -1399,6 +1445,38 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     const todayStr = getLocalDateString();
     return kasirLateHistory.find(l => l.tanggal === todayStr) || null;
   }, [kasirLateHistory]);
+
+  const ownerLateKasirs = useMemo(() => {
+    if (props.kasirRole !== 'owner') return [];
+    
+    // Group attendance by date and cashier
+    const lateEntries: { date: string, name: string, lateMins: number, shift: string, time: string }[] = [];
+    const entries = props.absensiList || [];
+    
+    // Get unique dates per cashier (first login of the day)
+    const firstLogins: Record<string, any> = {};
+    entries.forEach(e => {
+      const k = `${e.kasir_id}_${e.tanggal}`;
+      if (!firstLogins[k] || e.jam_masuk < firstLogins[k].jam_masuk) {
+        firstLogins[k] = e;
+      }
+    });
+
+    Object.values(firstLogins).forEach(e => {
+      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      if (info.isLate) {
+        lateEntries.push({
+          date: e.tanggal,
+          name: props.kasirList?.[e.kasir_id]?.name || e.kasir_id,
+          lateMins: info.lateMins,
+          shift: info.shiftName,
+          time: e.jam_masuk
+        });
+      }
+    });
+    
+    return lateEntries.sort((a, b) => b.date.localeCompare(a.date));
+  }, [props.absensiList, props.kasirRole, props.kasirList, financialSettings]);
 
   const bonusKasirList = useMemo(() => {
     if (props.kasirRole !== 'owner' || !props.kasirList) return []
@@ -4662,6 +4740,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   showToast={props.showToast}
                   onConfirm={props.onConfirm}
                   bonusKasirList={bonusKasirList}
+                  ownerLateKasirs={ownerLateKasirs}
                 />
               )}
             </div>

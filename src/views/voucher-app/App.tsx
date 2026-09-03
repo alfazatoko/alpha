@@ -144,6 +144,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   // Auto-Sync States
   const isDataLoadedRef = useRef(false);
   const [unsyncedChanges, setUnsyncedChanges] = useState(false);
+  const [forceSync, setForceSync] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [pendingExitAction, setPendingExitAction] = useState<(() => void) | null>(null);
@@ -230,6 +231,14 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [unsyncedChanges, isSyncing]);
+
+  // Immediate force sync effect
+  useEffect(() => {
+    if (forceSync && !isSyncing) {
+      performSyncToCloud();
+      setForceSync(false);
+    }
+  }, [forceSync, isSyncing, products, transactions]);
 
   // Sync with external props from Host App
   // FIXED: 'cashiers' removed from deps to prevent infinite loop
@@ -554,7 +563,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                 const activeTrx = cashierData.transactions.filter((t: any) => new Date(t.timestamp).getTime() >= cutoffTime);
                 
                 if (activeTrx.length < cashierData.transactions.length) {
-                  setTransactions(cashierData.transactions);
+                  setTransactions(activeTrx);
                   needsArchiving = true;
                 } else {
                   setTransactions(activeTrx);
@@ -568,7 +577,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                 const activeNotifs = cashierData.notifications.filter((n: any) => new Date(n.timestamp).getTime() >= cutoffTime);
                 
                 if (activeNotifs.length < cashierData.notifications.length) {
-                  setNotifications(cashierData.notifications);
+                  setNotifications(activeNotifs);
                   needsArchiving = true;
                 } else {
                   setNotifications(activeNotifs);
@@ -631,12 +640,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     // Tandai ada perubahan yang belum tersync ke cloud
     setUnsyncedChanges(true);
 
-    // Debounced save to Supabase (60 seconds)
-    const timeout = setTimeout(() => {
-      performSyncToCloud();
-    }, 60000);
+    // Immediate background save to Supabase (menggantikan delay 60s)
+    setForceSync(true);
 
-    return () => clearTimeout(timeout);
   }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex, cashiers]);
 
   // Watch for day change while app is open
@@ -1004,8 +1010,17 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     }));
 
     // Satu atomic setState call — tidak ada stale closure, semua produk tersimpan
-    setProducts(prev => [...newProducts, ...prev]);
-    setTransactions(prev => [...newTransactions, ...prev]);
+    const updatedProducts = [...newProducts, ...products];
+    const updatedTransactions = [...newTransactions, ...transactions];
+    
+    setProducts(updatedProducts);
+    setTransactions(updatedTransactions);
+    
+    // Simpan ke local storage
+    saveState(updatedProducts, updatedTransactions, notifications, shiftHandovers, detailedHandovers);
+    
+    // Trigger immediate cloud sync
+    setForceSync(true);
 
     pushNotification(
       'success',
@@ -1913,8 +1928,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                           saveState(products, transactions, updated, shiftHandovers, detailedHandovers);
                         }}
                         onClearAll={() => {
-                          setNotifications([]);
-                          saveState(products, transactions, [], shiftHandovers, detailedHandovers);
+                          const retainedNotifs = notifications.filter(n => 
+                            n.type === 'transfer' && (n.title.includes('Penjualan') || n.title.includes('Voucher Digital'))
+                          );
+                          setNotifications(retainedNotifs);
+                          saveState(products, transactions, retainedNotifs, shiftHandovers, detailedHandovers);
                         }}
                       />
                     );

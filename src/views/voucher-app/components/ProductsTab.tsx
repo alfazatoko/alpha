@@ -1121,7 +1121,7 @@ ${bulkAIText}`;
                         onClick={handleSaveBulk}
                         className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-900 dark:text-white text-xs font-bold py-3 rounded-xl transition shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                       >
-                        {isPartialScan ? `Simpan ${bulkParsedProducts.length} Produk (Parsial)` : 'Simpan Semua ke Stok'}
+                        {isPartialScan ? `Simpan & Sync ${bulkParsedProducts.length} Produk (Parsial)` : 'SIMPAN & SYNC'}
                       </button>
                     </div>
                   </div>

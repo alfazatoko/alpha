@@ -852,6 +852,16 @@ const MainApp: React.FC<MainAppProps> = ({
         }
       }
 
+      // Sync Owner Notifications
+      if (data.owner_notifications_data) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_notification_history`)
+        const remoteStr = JSON.stringify(data.owner_notifications_data)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_notification_history`, remoteStr)
+          changed = true
+        }
+      }
+
       if (changed) {
         window.dispatchEvent(new Event('alphaSyncUpdate'))
       }
