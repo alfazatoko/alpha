@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { cn, compressImage } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
   active: boolean
@@ -326,6 +327,71 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [ownerPinNew, setOwnerPinNew] = useState('')
   const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
   const [showOwnerPin, setShowOwnerPin] = useState(false)
+
+  // State untuk Kredensial Cloud (Email & Password Owner)
+  const [cloudEmailInput, setCloudEmailInput] = useState('')
+  const [cloudPasswordInput, setCloudPasswordInput] = useState('')
+  const [cloudPasswordConfirm, setCloudPasswordConfirm] = useState('')
+  const [showCloudPass, setShowCloudPass] = useState(false)
+  const [isSavingCloudAuth, setIsSavingCloudAuth] = useState(false)
+
+  const handleSaveCloudAuth = async () => {
+    if (!cloudEmailInput.trim() && !cloudPasswordInput) {
+      alert('Silakan masukkan email baru atau password baru yang ingin diatur.');
+      return;
+    }
+
+    if (cloudPasswordInput) {
+      if (cloudPasswordInput.length < 6) {
+        alert('Password minimal harus 6 karakter!');
+        return;
+      }
+      if (cloudPasswordInput !== cloudPasswordConfirm) {
+        alert('Konfirmasi password tidak cocok!');
+        return;
+      }
+    }
+
+    if (cloudEmailInput.trim()) {
+      const cleanEmail = cloudEmailInput.trim();
+      if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+        alert('Format email tidak valid!');
+        return;
+      }
+    }
+
+    try {
+      setIsSavingCloudAuth(true);
+      const updatePayload: any = {};
+      if (cloudPasswordInput) {
+        updatePayload.password = cloudPasswordInput;
+      }
+      if (cloudEmailInput.trim() && cloudEmailInput.trim() !== props.googleEmail) {
+        updatePayload.email = cloudEmailInput.trim();
+      }
+
+      const { error } = await supabase.auth.updateUser(updatePayload);
+      if (error) throw error;
+
+      let msg = 'Kredensial login Cloud berhasil diperbarui!';
+      if (updatePayload.email && updatePayload.password) {
+        msg = 'Email dan Password login Cloud berhasil diperbarui! Anda dapat masuk dengan kredensial baru ini di halaman depan.';
+      } else if (updatePayload.password) {
+        msg = 'Password login Cloud berhasil diperbarui! Anda sekarang dapat masuk menggunakan email Anda dan password baru ini di halaman depan.';
+      } else if (updatePayload.email) {
+        msg = 'Email login Cloud berhasil diperbarui! Silakan periksa inbox jika konfirmasi email diaktifkan.';
+      }
+
+      alert(msg);
+      setCloudPasswordInput('');
+      setCloudPasswordConfirm('');
+      setCloudEmailInput('');
+    } catch (err: any) {
+      alert('Gagal memperbarui kredensial: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsSavingCloudAuth(false);
+    }
+  };
 
   // State untuk PIN Darurat (Ambil Alih Stok)
   const takeoverPinKey = props.activeStoreId && props.activeStoreId !== 'all'
@@ -1134,6 +1200,88 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       >
                         <i className="fa-solid fa-shield-halved"></i>
                         Simpan PIN Owner Baru
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Kredensial Login Cloud (Email & Password Owner) */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                        <i className="fa-solid fa-cloud-lock text-sm"></i>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">Kredensial Login Cloud (Owner)</h3>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">Atur Email &amp; Password untuk masuk di halaman awal</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Email Terdaftar Saat Ini</p>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 flex items-center gap-2">
+                            <i className="fa-solid fa-envelope text-indigo-500"></i>
+                            {props.googleEmail || 'Belum terdeteksi'}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                          Aktif
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
+                          Ubah / Ganti Email Login (Opsional)
+                        </label>
+                        <input
+                          type="email"
+                          value={cloudEmailInput}
+                          onChange={e => setCloudEmailInput(e.target.value)}
+                          placeholder={props.googleEmail || "nama@email.com"}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
+                          Password Baru (min. 6 karakter)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCloudPass ? 'text' : 'password'}
+                            value={cloudPasswordInput}
+                            onChange={e => setCloudPasswordInput(e.target.value)}
+                            placeholder="Masukkan password baru"
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+                          />
+                          <button type="button" onClick={() => setShowCloudPass(v => !v)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                            <i className={showCloudPass ? 'fa-solid fa-eye-slash text-sm' : 'fa-solid fa-eye text-sm'}></i>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
+                          Konfirmasi Password Baru
+                        </label>
+                        <input
+                          type={showCloudPass ? 'text' : 'password'}
+                          value={cloudPasswordConfirm}
+                          onChange={e => setCloudPasswordConfirm(e.target.value)}
+                          placeholder="Ulangi password baru"
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleSaveCloudAuth}
+                        disabled={isSavingCloudAuth}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                        style={{ color: '#ffffff' }}
+                      >
+                        {isSavingCloudAuth ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-floppy-disk"></i>}
+                        Simpan Kredensial Cloud
                       </button>
                     </div>
                   </div>
@@ -3076,7 +3224,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                     {/* Ganti PIN Owner */}
                     {props.kasirRole === 'owner' && (
-                      <div className="border-t border-blue-100 pt-4 space-y-3">
+                      <>
+                        <div className="border-t border-blue-100 pt-4 space-y-3">
                         <div className="flex items-center gap-2 mb-1">
                           <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
                             <i className="fa-solid fa-user-shield text-xs"></i>
@@ -3140,7 +3289,77 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           Simpan PIN Owner
                         </button>
                       </div>
-                    )}
+
+                      {/* Kredensial Login Cloud / Email & Password Owner */}
+                      <div className="border-t border-blue-100 pt-4 space-y-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                            <i className="fa-solid fa-cloud-lock text-xs"></i>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-gray-800">Kredensial Login Cloud (Owner)</p>
+                            <p className="text-[9px] text-gray-500 font-medium">Atur Email &amp; Password untuk masuk di awal</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-white/90 border border-blue-100 rounded-xl p-3">
+                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Email Aktif Saat Ini</p>
+                          <p className="text-xs font-bold text-gray-800 mt-0.5 break-all flex items-center gap-1.5">
+                            <i className="fa-solid fa-envelope text-indigo-500 text-[10px]"></i>
+                            {props.googleEmail || 'Belum terdeteksi'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Ganti Email Login (Opsional)</label>
+                          <input
+                            type="email"
+                            value={cloudEmailInput}
+                            onChange={e => setCloudEmailInput(e.target.value)}
+                            placeholder={props.googleEmail || "nama@email.com"}
+                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Password Baru (min. 6 karakter)</label>
+                          <div className="relative">
+                            <input
+                              type={showCloudPass ? 'text' : 'password'}
+                              value={cloudPasswordInput}
+                              onChange={e => setCloudPasswordInput(e.target.value)}
+                              placeholder="Masukkan Password Baru"
+                              className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
+                            />
+                            <button type="button" onClick={() => setShowCloudPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                              <i className={showCloudPass ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Konfirmasi Password Baru</label>
+                          <input
+                            type={showCloudPass ? 'text' : 'password'}
+                            value={cloudPasswordConfirm}
+                            onChange={e => setCloudPasswordConfirm(e.target.value)}
+                            placeholder="Ulangi Password Baru"
+                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleSaveCloudAuth}
+                          disabled={isSavingCloudAuth}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                          style={{ color: '#ffffff' }}
+                        >
+                          {isSavingCloudAuth ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-floppy-disk"></i>}
+                          Simpan Kredensial Cloud
+                        </button>
+                      </div>
+                    </>
+                  )}
                   </div>
                 )}
 
