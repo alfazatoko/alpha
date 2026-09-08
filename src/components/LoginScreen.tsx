@@ -5,6 +5,7 @@ export interface KasirAccount {
   pin: string
   role: 'owner' | 'kasir'
   name: string
+  targetTrx?: number
   alamat?: string
   tempatLahir?: string
   tanggalLahir?: string

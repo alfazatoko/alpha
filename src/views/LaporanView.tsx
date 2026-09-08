@@ -7,6 +7,7 @@ interface LaporanViewProps {
   saldoBank: number
   totalPenjualan: number
   transactions: Transaction[]
+  allTransactions?: Transaction[]
   totalTarik: number
   totalAdmin: number
   totalAksesoris: number
@@ -368,6 +369,57 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   
   const currentTxCount = props.transactions.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length
   const currentUangMasuk = sum(props.transactions.filter(t => t.kategori !== 'Tarik Tunai' && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+
+  const yesterdayStats = useMemo(() => {
+    if (!props.allTransactions || !props.filterTanggal) return null;
+    
+    // Convert filterTanggal (YYYY-MM-DD) to a Date object
+    const [y, m, d] = props.filterTanggal.split('-');
+    const current = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    current.setDate(current.getDate() - 1); // subtract 1 day
+    
+    // Format back to YYYY-MM-DD
+    const yy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    const yesterdayStr = `${yy}-${mm}-${dd}`;
+    
+    // Filter transactions for yesterday
+    const yTxs = props.allTransactions.filter(t => t.timestamp.startsWith(yesterdayStr));
+    
+    if (yTxs.length === 0) return null; // No data for yesterday
+    
+    // Calculate stats
+    const yAdmin = sumAdmin(yTxs.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const yTarik = sum(yTxs.filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const yTxCount = yTxs.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length;
+    const yUangMasuk = sum(yTxs.filter(t => t.kategori !== 'Tarik Tunai' && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    
+    return {
+      admin: yAdmin,
+      tarik: yTarik,
+      txCount: yTxCount,
+      uangMasuk: yUangMasuk
+    };
+  }, [props.allTransactions, props.filterTanggal]);
+
+  const renderDelta = (current: number, yesterday: number | undefined, isRupiah: boolean = true) => {
+    if (yesterday === undefined) return <span className="text-[9px] text-slate-400 mt-0.5 inline-block font-medium">--</span>;
+    const diff = current - yesterday;
+    if (diff === 0) return <span className="text-[9px] text-slate-400 mt-0.5 inline-block font-bold">=</span>;
+    
+    const isUp = diff > 0;
+    const color = isUp ? "text-emerald-500 bg-emerald-50/80 dark:bg-emerald-500/10" : "text-rose-500 bg-rose-50/80 dark:bg-rose-500/10";
+    const icon = isUp ? "fa-arrow-up" : "fa-arrow-down";
+    const valStr = isRupiah ? formatRupiah(Math.abs(diff)) : Math.abs(diff).toString() + ' TRX';
+    
+    return (
+      <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded-md mt-0.5 inline-flex items-center gap-1 leading-none shadow-sm", color)}>
+        <i className={cn("fa-solid", icon, "text-[8px]")}></i>
+        {valStr}
+      </span>
+    );
+  };
 
   const [syncTrigger, setSyncTrigger] = useState(0)
   useEffect(() => {
@@ -1111,14 +1163,16 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             <div className="flex flex-col justify-between items-center text-center px-3">
               <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">TRX HARI INI</span>
               <span className="text-2xl font-black text-slate-800 dark:text-white my-1.5 leading-none">{currentTxCount}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Jumlah Transaksi</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Jumlah Transaksi</span>
+              {renderDelta(currentTxCount, yesterdayStats?.txCount, false)}
             </div>
 
             {/* 2. ADMIN FEE */}
             <div className="flex flex-col justify-between items-center text-center px-3">
               <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">ADMIN FEE</span>
-              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 my-1.5 leading-none">{formatRupiah(currentTotalAdmin)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Total Admin Fee</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentTotalAdmin)}>{formatRupiah(currentTotalAdmin)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Total Admin Fee</span>
+              {renderDelta(currentTotalAdmin, yesterdayStats?.admin, true)}
             </div>
 
             {/* 3. UANG MASUK */}
@@ -1126,8 +1180,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <span className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
               </span>
-              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1.5 leading-none">{formatRupiah(currentUangMasuk)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Penjualan → Laci</span>
+              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentUangMasuk)}>{formatRupiah(currentUangMasuk)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Penjualan → Laci</span>
+              {renderDelta(currentUangMasuk, yesterdayStats?.uangMasuk, true)}
             </div>
 
             {/* 4. TARIK TUNAI */}
@@ -1135,8 +1190,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               <span className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
               </span>
-              <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1.5 leading-none">{formatRupiah(currentTotalTarik)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Laci → Pembeli</span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentTotalTarik)}>{formatRupiah(currentTotalTarik)}</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Laci → Pembeli</span>
+              {renderDelta(currentTotalTarik, yesterdayStats?.tarik, true)}
             </div>
           </div>
         </div>
@@ -1956,35 +2012,39 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 rounded-3xl p-3 shadow-sm">
           <div className="grid grid-cols-4 divide-x divide-slate-100 dark:divide-slate-700/60">
             {/* 1. TRX HARI INI */}
-            <div className="flex flex-col justify-between items-center text-center px-1">
-              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">TRX HARI INI</span>
+            <div className="flex flex-col justify-start items-center text-center px-1 pb-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 mt-1">TRX HARI INI</span>
               <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white my-1 leading-none">{currentTxCount}</span>
               <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Jumlah Transaksi</span>
+              <div className="mt-auto pt-1">{renderDelta(currentTxCount, yesterdayStats?.txCount, false)}</div>
             </div>
 
             {/* 2. ADMIN FEE */}
-            <div className="flex flex-col justify-between items-center text-center px-1">
-              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">ADMIN FEE</span>
-              <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 my-1 leading-none truncate w-full">{formatRupiah(currentTotalAdmin)}</span>
+            <div className="flex flex-col justify-start items-center text-center px-1 pb-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mt-1">ADMIN FEE</span>
+              <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 my-1 leading-none w-full text-center block" title={formatRupiah(currentTotalAdmin)}>{formatRupiah(currentTotalAdmin)}</span>
               <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Total Admin Fee</span>
+              <div className="mt-auto pt-1">{renderDelta(currentTotalAdmin, yesterdayStats?.admin, true)}</div>
             </div>
 
             {/* 3. UANG MASUK */}
-            <div className="flex flex-col justify-between items-center text-center px-1">
-              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-0.5">
+            <div className="flex flex-col justify-start items-center text-center px-1 pb-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-0.5 mt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
               </span>
-              <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 my-1 leading-none truncate w-full">{formatRupiah(currentUangMasuk)}</span>
+              <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 my-1 leading-none w-full text-center block" title={formatRupiah(currentUangMasuk)}>{formatRupiah(currentUangMasuk)}</span>
               <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Penjualan → Laci</span>
+              <div className="mt-auto pt-1">{renderDelta(currentUangMasuk, yesterdayStats?.uangMasuk, true)}</div>
             </div>
 
             {/* 4. TARIK TUNAI */}
-            <div className="flex flex-col justify-between items-center text-center px-1">
-              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-0.5">
+            <div className="flex flex-col justify-start items-center text-center px-1 pb-1">
+              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-0.5 mt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
               </span>
-              <span className="text-xs sm:text-sm font-black text-rose-600 dark:text-rose-400 my-1 leading-none truncate w-full">{formatRupiah(currentTotalTarik)}</span>
+              <span className="text-[9px] font-black text-rose-600 dark:text-rose-400 my-1 leading-none w-full text-center block" title={formatRupiah(currentTotalTarik)}>{formatRupiah(currentTotalTarik)}</span>
               <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 leading-tight">Laci → Pembeli</span>
+              <div className="mt-auto pt-1">{renderDelta(currentTotalTarik, yesterdayStats?.tarik, true)}</div>
             </div>
           </div>
         </div>

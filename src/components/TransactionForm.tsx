@@ -24,6 +24,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | ''>('')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
   const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
+  const [aksesorisPayMode, setAksesorisPayMode] = useState<'TUNAI' | 'QRIS'>('TUNAI')
   const [isKetAuto, setIsKetAuto] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [selectedBank, setSelectedBank] = useState('BRI')
@@ -36,6 +37,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [activeTheme, setActiveTheme] = useState('TEMA_2')
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
+  // --- KALKULATOR STATE ---
+  const [showCalc, setShowCalc] = useState(false)
+  const [calcDisplay, setCalcDisplay] = useState('0')
+  const [calcExpression, setCalcExpression] = useState('')
+  const [calcPrev, setCalcPrev] = useState<number | null>(null)
+  const [calcOperator, setCalcOperator] = useState<string | null>(null)
+  const [calcNewInput, setCalcNewInput] = useState(true)
 
   // Effect untuk auto-focus saat ganti layar di Tema 3
   React.useEffect(() => {
@@ -161,6 +169,74 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }, [nominal, kategori, activeStoreId, isAdminManuallyEdited, setAdmin, adminRules]);
   
+  // --- KALKULATOR LOGIC ---
+  const handleCalcBtn = (btn: string) => {
+    if (btn === 'C') {
+      setCalcDisplay('0'); setCalcExpression(''); setCalcPrev(null); setCalcOperator(null); setCalcNewInput(true); return;
+    }
+    if (btn === '⌫') {
+      setCalcDisplay(prev => prev.length > 1 ? prev.slice(0, -1) : '0'); return;
+    }
+    if (btn === '±') {
+      setCalcDisplay(prev => prev.startsWith('-') ? prev.slice(1) : '-' + prev); return;
+    }
+    if (['+', '−', '×', '÷'].includes(btn)) {
+      const opMap: Record<string,string> = {'−':'-','×':'*','÷':'/'}
+      const op = opMap[btn] || btn
+      const cur = parseFloat(calcDisplay.replace(/\./g,'').replace(',','.')) || 0
+      if (calcPrev !== null && calcOperator && !calcNewInput) {
+        const res = calcOperator === '+' ? calcPrev + cur : calcOperator === '-' ? calcPrev - cur : calcOperator === '*' ? calcPrev * cur : calcPrev / cur
+        setCalcDisplay(res % 1 === 0 ? res.toLocaleString('id-ID') : res.toLocaleString('id-ID', {maximumFractionDigits: 2}))
+        setCalcPrev(res)
+      } else {
+        setCalcPrev(cur)
+      }
+      setCalcOperator(op); setCalcNewInput(true)
+      setCalcExpression(calcDisplay + ' ' + btn)
+      return;
+    }
+    if (btn === '=') {
+      if (calcPrev === null || calcOperator === null) return
+      const cur = parseFloat(calcDisplay.replace(/\./g,'').replace(',','.')) || 0
+      const res = calcOperator === '+' ? calcPrev + cur : calcOperator === '-' ? calcPrev - cur : calcOperator === '*' ? calcPrev * cur : calcOperator === '/' && cur !== 0 ? calcPrev / cur : 0
+      const formatted = res % 1 === 0 ? res.toLocaleString('id-ID') : res.toLocaleString('id-ID', {maximumFractionDigits: 2})
+      setCalcExpression(calcExpression + ' ' + calcDisplay + ' =')
+      setCalcDisplay(formatted)
+      setCalcPrev(null); setCalcOperator(null); setCalcNewInput(true)
+      return;
+    }
+    if (btn === ',') {
+      if (calcDisplay.includes(',')) return
+      setCalcDisplay(prev => calcNewInput ? '0,' : prev + ',')
+      setCalcNewInput(false); return;
+    }
+    // Angka
+    const digit = btn
+    if (calcNewInput) {
+      setCalcDisplay(digit === '0' ? '0' : digit)
+      setCalcNewInput(false)
+    } else {
+      const raw = calcDisplay.replace(/\./g, '') // hapus separator ribuan
+      if (raw === '0') { setCalcDisplay(digit) }
+      else {
+        const newRaw = raw + digit
+        const num = parseInt(newRaw)
+        setCalcDisplay(num.toLocaleString('id-ID'))
+      }
+    }
+  }
+
+  const applyCalcToNominal = () => {
+    const rawNum = calcDisplay.replace(/\./g, '').replace(',', '.')
+    const num = parseFloat(rawNum)
+    if (isNaN(num) || num <= 0) return
+    const formatted = Math.floor(num).toLocaleString('id-ID')
+    setNominal(formatted)
+    setIsAdminManuallyEdited(false)
+    setShowCalc(false)
+    setTimeout(() => nominalRef.current?.focus(), 100)
+  }
+
   // Refs for navigation
   const btnDigitalRef = useRef<HTMLButtonElement>(null)
   const btnTarikRef = useRef<HTMLButtonElement>(null)
@@ -315,6 +391,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const onSaveInternal = () => {
     setErrorMsg(null)
+
+    if (activeMode === 'AKSESORIS') {
+      const cleanNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+      if (cleanNominal <= 0) {
+        setErrorMsg('Harga wajib diisi!')
+        return
+      }
+      // Set admin=0 for aksesoris, isAdminNonTunai based on pay mode
+      setAdmin('0')
+      const isNonTunai = aksesorisPayMode === 'QRIS'
+      onSave({ activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
+      setIsKetAuto(true)
+      return
+    }
     
     // Validasi Khusus Transfer & Tarik Tunai
     if (activeMode === 'DIGITAL' || activeMode === 'TARIK') {
@@ -362,25 +452,98 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         </div>
 
-        <div className="relative z-50">
-          <button 
-            onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-            className="h-10 px-3.5 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center gap-2 hover:shadow-lg hover:shadow-purple-300 transition-all shadow-md group border border-purple-400/50"
+        <div className="flex items-center gap-2">
+          {/* Tombol Kalkulator */}
+          <button
+            onClick={() => { setShowCalc(v => !v); setIsThemeMenuOpen(false); }}
+            className={cn(
+              'h-10 px-3.5 rounded-[14px] flex items-center gap-2 transition-all shadow-md border font-black text-[11px] uppercase tracking-widest',
+              showCalc
+                ? 'bg-amber-500 border-amber-400 text-white shadow-amber-300'
+                : 'bg-white border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-600'
+            )}
           >
-            <i className="fa-solid fa-palette text-[13px] text-white group-hover:rotate-12 transition-transform"></i>
-            <span className="text-[11px] font-black tracking-widest text-white uppercase">Tema</span>
+            <i className="fa-solid fa-calculator text-[13px]"></i>
+            <span className="hidden sm:inline">Kalkulator</span>
           </button>
+
+          <div className="relative z-50">
+            <button 
+              onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+              className="h-10 px-3.5 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center gap-2 hover:shadow-lg hover:shadow-purple-300 transition-all shadow-md group border border-purple-400/50"
+            >
+              <i className="fa-solid fa-palette text-[13px] text-white group-hover:rotate-12 transition-transform"></i>
+              <span className="text-[11px] font-black tracking-widest text-white uppercase">Tema</span>
+            </button>
           
-          {isThemeMenuOpen && (
-            <div className="absolute right-0 top-12 w-40 bg-white rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] border border-gray-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-              <p className="px-3 pb-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 mb-1">Pilih Tema</p>
-              <button onClick={() => { setActiveTheme('TEMA_2'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_2' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 1 (Utama)</button>
-              <button onClick={() => { setActiveTheme('TEMA_3'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_3' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 2 (Sidebar)</button>
-              <button onClick={() => { setActiveTheme('TEMA_1'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_1' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 3 (Classic)</button>
-            </div>
-          )}
+            {isThemeMenuOpen && (
+              <div className="absolute right-0 top-12 w-40 bg-white rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] border border-gray-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="px-3 pb-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 mb-1">Pilih Tema</p>
+                <button onClick={() => { setActiveTheme('TEMA_2'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_2' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 1 (Utama)</button>
+                <button onClick={() => { setActiveTheme('TEMA_3'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_3' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 2 (Sidebar)</button>
+                <button onClick={() => { setActiveTheme('TEMA_1'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_1' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 3 (Classic)</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* ===== PANEL KALKULATOR ===== */}
+      {showCalc && (
+        <div className="mb-4 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.4)] border border-slate-700">
+            {/* Layar kalkulator */}
+            <div className="bg-slate-950/80 rounded-xl px-4 py-3 mb-3 min-h-[68px] flex flex-col justify-end items-end border border-slate-700/50">
+              <p className="text-slate-500 text-[10px] font-mono leading-none min-h-[14px] truncate w-full text-right">{calcExpression || '\u00a0'}</p>
+              <p className="text-white text-2xl font-black font-mono leading-tight tracking-wider mt-1 truncate max-w-full">{calcDisplay}</p>
+            </div>
+            {/* Grid tombol */}
+            {([
+              ['C', '±', '⌫', '÷'],
+              ['7', '8', '9', '×'],
+              ['4', '5', '6', '−'],
+              ['1', '2', '3', '+'],
+              ['0', ',', '=', '='],
+            ] as const).map((row, ri) => (
+              <div key={ri} className="grid grid-cols-4 gap-1.5 mb-1.5">
+                {row.map((btn, bi) => {
+                  if (ri === 4 && bi === 2) return null
+                  const isOp = ['+', '−', '×', '÷'].includes(btn)
+                  const isEq = btn === '='
+                  const isClear = btn === 'C'
+                  const opToInternal: Record<string,string> = {'÷':'/','×':'*','−':'-','+':'+'}
+                  const isActiveOp = calcOperator === (opToInternal[btn] || '') && calcNewInput
+                  return (
+                    <button
+                      key={`${ri}-${bi}`}
+                      onClick={() => handleCalcBtn(btn)}
+                      className={cn(
+                        'h-12 rounded-xl font-black text-[15px] transition-all active:scale-95 select-none',
+                        ri === 4 && bi === 3 ? 'col-span-2' : '',
+                        isClear ? 'bg-rose-500 text-white hover:bg-rose-400 shadow-sm'
+                          : isEq ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm hover:from-amber-300'
+                          : isOp ? cn('hover:bg-slate-600', isActiveOp ? 'bg-slate-500 text-amber-400' : 'bg-slate-700 text-amber-400')
+                          : btn === '±' || btn === '⌫' ? 'bg-slate-600 text-slate-200 hover:bg-slate-500'
+                          : 'bg-slate-700 text-white hover:bg-slate-600'
+                      )}
+                    >
+                      {btn}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+            {/* Tombol Pakai */}
+            <button
+              onClick={applyCalcToNominal}
+              className="w-full mt-2 h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 hover:from-emerald-400 transition-all shadow-md active:scale-[0.98]"
+            >
+              <i className="fa-solid fa-check-double text-sm"></i>
+              Pakai sebagai Nominal
+            </button>
+          </div>
+        </div>
+      )}
 
       {activeTheme === 'TEMA_1' ? (
       <>
@@ -602,14 +765,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
 
+        {/* PAYMENT MODE TOGGLE FOR AKSESORIS */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="flex gap-2 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            <button
+              onClick={() => setAksesorisPayMode('TUNAI')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'TUNAI'
+                  ? 'bg-emerald-500 border-emerald-500 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300'
+              )}
+            >
+              <i className="fa-solid fa-cash-register text-[11px]"></i>
+              <span>CASH / LACI</span>
+              {aksesorisPayMode === 'TUNAI' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+            <button
+              onClick={() => setAksesorisPayMode('QRIS')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'QRIS'
+                  ? 'bg-blue-500 border-blue-500 text-white shadow-[0_4px_12px_-4px_rgba(59,130,246,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300'
+              )}
+            >
+              <i className="fa-solid fa-qrcode text-[11px]"></i>
+              <span>NON TUNAI / QRIS</span>
+              {aksesorisPayMode === 'QRIS' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-3 flex-nowrap">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
                 <i className="fa-solid fa-coins text-yellow-500"></i>
-                {kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
               </label>
-              {kategori !== 'Order Kuota' && (
+              {kategori !== 'Order Kuota' && activeMode !== 'AKSESORIS' && (
                 <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
               )}
             </div>
@@ -626,7 +821,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
                     else adminRef.current?.focus();
                   }
                 }}
@@ -634,6 +830,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+          {activeMode !== 'AKSESORIS' && (
           <div className="relative group flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5">
@@ -709,6 +906,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               })()}
             </div>
           </div>
+          )}
         </div>
         {/* Peringatan real-time Order Kuota: Jual < Modal */}
         {kategori === 'Order Kuota' && (() => {
@@ -949,14 +1147,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
 
+        {/* PAYMENT MODE TOGGLE FOR AKSESORIS - TEMA 2 */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="flex gap-2 mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <button
+              onClick={() => setAksesorisPayMode('TUNAI')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'TUNAI'
+                  ? 'bg-emerald-500 border-emerald-500 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300'
+              )}
+            >
+              <i className="fa-solid fa-cash-register text-[11px]"></i>
+              <span>CASH / LACI</span>
+              {aksesorisPayMode === 'TUNAI' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+            <button
+              onClick={() => setAksesorisPayMode('QRIS')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'QRIS'
+                  ? 'bg-blue-500 border-blue-500 text-white shadow-[0_4px_12px_-4px_rgba(59,130,246,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300'
+              )}
+            >
+              <i className="fa-solid fa-qrcode text-[11px]"></i>
+              <span>NON TUNAI / QRIS</span>
+              {aksesorisPayMode === 'QRIS' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+          </div>
+        )}
+
         {/* NOMINAL & ADMIN ROW */}
         <div className="flex gap-3 mb-5">
-          <div className="flex-1">
+          <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> NOMINAL
+                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'HARGA' : 'NOMINAL'}
               </label>
-              <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+              {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
             </div>
             <div className="relative">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -969,7 +1199,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
                     else adminRef.current?.focus();
                   }
                 }}
@@ -978,6 +1209,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             </div>
           </div>
 
+          {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
@@ -1006,6 +1238,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+          )}
         </div>
 
         {/* ERROR MESSAGES & ALERTS */}
@@ -1138,16 +1371,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               })()}
             </div>
           )}
-        </div>
+          {/* PAYMENT MODE TOGGLE FOR AKSESORIS - TEMA 3 */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="flex gap-2 mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <button
+              onClick={() => setAksesorisPayMode('TUNAI')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'TUNAI'
+                  ? 'bg-emerald-500 border-emerald-500 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-300'
+              )}
+            >
+              <i className="fa-solid fa-cash-register text-[11px]"></i>
+              <span>CASH / LACI</span>
+              {aksesorisPayMode === 'TUNAI' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+            <button
+              onClick={() => setAksesorisPayMode('QRIS')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all',
+                aksesorisPayMode === 'QRIS'
+                  ? 'bg-blue-500 border-blue-500 text-white shadow-[0_4px_12px_-4px_rgba(59,130,246,0.5)]'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300'
+              )}
+            >
+              <i className="fa-solid fa-qrcode text-[11px]"></i>
+              <span>NON TUNAI / QRIS</span>
+              {aksesorisPayMode === 'QRIS' && <i className="fa-solid fa-check text-[10px]"></i>}
+            </button>
+          </div>
+        )}
 
         {/* NOMINAL & ADMIN ROW */}
         <div className="flex gap-3 mb-5">
-          <div className="flex-1">
+          <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> NOMINAL
+                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'HARGA' : 'NOMINAL'}
               </label>
-              <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+              {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
             </div>
             <div className="relative">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -1160,7 +1423,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
                     else adminRef.current?.focus();
                   }
                 }}
@@ -1168,6 +1432,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+          {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
@@ -1182,7 +1447,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={adminRef}
-                type="text" 
+                type="text"
                 inputMode="numeric"
                 value={admin}
                 onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
@@ -1196,7 +1461,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
-        </div>
+          )}
+        </div>        </div>
 
         {/* ERROR MESSAGES & ALERTS */}
         {errorMsg && (

@@ -1749,6 +1749,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [kasirFormId, setKasirFormId] = useState('')
   const [kasirFormName, setKasirFormName] = useState('')
   const [kasirFormPin, setKasirFormPin] = useState('')
+  const [kasirFormTargetTrx, setKasirFormTargetTrx] = useState('')
+  const [editKasirId, setEditKasirId] = useState<string | null>(null)
 
   // Izin State
   const [izinNamaKasir, setIzinNamaKasir] = useState('')
@@ -3095,18 +3097,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                       <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>
                       <div className="space-y-2">
-                        <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} disabled={!!editKasirId} className="w-full text-xs p-2 rounded-lg border outline-none font-bold disabled:bg-gray-100 disabled:text-gray-500" />
                         <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                         <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="number" placeholder="Target TRX Harian (Opsional)" value={kasirFormTargetTrx} onChange={e => setKasirFormTargetTrx(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        
+                        {editKasirId && (
+                          <button onClick={() => { setKasirFormId(''); setKasirFormName(''); setKasirFormPin(''); setKasirFormTargetTrx(''); setEditKasirId(null); }} className="text-[10px] text-rose-500 font-bold underline mb-1">Batal Edit</button>
+                        )}
+
                         <button onClick={() => {
                           if(!kasirFormId.trim() || !kasirFormName.trim() || !kasirFormPin) return props.showToast('Lengkapi data kasir');
-                          // Validasi: ID kasir tidak boleh sama dengan yang sudah ada
+                          // Validasi: ID kasir tidak boleh sama dengan yang sudah ada, KECUALI jika sedang diedit
                           const existingIds = Object.keys(props.kasirList || {})
-                          if (existingIds.includes(kasirFormId.trim())) {
+                          if (!editKasirId && existingIds.includes(kasirFormId.trim())) {
                             return props.showToast(`ID "${kasirFormId}" sudah digunakan kasir lain!`);
                           }
                           if (kasirFormPin.length < 4) return props.showToast('PIN minimal 4 digit!');
-                          const newKasirList = { ...props.kasirList, [kasirFormId.trim()]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName.trim() } };
+                          const newKasirList = { ...props.kasirList, [kasirFormId.trim()]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName.trim(), targetTrx: parseInt(kasirFormTargetTrx) || 0 } };
                           const targetStoreId = props.pantauStoreId;
                           if (targetStoreId && targetStoreId !== 'all') {
                             localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(newKasirList));
@@ -3121,9 +3129,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             saveKasirAccounts(newKasirList);
                           }
                           props.refreshKasirList(newKasirList);
-                          setKasirFormId(''); setKasirFormName(''); setKasirFormPin('');
+                          setKasirFormId(''); setKasirFormName(''); setKasirFormPin(''); setKasirFormTargetTrx(''); setEditKasirId(null);
                           props.showToast("Data Kasir Disimpan!");
-                        }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">Simpan Kasir</button>
+                        }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">{editKasirId ? 'Update Kasir' : 'Simpan Kasir'}</button>
                       </div>
                     </div>
 
@@ -3133,10 +3141,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
                             <div>
                               <p className="text-xs font-black text-gray-800">{account.name}</p>
-                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin}</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin} {account.targetTrx ? `| TARGET: ${account.targetTrx} TRX` : ''}</p>
                             </div>
                             <div className="flex gap-2">
-                              <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                              <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); setKasirFormTargetTrx(account.targetTrx ? account.targetTrx.toString() : ''); setEditKasirId(id); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
                                 <i className="fa-solid fa-pen text-[10px]"></i>
                               </button>
                               <button onClick={() => {
@@ -4864,6 +4872,41 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           <h3 className="font-black text-black text-[12px] uppercase tracking-tighter">RINGKASAN HARI INI</h3>
           <button onClick={() => props.setActiveView('view-transaksi')} className="text-[11px] text-blue-700 font-black uppercase tracking-tighter border-b border-blue-700 leading-none">LIHAT SEMUA</button>
         </div>
+
+        {/* PROGRESS BAR TARGET TRX UNTUK KASIR */}
+        {props.kasirRole !== 'owner' && (() => {
+          const target = props.kasirList[props.username]?.targetTrx || financialSettings?.defaultTargetTrx || 0;
+          if (target > 0) {
+            const pct = Math.min(Math.round((ownerTotalTrx / target) * 100), 100);
+            const isCompleted = pct >= 100;
+            return (
+              <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm mb-3">
+                <div className="flex justify-between items-center mb-1.5">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <i className="fa-solid fa-bullseye text-blue-500"></i> Target Hari Ini
+                  </p>
+                  {isCompleted ? (
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <i className="fa-solid fa-check-circle"></i> Tercapai!
+                    </span>
+                  ) : (
+                    <p className="text-[10px] font-black text-slate-800 tabular-nums">{ownerTotalTrx} / {target} TRX</p>
+                  )}
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full rounded-full transition-all duration-1000",
+                      isCompleted ? "bg-emerald-500" : pct >= 70 ? "bg-amber-400" : "bg-blue-500"
+                    )}
+                    style={{ width: `${pct}%` }}
+                  ></div>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
         
         <SummaryCards 
           totalTransactions={ownerTotalTrx}

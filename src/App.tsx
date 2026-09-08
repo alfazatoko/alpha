@@ -2312,6 +2312,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
                       totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
                       transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
+                      allTransactions={displayTransactions}
                       totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
                       totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
                       totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
@@ -2614,6 +2615,7 @@ const MainApp: React.FC<MainAppProps> = ({
             saldoBank={dailyReport ? dailyReport.saldoBank : saldoBank}
             totalPenjualan={dailyReport ? (dailyReport.penjualanDigital + dailyReport.totalAksesoris) : totalPenjualan}
             transactions={displayTransactions.filter(t => t.timestamp.startsWith(filterTanggalLaporan))}
+            allTransactions={displayTransactions}
             totalTarik={dailyReport ? dailyReport.totalTarik : totalTarik}
             totalAdmin={dailyReport ? dailyReport.totalAdmin : totalAdmin}
             totalAksesoris={dailyReport ? dailyReport.totalAksesoris : totalAksesoris}
