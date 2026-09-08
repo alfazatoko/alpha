@@ -862,6 +862,26 @@ const MainApp: React.FC<MainAppProps> = ({
         }
       }
 
+      // Sync Catatan Owner
+      if (data.catatan_owner_data) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_catatan_owner`)
+        const remoteStr = JSON.stringify(data.catatan_owner_data)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_catatan_owner`, remoteStr)
+          changed = true
+        }
+      }
+
+      // Sync Custom FAQ
+      if (data.custom_faq) {
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_custom_faq`)
+        const remoteStr = JSON.stringify(data.custom_faq)
+        if (local !== remoteStr) {
+          localStorage.setItem(`alphaPro_${targetStoreId}_custom_faq`, remoteStr)
+          changed = true
+        }
+      }
+
       if (changed) {
         window.dispatchEvent(new Event('alphaSyncUpdate'))
       }

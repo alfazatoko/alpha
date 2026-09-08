@@ -1053,7 +1053,12 @@ const NotificationLogPanel: React.FC<{
         const lateId = `late_${late.name}_${late.date}`
         if (!items.some(i => i.id === lateId)) {
           // Buat date object tiruan untuk tanggal + waktu terlambat
-          const notifDate = new Date(`${late.date}T${late.time}:00`).toISOString();
+          let notifDate = new Date().toISOString();
+          if (late.date && late.time) {
+            const safeTime = late.time.substring(0, 5).replace(/\./g, ':');
+            const parsed = new Date(`${late.date}T${safeTime}:00`);
+            if (!isNaN(parsed.getTime())) notifDate = parsed.toISOString();
+          }
           
           items.unshift({
             id: lateId,
