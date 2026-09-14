@@ -2221,8 +2221,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             <span className="text-[9px] bg-white/20 text-white px-2 py-1 rounded-full font-black uppercase tracking-widest">Otomatis</span>
           </div>
           
-          <div className="p-3">
-            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[1.5rem] p-3 border border-slate-200/60 dark:border-slate-700 space-y-3 shadow-inner">
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 border-t border-slate-200/60 dark:border-slate-700 space-y-3 shadow-inner">
               {/* Row 1: Kiri (Penambahan) vs Kanan (Pengurangan) */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Debit/Masuk */}
@@ -2256,9 +2255,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
 
               {/* Row 2: Kalkulasi Sisa Buku vs Real */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 items-start">
                 {/* Sisa Buku */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-3 border border-blue-200/60 dark:border-blue-800/50 relative overflow-hidden">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-3 border border-blue-200/60 dark:border-blue-800/50 relative overflow-hidden h-full">
                   <div className="absolute -bottom-2 -right-2 opacity-[0.03]">
                     <i className="fa-solid fa-book text-6xl"></i>
                   </div>
@@ -2267,23 +2266,28 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   <p className="text-[8px] text-blue-500/70 italic leading-tight mt-1">Hasil hitungan sistem</p>
                 </div>
                 {/* Saldo Real */}
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-900/10 rounded-xl p-3 border border-indigo-200/60 dark:border-indigo-800/50 relative overflow-hidden group">
-                  <div className="absolute -bottom-2 -right-2 opacity-[0.03]">
-                    <i className="fa-solid fa-mobile-screen text-6xl"></i>
+                <div className="flex flex-col gap-2 h-full">
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-900/10 rounded-xl p-3 border border-indigo-200/60 dark:border-indigo-800/50 relative overflow-hidden group">
+                    <div className="absolute -bottom-2 -right-2 opacity-[0.03]">
+                      <i className="fa-solid fa-mobile-screen text-6xl"></i>
+                    </div>
+                    <div className="relative z-10">
+                      <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Mbangking (HP)</p>
+                      <p className="text-sm font-black text-indigo-800 dark:text-indigo-300">{formatRupiah(props.saldoReal)}</p>
+                      <p className="text-[8px] text-indigo-500/70 italic leading-tight mt-1">Sisa saldo asli di HP</p>
+                    </div>
                   </div>
-                  <div className="relative z-10">
-                    <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Real App (HP)</p>
-                    <p className="text-sm font-black text-indigo-800 dark:text-indigo-300">{formatRupiah(props.saldoReal)}</p>
-                    <p className="text-[8px] text-indigo-500/70 italic leading-tight mt-1 mb-2">Input manual saldo asli</p>
-                    {props.onUpdateSaldoReal && (
+                  {props.onUpdateSaldoReal && (
+                    <div className="flex flex-col gap-1 mt-auto pt-1">
+                      <p className="text-[7.5px] font-black text-indigo-500/80 dark:text-indigo-400/80 uppercase text-center tracking-widest leading-none">INPUT SALDO M.Bangking disini</p>
                       <button
                         onClick={() => setShowSaldoRealModal(true)}
                         className="w-full bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg py-1.5 text-[9px] font-black uppercase tracking-widest transition-all shadow-sm shadow-indigo-500/20 flex items-center justify-center gap-1.5 active:scale-95"
                       >
                         <i className="fa-solid fa-pen-to-square"></i> Update
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2311,13 +2315,12 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-lg block leading-none">{isKlop ? 'âœ“ MATCH' : formatRupiah(selisih)}</span>
+                      <span className="font-black text-lg block leading-none flex items-center justify-end gap-1">{isKlop ? <><i className="fa-solid fa-check text-base"></i> MATCH</> : formatRupiah(selisih)}</span>
                       {!isKlop && <span className="text-[8px] font-black opacity-90 uppercase tracking-widest mt-1 block">Periksa Kembali</span>}
                     </div>
                   </div>
                 );
               })()}
-            </div>
           </div>
         </div>
 

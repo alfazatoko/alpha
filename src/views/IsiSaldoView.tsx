@@ -47,7 +47,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA', 'TAMBAH SALDOBANK']
 
   const toggleOption = (opt: string) => {
     let current = props.isiKeterangan
@@ -75,6 +75,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
       if (e.key === '2') { e.preventDefault(); toggleOption('FLIP'); }
       if (e.key === '3') { e.preventDefault(); toggleOption('ORDER KUOTA'); }
       if (e.key === '4') { e.preventDefault(); toggleOption('DANA'); }
+      if (e.key === '5') { e.preventDefault(); toggleOption('TAMBAH SALDOBANK'); }
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
