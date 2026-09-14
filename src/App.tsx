@@ -4,7 +4,7 @@ import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { parseNominal, formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
-import type { Transaction } from './types'
+import type { Transaction, OperkanSaldo } from './types'
 
 // Components
 import Navigation from './components/Navigation'
@@ -542,6 +542,9 @@ const MainApp: React.FC<MainAppProps> = ({
   const [kasModal, setKasModal] = useState<number>(0)
   const [absensi, setAbsensi] = useState<any[]>([])
   const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
+
+  // ── Operan Saldo State ──
+  const [pendingOperkan, setPendingOperkan] = useState<OperkanSaldo | null>(null)
 
   // Running Text State
   const [runningTexts, setRunningTexts] = useState<string[]>(() => {
@@ -1838,23 +1841,9 @@ const MainApp: React.FC<MainAppProps> = ({
       store_id: finalStoreId
     }))
 
-    // Jika opsi operkan saldo ke kasir selanjutnya diaktifkan
-    if (operkanInfo?.isOperkan && operkanInfo.targetKasirId) {
-      validRows.forEach((row, index) => {
-        const appLabel = row.keterangan || `Aplikasi ${index + 1}`
-        newTxs.push({
-          id: Date.now().toString() + '-operkan-' + index,
-          user_id: googleUid,
-          kasir_id: operkanInfo.targetKasirId,
-          kategori: 'Isi Saldo Bank',
-          nominal: row.nominal,
-          admin_fee: 0,
-          keterangan: `Operan Saldo Bank Awal dari ${username} (${appLabel})`,
-          timestamp: nowISO,
-          store_id: finalStoreId
-        })
-      })
-    }
+    // CATATAN: Operkan saldo sekarang menggunakan sistem titipan (2 tahap).
+    // Tidak lagi langsung insert transaksi ke kasir penerima.
+    // Fungsi handleKirimOperkanSaldo() akan dipanggil terpisah setelah insert saldo real.
 
     supabase.from('transactions').insert(newTxs).then(({ error }) => {
       setIsSaving(false)
@@ -1873,19 +1862,169 @@ const MainApp: React.FC<MainAppProps> = ({
         }))
         setTransactions(prev => [...optimisticTxs, ...prev])
 
-        if (operkanInfo?.isOperkan && operkanInfo.targetKasirId) {
-          const targetName = kasirList[operkanInfo.targetKasirId]?.name || operkanInfo.targetKasirId
-          showToast(`Saldo Real Diperbarui & Diserahkan ke ${targetName}!`)
-        } else {
-          showToast('Saldo Real Aplikasi Diperbarui!')
-        }
-
         // Trigger Closing Snapshot on Saldo Real Input
         const totalSaldoRealInput = validRows.reduce((s, r) => s + r.nominal, 0)
         saveClosingSnapshot(username, finalStoreId, totalSaldoRealInput)
+
+        // Kirim operan sebagai titipan (sistem 2 tahap) jika diaktifkan
+        if (operkanInfo?.isOperkan && operkanInfo.targetKasirId) {
+          handleKirimOperkanSaldo(validRows, operkanInfo.targetKasirId, finalStoreId)
+        } else {
+          showToast('Saldo Real Aplikasi Diperbarui!')
+        }
       }
     })
   }
+
+  // ── Kirim operan saldo sebagai titipan (belum masuk ke kasir penerima) ──
+  const handleKirimOperkanSaldo = async (
+    rows: { nominal: number; keterangan: string }[],
+    targetKasirId: string,
+    storeId: string
+  ) => {
+    const targetName = kasirList[targetKasirId]?.name || targetKasirId
+    const nowISO = getLocalISOString()
+    const operkanId = `operkan-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const totalNominal = rows.reduce((s, r) => s + r.nominal, 0)
+
+    const record: OperkanSaldo = {
+      id: operkanId,
+      store_id: storeId,
+      pengirim_id: username,
+      pengirim_name: account.name,
+      penerima_id: targetKasirId,
+      penerima_name: targetName,
+      nominal_total: totalNominal,
+      items: rows,
+      status: 'PENDING',
+      tanggal_kirim: nowISO,
+    }
+
+    const { error } = await supabase.from('operkan_saldo').insert({
+      ...record,
+      items: JSON.stringify(record.items)
+    })
+
+    if (error) {
+      showToast('Gagal kirim operan: ' + error.message)
+    } else {
+      setPendingOperkan(record)
+      showToast(`Saldo dikirim ke ${targetName}! Menunggu konfirmasi kasir penerima.`)
+    }
+  }
+
+  // ── Ambil data operan PENDING untuk kasir yang sedang login ──
+  const fetchPendingOperkan = async () => {
+    const finalStoreId = activeRole === 'owner'
+      ? (pantauStoreId === 'all' ? null : pantauStoreId)
+      : activeStoreId
+    if (!finalStoreId || !username) return
+
+    const { data, error } = await supabase
+      .from('operkan_saldo')
+      .select('*')
+      .eq('store_id', finalStoreId)
+      .eq('status', 'PENDING')
+      .or(`pengirim_id.eq.${username},penerima_id.eq.${username}`)
+      .order('tanggal_kirim', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('fetchPendingOperkan error:', error.message)
+      return
+    }
+
+    if (data) {
+      setPendingOperkan({
+        ...data,
+        items: typeof data.items === 'string' ? JSON.parse(data.items) : (data.items || [])
+      } as OperkanSaldo)
+    } else {
+      setPendingOperkan(null)
+    }
+  }
+
+  // ── Terima atau Ambil Kembali operan saldo ──
+  const handleTerimaOperkan = async (operkan: OperkanSaldo) => {
+    const isTerima = operkan.penerima_id === username
+    const isAmbilKembali = operkan.pengirim_id === username
+    if (!isTerima && !isAmbilKembali) return
+
+    const newStatus = isTerima ? 'DITERIMA' : 'DIAMBIL_KEMBALI'
+    const nowISO = getLocalISOString()
+
+    const { error } = await supabase
+      .from('operkan_saldo')
+      .update({
+        status: newStatus,
+        diterima_oleh: username,
+        diterima_name: account.name,
+        tanggal_terima: nowISO,
+      })
+      .eq('id', operkan.id)
+      .eq('status', 'PENDING') // double-check: hanya update jika masih PENDING
+
+    if (error) {
+      showToast('Gagal konfirmasi operan: ' + error.message)
+      return
+    }
+
+    const finalStoreId = activeRole === 'owner'
+      ? (pantauStoreId === 'all' ? null : pantauStoreId)
+      : activeStoreId
+
+    if (finalStoreId) {
+      // Tentukan kasir target: penerima jika DITERIMA, pengirim jika AMBIL KEMBALI
+      const targetKasirId = isTerima ? operkan.penerima_id : operkan.pengirim_id
+      const labelPrefix = isTerima
+        ? `Operan Saldo dari ${operkan.pengirim_name}`
+        : `Saldo Diambil Kembali (batal operan ke ${operkan.penerima_name})`
+
+      const newTxs = operkan.items.map((row, index) => ({
+        id: `${operkan.id}-${newStatus.toLowerCase()}-${index}`,
+        user_id: googleUid,
+        kasir_id: targetKasirId,
+        kategori: 'Isi Saldo Bank',
+        nominal: row.nominal,
+        admin_fee: 0,
+        keterangan: `${labelPrefix} (${row.keterangan})`,
+        timestamp: nowISO,
+        store_id: finalStoreId
+      }))
+
+      const { error: txError } = await supabase.from('transactions').insert(newTxs)
+      if (!txError) {
+        const optimisticTxs: Transaction[] = newTxs.map(tx => ({
+          id: tx.id,
+          kategori: tx.kategori as any,
+          nominal: tx.nominal,
+          adminFee: tx.admin_fee,
+          keterangan: tx.keterangan,
+          timestamp: tx.timestamp,
+          kasir_id: tx.kasir_id,
+          store_id: tx.store_id
+        }))
+        setTransactions(prev => [...optimisticTxs, ...prev])
+      }
+    }
+
+    if (isTerima) {
+      showToast(`Saldo ${new Intl.NumberFormat('id-ID').format(operkan.nominal_total)} berhasil diterima!`)
+    } else {
+      showToast(`Saldo ${new Intl.NumberFormat('id-ID').format(operkan.nominal_total)} berhasil diambil kembali!`)
+    }
+
+    setPendingOperkan(null)
+  }
+
+  // ── Polling: cek operan PENDING setiap 30 detik ──
+  useEffect(() => {
+    if (!isLoggedIn || !username || !activeStoreId || activeStoreId === 'all') return
+    fetchPendingOperkan()
+    const interval = setInterval(fetchPendingOperkan, 30000)
+    return () => clearInterval(interval)
+  }, [isLoggedIn, username, activeStoreId, pantauStoreId])
 
   const saveClosingSnapshot = async (kasirUsername: string, targetStore: string, totalSaldoRealInput: number) => {
     try {
@@ -2398,6 +2537,9 @@ const MainApp: React.FC<MainAppProps> = ({
                       kasirName={account.name}
                       kasirRole={account.role}
                       setIsSidePanelOpen={setIsSidePanelOpen}
+                      pendingOperkan={pendingOperkan}
+                      currentUsername={username}
+                      onTerimaOperkan={handleTerimaOperkan}
                     />
                   );
                 case 'view-kasbon':
@@ -2700,6 +2842,9 @@ const MainApp: React.FC<MainAppProps> = ({
             kasirName={account.name}
             kasirRole={account.role}
             setIsSidePanelOpen={setIsSidePanelOpen}
+            pendingOperkan={pendingOperkan}
+            currentUsername={username}
+            onTerimaOperkan={handleTerimaOperkan}
           />
 
           <KasbonView active={activeView === 'view-kasbon'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />

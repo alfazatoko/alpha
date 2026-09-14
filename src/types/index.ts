@@ -67,3 +67,20 @@ export interface StoreSettings {
   is_pin_enabled: boolean;
 }
 
+export interface OperkanSaldo {
+  id: string;
+  store_id: string;
+  pengirim_id: string;
+  pengirim_name: string;
+  penerima_id: string;
+  penerima_name: string;
+  nominal_total: number;
+  items: { nominal: number; keterangan: string }[];
+  catatan?: string;
+  status: 'PENDING' | 'DITERIMA' | 'DIAMBIL_KEMBALI';
+  diterima_oleh?: string;
+  diterima_name?: string;
+  tanggal_kirim: string;
+  tanggal_terima?: string;
+}
+
