@@ -1962,8 +1962,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider">
-                    âš ï¸ Peringatan Audit Shift
+                  <span className="text-[11px] font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider flex items-center gap-1">
+                    <i className="fa-solid fa-triangle-exclamation"></i> Peringatan Audit Shift
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black">
                     {auditDiscrepancies.length} Selisih
@@ -1996,7 +1996,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   title={isAuditBannerMinimized ? "Perbesar (Expand)" : "Minimize"}
                   className="w-6 h-6 rounded-lg bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-300 text-rose-900 dark:text-white font-black text-[11px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
                 >
-                  {isAuditBannerMinimized ? 'âž•' : 'âž–'}
+                  <i className={isAuditBannerMinimized ? "fa-solid fa-plus" : "fa-solid fa-minus"}></i>
                 </button>
                 <button
                   onClick={() => {
@@ -2006,7 +2006,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   title="Tutup Notifikasi"
                   className="w-6 h-6 rounded-lg bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-600 hover:text-white text-rose-900 dark:text-white font-black text-xs flex items-center justify-center active:scale-90 transition-all cursor-pointer"
                 >
-                  âœ•
+                  <i className="fa-solid fa-xmark"></i>
                 </button>
               </div>
             </div>
