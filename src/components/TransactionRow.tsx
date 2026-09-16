@@ -33,6 +33,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]')
   const rowColorClass = isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : "text-black"
 
+  const formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
+
   return (
     <div className="flex flex-col group transaction-row-container">
       <div 
@@ -47,12 +49,15 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
           </div>
 
           {/* INFO UTAMA */}
-          <div className="flex flex-col gap-0">
+          <div className="flex flex-col gap-[2px]">
             <div className={cn("text-[13px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
                {t.kategori}
             </div>
-            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.15em]">
-               {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
+            <div className="text-[9px] text-blue-900 dark:text-blue-300 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
+               {formattedKeterangan}
+            </div>
+            <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tracking-tight leading-none">
+               {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
         </div>
@@ -73,36 +78,42 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
       {/* DETAIL DRAWER */}
       {isOpen && (
-        <div className="bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100 flex justify-between items-center animate-in slide-in-from-top-1 duration-200">
-           <div className="flex flex-col gap-0.5">
-              <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Keterangan:</span>
-              <span className="text-[10px] font-bold text-slate-700 leading-tight max-w-[180px]">
-                {t.keterangan || '-'}
-                {t.isEdited && <span className="ml-1 text-[7px] bg-amber-100 text-amber-700 px-1 rounded font-black">EDIT</span>}
-              </span>
-           </div>
-           
-           <div className="flex gap-1.5">
-              {canEdit ? (
-                <button 
-                  onClick={handleEditClick}
-                  className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
-                >
-                  <i className="fa-solid fa-pen text-[7px]"></i> EDIT
-                </button>
-              ) : (
-                <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg">
-                  LOCKED
+        <div className="bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+           <div className="flex justify-between items-start">
+             <div className="flex flex-col gap-0.5">
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Keterangan:</span>
+                <span className="text-[10px] font-bold text-slate-700 leading-tight max-w-[180px]">
+                  {formattedKeterangan}
+                  {t.isEdited && <span className="ml-1 text-[7px] bg-amber-100 text-amber-700 px-1 rounded font-black">EDIT</span>}
                 </span>
-              )}
-              {canDelete && (
-                <button 
-                  onClick={handleDeleteClick}
-                  className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100"
-                >
-                  <i className="fa-solid fa-trash-can text-[9px]"></i>
-                </button>
-              )}
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mt-2">Tanggal:</span>
+                <span className="text-[10px] font-bold text-slate-700 leading-tight">
+                  {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
+                </span>
+             </div>
+             
+             <div className="flex gap-1.5 mt-1">
+                {canEdit ? (
+                  <button 
+                    onClick={handleEditClick}
+                    className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm"
+                  >
+                    <i className="fa-solid fa-pen text-[7px]"></i> EDIT
+                  </button>
+                ) : (
+                  <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg">
+                    LOCKED
+                  </span>
+                )}
+                {canDelete && (
+                  <button 
+                    onClick={handleDeleteClick}
+                    className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100 shadow-sm"
+                  >
+                    <i className="fa-solid fa-trash-can text-[9px]"></i>
+                  </button>
+                )}
+             </div>
            </div>
         </div>
       )}
