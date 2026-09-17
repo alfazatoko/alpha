@@ -94,7 +94,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
           </div>
           <div className={cn(
             "text-[11px] font-extrabold uppercase", 
-            isKhusus ? "text-orange-400" : (isNonTunai || (t.keterangan || '').includes('[ADMIN_DALAM]')) ? "text-purple-500" : "text-emerald-600"
+            isKhusus ? "text-orange-400" : (isNonTunai || (t.keterangan || '').includes('[ADMIN_DALAM]')) ? "text-[#0066AE]" : "text-emerald-600"
           )}>
             Admin: {t.adminFee.toLocaleString('id-ID')}
           </div>

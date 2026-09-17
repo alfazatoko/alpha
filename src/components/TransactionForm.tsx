@@ -705,15 +705,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={keteranganRef}
               rows={1} 
               placeholder="Tulis keterangan..." 
-              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? selectedSumber : keterangan}
+              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onFocus={handleInputFocus}
               onChange={(e) => {
-                setKeterangan(e.target.value);
+                const val = e.target.value.toUpperCase();
+                if (activeMode === 'TARIK') {
+                  setKeterangan(`TARIK_TUNAI|${val}`);
+                  setIsKetAuto(false);
+                } else {
+                  setKeterangan(val);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  nominalRef.current?.focus();
+                  setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
               className="w-full resize-none text-[11px] font-black py-1.5 min-h-[36px] px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
@@ -821,9 +827,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
-                    else adminRef.current?.focus();
+                    setTimeout(() => {
+                      if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                      else adminRef.current?.focus();
+                    }, 10);
                   }
                 }}
                 className="w-full text-[14px] font-black h-11 pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
@@ -865,7 +873,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    btnSimpanRef.current?.click();
+                    setTimeout(() => btnSimpanRef.current?.click(), 10);
                   }
                 }}
                 className={cn(
@@ -1092,14 +1100,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <textarea 
               ref={keteranganRef}
               rows={1}
-              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? selectedSumber : keterangan}
+              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
-                setKeterangan(e.target.value);
+                const val = e.target.value.toUpperCase();
+                if (activeMode === 'TARIK') {
+                  setKeterangan(`TARIK_TUNAI|${val}`);
+                  setIsKetAuto(false);
+                } else {
+                  setKeterangan(val);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  nominalRef.current?.focus();
+                  setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
               className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
@@ -1198,9 +1212,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
-                    else adminRef.current?.focus();
+                    setTimeout(() => {
+                      if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                      else adminRef.current?.focus();
+                    }, 10);
                   }
                 }}
                 className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
@@ -1230,7 +1246,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    btnSimpanRef.current?.click();
+                    setTimeout(() => btnSimpanRef.current?.click(), 10);
                   }
                 }}
                 className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
@@ -1319,14 +1335,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <textarea 
               ref={keteranganRef}
               rows={1}
-              value={keterangan}
+              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
-                setKeterangan(e.target.value);
+                const val = e.target.value.toUpperCase();
+                if (activeMode === 'TARIK') {
+                  setKeterangan(`TARIK_TUNAI|${val}`);
+                  setIsKetAuto(false);
+                } else {
+                  setKeterangan(val);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  nominalRef.current?.focus();
+                  setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
               className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
@@ -1422,9 +1444,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                    else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
-                    else adminRef.current?.focus();
+                    setTimeout(() => {
+                      if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
+                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                      else adminRef.current?.focus();
+                    }, 10);
                   }
                 }}
                 className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
@@ -1453,7 +1477,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    btnSimpanRef.current?.click();
+                    setTimeout(() => btnSimpanRef.current?.click(), 10);
                   }
                 }}
                 className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
