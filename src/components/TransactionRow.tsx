@@ -33,8 +33,30 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]')
   const rowColorClass = isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : "text-black"
 
-  const formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
+  const formatRp = (num: number) => num.toLocaleString('id-ID');
+  const formatK = (num: number) => (num % 1000 === 0) ? `${num / 1000}K` : formatRp(num);
 
+  let formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
+  let detailKeterangan = formattedKeterangan;
+
+  if (t.kategori === 'Tarik Tunai' && t.keterangan?.startsWith('TARIK_TUNAI|')) {
+    const parts = t.keterangan.split('|');
+    const metode = parts[1]?.replace(' [ADMIN_DALAM]', '')?.replace(' [NON_TUNAI]', '') || 'Unknown';
+    
+    const adm = t.adminFee;
+    const nom = t.nominal;
+    const adminPotong = t.keterangan.includes('[ADMIN_DALAM]');
+    
+    if (adminPotong) {
+      // Checkbox DALAM = DICEKLIS (Admin Potong Saldo)
+      formattedKeterangan = `${metode} | Tarik ${formatK(nom - adm)} | (Admin Dalam) ${formatK(adm)} Potong saldo`;
+      detailKeterangan = `Tarik tunai via ${metode} [ADMIN_DALAM] sebesar Rp${formatRp(nom)}. Uang diserahkan: Rp${formatRp(nom - adm)} (Admin ${formatK(adm)} potong saldo).`;
+    } else {
+      // Checkbox DALAM = TIDAK DICEKLIS (Admin Tunai)
+      formattedKeterangan = `${metode} | Tarik ${formatK(nom)} | Admin Tunai ${formatK(adm)}`;
+      detailKeterangan = `Tarik tunai via ${metode} sebesar Rp${formatRp(nom)}. Uang diserahkan: Rp${formatRp(nom)} (Admin ${formatK(adm)} bayar tunai).`;
+    }
+  }
   return (
     <div className="flex flex-col group transaction-row-container">
       <div 
@@ -70,7 +92,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
           )}>
             {t.nominal.toLocaleString('id-ID')}
           </div>
-          <div className={cn("text-[11px] font-extrabold uppercase", isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-400" : "text-emerald-600")}>
+          <div className={cn(
+            "text-[11px] font-extrabold uppercase", 
+            isKhusus ? "text-orange-400" : (isNonTunai || (t.keterangan || '').includes('[ADMIN_DALAM]')) ? "text-purple-500" : "text-emerald-600"
+          )}>
             Admin: {t.adminFee.toLocaleString('id-ID')}
           </div>
         </div>
@@ -83,7 +108,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
              <div className="flex flex-col gap-0.5">
                 <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Keterangan:</span>
                 <span className="text-[10px] font-bold text-slate-700 leading-tight max-w-[180px]">
-                  {formattedKeterangan}
+                  {detailKeterangan}
                   {t.isEdited && <span className="ml-1 text-[7px] bg-amber-100 text-amber-700 px-1 rounded font-black">EDIT</span>}
                 </span>
                 <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mt-2">Tanggal:</span>

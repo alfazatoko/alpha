@@ -60,7 +60,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [tema3Step, isTema3SheetOpen]);
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
-  const SUMBER_LIST = ['QRIS','ATM','DANA','GOPAY','BANK']
+  const SUMBER_LIST = ['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC']
   const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
@@ -126,7 +126,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` = ${nominal}` : ''}`
       else autoText = `Transfer ${sumberAplikasi}`
     } else if (activeMode === 'TARIK') {
-      autoText = `Tarik Tunai Saldo Masuk ke = ${selectedSumber}`
+      autoText = `TARIK_TUNAI|${selectedSumber}`
     } else {
       autoText = `${kategori} = `
       if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += nominal
@@ -666,7 +666,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[9px] font-black text-emerald-600">Pilih Cepat Klik (1-5)</p>
             </div>
             <div className="grid grid-cols-5 gap-1.5">
-              {['QRIS','ATM','DANA','GOPAY','BANK'].map((src, idx) => (
+              {['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC'].map((src, idx) => (
                 <button
                   key={src}
                   onClick={() => { setSelectedSumber(src); setIsKetAuto(true) }}
@@ -705,7 +705,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={keteranganRef}
               rows={1} 
               placeholder="Tulis keterangan..." 
-              value={keterangan}
+              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? selectedSumber : keterangan}
               onFocus={handleInputFocus}
               onChange={(e) => {
                 setKeterangan(e.target.value);
@@ -1056,10 +1056,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </>
         )}
         {activeMode === 'TARIK' && (
-          <>
-
-            <div className="grid grid-cols-5 gap-2 mb-4">
-               {['QRIS','ATM','DANA','GOPAY','BANK'].map(s => {
+          <div className="mb-4">
+            <div className="grid grid-cols-5 gap-2 mb-3">
+               {['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
                  const isAct = selectedSumber === s;
                  return (
                    <button 
@@ -1075,7 +1074,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                  )
                })}
             </div>
-          </>
+          </div>
         )}
 
         {/* KETERANGAN ROW */}
@@ -1093,7 +1092,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <textarea 
               ref={keteranganRef}
               rows={1}
-              value={keterangan}
+              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? selectedSumber : keterangan}
               onChange={(e) => {
                 setKeterangan(e.target.value);
               }}
@@ -1255,7 +1254,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
            onClick={onSaveInternal}
            disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-           className="w-full bg-gradient-to-r from-[#94a3b8] via-[#818cf8] to-[#8ca5ff] text-white text-[13px] font-black py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(129,140,248,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50"
+           className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-black py-3 rounded-xl shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50 disabled:bg-gray-300 disabled:shadow-none disabled:text-gray-500"
         >
            {isSaving ? (
              <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
