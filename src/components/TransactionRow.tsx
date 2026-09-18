@@ -52,22 +52,22 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
       formattedKeterangan = `${metode} | Tarik ${formatK(nom - adm)} | (Admin Dalam) ${formatK(adm)} Potong saldo`;
       
       detailTable = (
-        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
-           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
+           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
               <span className="text-slate-500">Metode</span>
-              <span className="text-slate-800">{metode} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded ml-1">ADMIN DALAM</span></span>
+              <span className="text-slate-800 text-right flex-1 ml-2">{metode} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded ml-1">ADMIN DALAM</span></span>
            </div>
-           <div className="flex justify-between border-b border-slate-100 p-1.5">
+           <div className="flex justify-between border-b border-slate-200 p-1.5">
               <span className="text-slate-500">Nominal Tarik</span>
-              <span className="text-slate-800">Rp {formatRp(nom)}</span>
+              <span className="text-slate-800 text-right flex-1">Rp {formatRp(nom)}</span>
            </div>
-           <div className="flex justify-between border-b border-slate-100 p-1.5">
+           <div className="flex justify-between border-b border-slate-200 p-1.5">
               <span className="text-slate-500">Admin (Potong Saldo)</span>
-              <span className="text-rose-600 font-black">- Rp {formatRp(adm)}</span>
+              <span className="text-rose-600 font-black text-right flex-1">- Rp {formatRp(adm)}</span>
            </div>
            <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
               <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
-              <span className="text-blue-700 text-[12px] font-black">
+              <span className="text-blue-700 text-[12px] font-black text-right flex-1">
                  Rp {formatRp(nom - adm)}
               </span>
            </div>
@@ -78,22 +78,22 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
       formattedKeterangan = `${metode} | Tarik ${formatK(nom)} | Admin Tunai ${formatK(adm)}`;
       
       detailTable = (
-        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
-           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
+           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
               <span className="text-slate-500">Metode</span>
-              <span className="text-slate-800">{metode} <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1">ADMIN TUNAI</span></span>
+              <span className="text-slate-800 text-right flex-1 ml-2">{metode} <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1">ADMIN TUNAI</span></span>
            </div>
-           <div className="flex justify-between border-b border-slate-100 p-1.5">
+           <div className="flex justify-between border-b border-slate-200 p-1.5">
               <span className="text-slate-500">Nominal Tarik</span>
-              <span className="text-slate-800">Rp {formatRp(nom)}</span>
+              <span className="text-slate-800 text-right flex-1">Rp {formatRp(nom)}</span>
            </div>
-           <div className="flex justify-between border-b border-slate-100 p-1.5">
+           <div className="flex justify-between border-b border-slate-200 p-1.5">
               <span className="text-slate-500">Admin (Tunai)</span>
-              <span className="text-emerald-600 font-black">+ Rp {formatRp(adm)}</span>
+              <span className="text-emerald-600 font-black text-right flex-1">+ Rp {formatRp(adm)}</span>
            </div>
            <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
               <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
-              <span className="text-blue-700 text-[12px] font-black">
+              <span className="text-blue-700 text-[12px] font-black text-right flex-1">
                  Rp {formatRp(nom)}
               </span>
            </div>
@@ -102,24 +102,24 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
     }
   } else {
      // Generic table format for other transactions
-     detailTable = (
-        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
-           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+      detailTable = (
+        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
+           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
               <span className="text-slate-500 min-w-[60px]">Keterangan</span>
-              <span className="text-slate-800 text-right max-w-[180px] leading-tight break-words">{formattedKeterangan}</span>
+              <span className="text-slate-800 text-right flex-1 ml-4 leading-tight break-words">{formattedKeterangan}</span>
            </div>
-           <div className="flex justify-between border-b border-slate-100 p-1.5">
+           <div className="flex justify-between border-b border-slate-200 p-1.5">
               <span className="text-slate-500">Total Nominal</span>
-              <span className="text-slate-800 font-black">Rp {formatRp(t.nominal)}</span>
+              <span className="text-slate-800 font-black text-right flex-1">Rp {formatRp(t.nominal)}</span>
            </div>
            {t.adminFee > 0 && (
            <div className="flex justify-between p-1.5 bg-rose-50/30">
               <span className="text-slate-500">Admin Fee</span>
-              <span className="text-rose-600 font-black">Rp {formatRp(t.adminFee)}</span>
+              <span className="text-rose-600 font-black text-right flex-1">Rp {formatRp(t.adminFee)}</span>
            </div>
            )}
         </div>
-     );
+      );
   }
 
   return (
@@ -150,7 +150,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         </div>
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex flex-col items-end gap-0 mr-4 mt-0.5">
+        <div className="flex flex-col items-end gap-0 pr-1 mt-0.5 shrink-0">
           <div className={cn(
             "text-[13px] font-black tracking-tight leading-tight",
             isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black")
@@ -169,43 +169,45 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
       {/* DETAIL DRAWER */}
       {isOpen && (
         <div className="bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
-           <div className="flex justify-between items-start gap-2">
-             <div className="flex flex-col gap-0.5 flex-1 overflow-hidden pr-2">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Rincian Transaksi:</span>
-                  {t.isEdited && <span className="text-[7px] bg-amber-100 text-amber-700 px-1 py-[2px] rounded font-black leading-none">EDITED</span>}
-                </div>
-                
-                {detailTable}
-                
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mt-2">Tanggal:</span>
-                <span className="text-[10px] font-bold text-slate-700 leading-tight">
-                  {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
-                </span>
-             </div>
-             
-             <div className="flex gap-1.5 mt-1 shrink-0">
-                {canEdit ? (
-                  <button 
-                    onClick={handleEditClick}
-                    className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm h-[26px]"
-                  >
-                    <i className="fa-solid fa-pen text-[7px]"></i> EDIT
-                  </button>
-                ) : (
-                  <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg h-[24px] flex items-center">
-                    LOCKED
-                  </span>
-                )}
-                {canDelete && (
-                  <button 
-                    onClick={handleDeleteClick}
-                    className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100 shadow-sm"
-                  >
-                    <i className="fa-solid fa-trash-can text-[9px]"></i>
-                  </button>
-                )}
-             </div>
+           <div className="flex flex-col gap-0.5 w-full">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Rincian Transaksi:</span>
+                {t.isEdited && <span className="text-[7px] bg-amber-100 text-amber-700 px-1 py-[2px] rounded font-black leading-none">EDITED</span>}
+              </div>
+              
+              {detailTable}
+              
+              <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-200/50">
+                 <div className="flex flex-col gap-0.5">
+                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Tanggal:</span>
+                   <span className="text-[10px] font-bold text-slate-700 leading-tight">
+                     {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
+                   </span>
+                 </div>
+                 
+                 <div className="flex gap-1.5 shrink-0">
+                    {canEdit ? (
+                      <button 
+                        onClick={handleEditClick}
+                        className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm h-[26px]"
+                      >
+                        <i className="fa-solid fa-pen text-[7px]"></i> EDIT
+                      </button>
+                    ) : (
+                      <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg h-[24px] flex items-center">
+                        LOCKED
+                      </span>
+                    )}
+                    {canDelete && (
+                      <button 
+                        onClick={handleDeleteClick}
+                        className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100 shadow-sm"
+                      >
+                        <i className="fa-solid fa-trash-can text-[9px]"></i>
+                      </button>
+                    )}
+                 </div>
+              </div>
            </div>
         </div>
       )}

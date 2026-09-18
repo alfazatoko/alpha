@@ -972,7 +972,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         {activePcTab === 'transaksi' && (
           <>
           <div className="flex flex-col">
-          <div className="divide-y divide-slate-200 border-t border-slate-200">
+          <div className="flex flex-col border-t border-slate-200">
             {paginatedTransactions.length === 0 ? (
               <div className="py-16 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Tidak ada transaksi</p>
@@ -1050,7 +1050,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-            <div className="divide-y divide-slate-50">
+            <div className="flex flex-col">
               {filteredSaldoTransactions.length === 0 ? (
                 <div className="py-6 text-center text-slate-300 text-[10px] font-bold">KOSONG</div>
               ) : (
