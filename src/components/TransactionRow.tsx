@@ -37,7 +37,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   const formatK = (num: number) => (num % 1000 === 0) ? `${num / 1000}K` : formatRp(num);
 
   let formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
-  let detailKeterangan = formattedKeterangan;
+  let detailTable: React.ReactNode = null;
 
   if (t.kategori === 'Tarik Tunai' && t.keterangan?.startsWith('TARIK_TUNAI|')) {
     const parts = t.keterangan.split('|');
@@ -50,13 +50,78 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
     if (adminPotong) {
       // Checkbox DALAM = DICEKLIS (Admin Potong Saldo)
       formattedKeterangan = `${metode} | Tarik ${formatK(nom - adm)} | (Admin Dalam) ${formatK(adm)} Potong saldo`;
-      detailKeterangan = `Tarik tunai via ${metode} [ADMIN_DALAM] sebesar Rp${formatRp(nom)}. Uang diserahkan: Rp${formatRp(nom - adm)} (Admin ${formatK(adm)} potong saldo).`;
+      
+      detailTable = (
+        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
+           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+              <span className="text-slate-500">Metode</span>
+              <span className="text-slate-800">{metode} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded ml-1">ADMIN DALAM</span></span>
+           </div>
+           <div className="flex justify-between border-b border-slate-100 p-1.5">
+              <span className="text-slate-500">Nominal Tarik</span>
+              <span className="text-slate-800">Rp {formatRp(nom)}</span>
+           </div>
+           <div className="flex justify-between border-b border-slate-100 p-1.5">
+              <span className="text-slate-500">Admin (Potong Saldo)</span>
+              <span className="text-rose-600 font-black">- Rp {formatRp(adm)}</span>
+           </div>
+           <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
+              <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
+              <span className="text-blue-700 text-[12px] font-black">
+                 Rp {formatRp(nom - adm)}
+              </span>
+           </div>
+        </div>
+      );
     } else {
       // Checkbox DALAM = TIDAK DICEKLIS (Admin Tunai)
       formattedKeterangan = `${metode} | Tarik ${formatK(nom)} | Admin Tunai ${formatK(adm)}`;
-      detailKeterangan = `Tarik tunai via ${metode} sebesar Rp${formatRp(nom)}. Uang diserahkan: Rp${formatRp(nom)} (Admin ${formatK(adm)} bayar tunai).`;
+      
+      detailTable = (
+        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
+           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+              <span className="text-slate-500">Metode</span>
+              <span className="text-slate-800">{metode} <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1">ADMIN TUNAI</span></span>
+           </div>
+           <div className="flex justify-between border-b border-slate-100 p-1.5">
+              <span className="text-slate-500">Nominal Tarik</span>
+              <span className="text-slate-800">Rp {formatRp(nom)}</span>
+           </div>
+           <div className="flex justify-between border-b border-slate-100 p-1.5">
+              <span className="text-slate-500">Admin (Tunai)</span>
+              <span className="text-emerald-600 font-black">+ Rp {formatRp(adm)}</span>
+           </div>
+           <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
+              <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
+              <span className="text-blue-700 text-[12px] font-black">
+                 Rp {formatRp(nom)}
+              </span>
+           </div>
+        </div>
+      );
     }
+  } else {
+     // Generic table format for other transactions
+     detailTable = (
+        <div className="flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full max-w-[280px]">
+           <div className="flex justify-between border-b border-slate-100 p-1.5 bg-slate-50">
+              <span className="text-slate-500 min-w-[60px]">Keterangan</span>
+              <span className="text-slate-800 text-right max-w-[180px] leading-tight break-words">{formattedKeterangan}</span>
+           </div>
+           <div className="flex justify-between border-b border-slate-100 p-1.5">
+              <span className="text-slate-500">Total Nominal</span>
+              <span className="text-slate-800 font-black">Rp {formatRp(t.nominal)}</span>
+           </div>
+           {t.adminFee > 0 && (
+           <div className="flex justify-between p-1.5 bg-rose-50/30">
+              <span className="text-slate-500">Admin Fee</span>
+              <span className="text-rose-600 font-black">Rp {formatRp(t.adminFee)}</span>
+           </div>
+           )}
+        </div>
+     );
   }
+
   return (
     <div className="flex flex-col group transaction-row-container">
       <div 
@@ -104,29 +169,31 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
       {/* DETAIL DRAWER */}
       {isOpen && (
         <div className="bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
-           <div className="flex justify-between items-start">
-             <div className="flex flex-col gap-0.5">
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Keterangan:</span>
-                <span className="text-[10px] font-bold text-slate-700 leading-tight max-w-[180px]">
-                  {detailKeterangan}
-                  {t.isEdited && <span className="ml-1 text-[7px] bg-amber-100 text-amber-700 px-1 rounded font-black">EDIT</span>}
-                </span>
+           <div className="flex justify-between items-start gap-2">
+             <div className="flex flex-col gap-0.5 flex-1 overflow-hidden pr-2">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Rincian Transaksi:</span>
+                  {t.isEdited && <span className="text-[7px] bg-amber-100 text-amber-700 px-1 py-[2px] rounded font-black leading-none">EDITED</span>}
+                </div>
+                
+                {detailTable}
+                
                 <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mt-2">Tanggal:</span>
                 <span className="text-[10px] font-bold text-slate-700 leading-tight">
                   {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
                 </span>
              </div>
              
-             <div className="flex gap-1.5 mt-1">
+             <div className="flex gap-1.5 mt-1 shrink-0">
                 {canEdit ? (
                   <button 
                     onClick={handleEditClick}
-                    className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm"
+                    className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm h-[26px]"
                   >
                     <i className="fa-solid fa-pen text-[7px]"></i> EDIT
                   </button>
                 ) : (
-                  <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg">
+                  <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg h-[24px] flex items-center">
                     LOCKED
                   </span>
                 )}
