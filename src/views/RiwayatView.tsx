@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { formatRupiah, cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { Transaction } from '../types'
 import TransactionRow from '../components/TransactionRow'
@@ -40,6 +40,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activePcTab, setActivePcTab] = useState<'transaksi' | 'tambah-saldo'>('transaksi')
   const [isPcKategoriOpen, setIsPcKategoriOpen] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const handleScroll = (dir: 'left' | 'right') => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' })
+    }
+  }
   
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -971,6 +978,44 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
         {activePcTab === 'transaksi' && (
           <>
+          {/* QUICK CHIP FILTER KATEGORI */}
+          <div className="relative flex items-center mb-4 group">
+            <button 
+              onClick={() => handleScroll('left')}
+              className="absolute left-0 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -ml-3 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <i className="fa-solid fa-chevron-left text-[10px]"></i>
+            </button>
+            <div ref={scrollRef} className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 w-full px-2 scroll-smooth">
+              {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+                const isActive = props.filterKategori.includes(cat);
+                return (
+                  <button 
+                    key={cat}
+                    onClick={() => {
+                      props.setFilterKategori([cat]);
+                      setCurrentPage(1);
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all border shrink-0",
+                      isActive 
+                        ? "bg-violet-600 border-violet-600 text-white shadow-md shadow-violet-500/20" 
+                        : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                    )}
+                  >
+                    {cat === 'Semua' ? 'Semua Kategori' : cat}
+                  </button>
+                );
+              })}
+            </div>
+            <button 
+              onClick={() => handleScroll('right')}
+              className="absolute right-0 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -mr-3 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <i className="fa-solid fa-chevron-right text-[10px]"></i>
+            </button>
+          </div>
+
           <div className="flex flex-col">
           <div className="flex flex-col border-t border-slate-200">
             {paginatedTransactions.length === 0 ? (
@@ -1060,11 +1105,11 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     const canDelete = isToday && props.kasirRole === 'owner'
 
                     return (
-                    <div key={t.id} className="py-2 px-4 flex flex-col gap-1.5 hover:bg-slate-50/50 transition-colors">
-                       <div className="flex justify-between items-center">
-                         <div className="flex gap-4 items-center">
-                            <div className="text-[9px] font-black text-slate-300 w-4">{i+1}</div>
-                            <div className="flex flex-col gap-0">
+                    <div key={t.id} className="py-3 px-4 flex flex-col gap-1 hover:bg-slate-50/50 transition-colors border-b border-slate-100 last:border-b-0">
+                       <div className="flex justify-between items-start">
+                         <div className="flex gap-4 items-start">
+                            <div className="text-[9px] font-black text-slate-300 w-4 mt-0.5">{i+1}</div>
+                            <div className="flex flex-col gap-0.5">
                                <div className={cn(
                                  "text-[13px] font-black uppercase leading-tight",
                                  t.kategori.includes('Bank') ? "text-blue-600" : 
@@ -1072,39 +1117,49 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                                )}>
                                  {t.kategori.replace('Isi ', 'TAMBAH ')}
                                </div>
-                               <div className="text-[10px] text-slate-400 font-bold">
+                               
+                               <div className="text-[10px] text-slate-700 font-black italic break-words pr-2">
+                                 {t.keterangan || '-'}
+                               </div>
+
+                               <div className="text-[9px] text-slate-400 font-bold mt-1">
                                   {(() => {
                                     const d = parseLocalISO(t.timestamp);
-                                    return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                    const hari = d.toLocaleDateString('id-ID', { weekday: 'long' });
+                                    const tgl = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                                    const jam = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                                    return `${hari}, ${tgl}, ${jam}`;
                                   })()}
                                </div>
                             </div>
                          </div>
-                          <div className="text-right flex flex-col items-end gap-0">
-                            <div className="text-[13px] font-black text-slate-800 leading-tight">{formatRupiah(t.nominal).replace(',00', '')}</div>
-                            <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[120px]">{t.keterangan || '-'}</div>
+                         
+                         <div className="text-right flex flex-col items-end justify-between self-stretch min-h-[50px]">
+                            <div className="text-[13px] font-black text-slate-800 leading-tight">
+                              {formatRupiah(t.nominal).replace(',00', '')}
+                            </div>
+                            
+                            <div className="flex justify-end items-center gap-1.5 mt-auto pt-2">
+                              {canEdit ? (
+                                <button 
+                                  onClick={() => props.onEdit(t)}
+                                  className="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-1"
+                                >
+                                  <i className="fa-solid fa-pen text-[7px]"></i> EDIT
+                                </button>
+                              ) : (
+                                <span className="text-[7px] text-slate-400 font-bold italic py-1 px-2.5 bg-slate-50 border border-slate-100 rounded-lg">LOCKED</span>
+                              )}
+                              {canDelete && (
+                                <button 
+                                  onClick={() => props.onDelete?.(t)}
+                                  className="bg-rose-50 text-rose-600 w-6 h-6 rounded-lg flex items-center justify-center"
+                                >
+                                  <i className="fa-solid fa-trash-can text-[8px]"></i>
+                                </button>
+                              )}
+                            </div>
                          </div>
-                       </div>
-                       
-                       <div className="flex justify-end items-center gap-2 border-t border-slate-100 pt-2 mt-0.5">
-                         {canEdit ? (
-                           <button 
-                             onClick={() => props.onEdit(t)}
-                             className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"
-                           >
-                             <i className="fa-solid fa-pen text-[8px]"></i> EDIT
-                           </button>
-                         ) : (
-                           <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2.5 bg-slate-50 rounded-lg">LOCKED</span>
-                         )}
-                         {canDelete && (
-                           <button 
-                             onClick={() => props.onDelete?.(t)}
-                             className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center"
-                           >
-                             <i className="fa-solid fa-trash-can text-[9px]"></i>
-                           </button>
-                         )}
                        </div>
                     </div>
                     )
@@ -1146,21 +1201,20 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               {/* Jenis Kategori -> Multiple Checkboxes */}
               <div>
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Jenis Kategori</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => (
-                    <label key={cat} className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                        checked={localKategori.includes(cat)}
-                        onChange={(e) => {
+                <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2">
+                  {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+                    const isChecked = localKategori.includes(cat);
+                    return (
+                      <button 
+                        key={cat}
+                        onClick={() => {
                           if (cat === 'Semua') {
                             setLocalKategori(['Semua'])
                           } else {
                             let next = [...localKategori]
                             if (next.includes('Semua')) next = []
                             
-                            if (e.target.checked) {
+                            if (!isChecked) {
                               next.push(cat)
                             } else {
                               next = next.filter(c => c !== cat)
@@ -1170,10 +1224,17 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                             setLocalKategori(next)
                           }
                         }}
-                      />
-                      <span className="text-xs font-bold text-slate-700">{cat === 'Semua' ? 'Semua Kategori' : cat}</span>
-                    </label>
-                  ))}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all border shrink-0",
+                          isChecked 
+                            ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20" 
+                            : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                        )}
+                      >
+                        {cat === 'Semua' ? 'Semua Kategori' : cat}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

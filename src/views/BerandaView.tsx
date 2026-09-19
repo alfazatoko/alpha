@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
@@ -59,6 +59,9 @@ interface BerandaViewProps {
   adminRules?: Record<string, any>
   activeStoreId?: string | 'all'
   pantauStoreId?: string | 'all'
+  targetTrx?: number
+  gajiBonusList?: any[]
+  fetchGajiBonus?: () => void
   setPantauStoreId?: (id: string | 'all') => void
   stores?: Store[]
   isPc?: boolean
@@ -97,7 +100,10 @@ const GajiPanel: React.FC<{
   storeName?: string
   showToast: (m: string) => void
   activeStoreId: string
-}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId }) => {
+  transactions?: any[]
+  gajiBonusList?: any[]
+  fetchGajiBonus?: () => void
+}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId, transactions, gajiBonusList, fetchGajiBonus }) => {
   if (activeStoreId === 'all') {
     return (
       <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
@@ -127,7 +133,23 @@ const GajiPanel: React.FC<{
   const slipRef = React.useRef<HTMLDivElement>(null)
 
   const [izinList, setIzinList] = useState<any[]>([])
+
+  // State untuk Tab Gaji Panel
+  const [gajiTab, setGajiTab] = useState<'form-gaji' | 'riwayat-gaji' | 'bonus'>('form-gaji')
+  const [expandedRiwayatGaji, setExpandedRiwayatGaji] = useState<string | null>(null)
   
+  // Filter state for riwayat
+  const [filterGajiKasir, setFilterGajiKasir] = useState<string>('semua')
+  const [filterBonusKasir, setFilterBonusKasir] = useState<string>('semua')
+  
+  // State untuk Form Bonus
+  const [bonusKasir, setBonusKasir] = useState<string>('')
+  const [bonusPeriode, setBonusPeriode] = useState<string>(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  })
+  const [bonusNominal, setBonusNominal] = useState<string>('')
+  const [bonusIsPaid, setBonusIsPaid] = useState<boolean>(true)
   useEffect(() => {
     const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`)
     if (saved) {
@@ -147,7 +169,10 @@ const GajiPanel: React.FC<{
     if (!selectedKasir && kasirArr.length > 0) {
       setSelectedKasir(kasirArr[0][0])
     }
-  }, [kasirArr, selectedKasir])
+    if (!bonusKasir && kasirArr.length > 0) {
+      setBonusKasir(kasirArr[0][0])
+    }
+  }, [kasirArr, selectedKasir, bonusKasir])
 
   const selectedName = kasirList[selectedKasir]?.name || ''
   const absenCount = new Set((absensiList || []).filter(a => (a.username === selectedKasir || a.nama_kasir === selectedName) && a.tanggal && a.tanggal.startsWith(month)).map(a => a.tanggal)).size
@@ -264,8 +289,116 @@ const GajiPanel: React.FC<{
     }
   }
 
+  const handleSimpanGaji = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast("Gagal: Anda belum login!");
+        return;
+      }
+      const newRecord = {
+        user_id: user.id,
+        store_id: activeStoreId,
+        kasir_id: selectedKasir,
+        jenis: 'Gaji',
+        nominal: totalGaji,
+        keterangan: `Periode: ${monthLabel}, Hari Kerja: ${hariKerja}, Libur: ${currentIzin}, Pokok: Rp ${formatRupiah(gajiPokok)}, Bonus: Rp ${formatRupiah(parseNum(bonus))}, Potongan: Rp ${formatRupiah(potonganIzinVal + parseNum(potonganLain))}`,
+        timestamp: new Date().toISOString()
+      };
+      const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
+      if (error) throw error;
+      showToast("Berhasil menyimpan riwayat gaji ke server!");
+      if (fetchGajiBonus) fetchGajiBonus();
+    } catch (e: any) {
+      showToast("Gagal simpan: " + e.message);
+    }
+  }
+
+  const handleSimpanBonus = async () => {
+    try {
+      if (!bonusKasir || !bonusPeriode || !bonusNominal) {
+         showToast("Harap lengkapi form bonus!"); return;
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast("Gagal: Anda belum login!");
+        return;
+      }
+      const numBonus = parseNum(bonusNominal);
+      const newRecord = {
+        user_id: user.id,
+        store_id: activeStoreId,
+        kasir_id: bonusKasir,
+        jenis: 'Bonus',
+        nominal: bonusIsPaid ? numBonus : 0,
+        keterangan: `Periode: ${bonusPeriode}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${bonusIsPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`,
+        timestamp: new Date().toISOString()
+      };
+      const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
+      if (error) throw error;
+      showToast("Berhasil menyimpan data bonus ke server!");
+      setBonusPeriode(""); setBonusNominal("");
+      if (fetchGajiBonus) fetchGajiBonus();
+    } catch (e: any) {
+      showToast("Gagal simpan bonus: " + e.message);
+    }
+  }
+
+  const handleTandaiDibayar = async (tx: any) => {
+    try {
+       const match = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+       let targetNominal = 0;
+       if (match) {
+         targetNominal = parseNum(match[1]);
+       }
+       const newKeterangan = tx.keterangan.replace('Belum Dibayar', 'Sudah Dibayar');
+       
+       const { error } = await supabase.from('gaji_bonus').update({
+          nominal: targetNominal,
+          keterangan: newKeterangan
+       }).eq('id', tx.id);
+       if (error) throw error;
+       showToast("Bonus berhasil ditandai lunas!");
+       if (fetchGajiBonus) fetchGajiBonus();
+    } catch(e: any) {
+       showToast("Gagal update bonus: " + e.message);
+    }
+  }
+
   return (
     <div className="space-y-4 pb-10">
+      {/* TABS (KOLOM BERWARNA BIRU) */}
+      <div className="bg-gradient-to-br from-blue-600 to-sky-500 p-3 rounded-2xl mb-4 shadow-lg border border-blue-400/30">
+        <h3 className="text-[10px] font-black text-white/90 uppercase tracking-widest text-center mb-3 drop-shadow-sm">
+          Menu Pengelolaan Gaji & Bonus
+        </h3>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setGajiTab('form-gaji')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'form-gaji' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-file-invoice text-sm mb-1"></i>
+            Form Gajih
+          </button>
+          <button 
+            onClick={() => setGajiTab('riwayat-gaji')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'riwayat-gaji' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-clock-rotate-left text-sm mb-1"></i>
+            Riwayat Gajih
+          </button>
+          <button 
+            onClick={() => setGajiTab('bonus')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'bonus' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-gift text-sm mb-1"></i>
+            Form Bonus
+          </button>
+        </div>
+      </div>
+
+      {gajiTab === 'form-gaji' && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
       <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
@@ -463,20 +596,207 @@ const GajiPanel: React.FC<{
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={handleSimpanGaji}
+          className="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-cloud-arrow-up text-[10px]"></i> SIMPAN GAJIH
+        </button>
         <button
           onClick={handleShareText}
-          className="flex-1 bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+          className="flex-1 bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
-          <i className="fa-solid fa-copy text-xs"></i> SALIN TEKS
+          <i className="fa-solid fa-copy text-[10px]"></i> SALIN TEKS
         </button>
         <button
           onClick={handleSharePDF}
-          className="flex-1 bg-green-600 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+          className="flex-1 bg-green-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
-          <i className="fa-solid fa-share-nodes text-xs"></i> BAGIKAN PDF
+          <i className="fa-solid fa-share-nodes text-[10px]"></i> PDF
         </button>
       </div>
+      </div>
+      )}
+
+      {gajiTab === 'riwayat-gaji' && (
+        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="flex justify-between items-center px-1">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Riwayat Gajih</p>
+            <select
+              value={filterGajiKasir}
+              onChange={e => setFilterGajiKasir(e.target.value)}
+              className="text-[9px] p-1.5 rounded-lg border border-gray-200 outline-none font-bold bg-white text-gray-600 focus:border-green-400"
+            >
+              <option value="semua">SEMUA KASIR</option>
+              {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+            </select>
+          </div>
+          {(gajiBonusList || [])?.filter((t: any) => t.jenis === 'Gaji' && (filterGajiKasir === 'semua' || t.kasir_id === filterGajiKasir)).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((tx: any) => {
+            const isExpanded = expandedRiwayatGaji === tx.id;
+            const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir Terhapus';
+            const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            return (
+              <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                 <div 
+                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                   onClick={() => setExpandedRiwayatGaji(isExpanded ? null : tx.id)}
+                 >
+                   <div>
+                     <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
+                     <p className="text-[10px] text-gray-500 font-bold mt-0.5"><i className="fa-regular fa-calendar text-green-500 mr-1"></i> {dateStr}</p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-[11px] font-black text-green-600 tabular-nums">{formatRupiah(tx.nominal)}</p>
+                     <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px] text-gray-400 mt-1`}></i>
+                   </div>
+                 </div>
+                 {isExpanded && (
+                   <div className="p-4 bg-gray-50 border-t border-gray-100 text-[10px] font-bold text-gray-600 leading-relaxed space-y-1.5">
+                     <p className="text-green-700 font-black text-[9px] uppercase tracking-widest mb-2 border-b border-green-200/50 pb-1">Rincian Slip Gaji:</p>
+                     {tx.keterangan.replace('[GAJI] ', '').split(', ').map((item: string, idx: number) => {
+                       const parts = item.split(': ');
+                       if (parts.length < 2) return null;
+                       const lbl = parts[0];
+                       const val = parts.slice(1).join(': ');
+                       return (
+                         <div key={idx} className="flex justify-between items-center">
+                           <span className="text-gray-500 uppercase text-[8px] font-bold tracking-widest">{lbl}</span>
+                           <span className="font-black text-gray-800">{val}</span>
+                         </div>
+                       )
+                     })}
+                   </div>
+                 )}
+              </div>
+            )
+          })}
+          {(!(gajiBonusList || []) || (gajiBonusList || []).filter((t: any) => t.jenis === 'Gaji').length === 0) && (
+             <div className="text-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+               <i className="fa-solid fa-box-open text-3xl text-gray-200 mb-2"></i>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada riwayat gajih</p>
+             </div>
+          )}
+        </div>
+      )}
+
+      {gajiTab === 'bonus' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+            <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-gift"></i> Form Bonus Kasir
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PILIH KASIR</label>
+                <div className="relative">
+                  <select
+                    value={bonusKasir}
+                    onChange={e => setBonusKasir(e.target.value)}
+                    className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400 appearance-none cursor-pointer"
+                  >
+                    {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL BONUS</label>
+                <input
+                  type="date"
+                  value={bonusPeriode}
+                  onChange={e => setBonusPeriode(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NOMINAL BONUS</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={bonusNominal}
+                    onChange={e => setBonusNominal(formatNum(e.target.value))}
+                    className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-lg border border-gray-200">
+                <input 
+                  type="checkbox" 
+                  checked={bonusIsPaid} 
+                  onChange={e => setBonusIsPaid(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600 rounded"
+                />
+                <span className="text-[10px] font-black text-gray-700 uppercase tracking-widest">Sudah Dibayarkan Lunas</span>
+              </label>
+              
+              <button
+                onClick={handleSimpanBonus}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-cloud-arrow-up text-xs"></i> SIMPAN DATA BONUS
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center px-1">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Riwayat Bonus</p>
+              <select
+                value={filterBonusKasir}
+                onChange={e => setFilterBonusKasir(e.target.value)}
+                className="text-[9px] p-1.5 rounded-lg border border-gray-200 outline-none font-bold bg-white text-gray-600 focus:border-blue-400"
+              >
+                <option value="semua">SEMUA KASIR</option>
+                {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+              </select>
+            </div>
+            {(gajiBonusList || [])?.filter((t: any) => t.jenis === 'Bonus' && (filterBonusKasir === 'semua' || t.kasir_id === filterBonusKasir)).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((tx: any) => {
+              const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir Terhapus';
+              const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+              const isPaid = tx.keterangan.includes('Sudah Dibayar');
+              const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+              const targetNominal = targetMatch ? targetMatch[1] : formatRupiah(tx.nominal);
+              const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
+              const periode = periodeMatch ? periodeMatch[1] : "-";
+              
+              return (
+                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
+                   <div>
+                     <div className="flex items-center gap-2 mb-1">
+                       <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
+                       <span className={cn("px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest", isPaid ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                         {isPaid ? "LUNAS" : "BELUM DIBAYAR"}
+                       </span>
+                     </div>
+                     <p className="text-[10px] text-gray-500 font-bold"><i className="fa-regular fa-clock text-blue-500 mr-1"></i> Periode {periode}</p>
+                     <p className="text-[9px] text-gray-400 font-bold mt-0.5">Tgl Input: {dateStr}</p>
+                   </div>
+                   <div className="text-right flex flex-col items-end">
+                     <p className="text-xs font-black text-blue-600 tabular-nums mb-2">Rp {targetNominal}</p>
+                     {!isPaid && (
+                       <button
+                         onClick={() => handleTandaiDibayar(tx)}
+                         className="bg-white text-green-600 border border-green-200 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 hover:bg-green-50 transition-all flex items-center gap-1.5 shadow-sm"
+                       >
+                         <i className="fa-solid fa-check"></i> Tandai Lunas
+                       </button>
+                     )}
+                   </div>
+                </div>
+              )
+            })}
+            {(!(gajiBonusList || []) || (gajiBonusList || []).filter((t: any) => t.jenis === 'Bonus').length === 0) && (
+               <div className="text-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                 <i className="fa-solid fa-gift text-3xl text-gray-200 mb-2"></i>
+                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada riwayat bonus</p>
+               </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -982,7 +1302,7 @@ const NotificationLogPanel: React.FC<{
   showToast?: (msg: string) => void
   onConfirm?: (title: string, msg: string, onOk: () => void) => void
   bonusKasirList?: string[]
-  ownerLateKasirs?: { date: string, name: string, lateMins: number, shift: string, time: string }[]
+  ownerLateKasirs?: { date: string, name: string, lateMins: number, shift: string, time: string, alasan_telat?: string }[]
 }> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [], ownerLateKasirs = [] }) => {
   const [filterType, setFilterType] = useState<string>('all')
   const [notifList, setNotifList] = useState<OwnerNotificationItem[]>([])
@@ -1063,7 +1383,7 @@ const NotificationLogPanel: React.FC<{
           items.unshift({
             id: lateId,
             title: `⏰ Kasir Telat: ${late.name}`,
-            message: `${late.name} (Shift ${late.shift}) absen masuk pukul ${late.time} (Telat ${late.lateMins} menit).`,
+            message: `${late.name} (Shift ${late.shift}) absen masuk pukul ${late.time} (Telat ${late.lateMins} menit).${late.alasan_telat ? `\n\nAlasan: ${late.alasan_telat}` : ''}`,
             date: notifDate,
             type: 'anomaly',
             isRead: false
@@ -1311,61 +1631,6 @@ function calculateTenure(joinDateStr: string) {
   return { months, days, totalMonths: months };
 }
 
-const getShiftInfo = (jam_masuk: string, finSettings?: Record<string, string>) => {
-  const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
-  const [hStr, mStr] = safeJam.split(':');
-  const hour = parseInt(hStr || '0', 10);
-  const min = parseInt(mStr || '0', 10);
-  const currentMins = hour * 60 + min;
-
-  const mode = finSettings?.shiftMode || '1-shift';
-  let isLate = false;
-  let lateMins = 0;
-  let shiftName = 'PAGI';
-  let isPagi = true;
-
-  if (mode === '1-shift') {
-    const startStr = finSettings?.shiftPagiStart || '08:00';
-    const tol = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
-    const [h, m] = startStr.split(':').map(Number);
-    const startMins = h * 60 + m;
-    if (currentMins > startMins + tol) {
-      isLate = true;
-      lateMins = currentMins - startMins;
-    }
-    shiftName = 'PAGI'; // Label as Pagi but it means full day
-    isPagi = true;
-  } else {
-    const startPagiStr = finSettings?.shiftPagiStart || '08:00';
-    const tolPagi = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
-    const startSiangStr = finSettings?.shiftSiangStart || '15:00';
-    const tolSiang = parseInt(finSettings?.shiftSiangTolerance || '15', 10);
-
-    const [hP, mP] = startPagiStr.split(':').map(Number);
-    const [hS, mS] = startSiangStr.split(':').map(Number);
-    const startPagiMins = hP * 60 + mP;
-    const startSiangMins = hS * 60 + mS;
-
-    // Shift Pagi boundary is 13:30 (13*60+30), so Kasir Siang can clock in slightly early
-    if (currentMins < 13 * 60 + 30) {
-      shiftName = 'PAGI';
-      isPagi = true;
-      if (currentMins > startPagiMins + tolPagi) {
-        isLate = true;
-        lateMins = currentMins - startPagiMins;
-      }
-    } else {
-      shiftName = 'SIANG';
-      isPagi = false;
-      if (currentMins > startSiangMins + tolSiang) {
-        isLate = true;
-        lateMins = currentMins - startSiangMins;
-      }
-    }
-  }
-
-  return { isLate, lateMins, shiftName, isPagi };
-}
 
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -1439,7 +1704,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           tanggal: e.tanggal,
           jam: e.jam_masuk,
           lateMins: info.lateMins,
-          shiftName: info.shiftName
+          shiftName: info.shiftName,
+          alasan_telat: e.alasan_telat
         });
       }
     });
@@ -1455,7 +1721,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     if (props.kasirRole !== 'owner') return [];
     
     // Group attendance by date and cashier
-    const lateEntries: { date: string, name: string, lateMins: number, shift: string, time: string }[] = [];
+    const lateEntries: { date: string, name: string, lateMins: number, shift: string, time: string, alasan_telat?: string }[] = [];
     const entries = props.absensiList || [];
     
     // Get unique dates per cashier (first login of the day)
@@ -1475,7 +1741,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           name: props.kasirList?.[e.kasir_id]?.name || e.kasir_id,
           lateMins: info.lateMins,
           shift: info.shiftName,
-          time: e.jam_masuk
+          time: e.jam_masuk,
+          alasan_telat: e.alasan_telat
         });
       }
     });
@@ -1526,6 +1793,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isRentDismissed, setIsRentDismissed] = useState(() => {
     return localStorage.getItem('alphaPro_owner_rent_dismissed') === 'true'
   })
+
+  const handleToggleLembur = async (entryId: number | string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'Lembur' ? 'Hadir' : 'Lembur';
+      const { error } = await supabase.from('absensi').update({ status: newStatus }).eq('id', entryId);
+      if (error) throw error;
+      if (props.showToast) props.showToast(`Status berhasil diubah menjadi ${newStatus}`);
+    } catch (e: any) {
+      if (props.showToast) props.showToast("Gagal mengubah status: " + e.message);
+    }
+  };
 
   useEffect(() => {
     if (props.kasirRole !== 'owner') return;
@@ -1766,6 +2044,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // Absensi Modal State
   const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
   const [absenLateHistoryId, setAbsenLateHistoryId] = useState<string | null>(null)
+  const [absenLiburHistoryId, setAbsenLiburHistoryId] = useState<string | null>(null)
   const [absenFilterMonth, setAbsenFilterMonth] = useState(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -2131,15 +2410,23 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
                         ) : (
                           kasirLateHistory.map((late, i) => (
-                            <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex items-center justify-between">
-                              <div>
-                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
-                                <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                            <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                                  <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
-                                <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
-                              </div>
+                              {late.alasan_telat && (
+                                <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
+                                  <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-0.5">Alasan:</p>
+                                  <p className="text-[10px] font-bold text-gray-800 leading-tight">{late.alasan_telat}</p>
+                                </div>
+                              )}
                             </div>
                           ))
                         )}
@@ -3535,24 +3822,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerSubView === 'absen' && (
-                <div className="space-y-6">
-                  {/* FILTER BULAN DAN TABS */}
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Periode Kehadiran</label>
+                <div className="relative">
+                  {/* FILTER BULAN DAN TABS - STICKY MINIMALIS */}
+                  <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pt-1 pb-3 -mx-4 px-4 flex items-end justify-between gap-2 border-b border-gray-100/50 mb-4">
+                    <div className="flex-1">
+                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block mb-0.5 ml-0.5">Periode Kehadiran</label>
                       <input 
                         type="month"
                         value={absenFilterMonth}
                         onChange={(e) => setAbsenFilterMonth(e.target.value)}
-                        className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-teal-400"
+                        className="w-full max-w-[130px] text-[10px] py-1.5 px-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-gray-50 focus:border-teal-400 focus:bg-white transition-all shadow-inner"
                       />
                     </div>
-                    <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                    <div className="flex bg-gray-100 p-0.5 rounded-[10px]">
                       <button 
                         onClick={() => setAbsenTab('summary')} 
                         className={cn(
-                          "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                          absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                          absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
                         )}
                       >
                         Ringkasan
@@ -3560,11 +3847,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <button 
                         onClick={() => setAbsenTab('full')} 
                         className={cn(
-                          "flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                          absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-500"
+                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                          absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
                         )}
                       >
-                        Riwayat Full
+                        Riwayat
                       </button>
                     </div>
                   </div>
@@ -3598,7 +3885,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             </span>
                           </div>
                           
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-3">
                             {cashiers.map(([id, acc]) => {
                               // Data absensi bulan ini untuk kasir ini
                               const monthData = (props.absensiList || []).filter(a => 
@@ -3621,7 +3908,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               
                               let pagi = 0
                               let siang = 0
-                              const latePagiDates: {tanggal: string, jam: string}[] = []
+                              const latePagiDates: {tanggal: string, jam: string, alasan_telat?: string}[] = []
                               
                               // Hitung shift pagi vs siang dari setiap tanggal unik (ambil entri pertama tiap hari)
                               const dailyFirstEntries = new Map<string, any>()
@@ -3636,7 +3923,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 if (info.isPagi) {
                                   pagi++
                                   if (info.isLate) {
-                                    latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`})
+                                    latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`, alasan_telat: entry.alasan_telat})
                                   }
                                 }
                                 else siang++
@@ -3644,6 +3931,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               
                               // Urutkan riwayat telat dari yang terbaru
                               latePagiDates.sort((a, b) => b.tanggal.localeCompare(a.tanggal))
+                              
+                              const liburDates: string[] = []
+                              for (let i = 1; i <= effectiveDaysPassed; i++) {
+                                const dStr = `${absenFilterMonth}-${String(i).padStart(2, '0')}`
+                                if (!uniqueAttendedDates.has(dStr)) {
+                                  liburDates.push(dStr)
+                                }
+                              }
+                              liburDates.sort((a,b) => b.localeCompare(a))
                               
                               return (
                                 <div key={`rekap-${id}`} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
@@ -3671,29 +3967,93 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                       <p className="text-[8px] font-bold text-indigo-600 uppercase mb-1">Siang</p>
                                       <p className="text-[12px] font-black text-indigo-700">{siang}</p>
                                     </div>
-                                    <div className="bg-rose-50/50 rounded-xl p-2 border border-rose-50">
-                                      <p className="text-[8px] font-bold text-rose-600 uppercase mb-1">Libur</p>
+                                    <div 
+                                      className={cn("bg-rose-50/50 rounded-xl p-2 border transition-all", liburDates.length > 0 ? "border-rose-300 cursor-pointer active:scale-95 shadow-sm" : "border-rose-50")}
+                                      onClick={() => liburDates.length > 0 ? setAbsenLiburHistoryId(absenLiburHistoryId === id ? null : id) : undefined}
+                                    >
+                                      <div className="flex items-center justify-center gap-1 mb-1">
+                                        <p className="text-[8px] font-bold text-rose-600 uppercase">Libur</p>
+                                        {liburDates.length > 0 && <i className="fa-solid fa-calendar-xmark text-[8px] text-rose-500"></i>}
+                                      </div>
                                       <p className="text-[12px] font-black text-rose-700">{totalLibur}</p>
                                     </div>
                                   </div>
                                   
+                                  {(() => {
+                                    const totalLembur = monthData.filter(e => e.status === 'Lembur').length;
+                                    if (totalLembur > 0) {
+                                      return (
+                                        <div className="mt-2 text-center bg-emerald-50/70 border border-emerald-100 rounded-lg p-1.5">
+                                          <p className="text-[10px] font-black text-emerald-600 tracking-wide uppercase">
+                                            <i className="fa-solid fa-medal text-emerald-500 mr-1"></i> {totalLembur} Hari Lembur Sah
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                  
                                   {absenLateHistoryId === id && latePagiDates.length > 0 && (
-                                    <div className="mt-3 p-3 bg-red-50/80 rounded-xl border border-red-100 animate-in slide-in-from-top-2 fade-in duration-300">
-                                      <p className="text-[9px] font-black text-red-800 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                        <i className="fa-solid fa-clock-rotate-left text-red-600"></i> Riwayat Telat <span className="lowercase font-bold opacity-80">({latePagiDates.length} x telat)</span>
-                                      </p>
-                                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
-                                        {latePagiDates.map((late, idx) => {
-                                          const [y, m, d] = late.tanggal.split('-');
-                                          const dateObj = new Date(Number(y), Number(m)-1, Number(d));
-                                          const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-                                          return (
-                                            <div key={idx} className="flex justify-between items-center text-[10px] bg-white px-2.5 py-2 rounded-lg border border-red-50/50 shadow-sm">
-                                              <span className="font-bold text-gray-700">{dateStr}</span>
-                                              <span className="font-black text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded">{late.jam}</span>
-                                            </div>
-                                          )
-                                        })}
+                                    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+                                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl relative animate-in slide-in-from-top-4">
+                                        <button onClick={() => setAbsenLateHistoryId(null)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-500 transition-colors">
+                                          <i className="fa-solid fa-xmark"></i>
+                                        </button>
+                                        <h3 className="text-[14px] font-black text-gray-800 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                          <i className="fa-solid fa-clock-rotate-left text-red-500"></i> Riwayat Telat
+                                        </h3>
+                                        <p className="text-[10px] text-gray-500 font-bold mb-4">Kasir: <span className="text-gray-800">{acc.name}</span></p>
+                                        <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                                          {latePagiDates.map((late, idx) => {
+                                            const [y, m, d] = late.tanggal.split('-');
+                                            const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                            const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                            return (
+                                              <div key={idx} className="flex flex-col gap-1 text-[11px] bg-red-50/50 px-3 py-2.5 rounded-xl border border-red-100 shadow-sm">
+                                                <div className="flex justify-between items-center">
+                                                  <span className="font-bold text-gray-700">{dateStr}</span>
+                                                  <span className="font-black text-red-600 bg-white px-2 py-1 rounded shadow-sm border border-red-100">{late.jam}</span>
+                                                </div>
+                                                {late.alasan_telat ? (
+                                                  <p className="text-[9px] text-gray-600 font-medium bg-white/50 p-1.5 rounded border border-red-50 mt-0.5">
+                                                    <span className="font-bold text-gray-800">Alasan:</span> {late.alasan_telat}
+                                                  </p>
+                                                ) : (
+                                                  <p className="text-[9px] text-gray-400 font-medium bg-white/50 p-1.5 rounded border border-red-50 mt-0.5 italic">
+                                                    Tidak ada keterangan
+                                                  </p>
+                                                )}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {absenLiburHistoryId === id && liburDates.length > 0 && (
+                                    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+                                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl relative animate-in slide-in-from-top-4">
+                                        <button onClick={() => setAbsenLiburHistoryId(null)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-rose-100 hover:text-rose-500 transition-colors">
+                                          <i className="fa-solid fa-xmark"></i>
+                                        </button>
+                                        <h3 className="text-[14px] font-black text-gray-800 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                          <i className="fa-solid fa-calendar-xmark text-rose-500"></i> Riwayat Libur
+                                        </h3>
+                                        <p className="text-[10px] text-gray-500 font-bold mb-4">Kasir: <span className="text-gray-800">{acc.name}</span></p>
+                                        <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                                          {liburDates.map((ldate, idx) => {
+                                            const [y, m, d] = ldate.split('-');
+                                            const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                            const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                            return (
+                                              <div key={idx} className="flex justify-between items-center text-[11px] bg-rose-50/50 px-3 py-2.5 rounded-xl border border-rose-100 shadow-sm">
+                                                <span className="font-bold text-gray-700">{dateStr}</span>
+                                                <span className="font-black text-rose-600 bg-white px-2 py-1 rounded shadow-sm border border-rose-100">LIBUR</span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
                                       </div>
                                     </div>
                                   )}
@@ -3824,10 +4184,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                        shiftLabel += ` (TELAT ${info.lateMins}M)`;
                                        shiftColor = 'text-red-500';
                                     }
+
+                                    if (entry.status === 'Lembur') {
+                                       shiftLabel = 'LEMBUR SAH';
+                                       shiftColor = 'text-emerald-500';
+                                    }
                                   }
 
                                   return (
-                                    <div key={id} className="px-4 py-3 flex justify-between items-center bg-white">
+                                    <div key={id} className="px-4 py-3 flex justify-between items-center bg-white border-b border-gray-50/50">
                                       <div className="w-1/3">
                                         <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
                                       </div>
@@ -3836,6 +4201,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                         <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
                                           {shiftLabel}
                                         </p>
+                                        {entry?.alasan_telat && (
+                                          <p className="text-[7.5px] text-red-500 font-bold mt-1 max-w-[120px] mx-auto leading-tight line-clamp-2" title={entry.alasan_telat}>
+                                            "{entry.alasan_telat}"
+                                          </p>
+                                        )}
+                                        {entry && props.kasirRole === 'owner' && (
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); if(entry.id) handleToggleLembur(entry.id, entry.status); }}
+                                            className={cn("mt-1.5 px-2 py-0.5 rounded text-[7px] font-black uppercase active:scale-95 transition-all shadow-sm border", entry.status === 'Lembur' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100")}
+                                          >
+                                            {entry.status === 'Lembur' ? 'Batalkan Lembur' : 'Jadikan Lembur'}
+                                          </button>
+                                        )}
                                       </div>
                                       
                                       <div className="w-1/4 text-right">
@@ -3867,6 +4245,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   storeName={props.storeName} 
                   showToast={props.showToast}
                   activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
+                  transactions={props.transactions}
+                  gajiBonusList={props.gajiBonusList}
+                  fetchGajiBonus={props.fetchGajiBonus}
                 />
               )}
 

@@ -199,12 +199,15 @@ const App: React.FC = () => {
   }, [activeStoreId, googleSession?.user?.id])
 
   // ── Login / Logout Handlers ──
-  const handleLogin = useCallback((username: string, account: KasirAccount) => {
+  const handleLogin = useCallback((username: string, account: KasirAccount, alasan_telat?: string) => {
     localStorage.setItem('alphaPro_loggedIn', 'true')
     localStorage.setItem('alphaPro_username', username)
     localStorage.setItem('alphaPro_name', account.name)
     localStorage.setItem('alphaPro_role', account.role)
     localStorage.setItem('alphaPro_login_date', getLocalDateString())
+    if (alasan_telat) {
+      localStorage.setItem('alphaPro_temp_alasan_telat', alasan_telat)
+    }
     setIsLoggedIn(true)
     setCurrentUsername(username)
     setCurrentAccount(account)
@@ -345,6 +348,13 @@ const App: React.FC = () => {
           onLogin={handleLogin} 
           storeName={activeStore?.name} 
           kasirListOverride={kasirList} 
+          financialSettings={(() => {
+            try {
+              const stored = localStorage.getItem(`alphaPro_${activeStoreId}_financial`);
+              if (stored) return JSON.parse(stored);
+            } catch(e) {}
+            return {};
+          })()}
         />
       </div>
     )
@@ -539,6 +549,7 @@ const MainApp: React.FC<MainAppProps> = ({
   const [saldoBank, setSaldoBank] = useState<number>(0)
   const [totalPenjualan, setTotalPenjualan] = useState<number>(0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [gajiBonusList, setGajiBonusList] = useState<any[]>([])
   const [kasModal, setKasModal] = useState<number>(0)
   const [absensi, setAbsensi] = useState<any[]>([])
   const [todayAbsen, setTodayAbsen] = useState<string>('--:--:--')
@@ -1237,7 +1248,8 @@ const MainApp: React.FC<MainAppProps> = ({
         const now = new Date()
         const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
         
-        const { error: insertError } = await supabase.from('absensi').insert({
+        const alasanTelat = localStorage.getItem('alphaPro_temp_alasan_telat')
+        const payload: any = {
           user_id: googleUid,
           username,
           nama: account.name,
@@ -1245,7 +1257,15 @@ const MainApp: React.FC<MainAppProps> = ({
           jam_masuk: jam,
           status: 'Hadir',
           store_id: activeStoreId !== 'all' ? activeStoreId : null
-        })
+        }
+        
+        if (alasanTelat) {
+          payload.alasan_telat = alasanTelat
+        }
+        
+        const { error: insertError } = await supabase.from('absensi').insert(payload)
+        
+        localStorage.removeItem('alphaPro_temp_alasan_telat')
 
         if (insertError) {
           console.error("Absensi Insert Error:", insertError.message || insertError)
@@ -1304,6 +1324,20 @@ const MainApp: React.FC<MainAppProps> = ({
   const [syncPast30Days, setSyncPast30Days] = useState(false)
 
   // --- DYNAMIC DATA FETCHER FOR PAST DATES ---
+  const fetchGajiBonus = useCallback(async () => {
+    let q = supabase.from('gaji_bonus').select('*').order('timestamp', { ascending: false }).limit(500);
+    if (activeStoreId !== 'all') {
+      const targetStoreId = activeStoreId === 'all' && pantauStoreId ? pantauStoreId : activeStoreId;
+      if (targetStoreId !== 'all') {
+         q = q.eq('store_id', targetStoreId);
+      }
+    }
+    const { data, error } = await q;
+    if (!error && data) {
+      setGajiBonusList(data);
+    }
+  }, [activeStoreId, pantauStoreId]);
+
   useEffect(() => {
     if (!googleUid) return;
     
@@ -1383,7 +1417,11 @@ const MainApp: React.FC<MainAppProps> = ({
       fetchRange(thirtyDaysAgo.toISOString().split('T')[0], today.toISOString().split('T')[0], `Past30Days`);
       setSyncPast30Days(false);
     }
-  }, [filterTanggalLaporan, filterTanggalMulai, filterTanggalAkhir, syncPast30Days, googleUid, fetchedDates, targetStoreId])
+
+    // Fetch Gaji & Bonus History
+    fetchGajiBonus();
+
+  }, [filterTanggalLaporan, filterTanggalMulai, filterTanggalAkhir, syncPast30Days, googleUid, fetchedDates, targetStoreId, fetchGajiBonus])
 
   // Recalculate daily balances whenever transactions change
   useEffect(() => {
@@ -2722,6 +2760,8 @@ const MainApp: React.FC<MainAppProps> = ({
             pantauStoreId={pantauStoreId}
             setPantauStoreId={setPantauStoreId}
             stores={stores}
+            gajiBonusList={gajiBonusList}
+            fetchGajiBonus={fetchGajiBonus}
           />
 
           <RiwayatView 

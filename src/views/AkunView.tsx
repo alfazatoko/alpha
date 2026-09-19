@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { cn, compressImage } from '../lib/utils'
+import { cn, compressImage, getShiftInfo } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
@@ -57,60 +57,6 @@ function calculateTenure(joinDateStr: string) {
   return { months, days, totalMonths: months };
 }
 
-const getShiftInfo = (jam_masuk: string, finSettings?: Record<string, string>) => {
-  const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
-  const [hStr, mStr] = safeJam.split(':');
-  const hour = parseInt(hStr || '0', 10);
-  const min = parseInt(mStr || '0', 10);
-  const currentMins = hour * 60 + min;
-
-  const mode = finSettings?.shiftMode || '1-shift';
-  let isLate = false;
-  let lateMins = 0;
-  let shiftName = 'PAGI';
-  let isPagi = true;
-
-  if (mode === '1-shift') {
-    const startStr = finSettings?.shiftPagiStart || '08:00';
-    const tol = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
-    const [h, m] = startStr.split(':').map(Number);
-    const startMins = h * 60 + m;
-    if (currentMins > startMins + tol) {
-      isLate = true;
-      lateMins = currentMins - startMins;
-    }
-    shiftName = 'PAGI';
-    isPagi = true;
-  } else {
-    const startPagiStr = finSettings?.shiftPagiStart || '08:00';
-    const tolPagi = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
-    const startSiangStr = finSettings?.shiftSiangStart || '15:00';
-    const tolSiang = parseInt(finSettings?.shiftSiangTolerance || '15', 10);
-
-    const [hP, mP] = startPagiStr.split(':').map(Number);
-    const [hS, mS] = startSiangStr.split(':').map(Number);
-    const startPagiMins = hP * 60 + mP;
-    const startSiangMins = hS * 60 + mS;
-
-    if (currentMins < 13 * 60 + 30) {
-      shiftName = 'PAGI';
-      isPagi = true;
-      if (currentMins > startPagiMins + tolPagi) {
-        isLate = true;
-        lateMins = currentMins - startPagiMins;
-      }
-    } else {
-      shiftName = 'SIANG';
-      isPagi = false;
-      if (currentMins > startSiangMins + tolSiang) {
-        isLate = true;
-        lateMins = currentMins - startSiangMins;
-      }
-    }
-  }
-
-  return { isLate, lateMins, shiftName, isPagi };
-}
 
 function calculateAttendanceStats(username: string, cashierName: string, joinDateStr: string, absensiList: any[], activeStoreId: string) {
   const today = new Date();
@@ -1384,12 +1330,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                       <div>
                                         <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Masa Kerja (Terhitung dr tgl join)</p>
                                         <p className="text-lg font-black">{tenure.months} Bulan {tenure.days} Hari</p>
-                                        {isBonus && <p className="text-xs font-bold text-amber-600 mt-1"><i className="fa-solid fa-gift mr-1 animate-bounce"></i> Waktunya Bonus 6 Bulanan!</p>}
+                                        {isBonus && <p className="text-xs font-bold text-amber-600 mt-1"><i className="fa-solid fa-gift mr-1 animate-bounce"></i> Waktunya Bonus 6 Bulanan! (Cek Tab Bonus di Menu Gaji)</p>}
                                       </div>
-                                      <button onClick={() => setShowPaymentForm(!showPaymentForm)} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm active:scale-95 transition-all flex items-center gap-2 ${isBonus ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                                        <i className={showPaymentForm ? "fa-solid fa-xmark" : "fa-solid fa-money-bills"}></i>
-                                        {showPaymentForm ? 'Batal' : 'Catat Pembayaran'}
-                                      </button>
                                     </div>
                                   )}
 
@@ -1542,189 +1484,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               );
                             })()}
 
-                            {/* Payment Section */}
-                            {showPaymentForm ? (
-                              <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 animate-in fade-in duration-200">
-                                <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-widest mb-4">Form Pembayaran</h4>
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                  <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Jenis Pembayaran</label>
-                                    <select
-                                      value={paymentType}
-                                      onChange={e => setPaymentType(e.target.value as 'gaji' | 'bonus')}
-                                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
-                                      style={{ color: '#000000' }}
-                                    >
-                                      <option value="gaji">Gaji Bulanan</option>
-                                      <option value="bonus">Bonus 6 Bulanan</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nominal (Rp)</label>
-                                    <input
-                                      type="number"
-                                      value={paymentAmount}
-                                      onChange={e => setPaymentAmount(e.target.value)}
-                                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
-                                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                    />
-                                  </div>
-                                </div>
-                                <div className="mb-4">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Keterangan / Catatan</label>
-                                  <input
-                                    type="text"
-                                    value={paymentNote}
-                                    onChange={e => setPaymentNote(e.target.value)}
-                                    placeholder="Contoh: Gaji bulan Agustus, Bonus kinerja, dll"
-                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
-                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                  />
-                                </div>
-                                <button
-                                  onClick={async () => {
-                                    if (!paymentAmount) return alert("Masukkan nominal!");
-                                    try {
-                                      const kData = props.kasirList![selectedKaryawan];
-                                      const history = kData.paymentHistory || [];
-                                      const newEntry = {
-                                        id: Date.now().toString(),
-                                        date: new Date().toISOString(),
-                                        type: paymentType,
-                                        amount: Number(paymentAmount),
-                                        note: paymentNote
-                                      };
-                                      if (props.onSaveCashierSelf) {
-                                        await props.onSaveCashierSelf(selectedKaryawan, {
-                                          ...kData,
-                                          paymentHistory: [newEntry, ...history]
-                                        });
-                                        setPaymentAmount('');
-                                        setPaymentNote('');
-                                        setShowPaymentForm(false);
-                                        setSavedStatus(true);
-                                        setTimeout(() => setSavedStatus(false), 2000);
-                                      }
-                                    } catch (e: any) {
-                                      alert(e.message || "Gagal mencatat pembayaran");
-                                    }
-                                  }}
-                                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-sm"
-                                  style={{ color: '#ffffff' }}
-                                >
-                                  Catat ke Riwayat
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden animate-in fade-in duration-200 shadow-sm bg-white dark:bg-slate-800">
-                                <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                                  <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                                    <i className="fa-solid fa-clock-rotate-left text-indigo-500"></i>
-                                    Riwayat Pembayaran & Bonus
-                                  </h4>
-                                </div>
-                                
-                                {/* Summary Cards */}
-                                <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-slate-700">
-                                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30 flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-500 flex items-center justify-center shrink-0">
-                                      <i className="fa-solid fa-hourglass-half"></i>
-                                    </div>
-                                    <div>
-                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Belum Dibayar</p>
-                                      <p className="text-sm font-black text-amber-600 dark:text-amber-400">
-                                        Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
-                                          .filter((p: any) => p.status === 'pending')
-                                          .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30 flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500 flex items-center justify-center shrink-0">
-                                      <i className="fa-solid fa-check-double"></i>
-                                    </div>
-                                    <div>
-                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Sudah Dibayar</p>
-                                      <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                                        Rp {(props.kasirList[selectedKaryawan].paymentHistory || [])
-                                          .filter((p: any) => p.status === 'paid' || !p.status)
-                                          .reduce((acc: number, cur: any) => acc + cur.amount, 0).toLocaleString('id-ID')}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
 
-                                <div className="p-4 max-h-[350px] overflow-y-auto">
-                                  {props.kasirList[selectedKaryawan].paymentHistory?.length ? (
-                                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 dark:before:via-slate-700 before:to-transparent">
-                                      {props.kasirList[selectedKaryawan].paymentHistory.map((ph: any) => {
-                                        const isPending = ph.status === 'pending';
-                                        return (
-                                          <div key={ph.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                            <div className={cn(
-                                              "flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-slate-800 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10",
-                                              isPending ? "bg-amber-100 text-amber-500" : "bg-emerald-100 text-emerald-500"
-                                            )}>
-                                              <i className={`fa-solid ${ph.type === 'bonus' ? 'fa-gift' : 'fa-money-bill-wave'} text-[10px]`}></i>
-                                            </div>
-                                            <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow">
-                                              <div className="flex items-start justify-between mb-2">
-                                                <div>
-                                                  <span className={cn(
-                                                    "inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest mb-1",
-                                                    ph.type === 'bonus' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
-                                                  )}>
-                                                    {ph.type}
-                                                  </span>
-                                                  <p className="text-xs font-black text-slate-800 dark:text-slate-200">Rp {ph.amount.toLocaleString('id-ID')}</p>
-                                                </div>
-                                                <p className="text-[8px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded">
-                                                  {new Date(ph.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}
-                                                </p>
-                                              </div>
-                                              {ph.note && <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-3">{ph.note}</p>}
-                                              
-                                              {isPending ? (
-                                                <button
-                                                  onClick={async () => {
-                                                    if(window.confirm('Tandai bonus ini sudah dibayarkan ke kasir?')) {
-                                                      try {
-                                                        const kData = props.kasirList![selectedKaryawan];
-                                                        const updatedHistory = kData.paymentHistory.map((item: any) => 
-                                                          item.id === ph.id ? { ...item, status: 'paid', paidAt: new Date().toISOString() } : item
-                                                        );
-                                                        if (props.onSaveCashierSelf) {
-                                                          await props.onSaveCashierSelf(selectedKaryawan, { ...kData, paymentHistory: updatedHistory });
-                                                          alert('Berhasil ditandai sudah dibayar!');
-                                                        }
-                                                      } catch(e) { alert('Gagal memproses'); }
-                                                    }
-                                                  }}
-                                                  className="w-full bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5"
-                                                >
-                                                  <i className="fa-solid fa-clock"></i> Belum Dibayar (Klik utk Lunasi)
-                                                </button>
-                                              ) : (
-                                                <div className="w-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 border border-emerald-100 dark:border-emerald-900/30">
-                                                  <i className="fa-solid fa-circle-check"></i> Sudah Dibayar {ph.paidAt && `(${new Date(ph.paidAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})`}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    <div className="py-12 text-center flex flex-col items-center">
-                                      <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3 text-slate-300 dark:text-slate-600">
-                                        <i className="fa-solid fa-folder-open text-2xl"></i>
-                                      </div>
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Belum ada riwayat</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
 
                           </div>
                         ) : (

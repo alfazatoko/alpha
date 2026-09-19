@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getLocalDateString } from '../lib/utils'
+import { getLocalDateString, getShiftInfo } from '../lib/utils'
 
 export interface KasirAccount {
   pin: string
@@ -36,12 +36,13 @@ export const saveKasirAccounts = (accounts: Record<string, KasirAccount>) => {
 
 
 interface LoginScreenProps {
-  onLogin: (username: string, account: KasirAccount) => void
+  onLogin: (username: string, account: KasirAccount, alasan_telat?: string) => void
   storeName?: string
   kasirListOverride?: Record<string, KasirAccount>
+  financialSettings?: Record<string, string>
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirListOverride }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirListOverride, financialSettings }) => {
   const [selectedUser, setSelectedUser] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
@@ -50,6 +51,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
   const [hasAbsenToday, setHasAbsenToday] = useState(false)
   const [isAbsenChecked, setIsAbsenChecked] = useState(false)
+  const [alasanTelat, setAlasanTelat] = useState('')
+  const [currentTimeStr, setCurrentTimeStr] = useState(() => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeStr(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+    }, 60000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (selectedUser && kasirList[selectedUser]?.role !== 'owner') {
@@ -105,6 +115,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
       return
     }
 
+    const shiftInfo = account.role !== 'owner' ? getShiftInfo(currentTimeStr, financialSettings) : null;
+    const isLate = shiftInfo?.isLate || false;
+
+    if (account.role !== 'owner' && !hasAbsenToday && isAbsenChecked) {
+      if (isLate && !alasanTelat.trim()) {
+        setError('Anda terlambat masuk shift. Harap isi alasan keterlambatan.')
+        triggerShake()
+        return
+      }
+    }
+
     // Only validate PIN if enabled
     if (isPinEnabled) {
       if (!pin) {
@@ -130,7 +151,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
        localStorage.setItem('alphaPro_absen_harian', JSON.stringify(absens))
     }
 
-    onLogin(selectedUser, account)
+    onLogin(selectedUser, account, isAbsenChecked && isLate ? alasanTelat.trim() : undefined)
   }
 
   const triggerShake = () => {
@@ -182,10 +203,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirList
                   <input type="checkbox" checked={isAbsenChecked} onChange={e => { setIsAbsenChecked(e.target.checked); setError(''); }} className="w-5 h-5 accent-amber-500 rounded" />
                   <span className="text-xs font-black text-amber-700 uppercase tracking-widest flex-1">
                      ABSEN MASUK
-                     <div className="text-[9px] text-amber-600 font-bold mt-0.5 tracking-normal">Jam {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div>
+                     <div className="text-[9px] text-amber-600 font-bold mt-0.5 tracking-normal">Jam {currentTimeStr}</div>
                   </span>
                   <i className="fa-solid fa-clock text-amber-400 text-lg"></i>
                </label>
+               {isAbsenChecked && getShiftInfo(currentTimeStr, financialSettings).isLate && (
+                 <div className="mt-3 bg-red-50 p-3 rounded-xl border border-red-200 shadow-inner animate-in slide-in-from-top-2">
+                   <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation"></i> Anda Terlambat ({getShiftInfo(currentTimeStr, financialSettings).lateMins} Menit)</p>
+                   <textarea 
+                     className="w-full text-xs p-2 rounded-lg border-red-300 focus:border-red-500 focus:ring-red-500 bg-white placeholder-red-300 text-red-900" 
+                     placeholder="Tulis alasan keterlambatan Anda di sini secara jelas..." 
+                     rows={3} 
+                     value={alasanTelat}
+                     onChange={e => { setAlasanTelat(e.target.value); setError(''); }}
+                   />
+                 </div>
+               )}
             </div>
           )}
 

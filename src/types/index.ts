@@ -25,6 +25,17 @@ export interface Transaction {
   store_id?: string; // Menyimpan ID toko transaksi ini
 }
 
+export interface GajiBonusRecord {
+  id: string;
+  user_id: string;
+  store_id: string;
+  kasir_id: string;
+  jenis: 'Gaji' | 'Bonus';
+  nominal: number;
+  keterangan: string;
+  timestamp: string;
+}
+
 export interface AppState {
   saldoBank: number;
   totalPenjualan: number;
@@ -37,8 +48,9 @@ export interface Absensi {
   nama: string;
   tanggal: string; // YYYY-MM-DD
   jam_masuk: string; // HH:mm:ss
-  status: 'Hadir' | 'Libur';
+  status: 'Hadir' | 'Libur' | 'Lembur';
   store_id?: string; // Menyimpan ID toko absensi ini
+  alasan_telat?: string;
 }
 
 export interface PresetOtomatis {

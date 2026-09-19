@@ -91,3 +91,59 @@ export const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quali
     reader.onerror = (err) => reject(err);
   });
 };
+
+export const getShiftInfo = (jam_masuk: string, finSettings?: Record<string, string>) => {
+  const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
+  const [hStr, mStr] = safeJam.split(':');
+  const hour = parseInt(hStr || '0', 10);
+  const min = parseInt(mStr || '0', 10);
+  const currentMins = hour * 60 + min;
+
+  const mode = finSettings?.shiftMode || '1-shift';
+  let isLate = false;
+  let lateMins = 0;
+  let shiftName = 'PAGI';
+  let isPagi = true;
+
+  if (mode === '1-shift') {
+    const startStr = finSettings?.shiftPagiStart || '08:00';
+    const tol = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const [h, m] = startStr.split(':').map(Number);
+    const startMins = h * 60 + m;
+    if (currentMins > startMins + tol) {
+      isLate = true;
+      lateMins = currentMins - startMins;
+    }
+    shiftName = 'PAGI'; // Label as Pagi but it means full day
+    isPagi = true;
+  } else {
+    const startPagiStr = finSettings?.shiftPagiStart || '08:00';
+    const tolPagi = parseInt(finSettings?.shiftPagiTolerance || '15', 10);
+    const startSiangStr = finSettings?.shiftSiangStart || '15:00';
+    const tolSiang = parseInt(finSettings?.shiftSiangTolerance || '15', 10);
+
+    const [hP, mP] = startPagiStr.split(':').map(Number);
+    const [hS, mS] = startSiangStr.split(':').map(Number);
+    const startPagiMins = hP * 60 + mP;
+    const startSiangMins = hS * 60 + mS;
+
+    // Shift Pagi boundary is 13:30 (13*60+30), so Kasir Siang can clock in slightly early
+    if (currentMins < 13 * 60 + 30) {
+      shiftName = 'PAGI';
+      isPagi = true;
+      if (currentMins > startPagiMins + tolPagi) {
+        isLate = true;
+        lateMins = currentMins - startPagiMins;
+      }
+    } else {
+      shiftName = 'SIANG';
+      isPagi = false;
+      if (currentMins > startSiangMins + tolSiang) {
+        isLate = true;
+        lateMins = currentMins - startSiangMins;
+      }
+    }
+  }
+
+  return { isLate, lateMins, shiftName, isPagi };
+}
