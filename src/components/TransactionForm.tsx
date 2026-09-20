@@ -389,6 +389,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+
   const onSaveInternal = () => {
     setErrorMsg(null)
 
@@ -701,10 +702,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative">
             <textarea 
               ref={keteranganRef}
+              onFocus={handleInputFocus}
               rows={1} 
               placeholder="Tulis keterangan..." 
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
-              onFocus={handleInputFocus}
               onChange={(e) => {
                 const val = e.target.value.toUpperCase();
                 if (activeMode === 'TARIK') {
@@ -816,6 +817,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
+                onFocus={handleInputFocus}
                 type="text" 
                 inputMode="numeric" 
                 placeholder="0" 
@@ -859,6 +861,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={adminRef}
+                onFocus={handleInputFocus}
                 type="text" 
                 inputMode="numeric" 
                 placeholder="0" 
@@ -1098,6 +1101,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative">
             <textarea 
               ref={keteranganRef}
+              onFocus={handleInputFocus}
               rows={1}
               placeholder="Masukkan keterangan transaksi..."
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
@@ -1202,6 +1206,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
+                onFocus={handleInputFocus}
                 type="text"
                 inputMode="numeric" 
                 value={nominal}
@@ -1234,6 +1239,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
               <input 
                 ref={adminRef}
+                onFocus={handleInputFocus}
                 type="text"
                 inputMode="numeric" 
                 value={admin}
@@ -1343,6 +1349,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative">
             <textarea 
               ref={keteranganRef}
+              onFocus={handleInputFocus}
               rows={1}
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
@@ -1446,6 +1453,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
+                onFocus={handleInputFocus}
                 type="text" 
                 inputMode="numeric"
                 value={nominal}
@@ -1479,6 +1487,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
               <input 
                 ref={adminRef}
+                onFocus={handleInputFocus}
                 type="text"
                 inputMode="numeric"
                 value={admin}
