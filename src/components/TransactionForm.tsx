@@ -817,7 +817,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
-                onFocus={handleInputFocus}
                 type="text" 
                 inputMode="numeric" 
                 placeholder="0" 
@@ -861,7 +860,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={adminRef}
-                onFocus={handleInputFocus}
                 type="text" 
                 inputMode="numeric" 
                 placeholder="0" 
