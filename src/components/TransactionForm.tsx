@@ -123,12 +123,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (activeMode === 'DIGITAL') {
       if (sumberAplikasi === 'BANK') autoText = `Transfer Bank`
       else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`
-      else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` = ${nominal}` : ''}`
+      else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`
       else autoText = `Transfer ${sumberAplikasi}`
     } else if (activeMode === 'TARIK') {
       autoText = `TARIK_TUNAI|${selectedSumber}`
     } else {
-      autoText = `${kategori} = `
+      autoText = `${kategori} `
       if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += nominal
     }
     setKeterangan(autoText.toUpperCase())
@@ -419,7 +419,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Validasi khusus Order Kuota: Jual HARUS lebih besar dari Modal
       if (kategori === 'Order Kuota') {
         if (cleanAdmin <= cleanNominal) {
-          setErrorMsg('⚠️ Harga JUAL harus lebih besar dari Harga MODAL! Cek kembali inputan Anda.')
+          setErrorMsg(`Harga JUAL (${admin}) harus lebih besar dari MODAL (${nominal})!`)
           adminRef.current?.focus()
           return
         }
@@ -444,36 +444,34 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl -z-10 pointer-events-none -translate-x-1/3 translate-y-1/3"></div>
       
       {/* HEADER BARU */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between mb-5 px-1">
+        <div className="flex items-center">
           <div className="flex flex-col">
-            <h2 className="text-[15px] font-black text-[#1e293b] leading-tight">FORM TRANSAKSI</h2>
-            <p className="text-[12px] font-bold text-blue-600 leading-tight">Kategori Layanan</p>
+            <h2 className="text-[20px] font-black text-[#0f172a] leading-tight tracking-tight">Form Transaksi</h2>
+            <p className="text-[13px] font-bold text-slate-500 leading-tight">Kategori Layanan</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Tombol Kalkulator */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-50 border border-slate-200 rounded-full shadow-sm">
+          {/* Tombol Kalkulator / Data */}
           <button
             onClick={() => { setShowCalc(v => !v); setIsThemeMenuOpen(false); }}
             className={cn(
-              'h-10 px-3.5 rounded-[14px] flex items-center gap-2 transition-all shadow-md border font-black text-[11px] uppercase tracking-widest',
+              'w-8 h-8 rounded-full flex items-center justify-center transition-all',
               showCalc
-                ? 'bg-amber-500 border-amber-400 text-white shadow-amber-300'
-                : 'bg-white border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-600'
+                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30'
+                : 'bg-amber-100 text-amber-600 hover:bg-amber-200'
             )}
           >
-            <i className="fa-solid fa-calculator text-[13px]"></i>
-            <span className="hidden sm:inline">Kalkulator</span>
+            <i className="fa-solid fa-calculator text-[14px]"></i>
           </button>
 
           <div className="relative z-50">
             <button 
               onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-              className="h-10 px-3.5 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center gap-2 hover:shadow-lg hover:shadow-purple-300 transition-all shadow-md group border border-purple-400/50"
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-blue-500/30 hover:scale-105 transition-all group"
             >
-              <i className="fa-solid fa-palette text-[13px] text-white group-hover:rotate-12 transition-transform"></i>
-              <span className="text-[11px] font-black tracking-widest text-white uppercase">Tema</span>
+              <i className="fa-solid fa-palette text-[14px] group-hover:rotate-12 transition-transform"></i>
             </button>
           
             {isThemeMenuOpen && (
@@ -989,59 +987,62 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : activeTheme === 'TEMA_2' ? (
       <>
         {/* TEMA 2 LAYOUT */}
-        {/* Label Subteks: Pilih Mode Utama */}
-
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          {([
-            { id: 'DIGITAL',   label: 'TRANSFER',     icon: 'fa-paper-plane',        accentBg: 'bg-[#3b82f6]', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(59,130,246,0.5)]' },
-            { id: 'TARIK',     label: 'TARIK TUNAI',  icon: 'fa-money-bill-transfer', accentBg: 'bg-red-500',   accentShadow: 'shadow-[0_8px_16px_-6px_rgba(239,68,68,0.5)]' },
-            { id: 'AKSESORIS', label: 'AKSESORIS',    icon: 'fa-headset',             accentBg: 'bg-emerald-500', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(16,185,129,0.5)]' },
-            { id: 'VOUCHER',   label: 'JUAL VOUCHER', icon: 'fa-ticket',              accentBg: 'bg-orange-500', accentShadow: 'shadow-[0_8px_16px_-6px_rgba(249,115,22,0.5)]' },
-          ] as const).map(mode => {
-            const isAct = activeMode === mode.id;
-            return (
-              <button
-                 key={mode.id}
-                 onClick={() => {
-                   if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
-                   setActiveMode(mode.id as any);
-                   setIsAdminManuallyEdited(false);
-                   if (mode.id === 'TARIK') { setKategori('Tarik Tunai'); }
-                   else if (mode.id === 'AKSESORIS') { setKategori('Aksesoris'); }
-                   else if (mode.id === 'DIGITAL') { setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank'); }
-                 }}
-                 className={cn(
-                   "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-300 gap-1.5",
-                   isAct
-                     ? `${mode.accentBg} ${mode.accentShadow} border-transparent scale-[1.02]`
-                     : "bg-white border-gray-100 hover:border-gray-200 shadow-sm"
-                 )}
-              >
-                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", isAct ? "bg-white/20" : "bg-gray-100")}>
-                   <i className={cn("fa-solid text-base", mode.icon, isAct ? "text-white" : "text-gray-400")}></i>
-                </div>
-                <span className={cn("text-[8px] font-black uppercase text-center leading-tight", isAct ? "text-white" : "text-[#1e293b]")}>{mode.label}</span>
-              </button>
-            )
-          })}
+        <div className="bg-white rounded-[20px] p-2 mb-2 shadow-sm border border-gray-100/80">
+          <div className="grid grid-cols-4 gap-1.5">
+            {([
+              { id: 'DIGITAL',   label: 'TRANSFER',     icon: 'fa-paper-plane',        iconBg: 'bg-[#0066ff]', iconColor: 'text-white' },
+              { id: 'TARIK',     label: 'TARIK TUNAI',  icon: 'fa-money-bill-transfer', iconBg: 'bg-emerald-500', iconColor: 'text-white' },
+              { id: 'AKSESORIS', label: 'AKSESORIS',    icon: 'fa-headset',             iconBg: 'bg-purple-500', iconColor: 'text-white' },
+              { id: 'VOUCHER',   label: 'JUAL VOUCHER', icon: 'fa-ticket',              iconBg: 'bg-orange-500', iconColor: 'text-white' },
+            ] as const).map((mode) => {
+              const isAct = activeMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  onClick={() => {
+                    if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
+                    setActiveMode(mode.id as any);
+                    setIsAdminManuallyEdited(false);
+                    if (mode.id === 'TARIK') setKategori('Tarik Tunai');
+                    else if (mode.id === 'AKSESORIS') setKategori('Aksesoris');
+                    else setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank');
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+                  className={cn(
+                    "flex flex-col items-center justify-center py-2 px-1 rounded-lg border transition-all duration-200 outline-none",
+                    isAct ? "border-[#0066ff] shadow-[0_0_0_2px_rgba(0,102,255,0.2)] bg-blue-50/30 scale-[1.02]" : "border-transparent hover:bg-gray-50/80"
+                  )}
+                >
+                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center mb-1.5 shadow-sm transition-transform duration-200", isAct ? "scale-110 shadow-md" : "", mode.iconBg)}>
+                    <i className={cn("fa-solid text-[16px]", mode.icon, mode.iconColor)}></i>
+                  </div>
+                  <span className={cn("text-[9px] font-black uppercase tracking-tight text-center", isAct ? "text-[#0066ff]" : "text-[#475569]")}>{mode.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* KATEGORI ROW */}
-        <div className="flex items-center justify-between mb-4 bg-white border border-gray-100 rounded-2xl p-2 shadow-sm">
-          <span className="text-[11px] font-black text-[#1e293b] tracking-widest pl-3">KATEGORI</span>
-          <button 
-            onClick={() => setIsTujuanModalOpen(true)}
-            className="bg-white text-blue-700 text-[10px] font-bold px-3 py-2 rounded-xl border border-gray-100 flex items-center gap-2 hover:bg-blue-50 shadow-sm transition-colors"
-          >
-            {tujuanMasuk} <i className="fa-solid fa-chevron-down text-[9px] bg-[#eff4ff] p-1 rounded-full text-blue-600"></i>
-          </button>
+        <div className="flex items-center justify-between mb-2 bg-slate-100 border border-slate-200 rounded-lg p-2.5 shadow-sm cursor-pointer hover:bg-slate-200/80 transition-colors" onClick={() => setIsTujuanModalOpen(true)}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 text-[#0066ff] flex items-center justify-center">
+              <i className="fa-solid fa-border-all text-[18px]"></i>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-semibold text-slate-500 leading-tight mb-0.5">Kategori</span>
+              <span className="text-[14px] font-black text-[#0f172a] uppercase tracking-wider leading-tight">{tujuanMasuk}</span>
+            </div>
+          </div>
+          <div className="w-8 h-8 rounded-md bg-blue-50 flex items-center justify-center mr-1">
+            <i className="fa-solid fa-chevron-down text-[12px] text-[#0066ff]"></i>
+          </div>
         </div>
 
         {/* SUMBER APLIKASI (DIGITAL) ATAU METODE (TARIK) */}
         {activeMode === 'DIGITAL' && (
           <>
-
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
             {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s) => {
                const isAct = sumberAplikasi === s;
                const label = s === 'BANK' ? 'TRANSFER BANK' : s;
@@ -1052,8 +1053,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                      setSumberAplikasi(s); setIsKetAuto(true); setIsAdminManuallyEdited(false);
                    }}
                    className={cn(
-                     "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-200",
-                     isAct ? "border-slate-800 bg-slate-800 shadow-md scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
+                     "flex flex-col items-center justify-center py-2 px-1 rounded-lg border transition-all duration-200",
+                     isAct ? "border-[#0066ff] bg-[#0066ff] shadow-md shadow-blue-500/20 scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
                    )}
                  >
                    <span className={cn("text-[9px] font-black uppercase text-center", isAct ? "text-white" : "text-[#1e293b]")}>{label}</span>
@@ -1064,8 +1065,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </>
         )}
         {activeMode === 'TARIK' && (
-          <div className="mb-4">
-            <div className="grid grid-cols-5 gap-2 mb-3">
+          <div className="mb-2">
+            <div className="grid grid-cols-5 gap-1.5 mb-2">
                {['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
                  const isAct = selectedSumber === s;
                  return (
@@ -1073,8 +1074,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                      key={s}
                      onClick={() => { setSelectedSumber(s); setIsKetAuto(true); }}
                      className={cn(
-                       "flex flex-col items-center justify-center py-3 px-1 rounded-2xl border transition-all duration-200",
-                       isAct ? "border-slate-800 bg-slate-800 shadow-md scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
+                       "flex flex-col items-center justify-center py-2 px-1 rounded-lg border transition-all duration-200",
+                       isAct ? "border-[#0066ff] bg-[#0066ff] shadow-md shadow-blue-500/20 scale-[1.02]" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
                      )}
                    >
                      <span className={cn("text-[9px] font-black uppercase text-center", isAct ? "text-white" : "text-[#1e293b]")}>{s}</span>
@@ -1086,20 +1087,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* KETERANGAN ROW */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-2 px-1">
-            <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-              <i className="fa-solid fa-align-left text-gray-400"></i> KETERANGAN
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
-              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3.5 h-3.5 accent-[#3b82f6] rounded-sm" />
-              <span className="text-[8px] font-black text-[#334155] tracking-widest uppercase">OTOMATIS</span>
+        <div className="mb-2">
+          <div className="flex justify-between items-center mb-1.5 px-1">
+            <label className="text-[14px] font-black text-[#0f172a] tracking-tight">Keterangan</label>
+            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors shadow-sm">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-4 h-4 text-[#0066ff] bg-gray-100 border-gray-300 rounded focus:ring-[#0066ff] focus:ring-2 accent-[#0066ff]" />
+              <span className="text-[12px] font-bold text-[#0066ff]">Otomatis</span>
             </label>
           </div>
           <div className="relative">
             <textarea 
               ref={keteranganRef}
               rows={1}
+              placeholder="Masukkan keterangan transaksi..."
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value.toUpperCase();
@@ -1116,7 +1116,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
+              className="w-full resize-none text-[13px] font-bold py-2.5 px-3 rounded-lg border border-slate-200 bg-slate-100 placeholder:text-gray-400 placeholder:font-medium focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-slate-800"
             ></textarea>
           </div>
 
@@ -1193,16 +1193,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN ROW */}
-        <div className="flex gap-3 mb-5">
-          <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
+        <div className="flex gap-4 mb-2">
+          <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-[1.2]'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'HARGA' : 'NOMINAL'}
-              </label>
-              {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
+              <label className="text-[14px] font-black text-[#0f172a] tracking-tight">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</label>
             </div>
             <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
                 type="text"
@@ -1219,7 +1216,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }, 10);
                   }
                 }}
-                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
+                className="w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border border-slate-200 bg-slate-100 focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-[#0f172a]"
               />
             </div>
           </div>
@@ -1227,16 +1224,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> ADMIN
-              </label>
+              <label className={cn("text-[14px] font-black tracking-tight transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>{kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}</label>
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
-                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase">DALAM</span>
+                <span className="text-[9px] font-black text-purple-700 tracking-widest uppercase">Dalam</span>
               </label>
             </div>
             <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
               <input 
                 ref={adminRef}
                 type="text"
@@ -1249,7 +1244,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setTimeout(() => btnSimpanRef.current?.click(), 10);
                   }
                 }}
-                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
+                className={cn(
+                  "w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border focus:ring-4 outline-none transition-all",
+                  kategori === 'Order Kuota' && (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    return m > 0 && j > 0 && j <= m
+                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                      : m > 0 && j > m
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
+                        : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff] focus:ring-blue-50"
+                  })() || (isAdminNonTunai 
+                    ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50" 
+                    : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400 focus:ring-purple-50")
+                )}
               />
             </div>
           </div>
@@ -1270,16 +1278,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
            onClick={onSaveInternal}
            disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-           className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-black py-3 rounded-xl shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50 disabled:bg-gray-300 disabled:shadow-none disabled:text-gray-500"
+           className="w-full bg-gradient-to-r from-[#0066ff] to-[#3b82f6] text-white text-[15px] font-black py-4 rounded-lg shadow-[0_8px_20px_-6px_rgba(0,102,255,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-wider disabled:opacity-50 disabled:bg-gray-300 disabled:shadow-none relative overflow-hidden group"
         >
            {isSaving ? (
-             <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
+             <i className="fa-solid fa-circle-notch fa-spin text-xl"></i>
            ) : (
-             <div className="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center">
-                <i className="fa-solid fa-paper-plane text-[10px]"></i>
+             <div className="w-9 h-9 rounded-full bg-white/25 flex items-center justify-center absolute left-4 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-paper-plane text-white text-[14px]"></i>
              </div>
            )}
-           {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
+           <span className="flex-1 text-center">{isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}</span>
+           {!isSaving && <i className="fa-solid fa-arrow-right text-white text-[18px] absolute right-6 group-hover:translate-x-1 transition-transform"></i>}
         </button>
       </>
       ) : (
@@ -1351,7 +1360,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[13px] font-bold py-3 px-4 rounded-2xl border border-gray-200 bg-white focus:border-[#3b82f6] focus:ring-4 focus:ring-blue-50 outline-none shadow-sm transition-all text-slate-800"
+              className="w-full resize-none text-[13px] font-bold py-2.5 px-3 rounded-lg border border-slate-200 bg-slate-100 placeholder:text-gray-400 placeholder:font-medium focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-slate-800"
             ></textarea>
           </div>
           {/* Autocomplete Suggestions */}
@@ -1429,12 +1438,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'HARGA' : 'NOMINAL'}
+                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
             </div>
             <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
                 type="text" 
@@ -1451,7 +1460,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }, 10);
                   }
                 }}
-                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none shadow-sm transition-all text-slate-800"
+                className="w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border border-slate-200 bg-slate-100 focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-[#0f172a]"
               />
             </div>
           </div>
@@ -1459,7 +1468,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> ADMIN
+                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> {kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
@@ -1467,7 +1476,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               </label>
             </div>
             <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+              <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
               <input 
                 ref={adminRef}
                 type="text"
@@ -1480,7 +1489,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setTimeout(() => btnSimpanRef.current?.click(), 10);
                   }
                 }}
-                className="w-full text-[14px] font-black h-[44px] pl-10 pr-3 rounded-2xl border border-gray-200 bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-50 outline-none shadow-sm transition-all text-slate-800"
+                className={cn(
+                  "w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border focus:ring-4 outline-none transition-all",
+                  kategori === 'Order Kuota' && (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    return m > 0 && j > 0 && j <= m
+                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                      : m > 0 && j > m
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
+                        : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff] focus:ring-blue-50"
+                  })() || (isAdminNonTunai 
+                    ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50" 
+                    : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400 focus:ring-purple-50")
+                )}
               />
             </div>
           </div>
@@ -1518,7 +1540,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Modal Sumber Aplikasi */}
       {isSumberModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSumberModalOpen(false)}>
-          <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col">
               {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx, arr) => (
                 <button
@@ -1530,11 +1552,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setIsSumberModalOpen(false);
                   }}
                   className={cn(
-                    "flex items-center justify-between p-4 text-left transition-colors hover:bg-gray-50",
-                    idx !== arr.length - 1 && "border-b-2 border-gray-100"
+                    "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",
+                    idx !== arr.length - 1 && "border-b border-gray-100"
                   )}
                 >
-                  <span className="text-[17px] font-black text-slate-800">{s}</span>
+                  <span className="text-[15px] font-black text-slate-800">{s}</span>
                   {sumberAplikasi === s ? (
                     <div className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[3px] border-[#293659]">
                       <div className="w-[10px] h-[10px] rounded-full bg-[#293659]"></div>
@@ -1552,7 +1574,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Modal Tujuan Masuk */}
       {isTujuanModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsTujuanModalOpen(false)}>
-          <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col">
               {['TUNAI LACI KASIR', 'NON TUNAI'].map((t, idx, arr) => (
                 <button
@@ -1562,11 +1584,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setIsTujuanModalOpen(false);
                   }}
                   className={cn(
-                    "flex items-center justify-between p-4 text-left transition-colors hover:bg-gray-50",
-                    idx !== arr.length - 1 && "border-b-2 border-gray-100"
+                    "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",
+                    idx !== arr.length - 1 && "border-b border-gray-100"
                   )}
                 >
-                  <span className="text-[17px] font-black text-slate-800">{t}</span>
+                  <span className="text-[15px] font-black text-slate-800">{t}</span>
                   {tujuanMasuk === t ? (
                     <div className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[3px] border-[#293659]">
                       <div className="w-[10px] h-[10px] rounded-full bg-[#293659]"></div>
