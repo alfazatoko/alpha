@@ -5,11 +5,11 @@ export interface GlobalHeaderProps {
   storePhoto?: string;
   storeName?: string;
   storeSubtext?: string;
-  kasirName: string;
-  kasirRole: string;
-  dayName: string;
-  fullDate: string;
-  clockStr: string;
+  kasirName?: string;
+  kasirRole?: string;
+  dayName?: string;
+  fullDate?: string;
+  clockStr?: string;
   
   onMenuClick?: () => void;
   showNotifBadge?: boolean;
@@ -20,10 +20,20 @@ export interface GlobalHeaderProps {
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   storePhoto, storeName, storeSubtext, kasirName, kasirRole, 
-  dayName, fullDate, clockStr,
+  dayName: propDayName, fullDate: propFullDate, clockStr: propClockStr,
   onMenuClick, showNotifBadge, notifBadgeCount, onNotifClick, notifPopupContent
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  
+  const dayName = propDayName || currentTime.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+  const fullDate = propFullDate || currentTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+  const clockStr = propClockStr || currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);

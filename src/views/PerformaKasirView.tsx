@@ -727,10 +727,6 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         storeSubtext={props.storeSubtext}
         kasirName={props.kasirName}
         kasirRole={props.kasirRole}
-        dayName={dayName}
-        fullDate={fullDate}
-        clockStr={clockStr}
-        onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
       <div className="px-4 -mt-8 relative z-10 space-y-4 pb-24">
