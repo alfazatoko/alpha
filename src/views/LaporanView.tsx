@@ -358,31 +358,87 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     if (!props.activeStoreId) {
       return { totalQtyLaku: 0, totalUangKeseluruhan: 0, totalUangQris: 0, totalProfitVoucher: 0 }
     }
-    const savedV = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_voucher_${props.filterTanggal}`)
-    const dataVoucher = savedV ? JSON.parse(savedV) : initialDataVoucher
-
-    const savedQ = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_qris_${props.filterTanggal}`)
-    const dataQris = savedQ ? JSON.parse(savedQ) : []
-
+    
     let qty = 0
     let uang = 0
     let qris = 0
     let profit = 0
-    
-    Object.values(dataVoucher).forEach((items: any) => {
-      items.forEach((item: any) => {
-        const laku = Math.max(0, item.awal - item.akhir)
-        qty += laku
-        uang += laku * item.price
-        if (item.modal) {
-          profit += laku * (item.price - item.modal)
-        }
-      });
-    });
-    
-    dataQris.forEach((item: any) => {
-      qris += item.harga * item.qty
-    });
+
+    // Get the list of cashiers to iterate over. If filterKasir is set, only use that.
+    let cashierIds = ['c1', 'cashier-1'] // default fallback dummy cashiers
+    if (props.kasirList) {
+      const keys = Object.keys(props.kasirList)
+      if (keys.length > 0) {
+        cashierIds = [...cashierIds, ...keys.map(k => `c_${k}`)]
+      }
+    }
+
+    if (props.filterKasir && props.filterKasir !== 'Semua') {
+       // Only filter by the specific selected cashier
+       cashierIds = [`c_${props.filterKasir}`]
+    }
+
+    // New Voucher App Transaction Format (v_{store}_{cashier}_transactions)
+    cashierIds.forEach(cId => {
+      const savedV = localStorage.getItem(`v_${props.activeStoreId}_${cId}_transactions`)
+      if (savedV) {
+        try {
+          const txs = JSON.parse(savedV)
+          if (Array.isArray(txs)) {
+             txs.forEach((log: any) => {
+               // Only count PENJUALAN for the selected date
+               if (log.type === 'PENJUALAN' && log.timestamp && log.timestamp.startsWith(props.filterTanggal)) {
+                  const amount = log.amount || 0;
+                  const q = log.quantity || 0;
+                  qty += q;
+                  uang += amount;
+                  
+                  // QRIS or NON-TUNAI detection
+                  if (log.paymentMethod === 'NON_TUNAI' || log.paymentMethod === 'QRIS' || log.paymentMethod === 'TRANSFER' || (log.notes || '').includes('[NON_TUNAI]') || (log.notes || '').includes('[QRIS]') || (log.notes || '').includes('[TRANSFER]')) {
+                    qris += amount;
+                  }
+
+                  // Profit
+                  const cogs = log.cogs || 0;
+                  if (cogs > 0) {
+                     profit += (amount - cogs);
+                  }
+               }
+             })
+          }
+        } catch(e) {}
+      }
+    })
+
+    // Fallback if data still exists in old format
+    if (qty === 0 && uang === 0) {
+      const savedOldV = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_voucher_${props.filterTanggal}`)
+      const savedOldQ = localStorage.getItem(`alphaPro_${props.activeStoreId}_stok_qris_${props.filterTanggal}`)
+      
+      if (savedOldV) {
+        try {
+          const dataVoucher = JSON.parse(savedOldV)
+          Object.values(dataVoucher).forEach((items: any) => {
+            items.forEach((item: any) => {
+              const laku = Math.max(0, item.awal - item.akhir)
+              qty += laku
+              uang += laku * item.price
+              if (item.modal) {
+                profit += laku * (item.price - item.modal)
+              }
+            });
+          });
+        } catch(e){}
+      }
+      if (savedOldQ) {
+        try {
+          const dataQris = JSON.parse(savedOldQ)
+          dataQris.forEach((item: any) => {
+            qris += item.harga * item.qty
+          });
+        } catch(e){}
+      }
+    }
     
     return { 
       totalQtyLaku: qty, 
@@ -390,7 +446,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       totalUangQris: qris,
       totalProfitVoucher: profit
     }
-  }, [props.activeStoreId, props.filterTanggal, syncTrigger])
+  }, [props.activeStoreId, props.filterTanggal, syncTrigger, props.filterKasir, props.kasirList])
 
   // Hitung ulang total berdasarkan transaksi yang difilter agar laporan akurat sesuai tanggal terpilih
   const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.nominal, 0)

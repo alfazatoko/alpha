@@ -20,15 +20,12 @@ import {
   Plus,
   Minus,
   Database,
-  FileCheck2,
   ListFilter,
   X,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   PackagePlus,
   ClipboardCheck,
-  Wallet,
   Pencil
 } from 'lucide-react';
 import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
@@ -693,6 +690,24 @@ export default function AturStokTab({
               <button
                 onClick={() => {
                   if (!isBukaTokoCompleted) return; // Kunci jika Buka Toko belum selesai
+                  
+                  // Otomatis sinkronkan potongan Jual Cepat sebelum pindah ke Tutup Toko
+                  const soldMap: Record<string, number> = {};
+                  currentShiftTransactions.forEach(trx => {
+                    if (trx.type === 'PENJUALAN' && trx.productId) {
+                      soldMap[trx.productId] = (soldMap[trx.productId] || 0) + (trx.quantity || 1);
+                    } else if (trx.type === 'PENJUALAN' && (trx as any).items) {
+                      (trx as any).items.forEach((item: any) => {
+                        soldMap[item.productId] = (soldMap[item.productId] || 0) + item.quantity;
+                      });
+                    }
+                  });
+                  
+                  setItems(prev => prev.map(item => ({
+                    ...item,
+                    finalStock: Math.max(0, item.initialStock + item.incomingStock - (soldMap[item.productId] || 0))
+                  })));
+
                   setViewMode('tutup');
                   setCurrentStep(3);
                 }}
@@ -802,199 +817,20 @@ export default function AturStokTab({
         )}
       </AnimatePresence>
 
-      {/* 1. TOP CARD & STEPPER (HANYA MUNCUL JIKA BUKAN DI LOBBY) */}
-      {viewMode !== 'lobby' && (
-        <>
-          <div className={`rounded-xl p-3 shadow-xs relative overflow-hidden border ${
-        isLight 
-          ? 'bg-white border-slate-200' 
-          : 'bg-gradient-to-r from-[#172554] via-[#0f172a] to-[#0a0f1d] border-blue-500/20 shadow-md'
-      }`}>
-        {!isLight && (
-          <div className="absolute -top-10 -left-10 w-36 h-36 bg-blue-600/15 blur-[40px] rounded-full pointer-events-none" />
-        )}
-        
-        <div className="flex items-center justify-between gap-2 relative z-10">
-          {/* Kiri: Icon + judul + badge role */}
-          <div className="flex items-center gap-2.5">
-            <div className={`w-10 h-10 rounded-xl p-[1px] shadow-xs shrink-0 ${
-              isLight 
-                ? 'bg-blue-600' 
-                : 'bg-gradient-to-br from-indigo-500 to-blue-600 shadow-blue-500/20'
-            }`}>
-              <div className={`w-full h-full rounded-[11px] flex items-center justify-center ${
-                isLight ? 'bg-blue-50' : 'bg-white dark:bg-slate-800'
-              }`}>
-                <Package className={`w-5 h-5 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
-              </div>
-            </div>
-            <div>
-              <h2 className={`text-xs sm:text-sm font-bold tracking-tight leading-snug ${
-                isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'
-              }`}>
-                Kelola Stok & Tutup Shift
-              </h2>
-              <span className={`text-[8.5px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5 border ${
-                isLight 
-                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                  : 'bg-blue-950/80 text-blue-400 border-blue-500/40'
-              }`}>
-                {activeCashier.role === "Kasir Utama" || activeCashier.role === "Administrator" ? 'Kasir Utama' : 'Kasir'}
-              </span>
-            </div>
-          </div>
-          
-          {/* Kanan: Kasir Aktif → Penerima */}
-          <div className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 border ${
-            isLight 
-              ? 'bg-slate-50 border-slate-200' 
-              : 'bg-slate-50 dark:bg-slate-800/80 border-blue-500/15'
-          }`}>
-            {/* Kasir Aktif */}
-            <div className="flex flex-col items-center gap-0.5">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black border ${
-                isLight ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-blue-600/30 border-blue-500/40 text-blue-300'
-              }`}>
-                {activeCashier.name.charAt(0).toUpperCase()}
-              </div>
-              <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Aktif</span>
-              <span className={`text-[9px] font-black leading-none max-w-[52px] truncate text-center ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>{activeCashier.name}</span>
-            </div>
+      {/* Header lama (Top Card & Stepper) disembunyikan sesuai permintaan agar UI lebih minimalis */}
 
-            {/* Arrow */}
-            <svg className={`w-3 h-3 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-
-            {/* Kasir Penerima */}
-            <div className="flex flex-col items-center gap-0.5">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black border ${
-                currentStep >= 4
-                  ? (isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-600/30 border-emerald-500/40 text-emerald-300')
-                  : (isLight ? 'bg-slate-100 border-slate-300 text-slate-500' : 'bg-slate-700 border-slate-600 text-slate-400')
-              }`}>
-                {currentStep >= 4 ? selectedToCashier.name.charAt(0).toUpperCase() : '?'}
-              </div>
-              <span className={`text-[7px] font-semibold leading-none ${isLight ? 'text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>Penerima</span>
-              <span className={`text-[9px] font-black leading-none max-w-[52px] truncate text-center ${
-                currentStep >= 4
-                  ? (isLight ? 'text-emerald-700' : 'text-emerald-400')
-                  : (isLight ? 'text-slate-400' : 'text-slate-500')
-              }`}>
-                {currentStep >= 4 ? selectedToCashier.name : 'Pilih di\u00a0Step\u00a04'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. COMPACT STEPPER BAR DENGAN IKON */}
-      <div className="px-1 py-1 sm:py-2">
-        <div className="relative flex items-center justify-between max-w-sm mx-auto px-4 sm:px-8">
-          {(() => {
-            const allSteps = [
-              { id: 1, label: 'Awal', icon: ClipboardList },
-              { id: 2, label: 'Masuk', icon: PackagePlus },
-              { id: 3, label: 'Akhir', icon: ClipboardCheck },
-              { id: 4, label: 'Kas', icon: Wallet },
-              { id: 5, label: 'Selesai', icon: Handshake }
-            ];
-            
-            const visibleSteps = viewMode === 'buka' 
-              ? allSteps.slice(0, 2) 
-              : viewMode === 'tutup' 
-                ? allSteps.slice(2, 5) 
-                : allSteps;
-
-            const currentIndex = Math.max(0, visibleSteps.findIndex(s => s.id === currentStep));
-            const maxIndex = Math.max(1, visibleSteps.length - 1);
-            const progressPercentage = (currentIndex / maxIndex) * 100;
-
-            return (
-              <>
-                {/* Background Line */}
-                <div className={`absolute left-8 right-8 sm:left-12 sm:right-12 top-[16px] sm:top-[18px] h-[2px] ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
-                
-                {/* Active Line Fill */}
-                <div 
-                  className="absolute left-8 sm:left-12 top-[16px] sm:top-[18px] h-[2px] bg-blue-500 transition-all duration-300"
-                  style={{ width: `calc(${progressPercentage}% - ${progressPercentage === 100 ? '2rem' : progressPercentage === 0 ? '0px' : '1rem'})` }}
-                />
-
-                {visibleSteps.map((step) => {
-                  const isActive = currentStep === step.id;
-                  const isPassed = currentStep > step.id;
-                  const Icon = step.icon;
-                  
-                  return (
-                    <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (step.id === 1 || isInitialLocked) {
-                            setCurrentStep(step.id as any);
-                          }
-                        }}
-                        className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center transition-all duration-300 cursor-pointer ${
-                          isActive 
-                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-110 ring-2 ring-white dark:ring-slate-900' 
-                            : isPassed
-                              ? (isLight ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-900/40 text-blue-400 border border-blue-500/30')
-                              : (isLight ? 'bg-white text-slate-400 border border-slate-200 shadow-sm' : 'bg-slate-800 text-slate-500 border border-slate-700')
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" strokeWidth={isActive ? 2.5 : 2} />
-                      </button>
-                      <span className={`text-[9px] sm:text-[10px] font-bold tracking-tight transition-colors ${
-                        isActive ? (isLight ? 'text-blue-700' : 'text-blue-400') : (isPassed ? (isLight ? 'text-slate-700' : 'text-slate-300') : (isLight ? 'text-slate-400' : 'text-slate-500'))
-                      }`}>
-                        {step.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </>
-            );
-          })()}
-        </div>
-      </div>
-      </>
-      )}
 
       {/* ========================================================================= */}
       {/* 1. LANGKAH 1: HITUNG STOK AWAL (BUKA SHIFT) / LOBBY TABLE */}
       {/* ========================================================================= */}
-      {(currentStep === 1 || viewMode === 'lobby') && !isHandoverSuccess && (() => {
+      {currentStep === 1 && viewMode !== 'lobby' && !isHandoverSuccess && (() => {
         return (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`space-y-2.5 ${viewMode === 'lobby' ? 'mt-8 pt-4 border-t border-slate-200 dark:border-slate-800' : ''}`}
+          className="space-y-2.5"
         >
-          {/* Outer Header Text */}
-          <div className="px-1 flex items-start justify-between gap-2">
-            <div className="flex items-start gap-2">
-              <div className="w-5 h-5 rounded-full bg-blue-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
-                1
-              </div>
-              <div>
-                <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                  {viewMode === 'lobby' ? 'Catatan Stok Shift Lalu' : 'Hitung Stok Awal (Buka Shift)'}
-                </h3>
-                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 leading-tight ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
-                  {viewMode === 'lobby' ? 'Berikut adalah sisa stok yang ditinggalkan oleh kasir sebelumnya.' : 'Cocokkan fisik etalase dengan sisa stok shift sebelumnya. Ketuk baris untuk mengatur jumlah.'}
-                </p>
-              </div>
-            </div>
-            
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
-              isLight 
-                ? 'bg-blue-50 border-blue-200 text-blue-600' 
-                : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-            }`}>
-              <FileCheck2 className="w-3.5 h-3.5" />
-            </div>
-          </div>
+          {/* Teks Judul disembunyikan agar lebih bersih */}
 
           {/* Quick Metric & Action Row - 3 BALANCED MODERN CARDS */}
           <div className="grid grid-cols-3 gap-1.5 px-0.5">
@@ -1284,9 +1120,7 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {viewMode === 'lobby' ? (
-              <div className="pt-2"></div>
-            ) : !isOwnerMode && (isInitialLocked ? (
+            {!isOwnerMode && (isInitialLocked ? (
               <div className="flex gap-1.5">
                 <button 
                   onClick={() => setIsInitialLocked(false)} 
@@ -1321,7 +1155,7 @@ export default function AturStokTab({
       {/* ========================================================================= */}
       {/* 2. LANGKAH 2: TAMBAH STOK BARU (BARANG MASUK) */}
       {/* ========================================================================= */}
-      {currentStep === 2 && !isHandoverSuccess && (
+      {currentStep === 2 && viewMode !== 'lobby' && !isHandoverSuccess && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1503,7 +1337,7 @@ export default function AturStokTab({
       {/* ========================================================================= */}
       {/* 3. LANGKAH 3: HITUNG STOK AKHIR (TUTUP SHIFT) */}
       {/* ========================================================================= */}
-      {currentStep === 3 && !isHandoverSuccess && (
+      {currentStep === 3 && viewMode !== 'lobby' && !isHandoverSuccess && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1780,151 +1614,91 @@ export default function AturStokTab({
           animate={{ opacity: 1, y: 0 }}
           className="space-y-3"
         >
-          {/* Header */}
-          <div className="px-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-start gap-2">
-              <div className="w-6 h-6 rounded-full bg-blue-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-xs">
-                3
-              </div>
-              <div>
-                <h3 className={`text-sm sm:text-base font-bold tracking-tight leading-snug ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                  Status Terjual (Tunai vs QRIS)
-                </h3>
-                <p className={`text-xs mt-0.5 leading-snug ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                  Pisahkan pembayaran non-tunai (QRIS) dari total penjualan untuk menghitung uang kas di laci.
-                </p>
-              </div>
-            </div>
-
-            <span className={`text-xs px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 shrink-0 ${
-              isCashMatched
-                ? (isLight ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs' : 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300')
-                : (isLight ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-2xs' : 'bg-amber-950/80 border-amber-500/40 text-amber-300')
-            }`}>
-              {isCashMatched ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-600" />}
-              Uang: {isCashMatched ? 'PAS (Rp0)' : `Selisih Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
-            </span>
-          </div>
-
-          {/* 3 Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {/* Card 1: Total Penjualan */}
-            <div className={`rounded-xl p-3 border shadow-xs space-y-1 ${
-              isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/20 text-slate-900 dark:text-white'
-            }`}>
-              <div className={`flex items-center justify-between text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
-                <span>Total Penjualan</span>
-                <Package className="w-4 h-4 opacity-70 text-blue-500" />
-              </div>
-              <div className={`text-base sm:text-lg font-black font-mono tracking-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                Rp{totalSalesAmount.toLocaleString('id-ID')}
-              </div>
-              <div className={`text-xs font-bold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                {totalSoldPcs} Pcs voucher fisik
-              </div>
-            </div>
-
-            {/* Card 2: QRIS/Transfer (Digital) */}
-            <div className={`rounded-xl p-3 border shadow-xs space-y-1.5 ${
-              isLight ? 'bg-white border-blue-200 ring-1 ring-blue-100 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
-            }`}>
-              <div className={`flex items-center justify-between text-xs font-semibold ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                <span>Non-Tunai (-)</span>
-                <QrCode className="w-4 h-4 text-blue-500" />
-              </div>
-              <div className="flex items-center gap-1.5 py-1">
-                <span className={`text-xs font-bold ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-400'}`}>Rp</span>
-                <span className={`font-mono font-bold text-sm ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                  {totalDigitalAmount.toLocaleString('id-ID')}
-                </span>
-              </div>
-              <div className={`text-xs flex items-center justify-between pt-0.5 border-t ${isLight ? 'border-slate-200 text-slate-600' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'}`}>
-                <span className="font-bold">Total Qty Digital:</span>
-                <span className="font-mono text-xs font-bold">{totalDigitalPcs} Pcs</span>
-              </div>
-            </div>
-
-            {/* Card 3: Uang Laci Wajib */}
-            <div className={`rounded-xl p-3 border shadow-xs space-y-1 ${
-              isLight ? 'bg-white border-emerald-200 ring-1 ring-emerald-100 text-slate-800' : 'bg-white dark:bg-slate-800 border-emerald-500/30 text-slate-900 dark:text-white'
-            }`}>
-              <div className={`flex items-center justify-between text-xs font-semibold ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
-                <span>Uang Laci (Wajib)</span>
-                <Banknote className="w-4 h-4 text-emerald-500" />
-              </div>
-              <div className={`text-base sm:text-lg font-black font-mono tracking-tight ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
-                Rp{totalCashExpected.toLocaleString('id-ID')}
-              </div>
-              <div className={`text-xs font-bold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                Penjualan dikurangi QRIS
-              </div>
-            </div>
-          </div>
-
-          {/* Cash Input & Reconciliation Box */}
-          <div className={`rounded-xl p-3.5 space-y-2.5 border shadow-sm ${
+          {/* UANG KAS FISIK & REKONSILIASI (MINIMALIST) */}
+          <div className={`rounded-xl p-3 border shadow-xs space-y-3 ${
             isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-500/20'
           }`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className={`text-xs sm:text-sm font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
-                Hitung Uang Tunai Fisik di Laci:
-              </span>
-              <button
-                type="button"
-                onClick={handleSyncCashPhysical}
-                className={`text-xs font-bold underline cursor-pointer transition ${
-                  isLight ? 'text-blue-600 hover:text-blue-800' : 'text-blue-400 hover:text-blue-300'
-                }`}
-              >
-                Samakan (Rp{totalCashExpected.toLocaleString('id-ID')})
-              </button>
+            {/* Header & Inline Summary */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  <Banknote className="w-4 h-4 text-emerald-500" />
+                  Uang Laci (Tunai)
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                  isCashMatched
+                    ? (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 text-emerald-400')
+                    : (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-900/40 text-amber-400')
+                }`}>
+                  {isCashMatched ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                  {isCashMatched ? 'PAS' : 'SELISIH'}
+                </span>
+              </div>
+              
+              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] sm:text-[11px] font-semibold ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>
+                <span>Jual: <strong className={isLight ? 'text-slate-900' : 'text-white'}>Rp{totalSalesAmount.toLocaleString('id-ID')}</strong></span>
+                <span>-</span>
+                <span>QRIS/TF: <strong className="text-blue-500">Rp{totalDigitalAmount.toLocaleString('id-ID')}</strong></span>
+                <span>=</span>
+                <span className={`px-1.5 py-0.5 rounded ${
+                  isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-900/20 text-emerald-400'
+                }`}>
+                  Wajib: <strong className="font-mono text-xs">Rp{totalCashExpected.toLocaleString('id-ID')}</strong>
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${
-                isLight ? 'bg-slate-50 border-slate-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-700'
+            <hr className={isLight ? 'border-slate-100' : 'border-slate-700/50'} />
+
+            {/* Input Kas Fisik */}
+            <div className="flex items-stretch gap-2 h-10">
+              <div className={`flex-1 flex items-center gap-2 rounded-xl px-3 border ${
+                isLight ? 'bg-slate-50 border-slate-300 focus-within:border-blue-500' : 'bg-slate-900/50 border-slate-700 focus-within:border-blue-500'
               }`}>
-                <span className={`text-xs font-bold ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-400'}`}>Fisik: Rp</span>
+                <span className={`text-xs font-bold ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Fisik: Rp</span>
                 <input
                   type="text"
                   inputMode="numeric"
                   placeholder="0"
                   value={cashPhysical}
                   onChange={(e) => handleCashPhysicalChange(e.target.value)}
-                  className={`w-full bg-transparent font-mono font-black text-sm sm:text-base focus:outline-none ${
-                    isLight ? 'text-slate-900 placeholder-slate-400' : 'text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600'
+                  className={`w-full h-full bg-transparent font-mono font-black text-sm focus:outline-none ${
+                    isLight ? 'text-slate-900 placeholder-slate-400' : 'text-slate-100 placeholder-slate-600'
                   }`}
                 />
               </div>
 
-              <div className={`text-xs px-3 py-2 rounded-xl border flex items-center justify-between ${
-                isLight ? 'bg-slate-50 border-slate-300' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
-              }`}>
-                <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>Selisih Fisik:</span>
-                <span className={`font-mono font-black text-xs sm:text-sm ${
-                  cashDifference === 0 
-                    ? (isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400')
-                    : cashDifference > 0 
-                      ? (isLight ? 'text-amber-700' : 'text-amber-500 font-black dark:text-amber-400')
-                      : (isLight ? 'text-rose-700' : 'text-rose-500 font-black dark:text-rose-400')
-                }`}>
-                  {cashDifference === 0 
-                    ? 'Rp0 (PAS)' 
-                    : `${cashDifference > 0 ? '+ ' : '- '}Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+              {/* Samakan Button / Status */}
+              <button
+                type="button"
+                onClick={handleSyncCashPhysical}
+                className={`shrink-0 flex flex-col justify-center items-center px-3 rounded-xl border transition cursor-pointer ${
+                  cashDifference === 0
+                    ? (isLight ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700' : 'bg-emerald-900/30 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-400')
+                    : (isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-blue-600' : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-blue-400')
+                }`}
+                title="Klik untuk otomatis menyamakan"
+              >
+                <span className="text-[9px] font-bold opacity-80 leading-none mb-1">SAMAKAN</span>
+                <span className="font-mono text-[10px] font-black tracking-tight leading-none">
+                  {cashDifference === 0 ? 'PAS' : `${cashDifference > 0 ? '+' : '-'}Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
                 </span>
-              </div>
+              </button>
             </div>
 
+            {/* Catatan Selisih */}
             {!isCashMatched && (
               <input
                 type="text"
-                placeholder="Catatan selisih (misal: kembalian kurang / uang koin tercecer)"
+                placeholder="Tulis alasan selisih (wajib) ..."
                 value={catatanSelisih}
                 onChange={(e) => setCatatanSelisih(e.target.value)}
-                className={`w-full rounded-xl p-2.5 text-xs focus:outline-none border mt-1 font-bold ${
+                className={`w-full rounded-lg p-2 text-xs focus:outline-none border font-semibold ${
                   isLight 
-                    ? 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500' 
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500'
+                    ? 'bg-rose-50/50 border-rose-200 text-slate-900 placeholder-rose-400 focus:border-rose-400' 
+                    : 'bg-rose-950/20 border-rose-900/50 text-slate-200 placeholder-rose-700 focus:border-rose-700'
                 }`}
               />
             )}
