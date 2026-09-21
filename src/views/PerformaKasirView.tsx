@@ -12,6 +12,9 @@ interface PerformaKasirViewProps {
   transactions: Transaction[]
   kasirList: Record<string, any>
   storeName?: string
+  storePhoto?: string
+  storeSubtext?: string
+  kasirName?: string
   kasirRole?: string
   googleUid?: string
   targetStoreId?: string
