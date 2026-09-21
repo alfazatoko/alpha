@@ -1368,7 +1368,7 @@ ${bulkAIText}`;
               {/* Header gradient strip */}
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500 rounded-t-3xl" />
 
-              <div className="p-5 space-y-4">
+              <div className="p-5 pb-24 sm:pb-5 space-y-4">
                 {/* Title */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

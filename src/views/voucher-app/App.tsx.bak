@@ -527,7 +527,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
     }
 
-    // setProducts(loadedProducts); // Diambil alih oleh SQL (fetchSQLData)
+    setProducts(loadedProducts);
     setTransactions(loadedTransactions);
     setNotifications(loadedNotifications);
     setShiftHandovers(loadedHandovers);
@@ -546,7 +546,14 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
             if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
             if (cashierData) {
-                // Produk tidak lagi diambil dari store_settings, melainkan dari voucher_products (SQL)
+                if (cashierData.products) {
+                  const p = cashierData.products;
+                  if (Array.isArray(p) && p.length === 0) {
+                    setProducts(INITIAL_PRODUCTS.map(prod => ({ ...prod, currentStock: 0 })));
+                  } else {
+                    setProducts(p);
+                  }
+                }
               let needsArchiving = false;
 
               if (cashierData.transactions) {
@@ -585,9 +592,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
             } else if (!cachedProducts && data.voucher_app_data.products) {
                 const p = data.voucher_app_data.products;
                 if (Array.isArray(p) && p.length === 0) {
-                  // setProducts dihapus karena SQL
+                  setProducts(INITIAL_PRODUCTS.map(prod => ({ ...prod, currentStock: 0 })));
                 } else {
-                  // setProducts dihapus karena SQL
+                  setProducts(p);
                 }
             }
           }
@@ -646,11 +653,9 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
         
         // Fetch Products
-        const { data: prods, error: err1 } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
-        if (err1) alert("Fetch Prods Error: " + err1.message);
+        const { data: prods } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
         // Fetch Stocks
-        const { data: stocks, error: err2 } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', cashierId);
-        if (err2) alert("Fetch Stocks Error: " + err2.message);
+        const { data: stocks } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', cashierId);
         
         if (prods) {
           const mapped = prods.map(p => {
@@ -680,58 +685,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
     
-    const sub = supabase.channel(`voucher_realtime_sql_${Date.now()}_${Math.random().toString(36).substring(7)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_stocks', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_products', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
-      .subscribe();
-      
-    return () => { supabase.removeChannel(sub); };
-  }, [activeStoreId, activeCashierIndex, cashiers]);
-  // ----------------------------------
-
-  // --- NEW SUPABASE REALTIME SYNC ---
-  useEffect(() => {
-    if (!activeStoreId) return;
-    const fetchSQLData = async () => {
-      try {
-        const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
-        
-        // Fetch Products
-        const { data: prods, error: err1 } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
-        if (err1) alert("Fetch Prods Error: " + err1.message);
-        // Fetch Stocks
-        const { data: stocks, error: err2 } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', cashierId);
-        if (err2) alert("Fetch Stocks Error: " + err2.message);
-        
-        if (prods) {
-          const mapped = prods.map(p => {
-             const stockRecord = stocks?.find(s => s.product_id === p.id);
-             return {
-                id: p.id,
-                name: p.name,
-                category: p.category,
-                operator: p.operator,
-                costPrice: p.cost_price,
-                sellingPrice: p.selling_price,
-                minStockLevel: p.min_stock_level,
-                description: p.description || '',
-                barcode: p.barcode || '',
-                sku: p.sku || '',
-                currentStock: stockRecord ? stockRecord.current_stock : 0
-             };
-          });
-          setProducts(mapped);
-        }
-      } catch (err) {
-        console.error("Fetch SQL Error:", err);
-      }
-    };
-    
-    fetchSQLData();
-    
-    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
-    
-    const sub = supabase.channel(`voucher_realtime_sql_${Date.now()}_${Math.random().toString(36).substring(7)}`)
+    const sub = supabase.channel('voucher_realtime_sql')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_stocks', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_products', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
       .subscribe();
@@ -1033,20 +987,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
           product_id: p.id,
           cashier_id: cashiers[activeCashierIndex]?.id || 'c1',
           current_stock: p.currentStock
-        }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock trx:', res));
-      }
-    }
-
-    // SQL SYNC STOCKS
-    if (!skipStockUpdate && activeStoreId) {
-      const p = updatedProducts.find(prod => prod.id === productId);
-      if (p) {
-        supabase.from('voucher_stocks').upsert({
-          store_id: activeStoreId,
-          product_id: p.id,
-          cashier_id: cashiers[activeCashierIndex]?.id || 'c1',
-          current_stock: p.currentStock
-        }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock trx:', res));
+        }, { onConflict: 'store_id,product_id,cashier_id' });
       }
     }
 
@@ -1089,35 +1030,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     };
 
     // Use functional updater to avoid stale closure issues
-    setProducts(prev => {
-      const updated = [newProduct, ...prev];
-      if (activeStoreId) {
-        supabase.from('voucher_products').insert({
-          id: newProduct.id,
-          store_id: activeStoreId,
-          name: newProduct.name,
-          category: newProduct.category,
-          operator: newProduct.operator,
-          cost_price: newProduct.costPrice,
-          selling_price: newProduct.sellingPrice,
-          min_stock_level: newProduct.minStockLevel,
-          description: newProduct.description,
-          barcode: newProduct.barcode,
-          sku: newProduct.sku
-        }).then(res1 => {
-          if (res1.error) alert("Error Insert Product: " + res1.error.message);
-          supabase.from('voucher_stocks').upsert({
-            store_id: activeStoreId,
-            product_id: newProduct.id,
-            cashier_id: cashiers[activeCashierIndex]?.id || 'c1',
-            current_stock: newProduct.currentStock
-          }, { onConflict: 'store_id,product_id,cashier_id' }).then(res2 => {
-            if (res2.error) alert("Error Insert Stock: " + res2.error.message);
-          });
-        });
-      }
-      return updated;
-    });
+    setProducts(prev => [newProduct, ...prev]);
     setTransactions(prev => [newTransaction, ...prev]);
 
     pushNotification(
@@ -1211,28 +1124,6 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
     setProducts(updatedProducts);
 
-    // SQL SYNC
-    if (activeStoreId) {
-      supabase.from('voucher_products').update({
-        name: updatedProduct.name,
-        category: updatedProduct.category,
-        operator: updatedProduct.operator,
-        cost_price: updatedProduct.costPrice,
-        selling_price: updatedProduct.sellingPrice,
-        min_stock_level: updatedProduct.minStockLevel,
-        description: updatedProduct.description,
-        barcode: updatedProduct.barcode,
-        sku: updatedProduct.sku
-      }).eq('id', updatedProduct.id).then(() => {
-         supabase.from('voucher_stocks').upsert({
-           store_id: activeStoreId,
-           product_id: updatedProduct.id,
-           cashier_id: cashiers[activeCashierIndex]?.id || 'c1',
-           current_stock: updatedProduct.currentStock
-         }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock update:', res));
-      });
-    }
-
     if (selectedProduct && selectedProduct.id === updatedProduct.id) {
       setSelectedProduct(updatedProduct);
     }
@@ -1308,7 +1199,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         current_stock: 0 // Empty the sender's stock
       }));
       
-      supabase.from('voucher_stocks').upsert([...handoverUpserts, ...zeroUpserts], { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert handover:', res));
+      supabase.from('voucher_stocks').upsert([...handoverUpserts, ...zeroUpserts], { onConflict: 'store_id,product_id,cashier_id' });
     }
 
     const newTrx: Transaction = {

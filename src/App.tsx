@@ -1639,55 +1639,60 @@ const MainApp: React.FC<MainAppProps> = ({
     setConfirmDialog({ show: true, title, message, onConfirm })
   }
 
-  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }, bypassDuplicateCheck = false) => {
+  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }, bypassDuplicateCheck = false) => {
     if (isSaving) return
-    const nominal = parseNominal(formNominal)
+    const totalNominal = parseNominal(formNominal)
+    const nonTunaiAmount = options?.nonTunaiAmount ?? 0
     const admin = parseNominal(formAdmin)
     
     if (!formKategori) return showToast('Pilih kategori transaksi!')
-    if (nominal <= 0) return showToast('Masukkan nominal yang valid!')
+    if (totalNominal <= 0) return showToast('Masukkan nominal yang valid!')
 
-    let finalKeterangan = formKeterangan || '-';
+    const nominal = totalNominal
+    let finalNominal = nominal
+    let finalAdmin = admin
+
+    if (formKategori === 'Order Kuota') {
+      finalAdmin = admin - nominal
+      finalNominal = nominal
+    }
+
+    let baseKet = formKeterangan || ''
     if (options) {
-      if (options.isAdminNonTunai) finalKeterangan += ' [ADMIN_DALAM]';
+      if (options.isAdminNonTunai) baseKet += ' [ADMIN_DALAM]'
+      if (options.subTab === 'NON_TUNAI') baseKet += ' [NON_TUNAI]'
       if (options.activeTab === 'LAIN') {
-        if (options.subTab.toLowerCase() === 'khusus') finalKeterangan += ' [KHUSUS]';
-        if (options.subTab.toLowerCase() === 'non_tunai') finalKeterangan += ' [NON_TUNAI]';
+        if (options.subTab.toLowerCase() === 'khusus') baseKet += ' [KHUSUS]'
+        if (options.subTab.toLowerCase() === 'non_tunai') baseKet += ' [NON_TUNAI]'
       }
     }
 
-    let finalNominal = nominal;
-    let finalAdmin = admin;
-
-    if (formKategori === 'Order Kuota') {
-      finalAdmin = admin - nominal;
-      finalNominal = nominal;
-    }
+    let finalKeterangan = baseKet.trim()
+    if (!finalKeterangan) finalKeterangan = '-'
 
     // Pengecekan Transaksi Ganda (Dalam 5 Menit Terakhir)
     if (!bypassDuplicateCheck) {
-      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).getTime();
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).getTime()
       const duplicateTx = transactions.find(t => {
-        const txTime = new Date(t.timestamp).getTime();
+        const txTime = new Date(t.timestamp).getTime()
         return t.kategori === formKategori && 
                t.nominal === finalNominal && 
                t.kasir_id === username &&
-               txTime >= fiveMinsAgo;
-      });
+               txTime >= fiveMinsAgo
+      })
 
       if (duplicateTx) {
         handleConfirm(
           '⚠️ Indikasi Transaksi Ganda',
           `Kamu baru saja mencatat transaksi ${formKategori} sebesar Rp ${finalNominal.toLocaleString('id-ID')} beberapa menit yang lalu.\n\nApakah ini transaksi yang baru (berbeda pembeli), atau tidak sengaja tercatat 2x?\n\nTekan Lanjutkan jika ini transaksi baru.`,
           () => handleSimpanTransaksi(options, true)
-        );
-        return;
+        )
+        return
       }
     }
 
     setIsSaving(true)
 
-    // Proses simpan ke Supabase
     const id = Date.now().toString()
     const finalStoreId = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
     if (!finalStoreId) {
@@ -1706,12 +1711,11 @@ const MainApp: React.FC<MainAppProps> = ({
       store_id: finalStoreId
     }
 
-    supabase.from('transactions').insert(newTx).then(({ error }) => {
-      setIsSaving(false)
+    supabase.from('transactions').insert(newTx).then(async ({ error }) => {
       if (error) {
+        setIsSaving(false)
         showToast('Gagal simpan: ' + error.message)
       } else {
-        // Optimistic UI Update
         const optimisticTx: Transaction = {
           id: newTx.id,
           kategori: newTx.kategori,
@@ -1724,6 +1728,38 @@ const MainApp: React.FC<MainAppProps> = ({
         }
         setTransactions(prev => [optimisticTx, ...prev])
 
+        // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
+        if (options?.isSplit && nonTunaiAmount > 0) {
+          const adjId = (Date.now() + 1).toString()
+          const adjKet = `[OPSI2_NT] Penyesuaian: Saldo Laci Kasir dikurang ${nonTunaiAmount.toLocaleString('id-ID')} karena dibayar non tunai`
+          const adjTx = {
+            id: adjId,
+            user_id: googleUid,
+            kasir_id: username,
+            kategori: formKategori,
+            nominal: nonTunaiAmount,
+            admin_fee: 0,
+            keterangan: adjKet,
+            timestamp: getLocalISOString(),
+            store_id: finalStoreId
+          }
+          const { error: adjError } = await supabase.from('transactions').insert(adjTx)
+          if (!adjError) {
+            const optimisticAdj: Transaction = {
+              id: adjTx.id,
+              kategori: adjTx.kategori,
+              nominal: adjTx.nominal,
+              adminFee: 0,
+              keterangan: adjTx.keterangan,
+              timestamp: adjTx.timestamp,
+              kasir_id: adjTx.kasir_id,
+              store_id: adjTx.store_id || undefined
+            }
+            setTransactions(prev => [optimisticAdj, ...prev])
+          }
+        }
+
+        setIsSaving(false)
         setFormKategori('')
         setFormNominal('')
         setFormAdmin('')
@@ -1732,6 +1768,7 @@ const MainApp: React.FC<MainAppProps> = ({
       }
     })
   }
+
 
   const handleOwnerTambahModal = (kasirId: string, nominal: number, kategori: string) => {
     if (isSaving) return

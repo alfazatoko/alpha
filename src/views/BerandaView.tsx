@@ -1,4 +1,6 @@
+import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
@@ -2330,119 +2332,71 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
       {!(props.isPc && isOwnerSubView) && (
         <>
-          <div className="relative theme-header" style={{ paddingBottom: '2.5rem' }}>
-        <div className="px-4 pt-12 pb-2 flex items-center justify-between gap-3">
-          <div className="flex-1 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {props.kasirList?.[props.username]?.avatar ? (
-                <img src={props.kasirList[props.username].avatar} alt="Profile" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
-              ) : props.storePhoto ? (
-                <img src={props.storePhoto} alt="Logo" className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
-              ) : (
-                <img src="/logo_icon.png" alt="Logo" className="w-12 h-12 object-contain" />
-              )}
-              <div>
-                <h1 className="text-[13px] font-black text-white leading-tight uppercase tracking-widest">{props.storeName || 'ALFAZA CELL'}</h1>
-                <p className="text-blue-200 text-[8px] font-bold uppercase tracking-tighter opacity-80">{props.storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-white text-[10px] font-black">{props.kasirName}</span>
-                  <span className={cn("text-[7px] px-1.5 py-0.5 rounded-full font-black", props.kasirRole === 'owner' ? "bg-amber-400 text-amber-900" : "bg-white/25 text-white")}>
-                    {props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'}
-                  </span>
-                  <span className={cn(
-                    "text-[7px] px-1.5 py-0.5 rounded-full font-black flex items-center gap-1",
-                    isOnline 
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
-                      : "bg-red-500 text-white animate-pulse"
-                  )}>
-                    <span className={cn("w-1 h-1 rounded-full", isOnline ? "bg-emerald-400" : "bg-white")}></span>
-                    {isOnline ? 'ONLINE' : 'OFFLINE'}
-                  </span>
+          <GlobalHeader 
+          storePhoto={props.storePhoto}
+          storeName={props.storeName}
+          storeSubtext={props.storeSubtext}
+          kasirName={props.kasirName}
+          kasirRole={props.kasirRole}
+          dayName={dayName}
+          fullDate={fullDate}
+          clockStr={clockStr}
+          onMenuClick={() => props.setIsSidePanelOpen(true)}
+          showNotifBadge={(kasirLateHistory.length > 0 || activePesanMendadak)}
+          notifBadgeCount={kasirLateHistory.length + (activePesanMendadak ? 1 : 0)}
+          onNotifClick={() => setShowKasirNotif(!showKasirNotif)}
+          notifPopupContent={
+            showKasirNotif && (
+              <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
+                <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
+                  <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                    <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+                  </h4>
                 </div>
-              </div>
-            </div>
-
-            <div className="text-right hidden sm:block">
-              <p className="text-blue-200 text-[8px] font-bold uppercase tracking-widest leading-none mb-1">{dayName}</p>
-              <p className="text-white text-[10px] font-black tracking-tight leading-none mb-1">{fullDate}</p>
-              <p className="text-blue-100 text-xs font-black tabular-nums tracking-widest">{clockStr}</p>
-            </div>
-
-            <div className="flex flex-col items-end gap-2">
-              {props.kasirRole !== 'owner' && (
-                <div className="relative z-50">
-                  <button 
-                    onClick={() => setShowKasirNotif(!showKasirNotif)}
-                    className="relative w-9 h-9 rounded-[14px] bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all"
-                  >
-                    <i className="fa-solid fa-bell text-sm"></i>
-                    {(kasirLateHistory.length > 0 || activePesanMendadak) && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-black shadow-sm border border-red-400">
-                        {kasirLateHistory.length + (activePesanMendadak ? 1 : 0)}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Popup Dropdown Notifikasi Kasir */}
-                  {showKasirNotif && (
-                    <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
-                      <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
-                        <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
-                          <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
-                        </h4>
+                <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
+                  
+                  {/* Show Pesan Mendadak if exists */}
+                  {activePesanMendadak && (
+                    <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
+                      <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
+                        <i className="fa-solid fa-bullhorn text-[10px]"></i>
                       </div>
-                      <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
-                        
-                        {/* Show Pesan Mendadak if exists */}
-                        {activePesanMendadak && (
-                          <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
-                            <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
-                              <i className="fa-solid fa-bullhorn text-[10px]"></i>
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Pesan Owner</p>
-                              <p className="text-xs font-bold text-gray-900 whitespace-pre-wrap">{activePesanMendadak}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {kasirLateHistory.length === 0 && !activePesanMendadak ? (
-                          <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
-                        ) : (
-                          kasirLateHistory.map((late, i) => (
-                            <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex flex-col gap-2">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
-                                  <span className="text-xs font-black text-gray-900">{late.jam}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
-                                </div>
-                              </div>
-                              {late.alasan_telat && (
-                                <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
-                                  <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-0.5">Alasan:</p>
-                                  <p className="text-[10px] font-bold text-gray-800 leading-tight">{late.alasan_telat}</p>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
+                      <div className="flex-1">
+                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Pesan Owner</p>
+                        <p className="text-xs font-bold text-gray-900 whitespace-pre-wrap">{activePesanMendadak}</p>
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              <button onClick={() => props.setIsSidePanelOpen(true)} className="w-9 h-9 rounded-[14px] bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/10 shadow-lg active:scale-90 hover:bg-white/20 transition-all">
-                <i className="fa-solid fa-bars text-sm"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+                  {kasirLateHistory.length === 0 && !activePesanMendadak ? (
+                    <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
+                  ) : (
+                    kasirLateHistory.map((late, i) => (
+                      <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                            <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
+                            <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
+                          </div>
+                        </div>
+                        {late.alasan_telat && (
+                          <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
+                            <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-0.5">Alasan:</p>
+                            <p className="text-[10px] font-bold text-gray-800 leading-tight">{late.alasan_telat}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          }
+        />
 
       <div className="mx-1.5 mb-3 relative z-50 space-y-3" style={{ marginTop: '-2.5rem' }}>
         
@@ -2981,102 +2935,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               </div>
 
-              {/* KAS MASUK SECTION */}
-              <div className="bg-white p-3 rounded-2xl shadow-sm border border-emerald-50 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                    <i className="fa-solid fa-arrow-down text-xs"></i>
-                  </div>
-                  <div>
-                    <h4 className="text-[12px] font-black text-emerald-900 uppercase leading-none">KAS MASUK</h4>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Uang masuk laci</p>
-                  </div>
-                </div>
-
-                <div className="space-y-0">
-                  {[
-                    { label: 'Modal Tunai Kasir', val: kasModal },
-                    { label: 'Penjualan Digital', val: penjualanDigital },
-                    { label: 'Penjualan Aksesoris', val: props.totalAksesoris },
-                    { label: 'Total Admin Fee', val: props.totalAdmin }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-1 px-2 border-b border-gray-50 last:border-0">
-                      <div>
-                        <p className="text-[10px] font-black text-gray-800 uppercase leading-none">{item.label}</p>
-                      </div>
-                      <span className="text-[11px] font-black text-emerald-600 tabular-nums">{formatRupiah(item.val)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* KAS LAINNYA SECTION */}
-              <div className="bg-white p-3 rounded-2xl shadow-sm border border-orange-50 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
-                    <i className="fa-solid fa-layer-group text-xs"></i>
-                  </div>
-                  <div>
-                    <h4 className="text-[12px] font-black text-orange-900 uppercase leading-none">KAS LAIN NYA</h4>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Pemasukan tambahan</p>
-                  </div>
-                </div>
-
-                <div className="space-y-0">
-                  {[
-                    { label: 'Transaksi Khusus', val: props.totalKhusus || 0 },
-                    { label: 'Transaksi Non Tunai', val: props.totalNonTunai || 0 },
-                    { label: 'Total Kas Lainnya', val: props.kasLainnya }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-1 px-2 border-b border-gray-50 last:border-0">
-                      <div>
-                        <p className="text-[10px] font-black text-gray-800 uppercase leading-none">{item.label}</p>
-                      </div>
-                      <span className="text-[11px] font-black text-orange-600 tabular-nums">{formatRupiah(item.val)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* KAS KELUAR SECTION */}
-              <div className="bg-white p-3 rounded-2xl shadow-sm border border-red-50 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-                    <i className="fa-solid fa-arrow-up text-xs"></i>
-                  </div>
-                  <div>
-                    <h4 className="text-[12px] font-black text-red-900 uppercase leading-none">KAS KELUAR</h4>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Uang keluar laci</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center p-2 rounded-xl bg-red-50/30 border border-red-100">
-                  <div>
-                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight leading-none">Tarik Tunai Nasabah</p>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Penarikan Tunai</p>
-                  </div>
-                  <span className="text-[11px] font-black text-red-600 tabular-nums">-{formatRupiah(props.totalTarik)}</span>
-                </div>
-              </div>
-
-              {/* TOTAL FINAL CARD */}
-              <div className="bg-[#051c5f] p-4 rounded-2xl text-white shadow-lg relative overflow-hidden border border-blue-400/20">
-                <div className="relative z-10 text-center">
-                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-300">SALDO LACI KASIR</span>
-                  <h2 className="text-2xl font-black text-green-400 tracking-tighter mt-0.5 mb-2 drop-shadow-md">
-                    {formatRupiah(totalPendapatanBersih)}
-                  </h2>
-                  <div className="pt-2 border-t border-white/10">
-                    <p className="text-[7px] font-bold text-blue-200/60 uppercase tracking-tighter leading-none italic">
-                      RUMUS: (MODAL + DIGITAL + AKSESORIS + ADMIN) - TARIK
-                    </p>
-                    <p className="text-[6px] text-blue-300/40 uppercase mt-1 tracking-widest font-bold">
-                      *KAS LAINNYA TIDAK MEMPENGARUHI SALDO LACI
-                    </p>
-                  </div>
-                </div>
-              </div>
-
+              <KasSummary 
+                kasModal={kasModal}
+                penjualanDigital={penjualanDigital}
+                penjualanAksesoris={props.totalAksesoris}
+                totalAdminFee={props.totalAdmin}
+                tarikTunaiNasabah={props.totalTarik}
+                transaksiKhusus={props.totalKhusus || 0}
+                transaksiNonTunai={props.totalNonTunai || 0}
+              />
               {/* ACTION BUTTON */}
               <button 
                 onClick={() => {
@@ -3501,87 +3368,16 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     </div>
                   </div>
 
-                  {/* KAS MASUK */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-[10px]">
-                        <i className="fa-solid fa-arrow-down"></i>
-                      </div>
-                      <h4 className="text-[13px] font-black text-green-700 uppercase tracking-widest">KAS MASUK</h4>
-                    </div>
-                    <div className="space-y-2 pl-7">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Modal Tunai Kasir</p>
-                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerKasModal)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Penjualan Digital</p>
-                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerPenjualanDigital)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Penjualan Aksesoris</p>
-                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerTotalAksesoris)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Total Admin Fee</p>
-                        <span className="text-xs font-black text-gray-800">{formatRupiah(ownerTotalAdmin)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-gray-100"></div>
-
-                  {/* KAS KELUAR */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-[10px]">
-                        <i className="fa-solid fa-arrow-up"></i>
-                      </div>
-                      <h4 className="text-[13px] font-black text-red-600 uppercase tracking-widest">KAS KELUAR</h4>
-                    </div>
-                    <div className="space-y-2 pl-7">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Tarik Tunai Nasabah</p>
-                        <span className="text-xs font-black text-red-600">-{formatRupiah(ownerTotalTarik)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-gray-100"></div>
-
-                  {/* KAS LAIN NYA */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 text-[10px]">
-                        <i className="fa-solid fa-layer-group"></i>
-                      </div>
-                      <h4 className="text-[13px] font-black text-purple-600 uppercase tracking-widest">KAS LAIN NYA</h4>
-                    </div>
-                    <div className="space-y-2 pl-7">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Admin Dalam/Non Tunai</p>
-                        <span className="text-xs font-black text-purple-600">{formatRupiah(ownerAdminDalam)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Transaksi Non Tunai</p>
-                        <span className="text-xs font-black text-indigo-600">{formatRupiah(ownerNonTunai)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Transaksi Khusus</p>
-                        <span className="text-xs font-black text-fuchsia-600">{formatRupiah(ownerKhusus)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Total Balance */}
-                  <div className="mt-3 p-4 bg-gradient-to-r from-blue-700 to-blue-800 rounded-2xl shadow-inner text-white flex justify-between items-center">
-                    <div>
-                      <p className="text-[12px] font-black text-blue-100 uppercase tracking-widest">SALDO LACI KASIR</p>
-                      <p className="text-[8px] text-blue-200 mt-0.5">Total uang fisik hari ini</p>
-                    </div>
-                    <span className="text-lg font-black text-green-300">{formatRupiah(ownerTotalLaci)}</span>
-                  </div>
-
+                  <KasSummary 
+                    kasModal={ownerKasModal}
+                    penjualanDigital={ownerPenjualanDigital}
+                    penjualanAksesoris={ownerTotalAksesoris}
+                    totalAdminFee={ownerTotalAdmin}
+                    tarikTunaiNasabah={ownerTotalTarik}
+                    adminDalamNonTunai={ownerAdminDalam}
+                    transaksiKhusus={ownerKhusus}
+                    transaksiNonTunai={ownerNonTunai}
+                  />
                   <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
                     <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
                   </button>

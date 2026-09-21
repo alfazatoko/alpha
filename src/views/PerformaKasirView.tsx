@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { GlobalHeader } from '../components/GlobalHeader';
 import { jsPDF } from 'jspdf'
 import { formatRupiah, cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
@@ -720,26 +721,17 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar bg-slate-50", props.active && "active")}>
-      <div className="relative theme-header" style={{ paddingBottom: '3rem' }}>
-        <div className="px-5 pt-12 pb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => props.setActiveView('view-beranda')}
-              className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-all backdrop-blur-sm"
-            >
-              <i className="fa-solid fa-arrow-left"></i>
-            </button>
-            <div>
-              <h1 className="text-[15px] font-black text-white leading-tight uppercase tracking-widest">
-                {mainTab === 'profit' ? 'Laporan Pembukuan Toko' : 'Performa Kasir'}
-              </h1>
-              <p className="text-[10px] text-white/80 font-bold uppercase mt-0.5 tracking-wider">
-                {mainTab === 'profit' ? 'Tambah Saldo Bank, Omset & Admin Fee' : 'Omset, Admin Fee & Tambah Saldo Kasir'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <GlobalHeader 
+        storePhoto={props.storePhoto}
+        storeName={props.storeName}
+        storeSubtext={props.storeSubtext}
+        kasirName={props.kasirName}
+        kasirRole={props.kasirRole}
+        dayName={dayName}
+        fullDate={fullDate}
+        clockStr={clockStr}
+        onMenuClick={() => props.setIsSidePanelOpen?.(true)}
+      />
 
       <div className="px-4 -mt-8 relative z-10 space-y-4 pb-24">
         
