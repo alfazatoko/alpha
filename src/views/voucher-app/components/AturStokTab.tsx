@@ -956,7 +956,7 @@ export default function AturStokTab({
                   }`}>
                     VOUCHER
                   </th>
-                  <th className={`py-2 px-1 text-center font-bold ${
+                  <th className={`py-2 px-1 text-center font-bold opacity-50 ${
                     showStatusColumn ? 'w-[18%]' : 'w-[20%]'
                   }`}>
                     LALU
@@ -966,7 +966,9 @@ export default function AturStokTab({
                   } ${
                     isLight ? 'text-blue-700' : 'text-blue-400'
                   }`}>
-                    STOK AWAL
+                    <div className="flex items-center justify-center gap-1">
+                      <Pencil className="w-2.5 h-2.5" /> STOK AWAL
+                    </div>
                   </th>
                   {showStatusColumn && (
                     <th className={`py-2 px-1 text-center font-bold w-[17%]`}>
@@ -1023,32 +1025,38 @@ export default function AturStokTab({
                       </td>
 
                       {/* STOK SHIFT LALU */}
-                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
-                        {item.previousStock}
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{item.previousStock}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
                       </td>
 
                       {/* STOK FISIK AWAL */}
                       <td className="py-2 px-1 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isStep1ReadOnly && !isInitialLocked) {
-                              setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId });
-                            }
-                          }}
-                          disabled={isStep1ReadOnly || isInitialLocked}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isStep1ReadOnly || isInitialLocked ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
-                            isLight 
-                              ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' 
-                              : 'bg-blue-950/40 hover:bg-blue-900/50 border-blue-500/30 text-blue-400'
-                          }`}
-                          title={isStep1ReadOnly || isInitialLocked ? 'Tidak bisa diedit saat ini' : 'Ketuk untuk ubah stok awal'}
-                        >
-                          <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
-                            {item.initialStock}
-                          </span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isStep1ReadOnly && !isInitialLocked) {
+                                setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId });
+                              }
+                            }}
+                            disabled={isStep1ReadOnly || isInitialLocked}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isStep1ReadOnly || isInitialLocked ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
+                              isLight 
+                                ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' 
+                                : 'bg-blue-950/40 hover:bg-blue-900/50 border-blue-500/30 text-blue-400'
+                            }`}
+                            title={isStep1ReadOnly || isInitialLocked ? 'Tidak bisa diedit saat ini' : 'Ketuk untuk ubah stok awal'}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.initialStock}
+                            </span>
+                          </button>
+                          {!isStep1ReadOnly && !isInitialLocked && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-blue-500' : 'text-blue-400'}`} />}
+                        </div>
                       </td>
 
                       {/* STATUS (OPTIONAL) */}
@@ -1188,8 +1196,12 @@ export default function AturStokTab({
               }`}>
                 <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
                   <th className="py-2 px-2 w-[42%] sm:w-[40%] font-bold">VOUCHER</th>
-                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold">AWAL</th>
-                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>+ MASUK</th>
+                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold opacity-50">AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <Pencil className="w-2.5 h-2.5" /> + MASUK
+                    </div>
+                  </th>
                   <th className="py-2 px-2 text-right w-[16%] sm:w-[20%] font-bold">TOTAL</th>
                 </tr>
               </thead>
@@ -1229,28 +1241,34 @@ export default function AturStokTab({
                         </div>
                       </td>
 
-                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
-                        {item.initialStock}
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{item.initialStock}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
                       </td>
                       
                       <td className="py-2 px-1 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isOwnerMode && !isIncomingLocked) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
-                          }}
-                          disabled={isOwnerMode || isIncomingLocked}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isIncomingLocked ? 'cursor-default opacity-70' : 'cursor-pointer active:scale-95'} ${
-                            isLight 
-                              ? (item.incomingStock > 0 ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700')
-                              : (item.incomingStock > 0 ? 'bg-indigo-900/60 border-indigo-400/50 text-indigo-300' : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-400')
-                          }`}
-                        >
-                          <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
-                            {item.incomingStock > 0 ? '+' + item.incomingStock : 0}
-                          </span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isOwnerMode && !isIncomingLocked) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
+                            }}
+                            disabled={isOwnerMode || isIncomingLocked}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isIncomingLocked ? 'cursor-default opacity-70' : 'cursor-pointer active:scale-95'} ${
+                              isLight 
+                                ? (item.incomingStock > 0 ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700')
+                                : (item.incomingStock > 0 ? 'bg-indigo-900/60 border-indigo-400/50 text-indigo-300' : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-400')
+                            }`}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.incomingStock > 0 ? '+' + item.incomingStock : 0}
+                            </span>
+                          </button>
+                          {!isOwnerMode && !isIncomingLocked && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-indigo-500' : 'text-indigo-400'}`} />}
+                        </div>
                       </td>
 
                       <td className={`py-2 px-2 text-right font-mono font-black text-xs sm:text-sm leading-tight ${
@@ -1475,9 +1493,13 @@ export default function AturStokTab({
               }`}>
                 <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
                   <th className="py-2 px-2 w-[36%] sm:w-[32%] font-bold">VOUCHER</th>
-                  <th className="py-2 px-1 text-center w-[14%] sm:w-[14%] font-bold">AWAL</th>
-                  <th className={`py-2 px-1 text-center w-[22%] sm:w-[24%] font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>AKHIR</th>
-                  <th className={`py-2 px-1 text-center w-[12%] sm:w-[14%] font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>TERJUAL</th>
+                  <th className="py-2 px-1 text-center w-[14%] sm:w-[14%] font-bold opacity-50">AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[22%] sm:w-[24%] font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <Pencil className="w-2.5 h-2.5" /> AKHIR
+                    </div>
+                  </th>
+                  <th className={`py-2 px-1 text-center w-[12%] sm:w-[14%] font-bold opacity-70 ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>TERJUAL</th>
                   <th className="py-2 px-2 text-right w-[16%] sm:w-[16%] font-bold">TOTAL</th>
                 </tr>
               </thead>
@@ -1529,30 +1551,36 @@ export default function AturStokTab({
                       </td>
 
                       {/* AWAL */}
-                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-600 dark:text-slate-300'}`}>
-                        {item.initialStock}
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{item.initialStock}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
                       </td>
                       
                       {/* SISA AKHIR */}
                       <td className="py-2 px-1 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isOwnerMode) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
-                          }}
-                          disabled={isOwnerMode}
-                          className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
-                            isLight 
-                              ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
-                              : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
-                          }`}
-                          title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : 'Ketuk untuk ubah sisa akhir'}
-                        >
-                          <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
-                            {item.finalStock}
-                          </span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isOwnerMode) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
+                            }}
+                            disabled={isOwnerMode}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
+                              isLight 
+                                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
+                                : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+                            }`}
+                            title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : 'Ketuk untuk ubah sisa akhir'}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.finalStock}
+                            </span>
+                          </button>
+                          {!isOwnerMode && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-emerald-500' : 'text-emerald-400'}`} />}
+                        </div>
                       </td>
 
                       {/* TERJUAL */}
@@ -1614,78 +1642,98 @@ export default function AturStokTab({
           animate={{ opacity: 1, y: 0 }}
           className="space-y-3"
         >
-          {/* UANG KAS FISIK & REKONSILIASI (MINIMALIST) */}
-          <div className={`rounded-xl p-3 border shadow-xs space-y-3 ${
+          {/* UANG KAS FISIK & REKONSILIASI (MODERN EXCEL STYLE) */}
+          <div className={`rounded-xl p-3.5 sm:p-4 border shadow-xs space-y-4 ${
             isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-500/20'
           }`}>
-            {/* Header & Inline Summary */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                  <Banknote className="w-4 h-4 text-emerald-500" />
-                  Uang Laci (Tunai)
-                </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-                  isCashMatched
-                    ? (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 text-emerald-400')
-                    : (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-900/40 text-amber-400')
-                }`}>
-                  {isCashMatched ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                  {isCashMatched ? 'PAS' : 'SELISIH'}
-                </span>
-              </div>
-              
-              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] sm:text-[11px] font-semibold ${
-                isLight ? 'text-slate-600' : 'text-slate-400'
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <span className={`text-sm sm:text-base font-black flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <Banknote className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
+                Uang Laci (Tunai)
+              </span>
+              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                isCashMatched
+                  ? (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 text-emerald-400')
+                  : (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-900/40 text-amber-400')
               }`}>
-                <span>Jual: <strong className={isLight ? 'text-slate-900' : 'text-white'}>Rp{totalSalesAmount.toLocaleString('id-ID')}</strong></span>
-                <span>-</span>
-                <span>QRIS/TF: <strong className="text-blue-500">Rp{totalDigitalAmount.toLocaleString('id-ID')}</strong></span>
-                <span>=</span>
-                <span className={`px-1.5 py-0.5 rounded ${
-                  isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-900/20 text-emerald-400'
-                }`}>
-                  Wajib: <strong className="font-mono text-xs">Rp{totalCashExpected.toLocaleString('id-ID')}</strong>
-                </span>
+                {isCashMatched ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                {isCashMatched ? 'PAS' : 'SELISIH'}
+              </span>
+            </div>
+            
+            {/* Rincian Excel-style */}
+            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-2 text-xs sm:text-sm font-semibold">
+              
+              {/* Total Penjualan */}
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Total penjualan</div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>:</div>
+              <div className={`text-right font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                Rp{totalSalesAmount.toLocaleString('id-ID')}
               </div>
+
+              {/* Laku Non tunai / QRIS */}
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Laku Non tunai \ Qris</div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>:</div>
+              <div className="text-right font-mono font-black text-rose-500 dark:text-rose-400">
+                - Rp{totalDigitalAmount.toLocaleString('id-ID')}
+              </div>
+
+              <div className="col-span-3 border-t-2 border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
+
+              {/* Uang Tunai Seharusnya */}
+              <div className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Seharusnya</div>
+              <div className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>:</div>
+              <div className={`text-right font-mono font-black text-sm sm:text-base ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                Rp{totalCashExpected.toLocaleString('id-ID')}
+              </div>
+
             </div>
 
-            <hr className={isLight ? 'border-slate-100' : 'border-slate-700/50'} />
-
-            {/* Input Kas Fisik */}
-            <div className="flex items-stretch gap-2 h-10">
-              <div className={`flex-1 flex items-center gap-2 rounded-xl px-3 border ${
-                isLight ? 'bg-slate-50 border-slate-300 focus-within:border-blue-500' : 'bg-slate-900/50 border-slate-700 focus-within:border-blue-500'
-              }`}>
-                <span className={`text-xs font-bold ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Fisik: Rp</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={cashPhysical}
-                  onChange={(e) => handleCashPhysicalChange(e.target.value)}
-                  className={`w-full h-full bg-transparent font-mono font-black text-sm focus:outline-none ${
-                    isLight ? 'text-slate-900 placeholder-slate-400' : 'text-slate-100 placeholder-slate-600'
-                  }`}
-                />
+            {/* Input Kas Fisik & Button for better space handling */}
+            <div className="flex flex-col gap-3 pt-2">
+              
+              {/* Row 1: Fisik input with Rp next to number */}
+              <div className="flex items-center gap-2">
+                <span className={`w-14 shrink-0 text-xs sm:text-sm font-bold ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Fisik:</span>
+                <div className={`flex-1 flex items-center gap-1.5 rounded-xl px-3 border h-11 sm:h-12 ${
+                  isLight ? 'bg-slate-50 border-slate-300 focus-within:border-blue-500 shadow-inner' : 'bg-slate-900/50 border-slate-700 focus-within:border-blue-500'
+                }`}>
+                  <span className={`text-sm sm:text-base font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={cashPhysical}
+                    onChange={(e) => handleCashPhysicalChange(e.target.value)}
+                    className={`w-full h-full bg-transparent font-mono font-black text-base sm:text-lg focus:outline-none ${
+                      isLight ? 'text-slate-900 placeholder-slate-400' : 'text-slate-100 placeholder-slate-600'
+                    }`}
+                  />
+                </div>
               </div>
 
-              {/* Samakan Button / Status */}
-              <button
-                type="button"
-                onClick={handleSyncCashPhysical}
-                className={`shrink-0 flex flex-col justify-center items-center px-3 rounded-xl border transition cursor-pointer ${
-                  cashDifference === 0
-                    ? (isLight ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700' : 'bg-emerald-900/30 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-400')
-                    : (isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-blue-600' : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-blue-400')
-                }`}
-                title="Klik untuk otomatis menyamakan"
-              >
-                <span className="text-[9px] font-bold opacity-80 leading-none mb-1">SAMAKAN</span>
-                <span className="font-mono text-[10px] font-black tracking-tight leading-none">
-                  {cashDifference === 0 ? 'PAS' : `${cashDifference > 0 ? '+' : '-'}Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+              {/* Row 2: Samakan text and button separated */}
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`text-[11px] sm:text-sm font-bold tracking-tight shrink-0 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
+                  Samakan dengan pembukuan :
                 </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={handleSyncCashPhysical}
+                  className={`flex-1 flex items-center justify-center px-2 sm:px-3 h-10 sm:h-11 rounded-xl border transition cursor-pointer shadow-sm ${
+                    cashDifference === 0
+                      ? (isLight ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 hover:bg-emerald-900/60 border-emerald-500/40 text-emerald-400')
+                      : (isLight ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' : 'bg-blue-900/40 hover:bg-blue-900/60 border-blue-500/40 text-blue-400')
+                  }`}
+                  title="Klik untuk otomatis menyamakan"
+                >
+                  <span className="font-mono text-sm sm:text-base font-black tracking-tight">
+                    {cashDifference === 0 ? 'PAS' : `${cashDifference > 0 ? '+' : '-'}Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+                  </span>
+                </button>
+              </div>
+
             </div>
 
             {/* Catatan Selisih */}
@@ -1753,44 +1801,63 @@ export default function AturStokTab({
                 </p>
               </div>
             </div>
-            <span className={`text-xs px-2.5 py-1 rounded-lg border font-mono font-semibold ${
+            <span className={`text-xs px-2.5 py-1 rounded-lg border font-mono font-semibold whitespace-nowrap ${
               isLight ? 'bg-white border-slate-200 text-slate-700 shadow-2xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
             }`}>
               {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div className={`rounded-xl p-3 space-y-1 border shadow-xs ${
-              isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/20 text-slate-900 dark:text-white'
-            }`}>
-              <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>1. Sisa Stok Diserahkan</span>
-              <div className={`text-base sm:text-lg font-black font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                {totalFinalStock} Pcs
-              </div>
-              <div className={`text-xs ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Awal: {totalInitialStock} • Terjual: {totalSoldPcs}</div>
+          {/* Ringkasan Serah Terima (Banking Style) */}
+          <div className={`rounded-xl border shadow-xs overflow-hidden ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-slate-700'
+          }`}>
+            <div className={`px-4 py-2.5 border-b flex items-center justify-between ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-900/50 border-slate-700/50'}`}>
+              <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ringkasan</span>
+              <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Nilai</span>
             </div>
+            
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              
+              {/* Sisa Stok */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Sisa Stok</span>
+                  <span className={`text-[10px] sm:text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Awal: {totalInitialStock} • Terjual: {totalSoldPcs}</span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {totalFinalStock} Pcs
+                </div>
+              </div>
 
-            <div className={`rounded-xl p-3 space-y-1 border shadow-xs ${
-              isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/20 text-slate-900 dark:text-white'
-            }`}>
-              <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>2. Uang Tunai Laci</span>
-              <div className={`text-base sm:text-lg font-black font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                Rp{physicalCashValue.toLocaleString('id-ID')}
+              {/* Uang Tunai */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Uang Tunai Laci</span>
+                  <span className={`text-[10px] sm:text-xs font-semibold ${
+                    isCashMatched 
+                      ? (isLight ? 'text-emerald-600' : 'text-emerald-400') 
+                      : (isLight ? 'text-rose-500' : 'text-rose-400')
+                  }`}>
+                    {isCashMatched ? 'Status: PAS' : `Selisih Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+                  </span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Rp{physicalCashValue.toLocaleString('id-ID')}
+                </div>
               </div>
-              <div className={`text-xs ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                {isCashMatched ? 'Status: Sesuai (PAS)' : `Selisih Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
-              </div>
-            </div>
 
-            <div className={`rounded-xl p-3 space-y-1 border shadow-xs ${
-              isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/20 text-slate-900 dark:text-white'
-            }`}>
-              <span className={`text-xs font-semibold ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>3. Non-Tunai</span>
-              <div className={`text-base sm:text-lg font-black font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                Rp{totalDigitalAmount.toLocaleString('id-ID')}
+              {/* Non-Tunai */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Non-Tunai (QRIS)</span>
+                  <span className={`text-[10px] sm:text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{totalDigitalPcs} transaksi</span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Rp{totalDigitalAmount.toLocaleString('id-ID')}
+                </div>
               </div>
-              <div className={`text-xs ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>{totalDigitalPcs} transaksi digital</div>
+
             </div>
           </div>
 
@@ -2114,30 +2181,54 @@ export default function AturStokTab({
                     </button>
                   </div>
 
-                  {/* Product Card Box - Centered & Enlarged */}
-                  <div className={`p-3.5 sm:p-4 rounded-2xl border flex flex-col items-center justify-center text-center gap-1.5 ${
+                  {/* Product Card Box - Centered Grid Block */}
+                  <div className={`p-3 sm:p-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 ${
                     isLight 
                       ? 'bg-slate-50/80 border-slate-200 shadow-xs' 
                       : 'bg-slate-50 dark:bg-slate-800 border-blue-900/40 shadow-xs'
                   }`}>
-                    <div className="flex items-center justify-center gap-2">
-                      <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="lg" />
-                      <span className={`text-xl sm:text-2xl font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                    {/* Inner wrapper to keep grid tight and centered */}
+                    <div className="grid grid-cols-[auto_auto_1fr] items-center text-left gap-x-2 gap-y-2 w-fit">
+                      
+                      {/* Provider Row */}
+                      <div className="flex items-center justify-start">
+                        <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-sm sm:text-base font-black uppercase tracking-wide ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
                         {brandTitle}
-                      </span>
+                      </div>
+                      
+                      {/* Nama Produk Row */}
+                      <div className={`text-[11px] sm:text-xs font-bold whitespace-nowrap capitalize ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Nama Produk
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-xs sm:text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                        {brandTitle} {variantSubtitle || item.productName}
+                      </div>
+
+                      {/* Harga Row */}
+                      <div className={`text-[11px] sm:text-xs font-bold whitespace-nowrap capitalize ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Harga Jual
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-xs sm:text-sm font-mono font-black truncate ${
+                        isStep1
+                          ? (isLight ? 'text-blue-700' : 'text-blue-400')
+                          : activeEditingRow.step === 2
+                            ? (isLight ? 'text-indigo-700' : 'text-indigo-400')
+                            : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+                      }`}>
+                        Rp{item.price.toLocaleString('id-ID')}
+                      </div>
                     </div>
-                    <span className={`text-sm sm:text-base font-bold ${isLight ? 'text-slate-700' : 'text-slate-700 dark:text-slate-200'}`}>
-                      {variantSubtitle || item.productName}
-                    </span>
-                    <span className={`text-xs sm:text-sm font-mono font-bold px-2.5 py-0.5 rounded-full ${
-                      isStep1
-                        ? (isLight ? 'bg-blue-100 text-blue-800' : 'bg-blue-950/80 text-blue-300 border border-blue-800/50')
-                        : activeEditingRow.step === 2
-                          ? (isLight ? 'bg-indigo-100 text-indigo-800' : 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/50')
-                          : (isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50')
-                    }`}>
-                      @Rp{item.price.toLocaleString('id-ID')}
-                    </span>
                   </div>
 
                   {/* Content for Step 1 (Stok Awal) */}

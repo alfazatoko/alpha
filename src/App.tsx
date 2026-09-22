@@ -1569,11 +1569,8 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [googleUid, isLoggedIn, filterTanggalLaporan, filterKasir, username, account?.role, transactions])
   
-  // Form State
-  const [formKategori, setFormKategori] = useState('')
-  const [formNominal, setFormNominal] = useState('')
-  const [formAdmin, setFormAdmin] = useState('')
-  const [formKeterangan, setFormKeterangan] = useState('')
+  // Form State removed to prevent global re-render lag
+
   
   // Isi Saldo State
   const [isiJenis, setIsiJenis] = useState('')
@@ -1639,25 +1636,30 @@ const MainApp: React.FC<MainAppProps> = ({
     setConfirmDialog({ show: true, title, message, onConfirm })
   }
 
-  const handleSimpanTransaksi = (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }, bypassDuplicateCheck = false) => {
+  const handleSimpanTransaksi = (
+    data?: { kategori: string, nominal: string, admin: string, keterangan: string },
+    options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }, 
+    bypassDuplicateCheck = false
+  ) => {
+    if (!data) return
     if (isSaving) return
-    const totalNominal = parseNominal(formNominal)
+    const totalNominal = parseNominal(data.nominal)
     const nonTunaiAmount = options?.nonTunaiAmount ?? 0
-    const admin = parseNominal(formAdmin)
+    const admin = parseNominal(data.admin)
     
-    if (!formKategori) return showToast('Pilih kategori transaksi!')
+    if (!data.kategori) return showToast('Pilih kategori transaksi!')
     if (totalNominal <= 0) return showToast('Masukkan nominal yang valid!')
 
     const nominal = totalNominal
     let finalNominal = nominal
     let finalAdmin = admin
 
-    if (formKategori === 'Order Kuota') {
+    if (data.kategori === 'Order Kuota') {
       finalAdmin = admin - nominal
       finalNominal = nominal
     }
 
-    let baseKet = formKeterangan || ''
+    let baseKet = data.keterangan || ''
     if (options) {
       if (options.isAdminNonTunai) baseKet += ' [ADMIN_DALAM]'
       if (options.subTab === 'NON_TUNAI') baseKet += ' [NON_TUNAI]'
@@ -1675,7 +1677,7 @@ const MainApp: React.FC<MainAppProps> = ({
       const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).getTime()
       const duplicateTx = transactions.find(t => {
         const txTime = new Date(t.timestamp).getTime()
-        return t.kategori === formKategori && 
+        return t.kategori === data.kategori && 
                t.nominal === finalNominal && 
                t.kasir_id === username &&
                txTime >= fiveMinsAgo
@@ -1684,8 +1686,8 @@ const MainApp: React.FC<MainAppProps> = ({
       if (duplicateTx) {
         handleConfirm(
           '⚠️ Indikasi Transaksi Ganda',
-          `Kamu baru saja mencatat transaksi ${formKategori} sebesar Rp ${finalNominal.toLocaleString('id-ID')} beberapa menit yang lalu.\n\nApakah ini transaksi yang baru (berbeda pembeli), atau tidak sengaja tercatat 2x?\n\nTekan Lanjutkan jika ini transaksi baru.`,
-          () => handleSimpanTransaksi(options, true)
+          `Kamu baru saja mencatat transaksi ${data.kategori} sebesar Rp ${finalNominal.toLocaleString('id-ID')} beberapa menit yang lalu.\n\nApakah ini transaksi yang baru (berbeda pembeli), atau tidak sengaja tercatat 2x?\n\nTekan Lanjutkan jika ini transaksi baru.`,
+          () => handleSimpanTransaksi(data, options, true)
         )
         return
       }
@@ -1703,7 +1705,7 @@ const MainApp: React.FC<MainAppProps> = ({
       id,
       user_id: googleUid,
       kasir_id: username,
-      kategori: formKategori,
+      kategori: data.kategori,
       nominal: finalNominal,
       admin_fee: finalAdmin,
       keterangan: finalKeterangan,
@@ -1736,7 +1738,7 @@ const MainApp: React.FC<MainAppProps> = ({
             id: adjId,
             user_id: googleUid,
             kasir_id: username,
-            kategori: formKategori,
+            kategori: data.kategori,
             nominal: nonTunaiAmount,
             admin_fee: 0,
             keterangan: adjKet,
@@ -1760,10 +1762,6 @@ const MainApp: React.FC<MainAppProps> = ({
         }
 
         setIsSaving(false)
-        setFormKategori('')
-        setFormNominal('')
-        setFormAdmin('')
-        setFormKeterangan('')
         showToast('Transaksi Berhasil Disimpan!')
       }
     })
@@ -2442,11 +2440,7 @@ const MainApp: React.FC<MainAppProps> = ({
                           </div>
                           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
                             <TransactionForm 
-                              kategori={formKategori} setKategori={setFormKategori}
-                              nominal={formNominal} setNominal={setFormNominal}
-                              admin={formAdmin} setAdmin={setFormAdmin}
-                              keterangan={formKeterangan} setKeterangan={setFormKeterangan}
-                              onSave={handleSimpanTransaksi} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
+                              onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
                             />
                           </div>
                         </div>
@@ -2683,15 +2677,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       saldoBank={saldoBank}
                       totalPenjualan={totalPenjualan}
                       lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
-                      formKategori={formKategori}
-                      setFormKategori={setFormKategori}
-                      formNominal={formNominal}
-                      setFormNominal={setFormNominal}
-                      formAdmin={formAdmin}
-                      setFormAdmin={setFormAdmin}
-                      formKeterangan={formKeterangan}
-                      setFormKeterangan={setFormKeterangan}
-                      handleSimpanTransaksi={handleSimpanTransaksi}
+                      handleSimpanTransaksi={handleSimpanTransaksi as any}
                       handleSyncPast30Days={() => setSyncPast30Days(true)}
                       transactions={todayTransactions}
                       allTransactions={displayTransactions}
@@ -2751,15 +2737,7 @@ const MainApp: React.FC<MainAppProps> = ({
             saldoBank={saldoBank}
             totalPenjualan={totalPenjualan}
             lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
-            formKategori={formKategori}
-            setFormKategori={setFormKategori}
-            formNominal={formNominal}
-            setFormNominal={setFormNominal}
-            formAdmin={formAdmin}
-            setFormAdmin={setFormAdmin}
-            formKeterangan={formKeterangan}
-            setFormKeterangan={setFormKeterangan}
-            handleSimpanTransaksi={handleSimpanTransaksi}
+            handleSimpanTransaksi={handleSimpanTransaksi as any}
             handleSyncPast30Days={() => setSyncPast30Days(true)}
             transactions={todayTransactions}
             allTransactions={displayTransactions}

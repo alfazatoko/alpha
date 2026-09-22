@@ -15,14 +15,14 @@ interface BerandaViewProps {
   saldoBank: number
   totalPenjualan: number
   lastTx?: Transaction
-  formKategori: string
-  setFormKategori: (v: string) => void
-  formNominal: string
-  setFormNominal: (v: string) => void
-  formAdmin: string
-  setFormAdmin: (v: string) => void
-  formKeterangan: string
-  setFormKeterangan: (v: string) => void
+  formKategori?: string
+  setFormKategori?: (v: string) => void
+  formNominal?: string
+  setFormNominal?: (v: string) => void
+  formAdmin?: string
+  setFormAdmin?: (v: string) => void
+  formKeterangan?: string
+  setFormKeterangan?: (v: string) => void
   handleSimpanTransaksi: () => void
   handleSyncPast30Days?: () => void
   transactions: Transaction[]
@@ -4942,14 +4942,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       {props.kasirRole !== 'owner' && (
         <div className="px-1.5 mb-4">
           <TransactionForm 
-            kategori={props.formKategori}
-            setKategori={props.setFormKategori}
-            nominal={props.formNominal}
-            setNominal={props.setFormNominal}
-            admin={props.formAdmin}
-            setAdmin={props.setFormAdmin}
-            keterangan={props.formKeterangan}
-            setKeterangan={props.setFormKeterangan}
             onSave={props.handleSimpanTransaksi}
             isSaving={props.isSaving}
             presets={props.presets}

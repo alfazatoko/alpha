@@ -191,12 +191,15 @@ export default function ProductsTab({
     try {
       const targetStoreKey = copyTargetStoreId;
 
-      // Siapkan produk yang akan disalin
-      const productsToCopy: VoucherProduct[] = products.map(p => ({
-        ...p,
-        id: `${p.id}_copy_${Date.now()}`,
-        currentStock: copyMode === 'withStock' ? p.currentStock : 0,
-      }));
+      // Siapkan produk yang akan disalin dengan ID yang stabil
+      const productsToCopy: VoucherProduct[] = products.map(p => {
+        const baseId = p.id.includes('_copy_') ? p.id.split('_copy_')[0] : p.id;
+        return {
+          ...p,
+          id: `${baseId}_copy_${copyTargetStoreId}`,
+          currentStock: copyMode === 'withStock' ? p.currentStock : 0,
+        };
+      });
 
       // Tentukan kasir tujuan
       const targetCashierIds: string[] = copyTargetCashierId === 'all'
@@ -204,6 +207,9 @@ export default function ProductsTab({
             ? targetStoreCashiers.map(c => c.id)
             : ['c1']) // fallback jika tidak ada kasir terdaftar
         : [copyTargetCashierId];
+
+      let allProductsToUpsert = new Map();
+      let allStocksToUpsert: any[] = [];
 
       // Tulis ke localStorage tiap kasir tujuan
       for (const cashierId of targetCashierIds) {
@@ -222,10 +228,35 @@ export default function ProductsTab({
           finalProducts = productsToCopy;
         }
         localStorage.setItem(`${prefix}_products`, JSON.stringify(finalProducts));
+
+        // Siapkan data untuk database utama (Supabase)
+        for (const p of finalProducts) {
+          allProductsToUpsert.set(p.id, {
+            id: p.id,
+            store_id: copyTargetStoreId,
+            name: p.name,
+            category: p.category,
+            operator: p.operator,
+            cost_price: p.costPrice,
+            selling_price: p.sellingPrice,
+            min_stock_level: p.minStockLevel,
+            description: p.description || '',
+            barcode: p.barcode || '',
+            sku: p.sku || ''
+          });
+          
+          allStocksToUpsert.push({
+            store_id: copyTargetStoreId,
+            product_id: p.id,
+            cashier_id: cashierId,
+            current_stock: p.currentStock
+          });
+        }
       }
 
       // Sync ke Supabase jika online
       if (googleUid && copyTargetStoreId) {
+        // 1. Update fallback store_settings
         const { data: existingData } = await supabase
           .from('store_settings')
           .select('voucher_app_data')
@@ -249,6 +280,26 @@ export default function ProductsTab({
           store_id: copyTargetStoreId,
           voucher_app_data: updatedCloud
         }, { onConflict: 'store_id' });
+
+        // 2. Jika mode timpa (overwrite) dan semua kasir dipilih, hapus produk lama di DB agar tidak muncul lagi
+        if (copyConflict === 'overwrite' && copyTargetCashierId === 'all') {
+           await supabase.from('voucher_products').delete().eq('store_id', copyTargetStoreId);
+           await supabase.from('voucher_stocks').delete().eq('store_id', copyTargetStoreId);
+        } else if (copyConflict === 'overwrite' && copyTargetCashierId !== 'all') {
+           // Jika hanya satu kasir, kita hapus stok lama untuk kasir tersebut saja
+           await supabase.from('voucher_stocks').delete().eq('store_id', copyTargetStoreId).eq('cashier_id', copyTargetCashierId);
+        }
+
+        // 3. Simpan ke tabel utama agar langsung terbaca di HP lain
+        const productsArr = Array.from(allProductsToUpsert.values());
+        if (productsArr.length > 0) {
+           const { error: pErr } = await supabase.from('voucher_products').upsert(productsArr);
+           if (pErr) console.error("Error upserting voucher_products:", pErr);
+        }
+        if (allStocksToUpsert.length > 0) {
+           const { error: sErr } = await supabase.from('voucher_stocks').upsert(allStocksToUpsert);
+           if (sErr) console.error("Error upserting voucher_stocks:", sErr);
+        }
       }
 
       const targetStoreName = storeList.find(s => s.id === copyTargetStoreId)?.name || copyTargetStoreId;

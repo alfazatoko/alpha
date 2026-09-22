@@ -1165,18 +1165,49 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     setProducts(updatedProducts);
     setTransactions(updatedTransactions);
     
+    // Masukkan ke database Supabase (tabel utama)
+    if (activeStoreId) {
+      const productsToInsert = newProducts.map(p => ({
+        id: p.id,
+        store_id: activeStoreId,
+        name: p.name,
+        category: p.category,
+        operator: p.operator,
+        cost_price: p.costPrice,
+        selling_price: p.sellingPrice,
+        min_stock_level: p.minStockLevel,
+        description: p.description,
+        barcode: p.barcode,
+        sku: p.sku
+      }));
+      const stocksToInsert = newProducts.map(p => ({
+        store_id: activeStoreId,
+        product_id: p.id,
+        cashier_id: cashiers[activeCashierIndex]?.id || 'c1',
+        current_stock: p.currentStock
+      }));
+      
+      supabase.from('voucher_products').insert(productsToInsert).then(res1 => {
+        if (res1.error) console.error("Error Bulk Insert Products: ", res1.error);
+        supabase.from('voucher_stocks').upsert(stocksToInsert).then(res2 => {
+          if (res2.error) console.error("Error Bulk Insert Stocks: ", res2.error);
+        });
+      });
+    }
+
     // Simpan ke local storage
     saveState(updatedProducts, updatedTransactions, notifications, shiftHandovers, detailedHandovers);
     
     // Trigger immediate cloud sync
     setForceSync(true);
 
-    pushNotification(
+    const updatedNotifs = pushNotification(
       'success',
       `${newProducts.length} Voucher Ditambahkan`,
       `Berhasil mendaftarkan ${newProducts.length} produk voucher baru ke sistem secara massal.`,
       notifications
     );
+    setNotifications(updatedNotifs);
   };
 
   const handleUpdateProduct = (updatedProduct: VoucherProduct) => {

@@ -2,15 +2,7 @@ import React, { useRef, useState } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
 
 interface TransactionFormProps {
-  kategori: string
-  setKategori: (v: string) => void
-  nominal: string
-  setNominal: (v: string) => void
-  admin: string
-  setAdmin: (v: string) => void
-  keterangan: string
-  setKeterangan: (v: string) => void
-  onSave: (options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
+  onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
   isSaving?: boolean
   presets?: any[]
   onOpenVoucherJualCepat?: () => void
@@ -19,8 +11,13 @@ interface TransactionFormProps {
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  kategori, setKategori, nominal, setNominal, admin, setAdmin, keterangan, setKeterangan, onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules
 }) => {
+  const [kategori, setKategori] = useState('')
+  const [nominal, setNominal] = useState('')
+  const [admin, setAdmin] = useState('')
+  const [keterangan, setKeterangan] = useState('')
+
   const [activeMode, setActiveMode] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | ''>('')
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
   const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
@@ -60,7 +57,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [tema3Step, isTema3SheetOpen]);
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
-  const SUMBER_LIST = ['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC']
+  const SUMBER_LIST = ['BANK','GoPay','QRIS','DANA','ATM/EDC']
   const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
@@ -402,7 +399,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Set admin=0 for aksesoris, isAdminNonTunai based on pay mode
       setAdmin('0')
       const isNonTunai = aksesorisPayMode === 'QRIS'
-      onSave({ activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
+      onSave({ kategori, nominal, admin: '0', keterangan }, { activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
       setIsKetAuto(true)
       return
     }
@@ -435,9 +432,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
     const subTab = subMode === 'NORMAL' ? 'KHUSUS' : subMode
-    onSave({ activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+    onSave({ kategori, nominal, admin, keterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
     setIsKetAuto(true)
   }
+
+  const [prevSaving, setPrevSaving] = useState(isSaving)
+  React.useEffect(() => {
+    if (prevSaving && !isSaving) {
+      setNominal('')
+      setAdmin('')
+      setKeterangan('')
+    }
+    setPrevSaving(isSaving)
+  }, [isSaving, prevSaving])
 
   return (
     <div className="relative p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 rounded-[2.5rem] bg-white/80 backdrop-blur-2xl outline-none" onKeyDown={handleGlobalKeyDown} tabIndex={0}>
@@ -667,7 +674,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[9px] font-black text-emerald-600">Pilih Cepat Klik (1-5)</p>
             </div>
             <div className="grid grid-cols-5 gap-1.5">
-              {['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC'].map((src, idx) => (
+              {['BANK','GoPay','QRIS','DANA','ATM/EDC'].map((src, idx) => (
                 <button
                   key={src}
                   onClick={() => { setSelectedSumber(src); setIsKetAuto(true) }}
@@ -854,7 +861,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     onChange={(e) => setIsAdminNonTunai(e.target.checked)}
                     className="w-3 h-3 accent-purple-600 align-middle"
                   />
-                  <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest">DALAM</span>
+                  <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest whitespace-nowrap">NON TUNAI</span>
                 </label>
               )}
             </div>
@@ -1070,7 +1077,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {activeMode === 'TARIK' && (
           <div className="mb-2">
             <div className="grid grid-cols-5 gap-1.5 mb-2">
-               {['Transfer Bank','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
+               {['BANK','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
                  const isAct = selectedSumber === s;
                  return (
                    <button 
@@ -1092,7 +1099,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* KETERANGAN ROW */}
         <div className="mb-2">
           <div className="flex justify-between items-center mb-1.5 px-1">
-            <label className="text-[14px] font-black text-[#0f172a] tracking-tight">Keterangan</label>
+            <label className="text-[13px] font-black text-[#0f172a] tracking-tight">Keterangan</label>
             <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors shadow-sm">
               <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-4 h-4 text-[#0066ff] bg-gray-100 border-gray-300 rounded focus:ring-[#0066ff] focus:ring-2 accent-[#0066ff]" />
               <span className="text-[12px] font-bold text-[#0066ff]">Otomatis</span>
@@ -1120,7 +1127,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[13px] font-bold py-2.5 px-3 rounded-lg border border-slate-200 bg-slate-100 placeholder:text-gray-400 placeholder:font-medium focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-slate-800"
+              className="w-full resize-none text-[13px] font-bold py-1.5 min-h-[36px] px-3 rounded-lg border border-slate-200 bg-slate-100 placeholder:text-gray-400 placeholder:font-medium focus:border-[#0066ff] outline-none focus:outline-none appearance-none transition-all text-slate-800"
             ></textarea>
           </div>
 
@@ -1200,10 +1207,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="flex gap-4 mb-2">
           <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-[1.2]'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[14px] font-black text-[#0f172a] tracking-tight">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</label>
+              <label className="text-[13px] font-black text-[#0f172a] tracking-tight whitespace-nowrap">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</label>
             </div>
             <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[18px] pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
                 onFocus={handleInputFocus}
@@ -1221,7 +1228,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }, 10);
                   }
                 }}
-                className="w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border border-slate-200 bg-slate-100 focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-[#0f172a]"
+                className="w-full text-[20px] font-black h-[54px] pl-12 pr-4 rounded-lg border border-slate-200 bg-slate-100 focus:border-[#0066ff] outline-none focus:outline-none appearance-none transition-all text-[#0f172a]"
               />
             </div>
           </div>
@@ -1229,14 +1236,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className={cn("text-[14px] font-black tracking-tight transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>{kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}</label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className={cn("text-[13px] font-black tracking-tight transition-colors whitespace-nowrap", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>{kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}</label>
+              <label className="flex items-center gap-1.5 cursor-pointer ml-auto pl-2">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
-                <span className="text-[9px] font-black text-purple-700 tracking-widest uppercase">Dalam</span>
+                <span className="text-[9px] font-black text-purple-700 tracking-widest uppercase whitespace-nowrap">Non Tunai</span>
               </label>
             </div>
             <div className="relative">
-              <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
+              <div className={cn("absolute left-3 top-1/2 -translate-y-1/2 font-black text-[18px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
               <input 
                 ref={adminRef}
                 onFocus={handleInputFocus}
@@ -1251,18 +1258,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   }
                 }}
                 className={cn(
-                  "w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border focus:ring-4 outline-none transition-all",
+                  "w-full text-[20px] font-black h-[54px] pl-12 pr-4 rounded-lg border outline-none focus:outline-none appearance-none transition-all",
                   kategori === 'Order Kuota' && (() => {
                     const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
                     const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
                     return m > 0 && j > 0 && j <= m
-                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400"
                       : m > 0 && j > m
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                        : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff] focus:ring-blue-50"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400"
+                        : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff]"
                   })() || (isAdminNonTunai 
-                    ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50" 
-                    : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400 focus:ring-purple-50")
+                    ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500" 
+                    : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400")
                 )}
               />
             </div>
@@ -1480,7 +1487,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
-                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase">DALAM</span>
+                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase whitespace-nowrap">NON TUNAI</span>
               </label>
             </div>
             <div className="relative">
