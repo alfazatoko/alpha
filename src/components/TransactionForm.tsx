@@ -853,7 +853,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
                 <i className="fa-solid fa-coins text-yellow-500"></i>
-                {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
               </label>
               {kategori !== 'Order Kuota' && activeMode !== 'AKSESORIS' && (
                 <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
@@ -888,7 +888,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="flex items-center gap-2 mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5">
                 <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-emerald-500" : "fa-hand-holding-dollar text-purple-500")}></i>
-                {kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
+                {kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
               </label>
               {kategori !== 'Order Kuota' && (
                 <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap ml-auto">
@@ -1244,7 +1244,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="flex gap-4 mb-2">
           <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-[1.2]'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[13px] font-black text-[#0f172a] tracking-tight whitespace-nowrap">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</label>
+              <label className="text-[13px] font-black text-[#0f172a] tracking-tight whitespace-nowrap">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}</label>
               {activeMode !== 'AKSESORIS' && (
                 <label className="flex items-center gap-1.5 cursor-pointer ml-auto pl-2">
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
@@ -1284,7 +1284,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className={cn("text-[13px] font-black tracking-tight transition-colors whitespace-nowrap", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>{kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}</label>
+              <label className={cn("text-[13px] font-black tracking-tight transition-colors whitespace-nowrap", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>{kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}</label>
               <label className="flex items-center gap-1.5 cursor-pointer ml-auto pl-2">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
                 <span className="text-[9px] font-black text-purple-700 tracking-widest uppercase whitespace-nowrap">Non Tunai</span>
@@ -1307,7 +1307,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 }}
                 className={cn(
                   "w-full text-[20px] font-black h-[54px] pl-12 pr-4 rounded-lg border outline-none focus:outline-none appearance-none transition-all",
-                  kategori === 'Order Kuota' && (() => {
+                  kategori === 'Order Kuota' ? (() => {
+                    if (isAdminNonTunai) return "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500"
                     const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
                     const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
                     return m > 0 && j > 0 && j <= m
@@ -1315,7 +1316,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       : m > 0 && j > m
                         ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400"
                         : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff]"
-                  })() || (isAdminNonTunai 
+                  })() : (isAdminNonTunai 
                     ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500" 
                     : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400")
                 )}
@@ -1338,13 +1339,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
             <div className="relative flex-1">
-              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 font-black text-[11px] text-blue-700 pointer-events-none">Rp</div>
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 font-black text-[11px] text-purple-700 pointer-events-none">Rp</div>
               <input 
                 type="text" inputMode="numeric"
                 placeholder="Non Tunai"
                 value={nominalNonTunaiSplit}
                 onChange={handleNominalNonTunaiChange}
-                className="w-full text-[13px] font-black h-[36px] pl-7 pr-2 rounded-md border border-blue-200 bg-blue-50/50 focus:border-blue-500 outline-none focus:outline-none appearance-none transition-all text-blue-900 placeholder:text-blue-400"
+                className="w-full text-[13px] font-black h-[36px] pl-7 pr-2 rounded-md border border-purple-200 bg-purple-50/50 focus:border-purple-500 outline-none focus:outline-none appearance-none transition-all text-purple-900 placeholder:text-purple-400"
               />
             </div>
           </div>
@@ -1525,7 +1526,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
             </div>
@@ -1556,7 +1557,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> {kategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
+                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> {kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
@@ -1580,7 +1581,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 }}
                 className={cn(
                   "w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border focus:ring-4 outline-none transition-all",
-                  kategori === 'Order Kuota' && (() => {
+                  kategori === 'Order Kuota' ? (() => {
+                    if (isAdminNonTunai) return "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50"
                     const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
                     const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
                     return m > 0 && j > 0 && j <= m
@@ -1588,7 +1590,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       : m > 0 && j > m
                         ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
                         : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff] focus:ring-blue-50"
-                  })() || (isAdminNonTunai 
+                  })() : (isAdminNonTunai 
                     ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50" 
                     : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400 focus:ring-purple-50")
                 )}

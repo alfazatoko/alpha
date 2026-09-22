@@ -91,8 +91,8 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
     if (formKategori === 'Order Kuota') {
       modalNum = parseNominal(formModal)
       jualNum = parseNominal(formJual)
-      if (modalNum <= 0) return props.showToast('Harga Modal tidak valid!')
-      if (jualNum <= 0) return props.showToast('Harga Jual tidak valid!')
+      if (modalNum <= 0) return props.showToast('Modal tidak valid!')
+      if (jualNum <= 0) return props.showToast('Jual tidak valid!')
     }
 
     let newPresets = [...props.presets]
@@ -322,7 +322,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                 {formKategori === 'Order Kuota' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Harga Modal</label>
+                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Modal</label>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -333,7 +333,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Harga Jual</label>
+                      <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Jual</label>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -667,7 +667,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             {formKategori === 'Order Kuota' && (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA MODAL</label>
+                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">MODAL</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -678,7 +678,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">HARGA JUAL</label>
+                  <label className="block text-[9px] font-black text-gray-900 mb-0.5 uppercase tracking-tighter ml-1">JUAL</label>
                   <input
                     type="text"
                     inputMode="numeric"

@@ -3027,7 +3027,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 <div className={cn("grid gap-3", isSaldoEdit ? "grid-cols-1" : "grid-cols-2")}>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
-                      {editKategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}
+                      {editKategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
                     </label>
                     <input 
                       ref={editNominalRef}
@@ -3040,7 +3040,7 @@ const MainApp: React.FC<MainAppProps> = ({
                   {!isSaldoEdit && (
                     <div>
                       <label className="text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 block tracking-tighter">
-                        {editKategori === 'Order Kuota' ? 'Harga Jual' : 'Admin'}
+                        {editKategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
                       </label>
                       <input 
                         ref={editAdminRef}
