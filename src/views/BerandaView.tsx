@@ -4940,7 +4940,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       })()}
 
       {props.kasirRole !== 'owner' && (
-        <div className="px-1.5 mb-4">
+        <div className="px-0 mb-4">
           <TransactionForm 
             onSave={props.handleSimpanTransaksi}
             isSaving={props.isSaving}
