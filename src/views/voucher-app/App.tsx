@@ -2287,22 +2287,22 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                                 key={p.id}
                                 type="button"
                                 onClick={() => setFormProductId(p.id)}
-                                className={`w-full text-left px-2 py-1.5 rounded-lg border transition-all flex justify-between items-center ${
+                                className={`w-full text-left px-2 py-1 rounded-lg border transition-all flex items-center justify-between gap-1.5 ${
                                   isSelected 
                                     ? `bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm dark:bg-emerald-500/10 dark:text-emerald-300` 
                                     : `bg-white hover:bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-white/10 dark:hover:bg-slate-800 ${isLight ? 'text-slate-700' : 'text-slate-300'}`
                                 }`}
                               >
-                                <div className="min-w-0 flex-1 pr-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className={`w-1 h-3 rounded-full ${isSelected ? 'bg-emerald-500' : (p.currentStock <= p.minStockLevel ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
-                                    <h4 className="text-[10px] font-black truncate">{p.name}</h4>
-                                  </div>
+                                <div className="min-w-0 flex-1 flex items-center gap-1.5 pr-1">
+                                  <div className={`w-1 h-3 rounded-full shrink-0 ${isSelected ? 'bg-emerald-500' : (p.currentStock <= p.minStockLevel ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
+                                  <h4 className="text-[10px] font-black truncate leading-tight">{p.name}</h4>
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <div className="text-[11px] font-black">Rp {p.sellingPrice.toLocaleString('id-ID')}</div>
-                                  <div className={`text-[8px] font-bold ${p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-slate-500'}`}>
-                                    Stok: {p.currentStock}
+                                <div className={`w-12 text-center text-[9px] font-bold shrink-0 ${p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-slate-500'}`}>
+                                  Stok: {p.currentStock}
+                                </div>
+                                <div className="w-[70px] text-right shrink-0">
+                                  <div className={`text-[11px] font-black leading-tight ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
+                                    Rp {p.sellingPrice.toLocaleString('id-ID')}
                                   </div>
                                 </div>
                               </button>
@@ -2378,13 +2378,13 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
                       <div className="grid grid-cols-2 gap-1.5">
                         <button
                           type="button"
                           onClick={() => setFormPaymentMethod('TUNAI')}
-                          className={`py-2 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
+                          className={`py-1.5 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
                             formPaymentMethod === 'TUNAI'
                               ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20'
                               : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
@@ -2396,7 +2396,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         <button
                           type="button"
                           onClick={() => setFormPaymentMethod('NON_TUNAI')}
-                          className={`py-2 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
+                          className={`py-1.5 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
                             formPaymentMethod === 'NON_TUNAI'
                               ? 'bg-indigo-500 border-indigo-400 text-white shadow-lg shadow-indigo-500/20'
                               : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10'
@@ -2411,7 +2411,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         placeholder="Keterangan tambahan (Opsional)"
                         value={formNote}
                         onChange={(e) => setFormNote(e.target.value)}
-                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
+                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1 text-[9px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition mt-0.5"
                       />
 
                       <label className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-colors ${

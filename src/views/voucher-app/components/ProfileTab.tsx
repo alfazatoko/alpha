@@ -180,72 +180,6 @@ export default function ProfileTab({
         </div>
       </div>
 
-      {/* Keamanan section */}
-      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-lg">
-        <button 
-          onClick={() => toggleSection('security')}
-          className="w-full flex justify-between items-center p-4 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:bg-white/2 transition"
-        >
-          <span className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            Keamanan (Password & 2FA)
-          </span>
-          {expandedSection === 'security' ? <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" />}
-        </button>
-
-        {expandedSection === 'security' && (
-          <div className="px-4 pb-5 pt-1.5 space-y-4 border-t border-slate-200 dark:border-white/5">
-            {successMsg && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[11px] text-emerald-500 font-black dark:text-emerald-400 flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                <span>{successMsg}</span>
-              </div>
-            )}
-
-            {/* Password Change form */}
-            <form onSubmit={handlePasswordSubmit} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wider">Sandi Lama</label>
-                <input 
-                  type="password" 
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 focus:border-indigo-600 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wider">Sandi Baru</label>
-                <input 
-                  type="password" 
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 focus:border-indigo-600 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-slate-900 dark:text-white font-bold text-xs rounded-xl transition cursor-pointer"
-              >
-                Ganti Password
-              </button>
-            </form>
-
-            {/* 2FA Toggle */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-white/5">
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Autentikasi Dua Faktor (2FA)</p>
-                <p className="text-[10px] text-slate-600 dark:text-slate-400">Verifikasi SMS untuk keamanan login.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="sr-only peer" />
-                <div className="w-9 h-5 bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/15 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Tim & Peran Standby list */}
       <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-lg">
@@ -282,7 +216,7 @@ export default function ProfileTab({
                 <img src={nextCashier.avatar} className="w-8 h-8 rounded-full object-cover" />
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white">{nextCashier.name}</h4>
-                  <p className="text-[9px] text-slate-600 dark:text-slate-400">Shift Berikutnya • Standby</p>
+                  <p className="text-[9px] text-slate-600 dark:text-slate-400">Standby</p>
                 </div>
               </div>
               <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 bg-slate-500/10 px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/5">

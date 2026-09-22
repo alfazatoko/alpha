@@ -26,7 +26,8 @@ import {
   ChevronRight,
   PackagePlus,
   ClipboardCheck,
-  Pencil
+  Pencil,
+  RefreshCcw
 } from 'lucide-react';
 import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
 
@@ -355,19 +356,21 @@ export default function AturStokTab({
     };
   }, [currentShiftTransactions]);
 
-  const totalCashExpected = Math.max(0, totalSalesAmount - totalDigitalAmount);
-  const physicalCashValue = parseInt(cashPhysical.replace(/\D/g, '') || '0', 10);
+  const totalCashExpected = totalSalesAmount - totalDigitalAmount;
+  const totalCashPcs = totalSoldPcs - totalDigitalPcs;
+  const physicalCashValue = parseInt(cashPhysical.replace(/[^\d-]/g, ''), 10) || 0;
   const cashDifference = physicalCashValue - totalCashExpected;
   const isCashMatched = physicalCashValue === totalCashExpected;
 
   const handleCashPhysicalChange = (raw: string) => {
+    const isNegative = raw.startsWith('-');
     const clean = raw.replace(/\D/g, '');
     if (!clean) {
-      setCashPhysical('');
+      setCashPhysical(isNegative ? '-' : '');
       return;
     }
     const formatted = parseInt(clean, 10).toLocaleString('id-ID');
-    setCashPhysical(formatted);
+    setCashPhysical(isNegative ? `-${formatted}` : formatted);
   };
 
   const handleSyncCashPhysical = () => {
@@ -1666,26 +1669,45 @@ export default function AturStokTab({
             <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-2 text-xs sm:text-sm font-semibold">
               
               {/* Total Penjualan */}
-              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Total penjualan</div>
-              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>:</div>
+              <div className={`${isLight ? 'text-slate-900' : 'text-slate-100'} font-black`}>
+                Total penjualan <span className="text-[10px] sm:text-xs font-normal opacity-70">({totalSoldPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-900' : 'text-slate-100'} font-black`}>:</div>
               <div className={`text-right font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 Rp{totalSalesAmount.toLocaleString('id-ID')}
               </div>
 
+              {/* Laku Tunai */}
+              <div className={`pl-4 ${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>
+                &gt; Laku Tunai <span className="opacity-70">({totalCashPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>:</div>
+              <div className={`text-right font-mono font-bold text-[11px] sm:text-xs ${
+                totalCashExpected < 0 ? (isLight ? 'text-rose-600' : 'text-rose-400') : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+              }`}>
+                {totalCashExpected < 0 ? '- Rp' : 'Rp'}{Math.abs(totalCashExpected).toLocaleString('id-ID')}
+              </div>
+
               {/* Laku Non tunai / QRIS */}
-              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Laku Non tunai \ Qris</div>
-              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'}`}>:</div>
-              <div className="text-right font-mono font-black text-rose-500 dark:text-rose-400">
-                - Rp{totalDigitalAmount.toLocaleString('id-ID')}
+              <div className={`pl-4 ${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>
+                &gt; Laku Non tunai <span className="opacity-70">({totalDigitalPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>:</div>
+              <div className={`text-right font-mono font-bold text-[11px] sm:text-xs ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>
+                Rp{totalDigitalAmount.toLocaleString('id-ID')}
               </div>
 
               <div className="col-span-3 border-t-2 border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
 
               {/* Uang Tunai Seharusnya */}
-              <div className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Seharusnya</div>
+              <div className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Laci Seharusnya</div>
               <div className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>:</div>
-              <div className={`text-right font-mono font-black text-sm sm:text-base ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
-                Rp{totalCashExpected.toLocaleString('id-ID')}
+              <div className={`text-right font-mono font-black text-sm sm:text-base ${
+                totalCashExpected < 0 
+                  ? (isLight ? 'text-rose-600' : 'text-rose-400')
+                  : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+              }`}>
+                {totalCashExpected < 0 ? '- Rp' : 'Rp'}{Math.abs(totalCashExpected).toLocaleString('id-ID')}
               </div>
 
             </div>
@@ -1714,24 +1736,39 @@ export default function AturStokTab({
               </div>
 
               {/* Row 2: Samakan text and button separated */}
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`text-[11px] sm:text-sm font-bold tracking-tight shrink-0 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
-                  Samakan dengan pembukuan :
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSyncCashPhysical}
-                  className={`flex-1 flex items-center justify-center px-2 sm:px-3 h-10 sm:h-11 rounded-xl border transition cursor-pointer shadow-sm ${
-                    cashDifference === 0
-                      ? (isLight ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 hover:bg-emerald-900/60 border-emerald-500/40 text-emerald-400')
-                      : (isLight ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' : 'bg-blue-900/40 hover:bg-blue-900/60 border-blue-500/40 text-blue-400')
-                  }`}
-                  title="Klik untuk otomatis menyamakan"
-                >
-                  <span className="font-mono text-sm sm:text-base font-black tracking-tight">
-                    {cashDifference === 0 ? 'PAS' : `${cashDifference > 0 ? '+' : '-'}Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+              <div className="flex flex-col mt-1">
+                <div className={`text-[10px] sm:text-[11px] text-right mb-1 italic ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  *(Tekan tombol di bawah untuk menyamakan otomatis)
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] sm:text-sm font-bold tracking-tight shrink-0 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
+                    Samakan dengan pembukuan :
                   </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleSyncCashPhysical}
+                    className={`flex-1 flex items-center justify-center px-2 sm:px-3 h-10 sm:h-11 rounded-xl border transition cursor-pointer shadow-md active:scale-95 ${
+                      cashDifference === 0
+                        ? (isLight ? 'bg-emerald-100 border-emerald-300 hover:bg-emerald-200 text-emerald-700' : 'bg-emerald-900/60 hover:bg-emerald-900/80 border-emerald-500/60 text-emerald-400')
+                        : (isLight ? 'bg-blue-600 hover:bg-blue-700 border-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white')
+                    }`}
+                    title="Klik untuk otomatis menyamakan"
+                  >
+                    <div className="flex items-center gap-1.5 font-mono text-sm sm:text-base font-black tracking-tight">
+                      {cashDifference === 0 ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>PAS</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCcw className="w-4 h-4" />
+                          <span>{cashDifference > 0 ? '+' : '-'}Rp{Math.abs(cashDifference).toLocaleString('id-ID')}</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                </div>
               </div>
 
             </div>

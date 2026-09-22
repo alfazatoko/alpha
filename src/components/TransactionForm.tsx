@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
 
 interface TransactionFormProps {
-  onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean }) => void
+  onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }) => void
   isSaving?: boolean
   presets?: any[]
   onOpenVoucherJualCepat?: () => void
@@ -28,6 +28,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [selectedSumber, setSelectedSumber] = useState('QRIS')
   const [sumberAplikasi, setSumberAplikasi] = useState('BANK')
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
+  const [nominalCashSplit, setNominalCashSplit] = useState('')
+  const [nominalNonTunaiSplit, setNominalNonTunaiSplit] = useState('')
   const [isSumberModalOpen, setIsSumberModalOpen] = useState(false)
   const [isTujuanModalOpen, setIsTujuanModalOpen] = useState(false)
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
@@ -131,6 +133,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setKeterangan(autoText.toUpperCase())
   }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, setKeterangan]);
   
+  // Split Payment Logic
+  const handleNominalCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '')
+    const numVal = parseInt(rawVal || '0', 10)
+    setNominalCashSplit(formatInputRupiah(rawVal))
+    const tot = parseInt(nominal.replace(/\D/g, '') || '0', 10)
+    const remain = Math.max(0, tot - numVal)
+    setNominalNonTunaiSplit(formatInputRupiah(remain.toString()))
+  }
+  const handleNominalNonTunaiChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '')
+    const numVal = parseInt(rawVal || '0', 10)
+    setNominalNonTunaiSplit(formatInputRupiah(rawVal))
+    const tot = parseInt(nominal.replace(/\D/g, '') || '0', 10)
+    const remain = Math.max(0, tot - numVal)
+    setNominalCashSplit(formatInputRupiah(remain.toString()))
+  }
+
   // Auto Admin Logic
   const [isAdminManuallyEdited, setIsAdminManuallyEdited] = useState(false);
 
@@ -265,7 +285,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     if (isTujuanModalOpen) {
-      const arr = ['TUNAI LACI KASIR', 'NON TUNAI'];
+      const arr = ['TUNAI LACI KASIR', 'NON TUNAI', '2X BAYAR (TUNAI & NON TUNAI)'];
       const idx = arr.indexOf(tujuanMasuk);
       if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < arr.length - 1) setTujuanMasuk(arr[idx + 1]); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); if (idx > 0) setTujuanMasuk(arr[idx - 1]); }
@@ -432,7 +452,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
     const subTab = subMode === 'NORMAL' ? 'KHUSUS' : subMode
-    onSave({ kategori, nominal, admin, keterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+    
+    if (tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)') {
+      const nonTunaiAmount = parseInt(nominalNonTunaiSplit.replace(/\D/g, '') || '0', 10)
+      const tunaiAmount = parseInt(nominalCashSplit.replace(/\D/g, '') || '0', 10)
+      const totNominal = parseInt(nominal.replace(/\D/g, '') || '0', 10)
+      
+      if (tunaiAmount + nonTunaiAmount !== totNominal) {
+        setErrorMsg('Total Tunai + Non Tunai harus sama dengan Nominal!')
+        return
+      }
+      
+      const splitKeterangan = `${keterangan} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
+      onSave({ kategori, nominal, admin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
+    } else {
+      onSave({ kategori, nominal, admin, keterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+    }
     setIsKetAuto(true)
   }
 
@@ -442,6 +477,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setNominal('')
       setAdmin('')
       setKeterangan('')
+      setNominalCashSplit('')
+      setNominalNonTunaiSplit('')
     }
     setPrevSaving(isSaving)
   }, [isSaving, prevSaving])
@@ -1055,7 +1092,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="grid grid-cols-4 gap-1.5 mb-2">
             {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s) => {
                const isAct = sumberAplikasi === s;
-               const label = s === 'BANK' ? 'TRANSFER BANK' : s;
+               const label = s === 'BANK' ? 'BANK' : s;
                return (
                  <button 
                    key={s}
@@ -1208,6 +1245,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-[1.2]'}>
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="text-[13px] font-black text-[#0f172a] tracking-tight whitespace-nowrap">{activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</label>
+              {activeMode !== 'AKSESORIS' && (
+                <label className="flex items-center gap-1.5 cursor-pointer ml-auto pl-2">
+                  <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
+                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
+                    else setTujuanMasuk('TUNAI LACI KASIR')
+                  }} className="w-3.5 h-3.5 accent-[#0066ff] rounded-sm" />
+                  <span className="text-[9px] font-black text-[#0066ff] tracking-widest uppercase whitespace-nowrap">2x Byr</span>
+                </label>
+              )}
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[18px] pointer-events-none">Rp</div>
@@ -1232,6 +1278,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+
+
 
           {activeMode !== 'AKSESORIS' && (
           <div className="flex-1">
@@ -1276,6 +1324,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
           )}
         </div>
+
+        {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
+          <div className="flex gap-2 w-full mb-3 animate-in fade-in slide-in-from-top-2">
+            <div className="relative flex-1">
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 font-black text-[11px] text-emerald-700 pointer-events-none">Rp</div>
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Tunai"
+                value={nominalCashSplit}
+                onChange={handleNominalCashChange}
+                className="w-full text-[13px] font-black h-[36px] pl-7 pr-2 rounded-md border border-emerald-200 bg-emerald-50/50 focus:border-emerald-500 outline-none focus:outline-none appearance-none transition-all text-emerald-900 placeholder:text-emerald-400"
+              />
+            </div>
+            <div className="relative flex-1">
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 font-black text-[11px] text-blue-700 pointer-events-none">Rp</div>
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Non Tunai"
+                value={nominalNonTunaiSplit}
+                onChange={handleNominalNonTunaiChange}
+                className="w-full text-[13px] font-black h-[36px] pl-7 pr-2 rounded-md border border-blue-200 bg-blue-50/50 focus:border-blue-500 outline-none focus:outline-none appearance-none transition-all text-blue-900 placeholder:text-blue-400"
+              />
+            </div>
+          </div>
+        )}
 
         {/* ERROR MESSAGES & ALERTS */}
         {errorMsg && (
@@ -1329,7 +1402,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                <span className="text-[10px] font-black text-[#64748b] tracking-widest uppercase">Mode Layanan Aktif</span>
                <span className="text-[15px] font-black text-[#1e293b] uppercase tracking-wider leading-none">
                  {activeMode === 'DIGITAL' && sumberAplikasi ? `TRANSFER - ${sumberAplikasi}` : 
-                  activeMode === 'DIGITAL' ? 'TRANSFER BANK' :
+                  activeMode === 'DIGITAL' ? 'BANK' :
                   activeMode === 'TARIK' && selectedSumber ? `TARIK TUNAI - ${selectedSumber}` : 
                   activeMode === 'TARIK' ? 'TARIK TUNAI' :
                   activeMode === 'AKSESORIS' ? 'AKSESORIS' : 
@@ -1592,7 +1665,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsTujuanModalOpen(false)}>
           <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col">
-              {['TUNAI LACI KASIR', 'NON TUNAI'].map((t, idx, arr) => (
+              {['TUNAI LACI KASIR', 'NON TUNAI', '2X BAYAR (TUNAI & NON TUNAI)'].map((t, idx, arr) => (
                 <button
                   key={t}
                   onClick={() => {
@@ -1711,7 +1784,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <div className="flex-1 flex flex-col overflow-y-auto pt-4 pb-4 px-4">
                   <div className="flex flex-col gap-2.5">
                     {tema3Step === 'DIGITAL' && ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx) => {
-                      const label = s === 'BANK' ? 'TRANSFER BANK' : s;
+                      const label = s === 'BANK' ? 'BANK' : s;
                       const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
                       const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;
                       return (

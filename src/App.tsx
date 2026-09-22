@@ -1733,12 +1733,13 @@ const MainApp: React.FC<MainAppProps> = ({
         // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
         if (options?.isSplit && nonTunaiAmount > 0) {
           const adjId = (Date.now() + 1).toString()
-          const adjKet = `[OPSI2_NT] Penyesuaian: Saldo Laci Kasir dikurang ${nonTunaiAmount.toLocaleString('id-ID')} karena dibayar non tunai`
+          const tunaiAmount = finalNominal - nonTunaiAmount
+          const adjKet = `Transfer Opsi 2x bayar\nNominal Tunai : ${tunaiAmount.toLocaleString('id-ID')}\nNominal Non tunai : ${nonTunaiAmount.toLocaleString('id-ID')}\nTotal ${finalNominal.toLocaleString('id-ID')}`
           const adjTx = {
             id: adjId,
             user_id: googleUid,
             kasir_id: username,
-            kategori: data.kategori,
+            kategori: 'Tarik Tunai',
             nominal: nonTunaiAmount,
             admin_fee: 0,
             keterangan: adjKet,
