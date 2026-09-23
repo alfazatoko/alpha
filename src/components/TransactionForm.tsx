@@ -1217,7 +1217,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         {/* AKSESORIS PAY MODE */}
         {activeMode === 'AKSESORIS' && (
-          <div className="flex gap-2 mb-2 px-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex gap-2 mb-2 px-5 animate-in fade-in slide-in-from-top-2 duration-300">
             <button
               onClick={() => setAksesorisPayMode('TUNAI')}
               className={cn(
@@ -1367,7 +1367,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
 
         {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
-          <div className="flex gap-2 w-full mb-3 px-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex gap-2 w-full mb-3 px-5 animate-in fade-in slide-in-from-top-2">
             <div className="relative flex-1">
               <input 
                 type="text" inputMode="numeric"
@@ -1390,14 +1390,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {errorMsg && (
-          <div className="mb-3 mx-3 bg-red-50 border border-red-200 p-2.5 rounded-xl">
+          <div className="mb-3 mx-5 bg-red-50 border border-red-200 p-2.5 rounded-xl">
             <p className="text-[11px] font-black text-red-600 uppercase text-center flex items-center justify-center gap-1.5">
               <i className="fa-solid fa-triangle-exclamation"></i> {errorMsg}
             </p>
           </div>
         )}
 
-        <div className="px-3">
+        <div className="px-5">
           <button 
             ref={btnSimpanRef}
             onClick={onSaveInternal} 
