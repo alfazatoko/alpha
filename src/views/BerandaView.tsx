@@ -5262,7 +5262,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           />
           {props.kasirRole === 'owner' && (
             <PengaturanPanel 
-              activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+              transactions={props.transactions} 
+              absensiList={props.absensiList} 
+              storeName={props.storeName} 
+              showToast={props.showToast}
+              onConfirm={props.onConfirm}
+              activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
               onSaveCashierSelf={props.onSaveCashierSelf}
               kasirList={props.kasirList}
             />
