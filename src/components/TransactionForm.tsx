@@ -1117,7 +1117,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <i className="fa-solid fa-border-all text-[14px]"></i>
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] font-semibold text-[#64748b] leading-none mb-0.5">Kategori</span>
+              <span className="text-[10px] font-semibold text-[#64748b] leading-none mb-0.5">KATEGORI PEMBAYARAN</span>
               <span className="text-[13px] font-black text-[#0c1f44] uppercase leading-tight">{tujuanMasuk}</span>
             </div>
           </div>
@@ -1467,7 +1467,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             setKategori('');
             setKeterangan('');
           }}
-          className="w-full bg-white border-2 border-gray-100 rounded-[24px] p-3 flex items-center justify-between mb-6 shadow-sm active:scale-[0.98] transition-all group hover:border-blue-300"
+          className="w-full bg-white border-2 border-gray-100 rounded-[24px] p-3 flex items-center justify-between mb-1 shadow-sm active:scale-[0.98] transition-all group hover:border-blue-300"
         >
            <div className="flex items-center gap-4">
              <div className="relative w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:shadow-lg group-hover:scale-105 transition-all">
@@ -1491,6 +1491,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
            </div>
         </button>
         </div>
+
+        {/* KATEGORI PEMBAYARAN ROW - TEMA 3 */}
+        {activeMode !== 'AKSESORIS' && (
+          <div className="mb-4 px-5 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:ring-4 hover:ring-blue-50 transition-all" onClick={() => setIsTujuanModalOpen(true)}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-[10px] bg-[#0066ff] text-white flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-border-all text-[12px]"></i>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-[#64748b] leading-none mb-0.5">KATEGORI PEMBAYARAN</span>
+                  <span className="text-[13px] font-black text-[#0c1f44] uppercase leading-tight">{tujuanMasuk}</span>
+                </div>
+              </div>
+              <div className="w-6 h-6 rounded-full bg-[#deeef9] flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-chevron-down text-[10px] text-[#0066ff]"></i>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* KETERANGAN ROW */}
         <div className="mb-4 px-5">
@@ -1565,7 +1585,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               })()}
             </div>
           )}
-          {/* PAYMENT MODE TOGGLE FOR AKSESORIS - TEMA 3 */}
+        </div>
+
+        {/* PAYMENT MODE TOGGLE FOR AKSESORIS - TEMA 3 */}
         {activeMode === 'AKSESORIS' && (
           <div className="flex gap-2 mb-3 px-5 animate-in fade-in slide-in-from-top-2 duration-300">
             <button
@@ -1598,7 +1620,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN ROW */}
-        <div className="flex gap-2 flex-nowrap mb-5 px-5">
+        <div className="flex gap-2 mb-3 px-5 w-full">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
@@ -1612,8 +1634,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 >
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
                     e.stopPropagation();
-                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
-                    else setTujuanMasuk('TUNAI LACI KASIR')
+                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)');
+                    else setTujuanMasuk('TUNAI LACI KASIR');
                   }} className="w-3 h-3 accent-white rounded-sm" />
                   <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
                 </label>
@@ -1643,86 +1665,86 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+
           {activeMode !== 'AKSESORIS' && (
-          <div className="relative group flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5 px-1">
-              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
-              </label>
-              <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
-                <input
-                  type="checkbox"
-                  checked={isAdminNonTunai}
-                  onChange={(e) => setIsAdminNonTunai(e.target.checked)}
-                  className="w-3 h-3 accent-white rounded-sm"
+            <div className="relative group flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 px-1">
+                <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                  <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
+                  {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
+                </label>
+                <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
+                  <input
+                    type="checkbox"
+                    checked={isAdminNonTunai}
+                    onChange={(e) => setIsAdminNonTunai(e.target.checked)}
+                    className="w-3 h-3 accent-white rounded-sm"
+                  />
+                  <span className="text-[9px] font-bold text-white whitespace-nowrap">Non Tunai</span>
+                </label>
+              </div>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
+                <input 
+                  ref={adminRef}
+                  type="text" 
+                  inputMode="numeric" 
+                  placeholder="0" 
+                  value={admin}
+                  onFocus={(e) => {
+                    handleInputFocus(e);
+                    e.target.select();
+                  }}
+                  onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setTimeout(() => btnSimpanRef.current?.click(), 10);
+                    }
+                  }}
+                  className={cn(
+                    "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
+                    kategori === 'Order Kuota' && (() => {
+                      const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                      const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                      return m > 0 && j > 0 && j <= m
+                        ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                        : m > 0 && j > m
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
+                          : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50";
+                    })() || (isAdminNonTunai 
+                      ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                      : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
+                  )}
                 />
-                <span className="text-[9px] font-bold text-white whitespace-nowrap">Non Tunai</span>
-              </label>
-            </div>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
-              <input 
-                ref={adminRef}
-                type="text" 
-                inputMode="numeric" 
-                placeholder="0" 
-                value={admin}
-                onFocus={(e) => {
-                  handleInputFocus(e);
-                  e.target.select();
-                }}
-                onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setTimeout(() => btnSimpanRef.current?.click(), 10);
+                {kategori === 'Order Kuota' && (() => {
+                  const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                  const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                  if (m > 0 && j > 0) {
+                    if (j > m) {
+                      return (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                          <i className="fa-solid fa-check text-white text-[10px]"></i>
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                          <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                        </div>
+                      )
+                    }
                   }
-                }}
-                className={cn(
-                  "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
-                  kategori === 'Order Kuota' && (() => {
-                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                    return m > 0 && j > 0 && j <= m
-                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                      : m > 0 && j > m
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
-                  })() || (isAdminNonTunai 
-                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
-                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
-                )}
-              />
-              {/* Indikator real-time untuk Order Kuota */}
-              {kategori === 'Order Kuota' && (() => {
-                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                if (m > 0 && j > 0) {
-                  if (j > m) {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
-                        <i className="fa-solid fa-check text-white text-[10px]"></i>
-                      </div>
-                    )
-                  } else {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
-                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
-                      </div>
-                    )
-                  }
-                }
-                return null
-              })()}
+                  return null;
+                })()}
+              </div>
             </div>
-          </div>
           )}
         </div>
-        </div>
 
+        {/* 2X BAYAR SPLIT (MOVED BELOW NOMINAL ROW) */}
         {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
-          <div className="flex gap-2 w-full mb-3 px-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex gap-2 w-full mb-3 px-5 animate-in fade-in slide-in-from-top-2">
             <div className="relative flex-1">
               <input 
                 type="text" inputMode="numeric"
