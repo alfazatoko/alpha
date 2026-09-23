@@ -972,6 +972,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
 
+        {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
+          <div className="flex gap-2 w-full mb-3 px-3 animate-in fade-in slide-in-from-top-2">
+            <div className="relative flex-1">
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Tunai"
+                value={nominalCashSplit}
+                onChange={handleNominalCashChange}
+                className="w-full text-[13px] font-black h-[38px] px-3 rounded-xl border border-emerald-200 bg-emerald-50 focus:border-emerald-500 outline-none appearance-none transition-all text-emerald-900 placeholder:text-emerald-300"
+              />
+            </div>
+            <div className="relative flex-1">
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Non Tunai"
+                value={nominalNonTunaiSplit}
+                onChange={handleNominalNonTunaiChange}
+                className="w-full text-[13px] font-black h-[38px] px-3 rounded-xl border border-blue-200 bg-blue-50 focus:border-[#0066ff] outline-none appearance-none transition-all text-[#0066ff] placeholder:text-blue-300"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Peringatan real-time Order Kuota: Jual < Modal */}
         {kategori === 'Order Kuota' && (() => {
           const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
@@ -1685,6 +1708,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
         </div>
         </div>
+
+        {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
+          <div className="flex gap-2 w-full mb-3 px-3 animate-in fade-in slide-in-from-top-2">
+            <div className="relative flex-1">
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Tunai"
+                value={nominalCashSplit}
+                onChange={handleNominalCashChange}
+                className="w-full text-[13px] font-black h-[38px] px-3 rounded-xl border border-emerald-200 bg-emerald-50 focus:border-emerald-500 outline-none appearance-none transition-all text-emerald-900 placeholder:text-emerald-300"
+              />
+            </div>
+            <div className="relative flex-1">
+              <input 
+                type="text" inputMode="numeric"
+                placeholder="Non Tunai"
+                value={nominalNonTunaiSplit}
+                onChange={handleNominalNonTunaiChange}
+                className="w-full text-[13px] font-black h-[38px] px-3 rounded-xl border border-blue-200 bg-blue-50 focus:border-[#0066ff] outline-none appearance-none transition-all text-[#0066ff] placeholder:text-blue-300"
+              />
+            </div>
+          </div>
+        )}
 
         {/* ERROR MESSAGES & ALERTS */}
         {errorMsg && (
