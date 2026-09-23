@@ -277,11 +277,21 @@ export default function DashboardTab({
   const todayTransactions = transactions.filter(t => t.timestamp.startsWith(todayDateString));
 
   const totalTunaiToday = todayTransactions
-    .filter(t => t.type === 'PENJUALAN' && (!t.notes || !t.notes.includes('[NON TUNAI]')))
+    .filter(t => {
+      if (t.type !== 'PENJUALAN') return false;
+      const notes = t.notes || '';
+      const isNonTunai = notes.includes('[NON_TUNAI]') || notes.includes('[QRIS]') || notes.includes('[TRANSFER]') || notes.includes('[NON TUNAI]') || t.paymentMethod === 'NON_TUNAI' || t.paymentMethod === 'QRIS' || t.paymentMethod === 'TRANSFER';
+      return !isNonTunai;
+    })
     .reduce((acc, t) => acc + t.amount, 0);
 
   const totalQrisToday = todayTransactions
-    .filter(t => t.type === 'PENJUALAN' && t.notes?.includes('[NON TUNAI]'))
+    .filter(t => {
+      if (t.type !== 'PENJUALAN') return false;
+      const notes = t.notes || '';
+      const isNonTunai = notes.includes('[NON_TUNAI]') || notes.includes('[QRIS]') || notes.includes('[TRANSFER]') || notes.includes('[NON TUNAI]') || t.paymentMethod === 'NON_TUNAI' || t.paymentMethod === 'QRIS' || t.paymentMethod === 'TRANSFER';
+      return isNonTunai;
+    })
     .reduce((acc, t) => acc + t.amount, 0);
 
   // Top selling voucher today
