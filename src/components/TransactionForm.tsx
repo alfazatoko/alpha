@@ -741,19 +741,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
-        <div className="relative group">
+        <div className="relative group px-2">
           <div className="flex justify-between items-center mb-1 px-1">
             <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
               <i className="fa-solid fa-align-left text-gray-400"></i> Keterangan
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-100 hover:bg-gray-100 transition-colors">
-              <input 
-                type="checkbox" 
-                checked={isKetAuto}
-                onChange={(e) => setIsKetAuto(e.target.checked)}
-                className="w-3 h-3 accent-blue-600 rounded-sm"
-              />
-              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">OTOMATIS</span>
+            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
+              <input type="checkbox" checked={isKetAuto} onChange={(e) => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
+              <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
           <div className="relative">
@@ -859,7 +854,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
-        <div className="flex gap-2 flex-nowrap">
+        <div className="flex gap-2 flex-nowrap px-2">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
@@ -1050,7 +1045,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : activeTheme === 'TEMA_2' ? (
       <>
         {/* 4 TOMBOL LAYANAN */}
-        <div className="grid grid-cols-4 gap-2 mb-2 px-3">
+        <div className="grid grid-cols-4 gap-2 mb-2 px-4">
           {([
             { id: 'DIGITAL',   label: 'TRANSFER',     icon: 'fa-paper-plane',        iconBg: '#0066ff' },
             { id: 'TARIK',     label: 'TARIK TUNAI',  icon: 'fa-money-bill-transfer', iconBg: '#10b981' },
@@ -1089,7 +1084,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
 
         {/* KATEGORI ROW */}
-        <div className="mx-3 flex items-center justify-between mb-2 bg-white rounded-2xl px-3 py-2.5 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all" onClick={() => setIsTujuanModalOpen(true)}>
+        <div className="mx-4 flex items-center justify-between mb-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all" onClick={() => setIsTujuanModalOpen(true)}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#0066ff] text-white flex items-center justify-center shrink-0">
               <i className="fa-solid fa-border-all text-[14px]"></i>
@@ -1125,7 +1120,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
         {activeMode === 'TARIK' && (
-          <div className="grid grid-cols-5 gap-1 mb-2 px-3">
+          <div className="grid grid-cols-5 gap-1 mb-2 px-4">
             {['BANK','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
               const isAct = selectedSumber === s;
               return (
@@ -1145,12 +1140,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* KETERANGAN */}
-        <div className="mb-1 px-3">
+        <div className="mb-1 px-5">
           <div className="flex justify-between items-center mb-1.5">
             <label className="text-[14px] font-black text-[#0c1f44]">Keterangan</label>
-            <label className="flex items-center gap-1.5 cursor-pointer bg-[#0066ff] px-2.5 py-1 rounded-lg shadow-sm hover:bg-blue-700 transition-colors">
-              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3.5 h-3.5 accent-white rounded" />
-              <span className="text-[11px] font-bold text-white">Otomatis</span>
+            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
+              <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
           <div className="relative">
@@ -1251,7 +1246,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex gap-2 flex-nowrap mb-2 px-3">
+        <div className="flex gap-2 flex-nowrap mb-2 px-5">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
@@ -1425,6 +1420,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : (
       <>
         {/* TEMA 3 LAYOUT (KOMPAK & SIDEBAR) */}
+        <div className="px-4">
         <button 
           ref={btnTema3MainRef}
           onClick={() => { 
@@ -1459,16 +1455,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
              <i className="fa-solid fa-chevron-right text-[#64748b] text-[12px]"></i>
            </div>
         </button>
+        </div>
 
         {/* KETERANGAN ROW */}
-        <div className="mb-4">
+        <div className="mb-4 px-5">
           <div className="flex justify-between items-center mb-2 px-1">
             <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
               <i className="fa-solid fa-align-left text-gray-400"></i> KETERANGAN
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
-              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3.5 h-3.5 accent-[#3b82f6] rounded-sm" />
-              <span className="text-[8px] font-black text-[#334155] tracking-widest uppercase">OTOMATIS</span>
+            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
+              <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
           <div className="relative">
@@ -1492,7 +1489,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[13px] font-bold py-2.5 px-3 rounded-lg border border-slate-200 bg-slate-100 placeholder:text-gray-400 placeholder:font-medium focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-slate-800"
+              className="w-full resize-none text-[11px] font-black py-1.5 min-h-[32px] px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
             ></textarea>
           </div>
           {/* Autocomplete Suggestions */}
@@ -1535,7 +1532,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
           {/* PAYMENT MODE TOGGLE FOR AKSESORIS - TEMA 3 */}
         {activeMode === 'AKSESORIS' && (
-          <div className="flex gap-2 mb-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex gap-2 mb-3 px-5 animate-in fade-in slide-in-from-top-2 duration-300">
             <button
               onClick={() => setAksesorisPayMode('TUNAI')}
               className={cn(
@@ -1566,7 +1563,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN ROW */}
-        <div className="flex gap-2 flex-nowrap mb-5 px-3">
+        <div className="flex gap-2 flex-nowrap mb-5 px-5">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
