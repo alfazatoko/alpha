@@ -861,9 +861,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
-              {activeMode !== 'AKSESORIS' && (
-                <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
+              {true && (
+                <label
+                  className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#0066ff] hover:bg-blue-700'}`}
+                  onClick={e => e.stopPropagation()}
+                >
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
+                    e.stopPropagation();
                     if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
                     else setTujuanMasuk('TUNAI LACI KASIR')
                   }} className="w-3 h-3 accent-white rounded-sm" />
@@ -1276,7 +1280,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
-              {activeMode !== 'AKSESORIS' && (
+              {true && (
                 <label
                   className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#0066ff] hover:bg-blue-700'}`}
                   onClick={e => e.stopPropagation()}
@@ -1601,9 +1605,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
-              {activeMode !== 'AKSESORIS' && (
-                <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
+              {true && (
+                <label
+                  className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#0066ff] hover:bg-blue-700'}`}
+                  onClick={e => e.stopPropagation()}
+                >
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
+                    e.stopPropagation();
                     if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
                     else setTujuanMasuk('TUNAI LACI KASIR')
                   }} className="w-3 h-3 accent-white rounded-sm" />
