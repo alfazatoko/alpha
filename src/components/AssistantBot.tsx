@@ -778,7 +778,7 @@ const AssistantBot: React.FC<Props> = ({
         onClick={() => { setIsOpen(p=>!p); setShowSettings(false) }}
         title="Asisten Bot Alpha"
         style={{ backdropFilter:'blur(12px)' }}
-        className={`fixed top-16 right-3 z-[998] w-10 rounded-2xl flex flex-col items-center justify-center gap-0.5 py-1 shadow-lg transition-all duration-300 active:scale-90 ${isOpen ? 'bg-indigo-700 shadow-indigo-600/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:scale-110 shadow-indigo-500/40'}`}
+        className={`fixed top-16 left-3 z-[998] w-10 rounded-2xl flex flex-col items-center justify-center gap-0.5 py-1 shadow-lg transition-all duration-300 active:scale-90 ${isOpen ? 'bg-indigo-700 shadow-indigo-600/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:scale-110 shadow-indigo-500/40'}`}
       >
         {isOpen ? (
           <span className="text-sm font-black text-white leading-none">✕</span>
@@ -795,7 +795,7 @@ const AssistantBot: React.FC<Props> = ({
       <div
         id="bot-chat-panel"
         style={{ background:'linear-gradient(160deg,#1a1050 0%,#0f0930 60%,#0d0726 100%)', maxHeight:'calc(100dvh - 80px)' }}
-        className={`fixed top-[68px] right-3 z-[997] w-[min(320px,calc(100vw-24px))] rounded-3xl overflow-hidden shadow-2xl shadow-black/30 border border-white/10 flex flex-col transition-all duration-300 origin-top-right ${isOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
+        className={`fixed top-[68px] left-3 z-[997] w-[min(320px,calc(100vw-24px))] rounded-3xl overflow-hidden shadow-2xl shadow-black/30 border border-white/10 flex flex-col transition-all duration-300 origin-top-left ${isOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/10 shrink-0" style={{ background:'linear-gradient(90deg,#4f46e5 0%,#7c3aed 100%)' }}>

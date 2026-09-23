@@ -862,7 +862,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && (
-                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
                     if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
                     else setTujuanMasuk('TUNAI LACI KASIR')
@@ -902,7 +902,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+              <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                 <input
                   type="checkbox"
                   checked={isAdminNonTunai}
@@ -1277,17 +1277,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && (
-                <button
-                  type="button"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setTujuanMasuk(tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'TUNAI LACI KASIR' : '2X BAYAR (TUNAI & NON TUNAI)');
-                  }}
+                <label
                   className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#0066ff] hover:bg-blue-700'}`}
+                  onClick={e => e.stopPropagation()}
                 >
-                  {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && <i className="fa-solid fa-check text-white text-[8px]" />}
+                  <input
+                    type="checkbox"
+                    checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'}
+                    onChange={e => {
+                      e.stopPropagation();
+                      setTujuanMasuk(e.target.checked ? '2X BAYAR (TUNAI & NON TUNAI)' : 'TUNAI LACI KASIR');
+                    }}
+                    className="w-3 h-3 accent-white rounded-sm"
+                  />
                   <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
-                </button>
+                </label>
               )}
             </div>
             <div className="relative">
@@ -1321,7 +1325,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+              <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                 <input
                   type="checkbox"
                   checked={isAdminNonTunai}
@@ -1598,7 +1602,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && (
-                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
                     if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
                     else setTujuanMasuk('TUNAI LACI KASIR')
@@ -1638,7 +1642,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
                 {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+              <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                 <input
                   type="checkbox"
                   checked={isAdminNonTunai}
