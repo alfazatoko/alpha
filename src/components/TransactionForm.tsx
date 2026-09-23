@@ -1246,7 +1246,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex gap-2 flex-nowrap mb-2 px-5">
+        <div className="flex gap-2 flex-nowrap mb-2 px-4">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
@@ -1254,13 +1254,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && (
-                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
-                  <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
-                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
-                    else setTujuanMasuk('TUNAI LACI KASIR')
-                  }} className="w-3 h-3 accent-white rounded-sm" />
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setTujuanMasuk(tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'TUNAI LACI KASIR' : '2X BAYAR (TUNAI & NON TUNAI)');
+                  }}
+                  className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-[#0066ff] hover:bg-blue-700'}`}
+                >
+                  {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && <i className="fa-solid fa-check text-white text-[8px]" />}
                   <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
-                </label>
+                </button>
               )}
             </div>
             <div className="relative">
@@ -1403,7 +1407,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             onClick={onSaveInternal} 
             disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
             onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-            className="group relative w-full overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-[13px] font-black py-3 rounded-2xl shadow-[0_8px_20px_-6px_rgba(79,70,229,0.5)] transition-all duration-300 hover:shadow-[0_12px_25px_-6px_rgba(79,70,229,0.6)] active:scale-[0.98] focus:ring-4 focus:ring-indigo-300 outline-none uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative w-full overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-[12px] font-black py-2 rounded-xl shadow-[0_4px_12px_-4px_rgba(79,70,229,0.5)] transition-all duration-300 hover:shadow-[0_8px_20px_-6px_rgba(79,70,229,0.6)] active:scale-[0.98] focus:ring-4 focus:ring-indigo-300 outline-none uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-700 ease-in-out"></div>
             {isSaving ? (
