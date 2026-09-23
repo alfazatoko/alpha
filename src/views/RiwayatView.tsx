@@ -492,7 +492,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     className={cn(
                       "px-3 py-1.5 rounded-xl text-[9px] font-black transition-all border uppercase tracking-wider",
                       props.activeSaldoFilter === f 
-                        ? "bg-violet-600 border-violet-600 text-white dark:bg-violet-500 dark:border-violet-500" 
+                        ? "bg-[#118ee9] border-[#118ee9] text-white dark:bg-blue-500 dark:border-blue-500" 
                         : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     )}
                   >
@@ -936,7 +936,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             className={cn(
               "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
               activePcTab === 'transaksi' 
-                ? "bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-500/20" 
+                ? "bg-[#118ee9] text-white border-[#118ee9] shadow-md shadow-[#118ee9]/20" 
                 : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
             )}
           >
@@ -947,7 +947,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
             className={cn(
               "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
               activePcTab === 'tambah-saldo' 
-                ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20" 
+                ? "bg-[#118ee9] text-white border-[#118ee9] shadow-md shadow-[#118ee9]/20" 
                 : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
             )}
           >
@@ -978,7 +978,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     className={cn(
                       "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all border shrink-0",
                       isActive 
-                        ? "bg-violet-600 border-violet-600 text-white shadow-md shadow-violet-500/20" 
+                        ? "bg-[#118ee9] border-[#118ee9] text-white shadow-md shadow-[#118ee9]/20" 
                         : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                     )}
                   >
@@ -1064,7 +1064,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                 className={cn(
                   "flex-1 py-2 rounded-xl text-[8px] font-black transition-all border",
                   props.activeSaldoFilter === f 
-                    ? "bg-violet-600 border-violet-600 text-white" 
+                    ? "bg-[#118ee9] border-[#118ee9] text-white" 
                     : "bg-white border-slate-100 text-slate-400"
                 )}
               >

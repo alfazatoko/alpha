@@ -36,6 +36,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [activeTheme, setActiveTheme] = useState('TEMA_2')
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
+  const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`)
+        if (saved) {
+          const methods = JSON.parse(saved)
+          setActiveTransferMethods(methods)
+          setSumberAplikasi(prev => methods.includes(prev) ? prev : (methods[0] || 'BANK'))
+        } else {
+          setActiveTransferMethods(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+        }
+      } catch (e) {
+        setActiveTransferMethods(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+      }
+    }
+    handleUpdate()
+    window.addEventListener('alphaSyncUpdate', handleUpdate)
+    return () => window.removeEventListener('alphaSyncUpdate', handleUpdate)
+  }, [activeStoreId])
   // --- KALKULATOR STATE ---
   const [showCalc, setShowCalc] = useState(false)
   const [calcDisplay, setCalcDisplay] = useState('0')
@@ -271,7 +292,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleGlobalKeyDown = (e: React.KeyboardEvent) => {
     // Intercept when modals are open
     if (isSumberModalOpen) {
-      const arr = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'];
+      const arr = activeTransferMethods;
       const idx = arr.indexOf(sumberAplikasi);
       if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < arr.length - 1) setSumberAplikasi(arr[idx + 1]); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); if (idx > 0) setSumberAplikasi(arr[idx - 1]); }
@@ -842,11 +863,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                <i className="fa-solid fa-coins text-yellow-500"></i>
-                {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
+                <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
-              {kategori !== 'Order Kuota' && activeMode !== 'AKSESORIS' && (
-                <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>
+              {activeMode !== 'AKSESORIS' && (
+                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                  <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
+                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
+                    else setTujuanMasuk('TUNAI LACI KASIR')
+                  }} className="w-3 h-3 accent-white rounded-sm" />
+                  <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
+                </label>
               )}
             </div>
             <div className="relative">
@@ -876,21 +903,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {activeMode !== 'AKSESORIS' && (
           <div className="relative group flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 px-1">
-              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5">
-                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-emerald-500" : "fa-hand-holding-dollar text-purple-500")}></i>
-                {kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              {kategori !== 'Order Kuota' && (
-                <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap ml-auto">
-                  <input
-                    type="checkbox"
-                    checked={isAdminNonTunai}
-                    onChange={(e) => setIsAdminNonTunai(e.target.checked)}
-                    className="w-3 h-3 accent-purple-600 align-middle"
-                  />
-                  <span className="text-[8px] font-black text-purple-700 uppercase tracking-widest whitespace-nowrap">NON TUNAI</span>
-                </label>
-              )}
+              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                <input
+                  type="checkbox"
+                  checked={isAdminNonTunai}
+                  onChange={(e) => setIsAdminNonTunai(e.target.checked)}
+                  className="w-3 h-3 accent-white rounded-sm"
+                />
+                <span className="text-[9px] font-bold text-white whitespace-nowrap">Non Tunai</span>
+              </label>
             </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
@@ -951,6 +976,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
           )}
         </div>
+
         {/* Peringatan real-time Order Kuota: Jual < Modal */}
         {kategori === 'Order Kuota' && (() => {
           const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
@@ -1081,7 +1107,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="grid grid-cols-4 gap-1.5 mb-2 px-3">
-            {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s) => {
+            {activeTransferMethods.map((s) => {
                const isAct = sumberAplikasi === s;
                return (
                  <button 
@@ -1225,32 +1251,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex gap-2 mb-2 px-3">
-          {/* Nominal */}
-          <div className={cn("bg-white rounded-2xl p-3 shadow-sm border border-gray-200 flex flex-col", activeMode === 'AKSESORIS' ? 'flex-1' : 'flex-1')}>
-            <div className="flex justify-between items-center mb-2.5">
-              <label className="text-[13px] font-black text-[#0c1f44] flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-[#0066ff] text-[12px]"></i>
-                {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
+        <div className="flex gap-2 flex-nowrap mb-2 px-3">
+          <div className="relative group flex-1 min-w-0">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
               {activeMode !== 'AKSESORIS' && (
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <span className="text-[9px] font-black text-[#0066ff]">2x Pay</span>
+                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
                   <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
                     if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
                     else setTujuanMasuk('TUNAI LACI KASIR')
-                  }} className="w-3.5 h-3.5 accent-[#0066ff]" />
+                  }} className="w-3 h-3 accent-white rounded-sm" />
+                  <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
                 </label>
               )}
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#555555] pointer-events-none select-none">Rp</span>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
-                onFocus={handleInputFocus}
-                type="text" inputMode="numeric"
-                placeholder="10.000.000"
+                type="text" 
+                inputMode="numeric" 
+                placeholder="0" 
                 value={nominal}
+                onFocus={handleInputFocus}
                 onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1262,32 +1288,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }, 10);
                   }
                 }}
-                className="w-full text-[14px] font-bold h-[42px] pl-8 pr-3 rounded-xl border border-gray-400 bg-[#dcdcdc] focus:border-[#0066ff] focus:shadow-[0_0_0_3px_rgba(0,102,255,0.1)] outline-none appearance-none transition-all text-[#111111] placeholder:text-[#888888] placeholder:font-normal"
+                className="w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
               />
             </div>
           </div>
-
-          {/* Admin */}
           {activeMode !== 'AKSESORIS' && (
-          <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-200 flex flex-col flex-1">
-            <div className="flex justify-between items-center mb-2.5">
-              <label className={cn("text-[13px] font-black flex items-center gap-1.5", isAdminNonTunai ? "text-purple-700" : "text-[#0c1f44]")}>
-                <i className="fa-solid fa-user text-[#0066ff] text-[12px]"></i>
-                {kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
+          <div className="relative group flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 px-1">
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1 cursor-pointer">
-                <span className="text-[9px] font-black text-purple-700">Non Tunai</span>
-                <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600" />
+              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                <input
+                  type="checkbox"
+                  checked={isAdminNonTunai}
+                  onChange={(e) => setIsAdminNonTunai(e.target.checked)}
+                  className="w-3 h-3 accent-white rounded-sm"
+                />
+                <span className="text-[9px] font-bold text-white whitespace-nowrap">Non Tunai</span>
               </label>
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#555555] pointer-events-none select-none">Rp</span>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={adminRef}
-                onFocus={handleInputFocus}
-                type="text" inputMode="numeric"
-                placeholder="10.000"
+                type="text" 
+                inputMode="numeric" 
+                placeholder="0" 
                 value={admin}
+                onFocus={(e) => {
+                  handleInputFocus(e);
+                  e.target.select();
+                }}
                 onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1296,14 +1329,47 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   }
                 }}
                 className={cn(
-                  "w-full text-[14px] font-bold h-[42px] pl-8 pr-3 rounded-xl border border-gray-400 bg-[#dcdcdc] focus:border-[#0066ff] focus:shadow-[0_0_0_3px_rgba(0,102,255,0.1)] outline-none appearance-none transition-all placeholder:text-[#888888] placeholder:font-normal",
-                  isAdminNonTunai ? "text-purple-700" : "text-[#111111]"
+                  "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
+                  kategori === 'Order Kuota' && (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    return m > 0 && j > 0 && j <= m
+                      ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
+                      : m > 0 && j > m
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
+                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
+                  })() || (isAdminNonTunai 
+                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
                 )}
               />
+              {/* Indikator real-time untuk Order Kuota */}
+              {kategori === 'Order Kuota' && (() => {
+                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                if (m > 0 && j > 0) {
+                  if (j > m) {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                        <i className="fa-solid fa-check text-white text-[10px]"></i>
+                      </div>
+                    )
+                  } else {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                      </div>
+                    )
+                  }
+                }
+                return null
+              })()}
             </div>
           </div>
           )}
         </div>
+
+
 
         {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
           <div className="flex gap-2 w-full mb-3 px-3 animate-in fade-in slide-in-from-top-2">
@@ -1338,16 +1404,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         <div className="px-3">
           <button 
-             ref={btnSimpanRef}
-             onClick={onSaveInternal}
-             disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
-             onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-             className="w-full text-white text-[14px] font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-between px-5 tracking-wider disabled:opacity-50 disabled:shadow-none relative overflow-hidden"
-             style={{background: 'linear-gradient(135deg, #1a7dff 0%, #0055dd 100%)', boxShadow: '0 8px 24px -6px rgba(0,100,255,0.55)'}}
+            ref={btnSimpanRef}
+            onClick={onSaveInternal} 
+            disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+            className="group relative w-full overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-[13px] font-black py-3 rounded-2xl shadow-[0_8px_20px_-6px_rgba(79,70,229,0.5)] transition-all duration-300 hover:shadow-[0_12px_25px_-6px_rgba(79,70,229,0.6)] active:scale-[0.98] focus:ring-4 focus:ring-indigo-300 outline-none uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-             <i className="fa-solid fa-paper-plane text-[15px] relative z-10"></i>
-             <span className="flex-1 text-center relative z-10 font-black tracking-widest">{isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}</span>
-             {!isSaving && <i className="fa-solid fa-arrow-right text-[15px] relative z-10"></i>}
+            <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-700 ease-in-out"></div>
+            {isSaving ? (
+              <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-paper-plane text-sm"></i>
+              </div>
+            )}
+            {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
           </button>
         </div>
       </>
@@ -1495,22 +1566,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* NOMINAL & ADMIN ROW */}
-        <div className="flex gap-3 mb-5">
-          <div className={activeMode === 'AKSESORIS' ? 'w-full' : 'flex-1'}>
+        <div className="flex gap-2 flex-nowrap mb-5 px-3">
+          <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-coins text-yellow-500"></i> {activeMode === 'AKSESORIS' ? 'Harga' : kategori === 'Order Kuota' ? 'MODAL' : 'Nominal'}
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
               </label>
-              {activeMode !== 'AKSESORIS' && <span className="text-[8px] font-bold text-slate-400 italic">mis: 50.000</span>}
+              {activeMode !== 'AKSESORIS' && (
+                <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                  <input type="checkbox" checked={tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'} onChange={e => {
+                    if (e.target.checked) setTujuanMasuk('2X BAYAR (TUNAI & NON TUNAI)')
+                    else setTujuanMasuk('TUNAI LACI KASIR')
+                  }} className="w-3 h-3 accent-white rounded-sm" />
+                  <span className="text-[9px] font-bold text-white whitespace-nowrap">2x Pay</span>
+                </label>
+              )}
             </div>
             <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0f172a] font-black text-[20px] pointer-events-none">Rp</div>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={nominalRef}
-                onFocus={handleInputFocus}
                 type="text" 
-                inputMode="numeric"
+                inputMode="numeric" 
+                placeholder="0" 
                 value={nominal}
+                onFocus={handleInputFocus}
                 onChange={(e) => { setNominal(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(false); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1522,29 +1603,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }, 10);
                   }
                 }}
-                className="w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border border-slate-200 bg-slate-100 focus:border-[#0066ff] focus:ring-4 focus:ring-blue-50 outline-none transition-all text-[#0f172a]"
+                className="w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-yellow-400 focus:ring-4 focus:ring-yellow-50 outline-none transition-all shadow-sm"
               />
             </div>
           </div>
           {activeMode !== 'AKSESORIS' && (
-          <div className="flex-1">
-            <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[10px] font-black text-[#334155] tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-hand-holding-dollar text-purple-500"></i> {kategori === 'Order Kuota' ? 'JUAL' : 'Admin'}
+          <div className="relative group flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 px-1">
+              <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
+                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={isAdminNonTunai} onChange={e => setIsAdminNonTunai(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600 rounded-sm" />
-                <span className="text-[8px] font-black text-purple-700 tracking-widest uppercase whitespace-nowrap">NON TUNAI</span>
+              <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors ml-auto">
+                <input
+                  type="checkbox"
+                  checked={isAdminNonTunai}
+                  onChange={(e) => setIsAdminNonTunai(e.target.checked)}
+                  className="w-3 h-3 accent-white rounded-sm"
+                />
+                <span className="text-[9px] font-bold text-white whitespace-nowrap">Non Tunai</span>
               </label>
             </div>
             <div className="relative">
-              <div className={cn("absolute left-4 top-1/2 -translate-y-1/2 font-black text-[20px] pointer-events-none transition-colors", isAdminNonTunai ? "text-purple-800" : "text-[#0f172a]")}>Rp</div>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs pointer-events-none">Rp</div>
               <input 
                 ref={adminRef}
-                onFocus={handleInputFocus}
-                type="text"
-                inputMode="numeric"
+                type="text" 
+                inputMode="numeric" 
+                placeholder="0" 
                 value={admin}
+                onFocus={(e) => {
+                  handleInputFocus(e);
+                  e.target.select();
+                }}
                 onChange={(e) => { setAdmin(formatInputRupiah(e.target.value)); setErrorMsg(null); setIsAdminManuallyEdited(true); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1553,25 +1644,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   }
                 }}
                 className={cn(
-                  "w-full text-[20px] font-black h-[54px] pl-11 pr-4 rounded-lg border focus:ring-4 outline-none transition-all",
-                  kategori === 'Order Kuota' ? (() => {
-                    if (isAdminNonTunai) return "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50"
+                  "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
+                  kategori === 'Order Kuota' && (() => {
                     const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
                     const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
                     return m > 0 && j > 0 && j <= m
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
                       : m > 0 && j > m
                         ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                        : "bg-slate-100 border-slate-200 text-[#0f172a] focus:border-[#0066ff] focus:ring-blue-50"
-                  })() : (isAdminNonTunai 
-                    ? "border-purple-300 bg-purple-50 text-purple-800 focus:border-purple-500 focus:ring-purple-50" 
-                    : "border-slate-200 bg-slate-100 text-[#0f172a] focus:border-purple-400 focus:ring-purple-50")
+                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
+                  })() || (isAdminNonTunai 
+                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
                 )}
               />
+              {/* Indikator real-time untuk Order Kuota */}
+              {kategori === 'Order Kuota' && (() => {
+                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                if (m > 0 && j > 0) {
+                  if (j > m) {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                        <i className="fa-solid fa-check text-white text-[10px]"></i>
+                      </div>
+                    )
+                  } else {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                      </div>
+                    )
+                  }
+                }
+                return null
+              })()}
             </div>
           </div>
           )}
-        </div>        </div>
+        </div>
+        </div>
 
         {/* ERROR MESSAGES & ALERTS */}
         {errorMsg && (
@@ -1583,20 +1695,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         <button 
-           ref={btnSimpanRef}
-           onClick={onSaveInternal}
-           disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
-           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
-           className="w-full bg-slate-900 text-white text-[13px] font-black py-4 rounded-2xl shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 tracking-widest disabled:opacity-50 hover:bg-slate-800"
+          ref={btnSimpanRef}
+          onClick={onSaveInternal} 
+          disabled={isSaving || (activeMode === 'DIGITAL' && !kategori)}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
+          className="group relative w-full overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-[13px] font-black py-3 rounded-2xl shadow-[0_8px_20px_-6px_rgba(79,70,229,0.5)] transition-all duration-300 hover:shadow-[0_12px_25px_-6px_rgba(79,70,229,0.6)] active:scale-[0.98] focus:ring-4 focus:ring-indigo-300 outline-none uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-           {isSaving ? (
-             <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
-           ) : (
-             <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
-                <i className="fa-solid fa-check text-[10px]"></i>
-             </div>
-           )}
-           {isSaving ? 'MEMPROSES...' : 'SIMPAN TRANSAKSI'}
+          <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-700 ease-in-out"></div>
+          {isSaving ? (
+            <i className="fa-solid fa-circle-notch fa-spin text-lg"></i>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+              <i className="fa-solid fa-paper-plane text-sm"></i>
+            </div>
+          )}
+          {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
         </button>
       </>
       )}
@@ -1605,9 +1718,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       {isSumberModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSumberModalOpen(false)}>
           <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-col">
-              {['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx, arr) => (
-                <button
+            <div className="flex flex-col py-2">
+              {activeTransferMethods.map((s, idx, arr) => (
+                <button 
                   key={s}
                   onClick={() => {
                     setSumberAplikasi(s);
@@ -1757,8 +1870,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
                 {/* Kolom Kanan: Pilihan Menu */}
                 <div className="flex-1 flex flex-col overflow-y-auto pt-4 pb-4 px-4">
-                  <div className="flex flex-col gap-2.5">
-                    {tema3Step === 'DIGITAL' && ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].map((s, idx) => {
+                  <div className="flex flex-col gap-2 mb-6">
+                    {tema3Step === 'DIGITAL' && activeTransferMethods.map((s, idx) => {
+                      const isAct = sumberAplikasi === s;
                       const label = s === 'BANK' ? 'BANK' : s;
                       const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
                       const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;

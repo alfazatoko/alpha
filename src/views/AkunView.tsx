@@ -689,12 +689,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   if (props.isPc) {
     const tabs = props.kasirRole === 'owner' ? [
       { id: 'profil', label: 'Profil Toko', icon: 'fa-user-pen', color: 'emerald' },
-      { id: 'keamanan', label: 'Keamanan & Akses', icon: 'fa-shield-halved', color: 'blue' },
       { id: 'karyawan', label: 'Manajemen Kasir & SDM', icon: 'fa-users-gear', color: 'indigo' },
       { id: 'promo', label: 'Tampilan & Promo', icon: 'fa-bullhorn', color: 'orange' },
-      { id: 'pantau', label: 'Pantau Dashboard', icon: 'fa-eye', color: 'indigo' },
       { id: 'printer', label: 'Printer & Hardware', icon: 'fa-print', color: 'slate' },
-      { id: 'backup', label: 'Backup & Reset', icon: 'fa-cloud-arrow-down', color: 'red' },
       { id: 'cloud', label: 'Sinkronisasi Cloud', icon: 'fa-cloud', color: 'purple' },
     ] : [
       { id: 'kasirSelf', label: 'PIN & Nama Kasir', icon: 'fa-user-lock', color: 'indigo' },
@@ -2751,6 +2748,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                 {/* Pengaturan Beban & Finansial Toko */}
                 <button
+                  style={{ display: 'none' }}
                   onClick={() => setOpenCategory(openCategory === 'finansial' ? null : 'finansial')}
                   className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
@@ -2923,6 +2921,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                 {/* Keamanan & Akses */}
                 <button
+                  style={{ display: 'none' }}
                   onClick={() => setOpenCategory(openCategory === 'keamanan' ? null : 'keamanan')}
                   className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
@@ -3595,6 +3594,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                 {/* Pantau Dashboard */}
                 <button
+                  style={{ display: 'none' }}
                   onClick={() => setOpenCategory(openCategory === 'pantau' ? null : 'pantau')}
                   className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
@@ -3648,6 +3648,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                 {/* Backup & Keamanan */}
                 <button
+                  style={{ display: 'none' }}
                   onClick={() => setOpenCategory(openCategory === 'backup' ? null : 'backup')}
                   className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >

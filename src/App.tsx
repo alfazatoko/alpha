@@ -2720,6 +2720,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       setPantauStoreId={setPantauStoreId}
                       stores={stores}
                       isPc={screenSize === 'pc'}
+                      onSaveCashierSelf={handleSaveCashierSelf}
                     />
                   );
                 default:
@@ -2781,6 +2782,7 @@ const MainApp: React.FC<MainAppProps> = ({
             stores={stores}
             gajiBonusList={gajiBonusList}
             fetchGajiBonus={fetchGajiBonus}
+            onSaveCashierSelf={handleSaveCashierSelf}
           />
 
           <RiwayatView 

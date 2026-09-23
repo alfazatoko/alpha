@@ -68,6 +68,7 @@ interface BerandaViewProps {
   stores?: Store[]
   isPc?: boolean
   userId: string
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>
 }
 
 const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
@@ -803,25 +804,160 @@ const GajiPanel: React.FC<{
   )
 }
 
-const BackupPanel: React.FC<{ 
+const PengaturanPanel: React.FC<{ 
   transactions: Transaction[], 
   absensiList?: any[],
   storeName?: string,
   showToast: (m: string) => void,
   onConfirm: (t: string, m: string, c: () => void) => void,
-  activeStoreId: string
-}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId }) => {
+  activeStoreId: string,
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>,
+  kasirList?: Record<string, KasirAccount>
+}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId, onSaveCashierSelf, kasirList }) => {
   if (activeStoreId === 'all') {
     return (
       <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
         <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
         <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
-        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk melakukan backup.</p>
+        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk melihat pengaturan.</p>
       </div>
     );
   }
 
   const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
+  const ALL_TRANSFER_METHODS = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'];
+  const [activeMethods, setActiveMethods] = useState<string[]>([]);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
+  const [isFinancialOpen, setIsFinancialOpen] = useState(false);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+
+  // Financial State
+  const defaultFinancial: Record<string, string> = { startDate: '', rentPeriod: 'bulanan', rentAmount: '', rentDueDate: '', electricityBill: '', wifiBill: '' }
+  const [financialSettings, setFinancialSettings] = useState<Record<string, string>>(defaultFinancial)
+
+  useEffect(() => {
+    try {
+      const key = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        setFinancialSettings({ ...defaultFinancial, ...JSON.parse(saved) })
+      } else {
+        setFinancialSettings(defaultFinancial)
+      }
+    } catch (e) {}
+  }, [activeStoreId])
+
+  const handleSaveFinancial = (key: string, value: string) => {
+    const newSettings = { ...financialSettings, [key]: value }
+    setFinancialSettings(newSettings)
+    const storeKey = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+    localStorage.setItem(storeKey, JSON.stringify(newSettings))
+  }
+
+  // Security State
+  const storageKeyPin = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_isPinEnabled` : 'alphaPro_isPinEnabled'
+  const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem(storageKeyPin) !== 'false')
+  useEffect(() => { setIsPinEnabled(localStorage.getItem(storageKeyPin) !== 'false') }, [storageKeyPin])
+
+  const togglePin = () => {
+    const newValue = !isPinEnabled
+    setIsPinEnabled(newValue)
+    localStorage.setItem(storageKeyPin, newValue.toString())
+  }
+
+  const [ownerPinOld, setOwnerPinOld] = useState('')
+  const [ownerPinNew, setOwnerPinNew] = useState('')
+  const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
+  const [showOwnerPin, setShowOwnerPin] = useState(false)
+
+  const handleSaveOwnerPin = async () => {
+    if (!ownerPinNew || ownerPinNew.length < 4) return showToast('PIN baru minimal 4 digit!');
+    if (ownerPinNew !== ownerPinConfirm) return showToast('Konfirmasi PIN tidak cocok!');
+    
+    const ownerAcc = kasirList?.['owner'];
+    if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return showToast('PIN lama tidak sesuai!');
+    
+    if (onSaveCashierSelf) {
+      await onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+      setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
+      showToast('PIN Owner berhasil diubah!');
+    } else {
+      showToast('Gagal: Fungsi onSaveCashierSelf tidak tersedia');
+    }
+  }
+
+  // Dashboard Filter State
+  const storageKeyFilter = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_showKasirFilter` : 'alphaPro_showKasirFilter'
+  const [showKasirFilter, setShowKasirFilter] = useState(localStorage.getItem(storageKeyFilter) !== 'false')
+  useEffect(() => { setShowKasirFilter(localStorage.getItem(storageKeyFilter) !== 'false') }, [storageKeyFilter])
+
+  const toggleFilterKasir = () => {
+    const newValue = !showKasirFilter
+    setShowKasirFilter(newValue)
+    localStorage.setItem(storageKeyFilter, newValue.toString())
+    window.dispatchEvent(new Event('storage'))
+  }
+  
+  const handleExportCSV = () => {
+    const txs = transactions || [];
+    if (txs.length === 0) return showToast("Belum ada data transaksi");
+
+    const headers = ["ID Transaksi", "Tanggal", "Waktu", "Kasir", "Kategori", "Keterangan", "Nominal (Rp)", "Admin/Fee (Rp)", "Tipe"];
+    const rows = txs.map((t: any) => {
+      const date = new Date(t.timestamp);
+      const tanggal = date.toLocaleDateString('id-ID');
+      const waktu = date.toLocaleTimeString('id-ID');
+
+      return [
+        t.id,
+        tanggal,
+        waktu,
+        t.kasir_id || '-',
+        t.kategori,
+        (t.keterangan || '').replace(/,/g, ' '),
+        t.nominal,
+        t.adminFee || 0,
+        t.jenis || '-'
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ALPHA_TRANSAKSI_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`);
+      if (saved) {
+        setActiveMethods(JSON.parse(saved));
+      } else {
+        setActiveMethods(ALL_TRANSFER_METHODS);
+      }
+    } catch (e) {
+      setActiveMethods(ALL_TRANSFER_METHODS);
+    }
+  }, [activeStoreId]);
+
+  const toggleMethod = (method: string) => {
+    let newMethods = [...activeMethods];
+    if (newMethods.includes(method)) {
+      newMethods = newMethods.filter(m => m !== method);
+    } else {
+      newMethods.push(method);
+    }
+    setActiveMethods(newMethods);
+    localStorage.setItem(`alphaPro_${activeStoreId}_transferMethods`, JSON.stringify(newMethods));
+    showToast(`Pengaturan transfer diperbarui`);
+    window.dispatchEvent(new Event('alphaSyncUpdate'));
+  };
 
   const handleBackup = async () => {
     try {
@@ -844,7 +980,6 @@ const BackupPanel: React.FC<{
         const { Filesystem, Directory } = await import('@capacitor/filesystem');
         const { Share } = await import('@capacitor/share');
         
-        // Convert to base64 for sharing
         const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
         
         const result = await Filesystem.writeFile({
@@ -875,21 +1010,18 @@ const BackupPanel: React.FC<{
     onConfirm("RESET SISTEM", "Apakah Anda yakin? Seluruh data transaksi dan absensi akan dihapus permanen dan tidak bisa dikembalikan!", async () => {
       setResetStep(2);
       try {
-        // 1. Reset Transactions
         let txQuery = supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         if (activeStoreId !== 'all') {
           txQuery = txQuery.eq('store_id', activeStoreId);
         }
         const { error: txError } = await txQuery;
         
-        // 2. Reset Attendance
         let absQuery = supabase.from('absensi').delete().neq('id', 0);
         if (activeStoreId !== 'all') {
           absQuery = absQuery.eq('store_id', activeStoreId);
         }
         const { error: absError } = await absQuery;
         
-        // 3. Reset Local Data
         localStorage.removeItem(`alphaPro_${activeStoreId}_catatanIzin`);
         
         if (txError || absError) throw new Error("Beberapa data gagal dihapus");
@@ -905,63 +1037,235 @@ const BackupPanel: React.FC<{
 
   return (
     <div className="space-y-4 pb-10">
-      {/* Backup Card */}
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-        <div className="relative z-10 flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/30">
-            <i className="fa-solid fa-cloud-arrow-up text-2xl"></i>
+
+      {/* Beban & Finansial Toko */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsFinancialOpen(!isFinancialOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-wallet text-orange-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">BEBAN & FINANSIAL TOKO</h3>
           </div>
-          <h3 className="font-black text-lg tracking-widest uppercase mb-1">BACKUP DATA</h3>
-          <p className="text-blue-100 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-6">Amankan seluruh transaksi & absensi</p>
-          
-          <button 
-            onClick={handleBackup}
-            className="w-full bg-white text-blue-700 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            <i className="fa-solid fa-file-export"></i> Ekspor ke JSON
-          </button>
-        </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isFinancialOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isFinancialOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-3">Sewa toko, listrik, WiFi (Otomatis Laba Bersih)</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Tgl Mulai Sewa</label>
+                <input type="date" value={financialSettings.startDate} onChange={e => handleSaveFinancial('startDate', e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Periode Sewa</label>
+                <select value={financialSettings.rentPeriod} onChange={e => handleSaveFinancial('rentPeriod', e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all">
+                  <option value="bulanan">Bulanan</option>
+                  <option value="tahunan">Tahunan</option>
+                </select>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Nominal Sewa</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                <input type="text" value={financialSettings.rentAmount} onChange={e => handleSaveFinancial('rentAmount', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Listrik /bln</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                  <input type="text" value={financialSettings.electricityBill} onChange={e => handleSaveFinancial('electricityBill', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">WiFi /bln</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                  <input type="text" value={financialSettings.wifiBill} onChange={e => handleSaveFinancial('wifiBill', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Reset Card */}
-      <div className="bg-white border border-red-100 rounded-[2rem] p-6 shadow-sm">
-        <div className="flex flex-col items-center text-center">
-          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-3">
-            <i className="fa-solid fa-triangle-exclamation text-xl"></i>
+      {/* Keamanan & Akses */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsSecurityOpen(!isSecurityOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-shield-halved text-emerald-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">KEAMANAN & AKSES</h3>
           </div>
-          <h3 className="font-black text-gray-800 text-[13px] tracking-widest uppercase mb-1">RESET SISTEM</h3>
-          <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-6">Hapus seluruh data untuk periode baru</p>
-          <button 
-            onClick={handleReset}
-            disabled={resetStep === 2}
-            className={cn(
-              "w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2",
-              resetStep === 2 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-red-600 text-white shadow-red-100"
-            )}
-          >
-            {resetStep === 2 ? (
-              <>
-                <i className="fa-solid fa-circle-notch fa-spin"></i> Memproses...
-              </>
-            ) : (
-              <>
-                <i className="fa-solid fa-trash-can"></i> Hapus Seluruh Data
-              </>
-            )}
-          </button>
-        </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isSecurityOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isSecurityOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase">PIN Login Kasir</h4>
+                  <p className="text-[9px] text-gray-500 mt-1 uppercase font-bold tracking-widest">Gunakan PIN saat kasir login</p>
+                </div>
+                <button 
+                  onClick={togglePin}
+                  className={cn("w-12 h-6 rounded-full transition-colors relative", isPinEnabled ? "bg-emerald-500" : "bg-gray-200")}
+                >
+                  <div className={cn("w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm", isPinEnabled ? "translate-x-6.5 left-0" : "translate-x-0.5 left-0")} style={{ transform: isPinEnabled ? 'translateX(26px)' : 'translateX(2px)' }}></div>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase mb-3">Ubah PIN Owner</h4>
+              <div className="space-y-3">
+                <div className="relative">
+                  <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinOld} onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))} placeholder="PIN Lama" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                  <button onClick={() => setShowOwnerPin(!showOwnerPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i className={showOwnerPin ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i></button>
+                </div>
+                <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinNew} onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))} placeholder="PIN Baru (Min 4 digit)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinConfirm} onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))} placeholder="Konfirmasi PIN Baru" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                <button onClick={handleSaveOwnerPin} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-blue-500/20">Simpan PIN Baru</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
-        <div className="flex gap-3">
-          <i className="fa-solid fa-circle-info text-orange-400 mt-0.5"></i>
-          <div>
-            <p className="text-[10px] font-black text-orange-800 uppercase tracking-widest mb-1">Tips Keamanan</p>
-            <p className="text-[9px] font-bold text-orange-700/70 leading-relaxed uppercase">Selalu lakukan backup sebelum melakukan reset sistem untuk menghindari kehilangan data penting permanen.</p>
+      {/* Pantau Dashboard */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsDashboardOpen(!isDashboardOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-eye text-indigo-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">PANTAU DASHBOARD</h3>
           </div>
-        </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isDashboardOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isDashboardOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase">Filter Kasir di Beranda</h4>
+                <p className="text-[9px] text-gray-500 mt-1 uppercase font-bold tracking-widest">Tampilkan tombol filter kasir</p>
+              </div>
+              <button 
+                onClick={toggleFilterKasir}
+                className={cn("w-12 h-6 rounded-full transition-colors relative", showKasirFilter ? "bg-indigo-500" : "bg-gray-200")}
+              >
+                <div className={cn("w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm")} style={{ transform: showKasirFilter ? 'translateX(26px)' : 'translateX(2px)' }}></div>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      
+      {/* Pengaturan Transfer */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsTransferOpen(!isTransferOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-money-bill-transfer text-blue-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">KATEGORI TRANSFER</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isTransferOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isTransferOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-3">Pilih kategori layanan digital yang muncul di kasir</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_TRANSFER_METHODS.map(method => {
+                const isActive = activeMethods.includes(method);
+                return (
+                  <label key={method} className={cn("flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all", isActive ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100")}>
+                    <span className={cn("text-[10px] font-black uppercase tracking-widest", isActive ? "text-blue-700" : "text-gray-500")}>{method}</span>
+                    <input 
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleMethod(method)}
+                      className="w-3.5 h-3.5 accent-blue-600 rounded-sm cursor-pointer"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Backup & Reset (Minimalist) */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsBackupOpen(!isBackupOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-cloud-arrow-down text-slate-600"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">SISTEM & BACKUP</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isBackupOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isBackupOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50 grid grid-cols-2 gap-3">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center">
+              <h3 className="font-black text-gray-800 text-[10px] tracking-widest uppercase mb-1">BACKUP DATA</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Ekspor ke JSON</p>
+              <button 
+                onClick={handleBackup}
+                className="w-full bg-slate-100 text-slate-700 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-slate-200"
+              >
+                <i className="fa-solid fa-file-export"></i> Unduh File
+              </button>
+            </div>
+
+            <div className="bg-white border border-red-100 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center">
+              <h3 className="font-black text-red-600 text-[10px] tracking-widest uppercase mb-1">RESET SISTEM</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Hapus Seluruh Data</p>
+              <button 
+                onClick={handleReset}
+                disabled={resetStep === 2}
+                className={cn(
+                  "w-full py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5",
+                  resetStep === 2 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-red-50 text-red-600 hover:bg-red-100"
+                )}
+              >
+                {resetStep === 2 ? (
+                  <><i className="fa-solid fa-circle-notch fa-spin"></i> Proses...</>
+                ) : (
+                  <><i className="fa-solid fa-trash-can"></i> Reset</>
+                )}
+              </button>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center col-span-2">
+              <h3 className="font-black text-emerald-600 text-[10px] tracking-widest uppercase mb-1">EKSPOR CSV</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Ekspor ke CSV/Excel</p>
+              <button 
+                onClick={handleExportCSV}
+                className="w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5"
+              >
+                <i className="fa-solid fa-file-excel"></i> Unduh CSV
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 };
@@ -1607,7 +1911,7 @@ const DEFAULT_OWNER_MENU = [
   { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
   { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
   { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
-  { id: 'view-owner-backup', title: 'Backup', desc: 'Backup & reset', icon: 'fa-database', color: 'bg-red-600' },
+  { id: 'view-owner-backup', title: 'Pengaturan', desc: 'Sistem & Backup', icon: 'fa-gear', color: 'bg-slate-600' },
   { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
   { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
 ];
@@ -3150,7 +3454,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
             case 'catatan': return { title: 'CATATAN OWNER', color: 'from-amber-500 to-orange-600', icon: 'fa-clipboard-list', desc: 'Catat pengingat penting dan daftar belanja.' }
             case 'profit': return { title: 'RIWAYAT NOTIFIKASI TOKO', color: 'from-indigo-600 to-blue-800', icon: 'fa-bell', desc: 'Riwayat lengkap notifikasi sistem, bonus kasir, dan audit toko.' }
-            default: return { title: 'BACKUP & RESET', color: 'from-red-600 to-red-800', icon: 'fa-database', desc: 'Cadangkan data dan kembalikan ke pengaturan awal.' }
+            default: return { title: 'PENGATURAN', color: 'from-slate-600 to-slate-800', icon: 'fa-gear', desc: 'Pengaturan toko, transfer, dan backup data.' }
           }
         };
         const { title, color, icon, desc } = getSubViewDetails();
@@ -4048,14 +4352,16 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerSubView === 'backup' && (
-                <div className="animate-in slide-in-from-right duration-300">
-                  <BackupPanel 
+                <div className="animate-in fade-in zoom-in-95 duration-300">
+                  <PengaturanPanel 
                     transactions={props.transactions} 
                     absensiList={props.absensiList} 
                     storeName={props.storeName} 
                     showToast={props.showToast}
                     onConfirm={props.onConfirm}
                     activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
+                    onSaveCashierSelf={props.onSaveCashierSelf}
+                    kasirList={props.kasirList}
                   />
                 </div>
               )}
@@ -4954,6 +5260,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
             adminRules={props.adminRules}
           />
+          {props.kasirRole === 'owner' && (
+            <PengaturanPanel 
+              activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+              onSaveCashierSelf={props.onSaveCashierSelf}
+              kasirList={props.kasirList}
+            />
+          )}
         </div>
       )}
       {props.kasirRole === 'owner' && !isOwnerSubView && (
