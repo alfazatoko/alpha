@@ -1994,7 +1994,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const kasirLateHistory = useMemo(() => {
     if (props.kasirRole === 'owner') return [];
-    const entries = (props.absensiList || []).filter(a => a.kasir_id === props.username);
+    const entries = (props.absensiList || []).filter(a => a.username === props.username);
     const byDate: Record<string, any> = {};
     entries.forEach(e => {
       if (!byDate[e.tanggal] || e.jam_masuk < byDate[e.tanggal].jam_masuk) {
@@ -2033,7 +2033,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     // Get unique dates per cashier (first login of the day)
     const firstLogins: Record<string, any> = {};
     entries.forEach(e => {
-      const k = `${e.kasir_id}_${e.tanggal}`;
+      const k = `${e.username}_${e.tanggal}`;
       if (!firstLogins[k] || e.jam_masuk < firstLogins[k].jam_masuk) {
         firstLogins[k] = e;
       }
@@ -2044,7 +2044,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       if (info.isLate) {
         lateEntries.push({
           date: e.tanggal,
-          name: props.kasirList?.[e.kasir_id]?.name || e.kasir_id,
+          name: props.kasirList?.[e.username]?.name || e.nama || e.username || 'Kasir',
           lateMins: info.lateMins,
           shift: info.shiftName,
           time: e.jam_masuk,

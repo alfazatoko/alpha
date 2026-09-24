@@ -127,20 +127,12 @@ export const INITIAL_PRODUCTS: VoucherProduct[] = [
 
 export const INITIAL_CASHIERS: Cashier[] = [
   {
-    id: 'cashier-1',
-    name: 'Budi Satria',
-    role: 'Kasir Utama',
-    email: 'budi.satria@voucherku.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
+    id: 'c-loading',
+    name: 'Memuat...',
+    role: 'System',
+    email: 'system@alfazacell.com',
+    avatar: 'https://ui-avatars.com/api/?name=Memuat',
     isOnline: true
-  },
-  {
-    id: 'cashier-2',
-    name: 'Ahmad Rifai',
-    role: 'Kasir Shift',
-    email: 'ahmad.rifai@voucherku.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&h=256&q=80',
-    isOnline: false
   }
 ];
 

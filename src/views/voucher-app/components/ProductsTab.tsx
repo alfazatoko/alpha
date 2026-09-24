@@ -135,6 +135,48 @@ export default function ProductsTab({
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
+  // Owner two-column product visibility view
+  const [ownerProductView, setOwnerProductView] = useState<'visible' | 'hidden'>('visible');
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+
+  const [hiddenProductIds, setHiddenProductIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Load from Supabase Online
+  useEffect(() => {
+    if (!activeStoreId) return;
+    
+    // Initial fetch
+    supabase.from('store_settings')
+      .select('voucher_app_data')
+      .eq('store_id', activeStoreId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.voucher_app_data?.global_hidden_products) {
+          setHiddenProductIds(data.voucher_app_data.global_hidden_products);
+          localStorage.setItem(`alphaPro_${activeStoreId}_hidden_products`, JSON.stringify(data.voucher_app_data.global_hidden_products));
+        }
+      });
+
+    // Realtime Listener for sync across devices
+    const sub = supabase.channel(`hidden_products_sync_${activeStoreId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings', filter: `store_id=eq.${activeStoreId}` }, (payload) => {
+         const newData = (payload.new as any)?.voucher_app_data;
+         if (newData?.global_hidden_products) {
+           setHiddenProductIds(newData.global_hidden_products);
+           localStorage.setItem(`alphaPro_${activeStoreId}_hidden_products`, JSON.stringify(newData.global_hidden_products));
+         }
+      }).subscribe();
+
+    return () => { supabase.removeChannel(sub); };
+  }, [activeStoreId]);
+
   // STATE: Modal Salin Produk ke Toko Lain
   // ====================================================
   const [showCopyModal, setShowCopyModal] = useState(false);
@@ -350,8 +392,46 @@ export default function ProductsTab({
     const minStock = typeof p.minStockLevel === 'number' ? p.minStockLevel : 0;
     const matchesLowStock = !showLowStockOnly || currentStock <= minStock;
 
+    // For cashier: only show non-hidden products
+    const isHidden = hiddenProductIds.includes(p.id);
+    if (userRole !== 'owner' && isHidden) return false;
+
     return matchesSearch && matchesOperator && matchesLowStock;
   });
+
+  // Separate visible / hidden for owner two-col view
+  const visibleProducts = filteredProducts.filter(p => !hiddenProductIds.includes(p.id));
+  const hiddenProducts = filteredProducts.filter(p => hiddenProductIds.includes(p.id));
+
+  // Helper: toggle product hidden state (Syncs to DB too)
+  const handleToggleHide = async (p: VoucherProduct, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedProductId(null);
+    
+    const newHidden = hiddenProductIds.includes(p.id) 
+      ? hiddenProductIds.filter(id => id !== p.id) 
+      : [...hiddenProductIds, p.id];
+      
+    // Optimistic Update (Instant)
+    setHiddenProductIds(newHidden);
+    localStorage.setItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`, JSON.stringify(newHidden));
+
+    // Online Sync
+    if (activeStoreId) {
+      try {
+        const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+        const existingData = data?.voucher_app_data || {};
+        existingData.global_hidden_products = newHidden;
+        
+        await supabase.from('store_settings').upsert({
+          store_id: activeStoreId,
+          voucher_app_data: existingData
+        }, { onConflict: 'store_id' });
+      } catch (err) {
+        console.error("Gagal sinkronisasi sembunyikan produk ke cloud:", err);
+      }
+    }
+  };
 
   const toggleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -669,38 +749,70 @@ ${bulkAIText}`;
 
   return (
     <div className="flex flex-col h-full space-y-3.5 pb-6" id="stok-voucher-container">
-      {/* 1. Header Stok Voucher matching Photo 2 */}
-      <div className="flex items-center justify-between pt-0.5 pb-1" id="stok-voucher-header">
-        <div className="flex items-center gap-3">
-          {/* Glassmorphic Back button */}
-          <button 
-            onClick={onBack}
-            className="w-11 h-11 rounded-2xl bg-white/[0.08] hover:bg-white/[0.14] backdrop-blur-xl border border-white/20 flex items-center justify-center text-slate-800 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition shadow-sm cursor-pointer"
-            title="Kembali ke Beranda"
-            id="stok-back-btn"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-
-          <div>
-            <h2 className={`text-lg font-black tracking-tight leading-tight ${isLight ? 'text-slate-800' : 'text-slate-900 dark:text-white'}`}>
+      {/* 1. Enhanced Header: Unified Mobile App Bar */}
+      <div className="flex flex-col gap-3 mb-2 mt-1">
+        
+        {/* ROW 1: < (Back), Title (Center), x (Close) */}
+        <div className="flex items-center justify-between relative px-1">
+          {onBack ? (
+            <button 
+              onClick={onBack}
+              className={`w-9 h-9 flex items-center justify-center rounded-full transition-all active:scale-95 ${
+                isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-white/10 hover:bg-white/20 text-slate-300'
+              }`}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          ) : (
+            <div className="w-9 h-9" />
+          )}
+          
+          <div className="flex-1 text-center px-2">
+            <h2 className={`text-[17px] font-black tracking-tight leading-tight ${isLight ? 'text-slate-800' : 'text-slate-900 dark:text-white'}`}>
               Stok Voucher
             </h2>
-            <p className={`text-[11px] font-bold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-300/90'}`}>
-              Daftar produk voucher yang tersedia
+            <p className={`text-[10px] font-bold mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Daftar produk yang tersedia
             </p>
           </div>
+
+          <button 
+            onClick={onBack || (() => {})}
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all active:scale-95 ${
+              isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-white/10 hover:bg-white/20 text-slate-300'
+            }`}
+            title="Tutup"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* ROW 2: Search + Action Buttons Combined */}
+        <div className="flex items-center gap-1.5 px-1">
+          {/* Search Bar */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Cari..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full backdrop-blur-xl border rounded-xl pl-8 pr-3 py-1.5 text-[12px] focus:outline-none transition shadow-sm ${
+                isLight 
+                  ? 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-slate-400' 
+                  : 'bg-white/5 border-white/10 text-white placeholder-slate-400 focus:border-white/30'
+              }`}
+            />
+          </div>
+
           {/* View Mode Toggles */}
-          <div className={`flex rounded-xl p-1 border shadow-inner ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10'}`}>
+          <div className={`flex shrink-0 rounded-xl p-1 border shadow-inner ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-white/5 border-white/10'}`}>
             <button 
               onClick={() => setViewMode('card')}
-              className={`p-1.5 rounded-lg transition-all ${
+              className={`p-1 rounded-lg transition-all ${
                 viewMode === 'card' 
-                  ? (isLight ? 'bg-white text-cyan-600 shadow-sm border border-slate-200/60 font-bold' : 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 shadow-sm') 
-                  : (isLight ? 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent')
+                  ? (isLight ? 'bg-white text-cyan-600 shadow-sm border border-slate-200/60 font-bold' : 'bg-cyan-500/20 text-cyan-700 shadow-sm') 
+                  : (isLight ? 'text-slate-500 hover:bg-slate-200/50' : 'text-slate-400 hover:bg-white/10')
               }`}
               title="Mode Kartu"
             >
@@ -708,119 +820,75 @@ ${bulkAIText}`;
             </button>
             <button 
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-lg transition-all ${
+              className={`p-1 rounded-lg transition-all ${
                 viewMode === 'table' 
-                  ? (isLight ? 'bg-white text-cyan-600 shadow-sm border border-slate-200/60 font-bold' : 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 shadow-sm') 
-                  : (isLight ? 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent')
+                  ? (isLight ? 'bg-white text-cyan-600 shadow-sm border border-slate-200/60 font-bold' : 'bg-cyan-500/20 text-cyan-700 shadow-sm') 
+                  : (isLight ? 'text-slate-500 hover:bg-slate-200/50' : 'text-slate-400 hover:bg-white/10')
               }`}
               title="Mode Tabel & Shift"
             >
               <Table2 className="w-4 h-4" />
             </button>
           </div>
+          
           {/* Add Actions Group - Visible only for Owner */}
           {userRole === 'owner' && (
-            <div className={`flex rounded-2xl p-1 border shadow-inner relative ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10'}`}>
+            <div className={`flex shrink-0 rounded-xl p-1 border shadow-inner relative ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-white/5 border-white/10'}`}>
               <div className="absolute -top-1 -right-1 w-6 h-6 bg-cyan-400/20 rounded-full blur-md pointer-events-none" />
-              {/* Salin ke Toko Lain - hanya tampil jika ada toko lain */}
+              {/* Salin ke Toko Lain */}
               {otherStores.length > 0 && (
                 <>
                   <button
                     onClick={() => { setShowCopyModal(true); setCopyStatus('idle'); }}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-violet-100 text-violet-600' : 'hover:bg-violet-500/20 text-violet-400 hover:text-violet-300'}`}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-violet-100 text-violet-600' : 'hover:bg-violet-500/20 text-violet-400'}`}
                     title="Salin Daftar Produk ke Toko Lain"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
-                  <div className={`w-px mx-0.5 my-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-100 dark:bg-white/10'}`} />
+                  <div className={`w-px mx-0.5 my-1.5 ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
                 </>
               )}
+              {/* Bulk Add */}
               <button 
                 onClick={() => setIsAddingBulkAI(true)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-amber-500/20 text-amber-500 font-black dark:text-amber-400 hover:text-amber-300'}`}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-amber-500/20 text-amber-500'}`}
                 title="Tambah Massal"
               >
-                <ListPlus className="w-5 h-5" />
+                <ListPlus className="w-4 h-4" />
               </button>
-              <div className={`w-px mx-0.5 my-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-100 dark:bg-white/10'}`} />
+              <div className={`w-px mx-0.5 my-1.5 ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+              {/* Add New */}
               <button 
                 onClick={handleOpenAddForm}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${isLight ? 'hover:bg-cyan-100 text-cyan-600' : 'hover:bg-white/[0.14] text-slate-900 dark:text-white'}`}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${isLight ? 'bg-cyan-100 hover:bg-cyan-200 text-cyan-700' : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400'}`}
                 title="Tambah Voucher Baru"
-                id="stok-add-btn"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4" />
               </button>
             </div>
           )}
         </div>
-      </div>
 
-      {/* 2. Provider Filter Bar (New Renovated) */}
-      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar -mx-0.5 px-0.5" id="products-provider-filter">
-        {['Semua', 'Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren'].map((op) => {
-          const isSelected = selectedOperator === op;
-          const opStyle = OPERATOR_STYLES[op] || { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-200 dark:border-white/10', logoBg: 'bg-slate-500' };
-          
-          return (
-            <button
-              key={op}
-              type="button"
-              onClick={() => setSelectedOperator(op)}
-              className={`flex flex-col items-center gap-3 p-2 rounded-2xl min-w-[62px] transition-all border ${
-                isSelected
-                  ? `bg-slate-100 dark:bg-white/10 ${opStyle.border} shadow-lg ring-1 ring-white/10 scale-105`
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 hover:border-indigo-400 hover:shadow-md'
-              }`}
-            >
-              <div className={`w-9 h-9 rounded-xl ${opStyle.bg} border ${opStyle.border} flex items-center justify-center overflow-hidden shadow-inner`}>
-                {op === 'Semua' ? (
-                  <LayoutGrid className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                ) : (
-                  <div className={`w-full h-full ${opStyle.logoBg} flex items-center justify-center font-black text-[10px] text-slate-900 dark:text-white uppercase`}>
-                    {op.substring(0, 3)}
-                  </div>
-                )}
-              </div>
-              <span className={`text-[8px] font-black uppercase tracking-tighter ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+        {/* ROW 3: Provider Filter Bar (New Renovated - Minimalist Pills) */}
+        <div className="flex gap-2 overflow-x-auto py-2 px-1 no-scrollbar items-center" id="products-provider-filter">
+          {['Semua', 'Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren'].map((op) => {
+            const isSelected = selectedOperator === op;
+            return (
+              <button
+                key={op}
+                type="button"
+                onClick={() => setSelectedOperator(op)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-[11px] font-bold transition-all border ${
+                  isSelected
+                    ? (isLight ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white text-slate-900 border-white shadow-md')
+                    : (isLight ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' : 'bg-slate-800/50 text-slate-400 border-white/10 hover:bg-white/10')
+                }`}
+              >
                 {op}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 3. Search Bar */}
-      <div className="flex items-center gap-2" id="stok-search-filter-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 dark:text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Cari produk voucher..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full backdrop-blur-xl border rounded-2xl pl-10 pr-4 py-2.5 text-xs focus:outline-none transition shadow-inner ${
-              isLight 
-                ? 'bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-cyan-500' 
-                : 'bg-white/[0.07] border-slate-200 dark:border-white/15 text-slate-900 dark:text-white placeholder-slate-400 focus:border-cyan-400/50'
-            }`}
-            id="stok-search-input"
-          />
+              </button>
+            );
+          })}
         </div>
-
-        {/* Filter Button */}
-        <button 
-          onClick={() => setShowFilterDrawer(!showFilterDrawer)}
-          className={`w-11 h-11 rounded-2xl backdrop-blur-xl border flex items-center justify-center transition shadow-sm cursor-pointer ${
-            showFilterDrawer || selectedOperator !== 'Semua' || showLowStockOnly 
-              ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-700 dark:text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]' 
-              : 'bg-white/[0.07] border-slate-200 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white'
-          }`}
-          title="Filter Kategori & Operator"
-          id="stok-filter-toggle-btn"
-        >
-          <SlidersHorizontal className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Filter Quick Chips (Collapsible / Dynamic) */}
@@ -863,67 +931,184 @@ ${bulkAIText}`;
       </AnimatePresence>
 
       {viewMode === 'card' ? (
-        <div className="space-y-2.5 max-h-[510px] overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-white/10" id="stok-voucher-card-list">
-          {filteredProducts.length === 0 ? (
-            <div className="text-center py-12 text-slate-600 dark:text-slate-400 text-xs italic bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-2xl p-6">
-              Tidak ada voucher yang cocok dengan pencarian.
+        <div className="space-y-2.5 overflow-y-auto pb-32 scrollbar-thin scrollbar-thumb-white/10 flex-1 min-h-[500px]" id="stok-voucher-card-list">
+          {/* Owner Two-Column Tab Header */}
+          {userRole === 'owner' && (
+            <div className={`flex gap-1 p-1 rounded-xl border shadow-inner mb-1 ${
+              isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-800/60 border-white/10'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setOwnerProductView('visible')}
+                className={`flex-1 py-2 rounded-lg text-[11px] font-black transition flex items-center justify-center gap-1.5 ${
+                  ownerProductView === 'visible'
+                    ? 'bg-emerald-500 text-white shadow-md'
+                    : (isLight ? 'text-slate-600 hover:bg-slate-200' : 'text-slate-400 hover:bg-white/10')
+                }`}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Ditampilkan
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                  ownerProductView === 'visible' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                }`}>{visibleProducts.length}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerProductView('hidden')}
+                className={`flex-1 py-2 rounded-lg text-[11px] font-black transition flex items-center justify-center gap-1.5 ${
+                  ownerProductView === 'hidden'
+                    ? 'bg-rose-500 text-white shadow-md'
+                    : (isLight ? 'text-slate-600 hover:bg-slate-200' : 'text-slate-400 hover:bg-white/10')
+                }`}
+              >
+                <X className="w-3.5 h-3.5" />
+                Disembunyikan
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                  ownerProductView === 'hidden' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'
+                }`}>{hiddenProducts.length}</span>
+              </button>
             </div>
-          ) : (
-            filteredProducts.map((p) => {
+          )}
+
+          {/* Product list based on view */}
+          {(() => {
+            const displayList = userRole === 'owner'
+              ? (ownerProductView === 'visible' ? visibleProducts : hiddenProducts)
+              : visibleProducts;
+
+            if (displayList.length === 0) {
+              return (
+                <div className="text-center py-10 text-slate-500 text-xs bg-white/[0.03] border border-dashed border-slate-200 dark:border-white/10 rounded-2xl p-6">
+                  {userRole === 'owner' && ownerProductView === 'hidden'
+                    ? '✅ Tidak ada produk yang disembunyikan.'
+                    : 'Tidak ada voucher yang cocok dengan pencarian.'}
+                </div>
+              );
+            }
+
+            return displayList.map((p) => {
               const isLowStock = p.currentStock <= p.minStockLevel;
 
               return (
-                <div 
+                <div
                   key={p.id}
-                  onClick={() => onSelectProduct(p)}
-                  className={`backdrop-blur-xl border rounded-2xl p-3 shadow-md transition-all duration-200 cursor-pointer relative flex items-center justify-between group select-none ${
-                    isLight 
-                      ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800' 
-                      : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-200 dark:border-white/5 text-slate-900 dark:text-white'
+                  className={`backdrop-blur-xl border rounded-2xl p-3 shadow-md transition-all duration-200 relative flex flex-col group select-none ${
+                    hiddenProductIds.includes(p.id)
+                      ? (isLight ? 'bg-slate-50 border-slate-200 opacity-75' : 'bg-slate-800/40 border-white/5 opacity-70')
+                      : (isLight
+                          ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
+                          : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-200 dark:border-white/5 text-slate-900 dark:text-white')
                   }`}
                 >
                   <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
 
-                  <div className="flex items-center gap-3.5 flex-1 min-w-0">
-                    {/* Left: Logo */}
-                    <ProviderLogo operator={p.operator} category={p.category} size="md" />
+                  {/* Main Row */}
+                  <div className={`flex items-center justify-between w-full ${!hiddenProductIds.includes(p.id) ? 'cursor-pointer' : 'cursor-default'}`} onClick={() => !hiddenProductIds.includes(p.id) && onSelectProduct(p)}>
+                    <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                      {/* Left: Logo */}
+                      <div className="flex shrink-0 items-center justify-center">
+                        <ProviderLogo operator={p.operator} category={p.category} size="md" />
+                      </div>
 
-                    {/* Middle: Title & Price */}
-                    <div className="min-w-0 flex-1 flex flex-col justify-center">
-                      <h4 className={`text-[15px] font-bold tracking-tight truncate leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                        {p.name}
-                      </h4>
-                      <div className={`flex items-center gap-3 mt-1.5 text-[11px] font-bold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                        {userRole === 'owner' && (
-                          <>
-                            <span>Rp {p.costPrice.toLocaleString('id-ID')}</span>
-                            <span className={isLight ? 'text-slate-600 dark:text-slate-300' : 'text-white/20'}>|</span>
-                          </>
-                        )}
-                        <span className={isLight ? 'text-emerald-600 font-extrabold' : 'text-emerald-500 font-black dark:text-emerald-400'}>Rp {p.sellingPrice.toLocaleString('id-ID')}</span>
+                      {/* Middle: Title & Price */}
+                      <div className="min-w-0 flex-1 flex flex-col justify-center">
+                        <h4 className={`text-[15px] font-bold tracking-tight truncate leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'} ${hiddenProductIds.includes(p.id) ? 'line-through opacity-60' : ''}`}>
+                          {p.name}
+                        </h4>
+                        <div className={`flex items-center gap-2 mt-1 text-[11px] font-bold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                          {userRole === 'owner' && (
+                            <>
+                              <span>Rp {p.costPrice.toLocaleString('id-ID')}</span>
+                              <span className={isLight ? 'text-slate-600 dark:text-slate-300' : 'text-white/20'}>|</span>
+                            </>
+                          )}
+                          <span className={isLight ? 'text-emerald-600 font-extrabold' : 'text-emerald-500 font-black dark:text-emerald-400'}>Rp {p.sellingPrice.toLocaleString('id-ID')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Actions & Stock Badge */}
+                    <div className="flex items-center gap-3 shrink-0 pl-2">
+                      {/* Arrow Expander Button */}
+                      {userRole === 'owner' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setExpandedProductId(prev => prev === p.id ? null : p.id); }}
+                          className={`w-8 h-8 rounded-full transition-all flex items-center justify-center ${
+                            isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-500' : 'bg-white/5 hover:bg-white/10 text-slate-400'
+                          }`}
+                          title="Aksi Produk"
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${expandedProductId === p.id ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+
+                      {/* Stock Badge */}
+                      <div className={`w-[56px] h-[56px] rounded-2xl border flex flex-col items-center justify-center transition-all shadow-sm ${
+                        hiddenProductIds.includes(p.id)
+                          ? 'bg-slate-100 border-slate-200 text-slate-400'
+                          : isLowStock
+                            ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 font-black dark:text-rose-400'
+                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+                      }`}>
+                        <span className="text-xl font-black leading-none tracking-tight">
+                          {p.currentStock}
+                        </span>
+                        <span className="text-[9px] font-black tracking-widest uppercase leading-none mt-1 opacity-90">
+                          STOK
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right: Stock Badge (Big number on top, STOK below, red when low stock) */}
-                  <div className="flex items-center justify-center shrink-0 pl-2">
-                    <div className={`px-3 py-1.5 rounded-2xl border flex flex-col items-center justify-center min-w-[58px] transition-all shadow-sm ${
-                      isLowStock 
-                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 font-black dark:text-rose-400' 
-                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
-                    }`}>
-                      <span className="text-xl sm:text-2xl font-black leading-none tracking-tight">
-                        {p.currentStock}
-                      </span>
-                      <span className="text-[9px] font-black tracking-widest uppercase leading-none mt-1 opacity-90">
-                        STOK
-                      </span>
-                    </div>
-                  </div>
+                  {/* Expanded Actions Row (Accordion) */}
+                  <AnimatePresence>
+                    {userRole === 'owner' && expandedProductId === p.id && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className={`flex items-center justify-around p-1.5 rounded-xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/50 border-white/10'}`}>
+                          {/* Edit */}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleOpenEditForm(p, e); }} 
+                            className={`flex items-center justify-center flex-1 gap-1.5 py-2.5 rounded-lg transition active:scale-95 ${isLight ? 'hover:bg-blue-100 text-blue-600' : 'hover:bg-blue-500/30 text-blue-400'}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">Edit</span>
+                          </button>
+                          
+                          <div className={`w-px h-6 mx-1 ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                          
+                          {/* Hide / Show */}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleToggleHide(p, e); }} 
+                            className={`flex items-center justify-center flex-1 gap-1.5 py-2.5 rounded-lg transition active:scale-95 ${
+                              hiddenProductIds.includes(p.id) 
+                                ? (isLight ? 'hover:bg-emerald-100 text-emerald-600' : 'hover:bg-emerald-500/30 text-emerald-400') 
+                                : (isLight ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-amber-500/30 text-amber-400')
+                            }`}
+                          >
+                            {hiddenProductIds.includes(p.id) ? <><CheckCircle className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">Tampilkan</span></> : <><X className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">Sembunyikan</span></>}
+                          </button>
+                          
+                          <div className={`w-px h-6 mx-1 ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                          
+                          {/* Delete */}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(p, e); }} 
+                            className={`flex items-center justify-center flex-1 gap-1.5 py-2.5 rounded-lg transition active:scale-95 ${isLight ? 'hover:bg-rose-100 text-rose-500' : 'hover:bg-rose-500/30 text-rose-400'}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">Hapus</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
-            })
-          )}
+            });
+          })()}
         </div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden space-y-3 pb-2 pt-1">
@@ -1286,12 +1471,12 @@ ${bulkAIText}`;
                 <X className="h-5 w-5" />
               </button>
 
-              <h3 className="text-sm font-black text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
                 {isAddingNew ? 'Tambah Voucher Baru' : 'Edit Info Voucher'}
               </h3>
 
-              <form onSubmit={isAddingNew ? handleAddSubmit : handleEditSubmit} className="space-y-3.5 text-xs">
+              <form onSubmit={isAddingNew ? handleAddSubmit : handleEditSubmit} className="space-y-2.5 text-xs">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Nama Voucher</label>
                   <input 
@@ -1300,7 +1485,7 @@ ${bulkAIText}`;
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="Contoh: Axis 6GB 1Hari"
-                    className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-400 transition"
                   />
                 </div>
 
@@ -1309,7 +1494,7 @@ ${bulkAIText}`;
                   <select
                     value={formOperator}
                     onChange={(e: any) => setFormOperator(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
                   >
                     {['Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren'].map(op => (
                       <option key={op} value={op} className="bg-white dark:bg-slate-900">{op}</option>
@@ -1330,11 +1515,11 @@ ${bulkAIText}`;
                           const val = e.target.value.replace(/\D/g, '');
                           setFormCostPrice(val ? parseInt(val, 10).toLocaleString('id-ID') : '');
                         }}
-                        className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-indigo-600 dark:text-indigo-200 font-bold focus:outline-none focus:border-cyan-400 transition"
+                        className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-indigo-600 dark:text-indigo-200 font-bold focus:outline-none focus:border-cyan-400 transition"
                       />
                     </div>
                   ) : (
-                    <div className="space-y-1 invisible">
+                    <div className="space-y-1 hidden">
                       {/* Hidden for cashiers */}
                     </div>
                   )}
@@ -1349,7 +1534,7 @@ ${bulkAIText}`;
                         const val = e.target.value.replace(/\D/g, '');
                         setFormSellingPrice(val ? parseInt(val, 10).toLocaleString('id-ID') : '');
                       }}
-                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-emerald-500 font-black dark:text-emerald-400 font-bold focus:outline-none focus:border-cyan-400 transition"
+                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-emerald-500 font-black dark:text-emerald-400 font-bold focus:outline-none focus:border-cyan-400 transition"
                     />
                   </div>
                 </div>
@@ -1362,7 +1547,7 @@ ${bulkAIText}`;
                       required
                       value={formCurrentStock}
                       onChange={(e) => setFormCurrentStock(Number(e.target.value))}
-                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
+                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1372,7 +1557,7 @@ ${bulkAIText}`;
                       required
                       value={formMinStockLevel}
                       onChange={(e) => setFormMinStockLevel(Number(e.target.value))}
-                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
+                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-slate-900 dark:text-white focus:outline-none focus:border-cyan-400 transition"
                     />
                   </div>
                 </div>

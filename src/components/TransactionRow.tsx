@@ -123,7 +123,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   }
 
   return (
-    <div className="flex flex-col group transaction-row-container">
+    <div className="flex flex-col group transaction-row-container border-b border-slate-200/60 last:border-b-0 pb-1.5 mb-1.5">
       <div 
         className="flex justify-between items-start py-1 cursor-pointer active:bg-slate-50 transition-all px-1"
         onClick={() => setIsOpen(!isOpen)}

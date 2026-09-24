@@ -91,9 +91,9 @@ export default function DetailProductView({
   const profit = Math.max(0, product.sellingPrice - product.costPrice);
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto pb-8 space-y-5" id="detail-product-view-container">
+    <div className="flex flex-col h-full overflow-y-auto pb-4 space-y-3" id="detail-product-view-container">
       {/* Detail Header Navigation */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/5" id="detail-nav-header">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-white/5" id="detail-nav-header">
         <button 
           onClick={onBack}
           className="p-1.5 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
@@ -105,20 +105,20 @@ export default function DetailProductView({
       </div>
 
       {/* Main Large Product / Provider Banner Card */}
-      <div className={`w-full py-6 px-4 rounded-2xl bg-gradient-to-br ${opStyle.bg} border ${opStyle.border} relative overflow-hidden flex items-center justify-center text-center shadow-lg`} id="detail-main-hero-card">
+      <div className={`w-full py-4 px-3 rounded-2xl bg-gradient-to-br ${opStyle.bg} border ${opStyle.border} relative overflow-hidden flex items-center justify-center text-center shadow-lg`} id="detail-main-hero-card">
         {/* Decorative ambient glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent rounded-full blur-2xl pointer-events-none" />
         
         {/* Operator Text Name prominently and perfectly centered */}
-        <div className="relative z-10 px-6 py-3 rounded-2xl bg-slate-100 dark:bg-white/10 border border-white/20 backdrop-blur-md shadow-lg flex items-center justify-center">
-          <span className="text-2xl sm:text-3xl font-black tracking-widest text-slate-900 dark:text-white uppercase drop-shadow-md leading-none">
+        <div className="relative z-10 px-5 py-2 rounded-2xl bg-slate-100 dark:bg-white/10 border border-white/20 backdrop-blur-md shadow-lg flex items-center justify-center">
+          <span className="text-xl sm:text-2xl font-black tracking-widest text-slate-900 dark:text-white uppercase drop-shadow-md leading-none">
             {product.operator}
           </span>
         </div>
       </div>
 
       {/* Info Produk section with Edit & Delete action buttons on the right */}
-      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-3" id="info-produk-card">
+      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-3.5 space-y-2" id="info-produk-card">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
             <Info className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -150,16 +150,16 @@ export default function DetailProductView({
           )}
         </div>
         
-        <div className="space-y-2.5 text-xs">
-          <div className="flex justify-between items-center py-1 border-b border-slate-200 dark:border-white/5">
+        <div className="space-y-1.5 text-xs">
+          <div className="flex justify-between items-center py-0.5 border-b border-slate-200 dark:border-white/5">
             <span className="text-slate-600 dark:text-slate-400">Nama Voucher</span>
             <span className="font-bold text-slate-900 dark:text-white text-right">{product.name}</span>
           </div>
-          <div className="flex justify-between items-center py-1">
+          <div className="flex justify-between items-center py-0.5">
             <span className="text-slate-600 dark:text-slate-400">Operator</span>
             <span className="font-bold text-slate-900 dark:text-white">{product.operator}</span>
           </div>
-          <div className="flex justify-between items-center py-1 border-t border-slate-200 dark:border-white/5">
+          <div className="flex justify-between items-center py-0.5 border-t border-slate-200 dark:border-white/5">
             <span className="text-slate-600 dark:text-slate-400">Min. Alert Stok</span>
             <span className="font-bold text-indigo-700 dark:text-indigo-300">{product.minStockLevel || 10} Pcs</span>
           </div>
@@ -167,7 +167,7 @@ export default function DetailProductView({
       </div>
 
       {/* Stok Saat Ini (Display Only - No accidental edit buttons) */}
-      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4" id="detail-current-stock-card">
+      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-3.5 space-y-2.5" id="detail-current-stock-card">
         <div className="flex justify-between items-center">
           <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-400">
             Stok Saat Ini ({product.currentStock} Pcs)
@@ -182,7 +182,7 @@ export default function DetailProductView({
         </div>
 
         {/* Beautiful wave neon sparkline chart */}
-        <div className="h-16 relative bg-indigo-950/25 border border-indigo-500/10 rounded-xl overflow-hidden flex items-end">
+        <div className="h-12 relative bg-indigo-950/25 border border-indigo-500/10 rounded-xl overflow-hidden flex items-end">
           {/* Glowing neon path */}
           <svg className="w-full h-full absolute inset-0 text-cyan-400 opacity-80" viewBox="0 0 100 30" preserveAspectRatio="none">
             <defs>
@@ -207,9 +207,9 @@ export default function DetailProductView({
       </div>
 
       {/* Harga Card Grid */}
-      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-3.5">
+      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-3.5 space-y-2.5">
         <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-400">Harga</h4>
-        <div className={`grid ${userRole === 'owner' ? 'grid-cols-3' : 'grid-cols-1'} gap-2.5`}>
+        <div className={`grid ${userRole === 'owner' ? 'grid-cols-3' : 'grid-cols-1'} gap-2`}>
           {userRole === 'owner' && (
             <div className="bg-slate-50 border-slate-200 shadow-sm dark:bg-slate-950/40 border border-slate-200 dark:border-white/5 p-3 rounded-xl space-y-1">
               <span className="text-[9px] text-slate-600 dark:text-slate-400 uppercase font-bold tracking-wider">Modal</span>
@@ -230,13 +230,13 @@ export default function DetailProductView({
       </div>
 
       {/* Riwayat Stok list */}
-      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-3.5">
+      <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-md border border-slate-200 dark:border-white/10 rounded-2xl p-3.5 space-y-2.5">
         <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
           <Clock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           Riwayat Transaksi Stok
         </h4>
         
-        <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
           {productTrx.length === 0 ? (
             <p className="text-xs text-slate-600 dark:text-slate-400 italic py-2 text-center">Belum ada riwayat stok untuk voucher ini.</p>
           ) : (

@@ -27,7 +27,9 @@ import {
   PackagePlus,
   ClipboardCheck,
   Pencil,
-  RefreshCcw
+  RefreshCcw,
+  Store,
+  Loader2
 } from 'lucide-react';
 import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
 
@@ -196,6 +198,8 @@ export default function AturStokTab({
   );
   const [showTakeoverPin, setShowTakeoverPin] = useState(false);
   const [takeoverPinInput, setTakeoverPinInput] = useState('');
+  const [isOpeningStore, setIsOpeningStore] = useState(false);
+  const [isClosingStore, setIsClosingStore] = useState(false);
   
   const isStep1ReadOnly = isReadOnly || viewMode === 'lobby';
 
@@ -544,6 +548,113 @@ export default function AturStokTab({
 
   return (
     <div className={`w-full space-y-3 font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-700 dark:text-slate-200'}`} id="atur-stok-container">
+      
+      {/* 🌟 ANIMASI BUKA TOKO MEGAH */}
+      <AnimatePresence>
+        {isOpeningStore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.5 } }}
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-slate-900"
+          >
+            {/* Background Glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-900/40 to-slate-900"></div>
+            
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                  className="absolute -inset-8 bg-blue-500/20 blur-3xl rounded-full"
+                ></motion.div>
+                <div className="w-28 h-28 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-3xl shadow-2xl shadow-blue-500/50 flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/20 blur-xl mix-blend-overlay"></div>
+                  <Store className="w-16 h-16 text-white drop-shadow-lg" />
+                </div>
+              </div>
+              
+              <motion.h1
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-cyan-200 mt-8 tracking-widest uppercase"
+              >
+                Membuka Toko
+              </motion.h1>
+              
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="flex items-center gap-2 mt-6"
+              >
+                <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                <span className="text-blue-300/80 text-sm font-semibold tracking-wider">Mempersiapkan Rak...</span>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🌟 ANIMASI TUTUP TOKO MEGAH */}
+      <AnimatePresence>
+        {isClosingStore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.5 } }}
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-slate-900"
+          >
+            {/* Background Glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-rose-900/40 to-slate-900"></div>
+            
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ rotate: -360 }}
+                  transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                  className="absolute -inset-8 bg-rose-500/20 blur-3xl rounded-full"
+                ></motion.div>
+                <div className="w-28 h-28 bg-gradient-to-tr from-rose-600 to-red-400 rounded-3xl shadow-2xl shadow-rose-500/50 flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/20 blur-xl mix-blend-overlay"></div>
+                  <Lock className="w-16 h-16 text-white drop-shadow-lg" />
+                </div>
+              </div>
+              
+              <motion.h1
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-200 to-rose-200 mt-8 tracking-widest uppercase"
+              >
+                Menutup Toko
+              </motion.h1>
+              
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="flex items-center gap-2 mt-6"
+              >
+                <Loader2 className="w-5 h-5 text-rose-400 animate-spin" />
+                <span className="text-rose-300/80 text-sm font-semibold tracking-wider">Merekap Penjualan...</span>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* MODE PANTAU BANNER (READ-ONLY) */}
       {isReadOnly && (
         <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border shadow-xs ${
@@ -616,85 +727,89 @@ export default function AturStokTab({
       {/* 0. LOBBY: PILIH MODE BUKA / TUTUP TOKO */}
       {/* ========================================================================= */}
       {viewMode === 'lobby' && !isHandoverSuccess && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 mt-4">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 mt-2 mb-8">
           <div className="text-center px-4">
-            <h2 className={`text-lg font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Alur Shift Kasir</h2>
+            <h2 className={`text-xl font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Alur Shift Kasir</h2>
             <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Pilih proses yang ingin Anda lakukan saat ini.</p>
+            
+            {/* Ambil Alih Stok (Darurat) - Dipindah ke atas */}
+            <button
+              type="button"
+              onClick={() => setShowTakeoverPin(true)}
+              className={`inline-block mt-3 text-[10px] font-bold underline transition cursor-pointer px-2 py-1 ${
+                isLight ? 'text-slate-400 hover:text-slate-800' : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Ambil Alih Stok (Darurat)
+            </button>
           </div>
 
-          <div className="relative max-w-sm mx-auto px-4 flex flex-col gap-8">
-            {/* Curved Arrow connecting the two buttons visually */}
-            <svg className="absolute left-[20%] top-[30%] w-[60%] h-[60%] -z-10 text-slate-300 dark:text-slate-700" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M 10,0 Q 90,0 90,90" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="8 8" />
-              <polygon points="85,85 95,85 90,95" fill="currentColor" />
-            </svg>
-
-            {/* BUKA TOKO BUTTON (Kiri Atas) */}
-            <div className="w-[85%] self-start">
-              <button
-                onClick={() => {
+          <div className="max-w-xs mx-auto px-4 flex flex-col gap-4 relative">
+            {/* BUKA TOKO BUTTON */}
+            <button
+              onClick={() => {
+                if (!isBukaTokoCompleted) {
+                  // Munculkan animasi megah dulu jika baru mau buka toko
+                  setIsOpeningStore(true);
+                  setTimeout(() => {
+                    setIsOpeningStore(false);
+                    setViewMode('buka');
+                    setCurrentStep(1);
+                  }, 2000);
+                } else {
+                  // Kalau sudah dibuka, langsung masuk ke Step 2 (stok masuk) tanpa animasi lama
                   setViewMode('buka');
-                  // Jika Buka Toko sudah selesai, langsung ke step 2 (stok masuk)
-                  setCurrentStep(isBukaTokoCompleted ? 2 : 1);
-                }}
-                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border-2 transition-all cursor-pointer group hover:-translate-y-1 hover:shadow-xl ${
-                  isLight 
-                    ? (isBukaTokoCompleted 
-                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-200/50' 
-                        : 'bg-blue-50 border-blue-200 hover:border-blue-400 hover:shadow-blue-200/50')
-                    : (isBukaTokoCompleted
-                        ? 'bg-emerald-950/40 border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-900/40'
-                        : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/60 hover:shadow-blue-900/40')
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
-                    isBukaTokoCompleted
-                      ? (isLight ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white')
-                      : (isLight ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white')
-                  }`}>
-                    {isBukaTokoCompleted ? <CheckCircle2 className="w-6 h-6" /> : <PackagePlus className="w-6 h-6" />}
-                  </div>
-                  <div>
-                    <h3 className={`text-base font-black uppercase tracking-wide ${
-                      isBukaTokoCompleted
-                        ? (isLight ? 'text-emerald-900' : 'text-emerald-100')
-                        : (isLight ? 'text-blue-900' : 'text-blue-100')
-                    }`}>
-                      {isBukaTokoCompleted ? '✅ Toko Sudah Dibuka' : 'Buka Toko'}
-                    </h3>
-                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${
-                      isBukaTokoCompleted
-                        ? (isLight ? 'text-emerald-700/80' : 'text-emerald-300/80')
-                        : (isLight ? 'text-blue-700/80' : 'text-blue-300/80')
-                    }`}>
-                      {isBukaTokoCompleted ? 'Lihat / edit stok masuk' : 'Atur stok awal & tambah stok baru'}
-                    </p>
-                  </div>
+                  setCurrentStep(2);
+                }
+              }}
+              className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                isLight 
+                  ? (isBukaTokoCompleted 
+                      ? 'bg-gradient-to-br from-emerald-50 to-green-100 border-emerald-300 shadow-sm' 
+                      : 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-400 shadow-xl shadow-blue-500/30 text-white')
+                  : (isBukaTokoCompleted
+                      ? 'bg-gradient-to-br from-emerald-950/40 to-green-900/40 border-emerald-500/50'
+                      : 'bg-gradient-to-br from-blue-600 to-indigo-700 border-blue-500 shadow-xl shadow-blue-900/50 text-white')
+              }`}
+            >
+              {/* Watermark Icon (Transparan di kanan bawah) */}
+              <Store className={`absolute -right-4 -bottom-4 w-28 h-28 opacity-10 rotate-[-10deg] pointer-events-none ${isBukaTokoCompleted ? (isLight ? 'text-emerald-900' : 'text-emerald-100') : 'text-white'}`} />
+              
+              <div className="flex items-center gap-4 relative z-10">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                  isBukaTokoCompleted
+                    ? (isLight ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-slate-900')
+                    : 'bg-white/20 text-white backdrop-blur-sm'
+                }`}>
+                  {isBukaTokoCompleted ? <CheckCircle2 className="w-8 h-8" /> : <Store className="w-8 h-8" />}
                 </div>
-              </button>
-            </div>
-
-            {/* TUTUP TOKO BUTTON (Kanan Bawah) */}
-            <div className="w-[85%] self-end relative">
-              {/* Ambil Alih Stok (Darurat) - Top Right of Tutup Toko area */}
-              <div className="absolute -top-6 right-1 z-10">
-                <button
-                  type="button"
-                  onClick={() => setShowTakeoverPin(true)}
-                  className={`text-[9px] font-bold underline transition cursor-pointer px-1 py-0.5 ${
-                    isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  Ambil Alih Stok (Darurat)
-                </button>
+                <div>
+                  <h3 className={`text-sm font-black uppercase tracking-wider ${
+                    isBukaTokoCompleted
+                      ? (isLight ? 'text-emerald-900' : 'text-emerald-300')
+                      : 'text-white drop-shadow-md'
+                  }`}>
+                    {isBukaTokoCompleted ? 'Toko Dibuka' : 'Buka Toko'}
+                  </h3>
+                  <p className={`text-[10px] mt-0.5 font-medium ${
+                    isBukaTokoCompleted
+                      ? (isLight ? 'text-emerald-700/80' : 'text-emerald-400/80')
+                      : 'text-blue-100/90'
+                  }`}>
+                    {isBukaTokoCompleted ? 'Lihat / edit stok masuk' : 'Klik untuk mulai shift hari ini'}
+                  </p>
+                </div>
               </div>
+            </button>
 
+            {/* Connecting Line */}
+            <div className={`w-0.5 h-6 mx-auto ${isLight ? 'bg-slate-200' : 'bg-slate-700'}`}></div>
+
+            {/* TUTUP TOKO BUTTON */}
+            <div className="relative">
               <button
                 onClick={() => {
-                  if (!isBukaTokoCompleted) return; // Kunci jika Buka Toko belum selesai
-                  
-                  // Otomatis sinkronkan potongan Jual Cepat sebelum pindah ke Tutup Toko
+                  if (!isBukaTokoCompleted) return;
                   const soldMap: Record<string, number> = {};
                   currentShiftTransactions.forEach(trx => {
                     if (trx.type === 'PENJUALAN' && trx.productId) {
@@ -705,58 +820,57 @@ export default function AturStokTab({
                       });
                     }
                   });
-                  
                   setItems(prev => prev.map(item => ({
                     ...item,
                     finalStock: Math.max(0, item.initialStock + item.incomingStock - (soldMap[item.productId] || 0))
                   })));
-
-                  setViewMode('tutup');
-                  setCurrentStep(3);
+                  
+                  // Munculkan animasi Tutup Toko
+                  setIsClosingStore(true);
+                  setTimeout(() => {
+                    setIsClosingStore(false);
+                    setViewMode('tutup');
+                    setCurrentStep(3);
+                  }, 2000);
                 }}
                 disabled={!isBukaTokoCompleted}
-                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border-2 transition-all group ${
+                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border transition-all ${
                   isBukaTokoCompleted
-                    ? `cursor-pointer hover:-translate-y-1 hover:shadow-xl ${
+                    ? `cursor-pointer hover:scale-105 active:scale-95 ${
                         isLight
-                          ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-200/50'
-                          : 'bg-emerald-950/40 border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-900/40'
+                          ? 'bg-gradient-to-br from-red-500 to-rose-600 border-red-400 shadow-xl shadow-red-500/30 text-white'
+                          : 'bg-gradient-to-br from-red-600 to-rose-800 border-red-500 shadow-xl shadow-red-900/50 text-white'
                       }`
-                    : `cursor-not-allowed opacity-50 ${
-                        isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-800/40 border-slate-700/50'
+                    : `cursor-not-allowed opacity-60 ${
+                        isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/20 border-slate-700/50'
                       }`
                 }`}
-                title={!isBukaTokoCompleted ? 'Selesaikan Buka Toko terlebih dahulu' : ''}
               >
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                {/* Watermark Icon (Transparan di kanan bawah) */}
+                <Lock className={`absolute -right-4 -bottom-4 w-28 h-28 opacity-10 rotate-[10deg] pointer-events-none ${isBukaTokoCompleted ? 'text-white' : (isLight ? 'text-slate-400' : 'text-slate-500')}`} />
+                
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
                     isBukaTokoCompleted
-                      ? (isLight ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white')
-                      : (isLight ? 'bg-slate-400 text-white' : 'bg-slate-600 text-slate-400')
+                      ? 'bg-white/20 text-white backdrop-blur-sm'
+                      : (isLight ? 'bg-slate-300 text-slate-500' : 'bg-slate-700 text-slate-400')
                   }`}>
-                    {isBukaTokoCompleted ? (
-                      <ClipboardCheck className="w-6 h-6" />
-                    ) : (
-                      <Lock className="w-6 h-6" />
-                    )}
+                    {isBukaTokoCompleted ? <ClipboardCheck className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                   </div>
                   <div>
-                    <h3 className={`text-base font-black uppercase tracking-wide ${
+                    <h3 className={`text-sm font-black uppercase tracking-wider ${
                       isBukaTokoCompleted
-                        ? (isLight ? 'text-emerald-900' : 'text-emerald-100')
+                        ? 'text-white drop-shadow-md'
                         : (isLight ? 'text-slate-500' : 'text-slate-400')
                     }`}>
                       Tutup Toko
                     </h3>
-                    <p className={`text-[10px] sm:text-xs mt-0.5 font-semibold ${
+                    <p className={`text-[10px] mt-0.5 font-medium ${
                       isBukaTokoCompleted
-                        ? (isLight ? 'text-emerald-700/80' : 'text-emerald-300/80')
+                        ? 'text-red-100/90'
                         : (isLight ? 'text-slate-400' : 'text-slate-500')
                     }`}>
-                      {isBukaTokoCompleted
-                        ? 'Hitung stok akhir & serah terima'
-                        : '🔒 Selesaikan Buka Toko terlebih dahulu'
-                      }
+                      {isBukaTokoCompleted ? 'Hitung stok akhir & serah terima' : 'Selesaikan Buka Toko dulu'}
                     </p>
                   </div>
                 </div>
@@ -1095,11 +1209,12 @@ export default function AturStokTab({
           </div>
 
           {/* Bottom Bar: Total Stok & Kunci */}
-          <div className={`rounded-xl p-3 flex items-center justify-between gap-2 border shadow-xs ${
-            isLight 
-              ? 'bg-white border-slate-200 text-slate-800' 
-              : 'bg-white dark:bg-slate-800 border-blue-500/20 shadow-md text-slate-900 dark:text-white'
-          }`}>
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-3 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${
+              isLight 
+                ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' 
+                : 'bg-slate-900/95 border-white/10 shadow-black/50 text-white'
+            }`}>
             <div className="flex items-center gap-2">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
                 isLight 
@@ -1158,6 +1273,7 @@ export default function AturStokTab({
                 <Lock className="w-3.5 h-3.5" /> Kunci Stok Awal & Lanjut
               </button>
             ))}
+            </div>
           </div>
         </motion.div>
         );
@@ -1167,6 +1283,7 @@ export default function AturStokTab({
       {/* 2. LANGKAH 2: TAMBAH STOK BARU (BARANG MASUK) */}
       {/* ========================================================================= */}
       {currentStep === 2 && viewMode !== 'lobby' && !isHandoverSuccess && (
+        <div className="pb-24">
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1311,48 +1428,51 @@ export default function AturStokTab({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setCurrentStep(1)}
-              className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
-                isLight 
-                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Awal
-            </button>
-            {viewMode === 'buka' ? (
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
               <button
                 type="button"
-                onClick={() => {
-                  setIsBukaTokoCompleted(true);
-                  setIsIncomingLocked(true);
-                  // Simpan stok masuk ke parent
-                  items.forEach(item => {
-                    if (item.incomingStock > 0) {
-                      onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
-                    }
-                  });
-                  alert('Stok berhasil disimpan & Toko Dibuka! 🎉\nSelamat bertugas dan semoga laris manis hari ini!');
-                  setViewMode('lobby');
-                }}
-                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide"
+                onClick={() => setCurrentStep(1)}
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                  isLight 
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
+                }`}
               >
-                Simpan Stok & Buka Toko <CheckCircle2 className="w-3.5 h-3.5" />
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Kembali</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setCurrentStep(3)}
-                className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                Tutup Shift & Mulai Closing <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+              {viewMode === 'buka' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBukaTokoCompleted(true);
+                    setIsIncomingLocked(true);
+                    // Simpan stok masuk ke parent
+                    items.forEach(item => {
+                      if (item.incomingStock > 0) {
+                        onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
+                      }
+                    });
+                    alert('Stok berhasil disimpan & Toko Dibuka! 🎉\nSelamat bertugas dan semoga laris manis hari ini!');
+                    setViewMode('lobby');
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+                >
+                  SIMPAN & BUKA TOKO <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  Tutup Shift <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              )}
+            </div>
           </div>
         </motion.div>
+        </div>
       )}
 
       {/* ========================================================================= */}
@@ -1608,29 +1728,29 @@ export default function AturStokTab({
 
           {/* Bottom Actions - hidden for owner */}
           {!isOwnerMode && (
-          <div className="flex items-center justify-between gap-2 pt-1">
-            {viewMode === 'tutup' ? (
-              <div className="flex-1" />
-            ) : (
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+            {viewMode === 'tutup' ? null : (
               <button
                 type="button"
                 onClick={() => setCurrentStep(2)}
-                className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
                   isLight 
-                    ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
-                    : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
                 }`}
               >
-                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Tambah Stok
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Tambah Stok</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setCurrentStep(4)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
-            >
-              Lanjut: Cek Tunai & QRIS <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(4)}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+              >
+                Cek Uang Laci <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            </div>
           </div>
           )}
         </motion.div>
@@ -1791,25 +1911,27 @@ export default function AturStokTab({
 
           {/* Navigation - hidden for owner */}
           {!isOwnerMode && (
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setCurrentStep(3)}
-              className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
-                isLight 
-                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50 hover:text-slate-900' 
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Kembali ke Stok Akhir
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentStep(5)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
-            >
-              Lanjut: Serah Terima <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                  isLight 
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Stok Akhir</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(5)}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+              >
+                Serah Terima <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            </div>
           </div>
           )}
         </motion.div>
@@ -2085,32 +2207,32 @@ export default function AturStokTab({
 
           {/* Action Buttons - hidden for owner */}
           {!isOwnerMode && (
-          <div className={`flex items-center justify-between gap-2 pt-1 border-t ${
-            isLight ? 'border-slate-200' : 'border-slate-200 dark:border-slate-800'
-          }`}>
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
             <button
               type="button"
               onClick={() => setCurrentStep(4)}
-              className={`px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border shadow-xs ${
+              className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
                 isLight 
-                  ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50' 
-                  : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 border-slate-700 text-slate-700 dark:text-slate-200'
+                  ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                  : 'bg-transparent text-slate-300 hover:bg-slate-800'
               }`}
             >
-              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`} /> Cek Uang
+              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Cek Uang</span>
             </button>
             <button
               type="button"
               onClick={handleCompleteHandover}
-              className={`px-4 py-2 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 py-2.5 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap ${
                 isSelfHandover
-                  ? 'bg-amber-500 hover:bg-amber-400'
-                  : 'bg-emerald-600 hover:bg-emerald-500'
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900'
+                  : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'
               }`}
             >
-              <Handshake className="w-4 h-4" />
-              {isSelfHandover ? '↺ Tutup Shift & Reset Stok' : `Serahkan ke ${selectedToCashier.name}`}
+              {isSelfHandover ? <RefreshCcw className="w-3.5 h-3.5 shrink-0" /> : <Handshake className="w-3.5 h-3.5 shrink-0" />}
+              {isSelfHandover ? 'Tutup Shift & Reset' : `Serahkan ke ${selectedToCashier.name}`}
             </button>
+            </div>
           </div>
           )}
         </motion.div>

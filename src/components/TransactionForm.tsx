@@ -136,23 +136,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setSubMode(tujuanMasuk === 'NON TUNAI' ? 'NON_TUNAI' : 'NORMAL')
   }, [tujuanMasuk])
   
-  // Auto Keterangan Logic
-  React.useEffect(() => {
-    if (!isKetAuto) return
-    let autoText = ''
+  // Auto Keterangan Logic (Prefix calculation)
+  const autoTextPrefix = React.useMemo(() => {
+    if (!isKetAuto) return '';
+    let autoText = '';
     if (activeMode === 'DIGITAL') {
-      if (sumberAplikasi === 'BANK') autoText = `Transfer Bank`
-      else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`
-      else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`
-      else autoText = `Transfer ${sumberAplikasi}`
+      if (sumberAplikasi === 'BANK') autoText = `Transfer Bank`;
+      else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`;
+      else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
+      else autoText = `Transfer ${sumberAplikasi}`;
     } else if (activeMode === 'TARIK') {
-      autoText = `TARIK_TUNAI|${selectedSumber}`
+      autoText = `TARIK_TUNAI|${selectedSumber}`;
     } else {
-      autoText = `${kategori} `
-      if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += nominal
+      autoText = `${kategori}`;
+      if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += ` ${nominal}`;
     }
-    setKeterangan(autoText.toUpperCase())
-  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, setKeterangan]);
+    return autoText.toUpperCase();
+  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi]);
   
   // Split Payment Logic
   const handleNominalCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -430,6 +430,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const onSaveInternal = () => {
     setErrorMsg(null)
+    
+    // Combine manual keterangan with auto prefix if needed
+    const finalKeteranganBase = (isKetAuto && autoTextPrefix) 
+      ? (keterangan.trim() ? `${autoTextPrefix} ${keterangan.trim()}` : autoTextPrefix)
+      : keterangan;
 
     if (activeMode === 'AKSESORIS') {
       const cleanNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
@@ -440,7 +445,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Set admin=0 for aksesoris, isAdminNonTunai based on pay mode
       setAdmin('0')
       const isNonTunai = aksesorisPayMode === 'QRIS'
-      onSave({ kategori, nominal, admin: '0', keterangan }, { activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
+      onSave({ kategori, nominal, admin: '0', keterangan: finalKeteranganBase }, { activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
       setIsKetAuto(true)
       return
     }
@@ -484,10 +489,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         return
       }
       
-      const splitKeterangan = `${keterangan} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
+      const splitKeterangan = `${finalKeteranganBase} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
       onSave({ kategori, nominal, admin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
     } else {
-      onSave({ kategori, nominal, admin, keterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+      onSave({ kategori, nominal, admin, keterangan: finalKeteranganBase }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
     }
     setIsKetAuto(true)
   }
@@ -759,7 +764,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               placeholder="Tulis keterangan..." 
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
-                const val = e.target.value.toUpperCase();
+                const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                 if (activeMode === 'TARIK') {
                   setKeterangan(`TARIK_TUNAI|${val}`);
                   setIsKetAuto(false);
@@ -1183,7 +1188,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               placeholder="Masukkan keterangan transaksi..."
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
-                const val = e.target.value.toUpperCase();
+                const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                 if (activeMode === 'TARIK') {
                   setKeterangan(`TARIK_TUNAI|${val}`);
                   setIsKetAuto(false);
@@ -1530,7 +1535,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               rows={1}
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
-                const val = e.target.value.toUpperCase();
+                const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                 if (activeMode === 'TARIK') {
                   setKeterangan(`TARIK_TUNAI|${val}`);
                   setIsKetAuto(false);

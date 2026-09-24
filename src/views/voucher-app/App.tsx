@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import ProviderLogo from './components/ProviderLogo';
 import { 
   Layers, 
   Search, 
@@ -48,7 +49,9 @@ import {
   PackageOpen,
   Info,
   LogOut,
-  Palette
+  Palette,
+  Store,
+  CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -247,19 +250,22 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
     if (externalRole) setCurrentUserRole(externalRole);
     if (kasirList && Object.keys(kasirList).length > 0) {
       const newCashiers: Cashier[] = Object.entries(kasirList)
-        .filter(([_, data]) => data.role !== 'owner')
-        .map(([username, data], idx) => ({
-          id: `c_${username}`,
-          name: data.name || username,
-          role: 'Kasir Shift',
-          email: `${username.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
-          avatar: data.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(data.name || username)),
-          isOnline: true
-        }));
+        .map(([username, data], idx) => {
+          const isOwner = data.role === 'owner';
+          return {
+            id: `c_${username}`,
+            name: isOwner ? 'Owner' : (data.name || username),
+            role: isOwner ? 'Owner' : 'Kasir Shift',
+            email: `${username.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+            avatar: data.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(isOwner ? 'Owner' : (data.name || username))),
+            isOnline: true
+          };
+        });
       setCashiers(newCashiers);
       
       if (externalCashierName) {
-        const idx = newCashiers.findIndex(c => c.name === externalCashierName);
+        // Find by original name or if external is owner and we mapped it to 'Owner'
+        const idx = newCashiers.findIndex(c => c.name === externalCashierName || (c.role === 'Owner' && externalRole === 'owner'));
         if (idx !== -1) setActiveCashierIndex(idx);
       }
     } else if (externalCashierName) {
@@ -319,6 +325,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
   // Modals / Overlays
   const [showQuickSale, setShowQuickSale] = useState(false);
+  const [quickSaleStep, setQuickSaleStep] = useState<1 | 2>(1);
   const [showQuickRestock, setShowQuickRestock] = useState(false);
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [showHandoverSuccessOverlay, setShowHandoverSuccessOverlay] = useState(false);
@@ -331,6 +338,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
       setFormPaymentMethod('NON_TUNAI'); // default to NON TUNAI as requested by user
       setFormQuantity(1);
       setFormNote('');
+              setQuickSaleStep(1);
       setShowQuickSale(true);
     };
     window.addEventListener('open-voucher-quick-sale', handleOpenQuickSaleEvent);
@@ -367,7 +375,11 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
   }, [showQuickSale]);
   const [handoverSuccessSummary, setHandoverSuccessSummary] = useState<ShiftHandover | null>(null);
 
+
   // Quick Action Forms Fields
+  const [saleCart, setSaleCart] = useState<{id: string, qty: number}[]>([]);
+  const [showQtyModalFor, setShowQtyModalFor] = useState<string | null>(null);
+  const [qtyModalValue, setQtyModalValue] = useState<number>(1);
   const [formProductId, setFormProductId] = useState('');
   const [formQuantity, setFormQuantity] = useState<number>(1);
   const [formNote, setFormNote] = useState('');
@@ -1499,24 +1511,27 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
   const handleQuickSaleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formProductId) return;
+    if (saleCart.length === 0) return;
     
     const baseNote = formNote ? ' ' + formNote : '';
     const finalNote = isPostClosing 
       ? `[${formPaymentMethod}] [PASCA-CLOSING]${baseNote}` 
       : `[${formPaymentMethod}]${baseNote}`;
     
-    handleAdjustStock(
-      formProductId,
-      formQuantity,
-      'PENJUALAN',
-      finalNote,
-      true, // skipStockUpdate = true: Jual cepat hanya mencatat transaksi, tidak memotong stok fisik sistem
-      undefined,
-      formPaymentMethod
-    );
+    saleCart.forEach(item => {
+      handleAdjustStock(
+        item.id,
+        item.qty,
+        'PENJUALAN',
+        finalNote,
+        true,
+        undefined,
+        formPaymentMethod
+      );
+    });
 
     setFormProductId('');
+    setSaleCart([]);
     setFormQuantity(1);
     setFormNote('');
     setFormPaymentMethod('TUNAI');
@@ -1959,6 +1974,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         }
                         setFormQuantity(1);
                         setFormNote('');
+              setQuickSaleStep(1);
                         setShowQuickSale(true);
                       }}
                       activeStoreId={activeStoreId}
@@ -2184,293 +2200,372 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
         {/* DIALOG MODAL: QUICK SALE */}
         <AnimatePresence>
-          {showQuickSale && (() => {
+                              {showQuickSale && (() => {
             const filteredSaleProducts = filterProductsByOperatorAndTitle(products, saleSelectedOperator, saleSearchQuery);
-            const activeSelectedId = formProductId || (filteredSaleProducts.length > 0 ? filteredSaleProducts[0].id : (products.length > 0 ? products[0].id : ''));
-            const selectedProduct = products.find(p => p.id === activeSelectedId) || null;
+            const activeQtyModalProduct = products.find(p => p.id === showQtyModalFor) || null;
+            
+            const totalSellingPrice = saleCart.reduce((sum, item) => {
+              const p = products.find(prod => prod.id === item.id);
+              return sum + ((p?.sellingPrice || 0) * item.qty);
+            }, 0);
+
+            const isKonfirmasiDisabled = saleCart.length === 0;
+
+            const handleSaveQty = () => {
+              if (showQtyModalFor) {
+                if (qtyModalValue <= 0) {
+                  setSaleCart(saleCart.filter(i => i.id !== showQtyModalFor));
+                } else {
+                  const existing = saleCart.find(i => i.id === showQtyModalFor);
+                  if (existing) {
+                    setSaleCart(saleCart.map(i => i.id === showQtyModalFor ? { ...i, qty: qtyModalValue } : i));
+                  } else {
+                    setSaleCart([...saleCart, { id: showQtyModalFor, qty: qtyModalValue }]);
+                  }
+                }
+              }
+              setShowQtyModalFor(null);
+            };
 
             return (
-              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3" id="quick-sale-modal">
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-[100] flex items-center justify-center p-3 pb-20" id="quick-sale-modal">
                 <motion.div 
-                  initial={{ y: 50, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 50, opacity: 0 }}
-                  className={`w-full rounded-3xl p-3 shadow-2xl relative space-y-1.5 text-xs max-h-[90vh] overflow-y-auto border flex flex-col ${
-                    isLight 
-                      ? 'bg-white border-slate-200 text-slate-900' 
-                      : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 border-slate-200 dark:border-white/15 text-slate-900 dark:text-white'
-                  }`}
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className={`w-full max-w-sm rounded-3xl shadow-2xl relative max-h-[85vh] flex flex-col overflow-hidden border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-white/10'}`}
                 >
-                  <button 
-                    onClick={() => setShowQuickSale(false)}
-                    className={`absolute top-4 right-4 p-1 rounded-lg transition ${isLight ? 'text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:bg-white/10'}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <h3 className={`text-xs font-black flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                    <ArrowUpRight className="h-5 w-5 text-emerald-500 bg-emerald-500/10 rounded p-0.5" />
-                    Catat Penjualan Voucher
-                  </h3>
-
-                  <form 
-                    onSubmit={(e) => {
-                      if (!formProductId && selectedProduct) {
-                        setFormProductId(selectedProduct.id);
-                      }
-                      handleQuickSaleSubmit(e);
-                    }} 
-                    className="space-y-2 flex-1 flex flex-col"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar" id="sale-provider-filter">
-                        {OPERATOR_CHIPS.map((chip) => {
-                          const isSelected = saleSelectedOperator === chip.opValue;
-                          return (
-                            <button
-                              key={chip.id}
-                              type="button"
-                              onClick={() => setSaleSelectedOperator(chip.opValue)}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-xl text-[9px] font-black whitespace-nowrap transition-all border ${
-                                isSelected
-                                  ? `bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-sm`
-                                  : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-emerald-400'
-                              }`}
-                            >
-                              <span className={`text-[8px] font-black uppercase ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>{chip.label}</span>
-                            </button>
-                          );
-                        })}
+                  {/* Top Header */}
+                  <div className={`px-3 py-2 flex items-center justify-between shadow-sm shrink-0 border-b ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => quickSaleStep === 2 ? setQuickSaleStep(1) : setShowQuickSale(false)} className={`p-1 rounded-full transition-all ${isLight ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-white/10'}`}>
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <div>
+                        <h2 className={`text-[13px] font-black leading-tight tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Catat Penjualan</h2>
+                        <p className={`text-[9px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{quickSaleStep === 1 ? 'Cari & Pilih Voucher' : 'Konfirmasi & Simpan'}</p>
                       </div>
+                    </div>
+                    <div className={`w-7 h-7 rounded-full border flex flex-col items-center justify-center shrink-0 ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800 border-white/10'}`}>
+                      <Store className={`w-2.5 h-2.5 mb-0.5 ${isLight ? 'text-slate-600' : 'text-slate-300'}`} />
+                      <span className={`text-[4px] font-black uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>ALPHA</span>
+                    </div>
+                  </div>
 
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={saleSearchQuery}
-                          onChange={(e) => setSaleSearchQuery(e.target.value)}
-                          placeholder="🔍 Cari & Pilih Voucher..."
-                          className={`w-full border rounded-xl pl-9 pr-16 py-2 text-xs focus:outline-none transition shadow-inner ${
-                            isLight 
-                              ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-500 focus:border-emerald-500' 
-                              : 'bg-white border-slate-200 dark:bg-slate-950 dark:border-white/15 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 focus:border-emerald-500'
-                          }`}
-                        />
-                        {(saleSearchQuery || saleSelectedOperator !== 'SEMUA') && (
-                          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[9px] font-bold text-emerald-500 dark:text-emerald-400 pointer-events-none">
-                            {filteredSaleProducts.length}
-                          </span>
-                        )}
-                        {saleSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setSaleSearchQuery('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                        </div>
-
-                      <div className="h-28 overflow-y-auto space-y-1 pr-1 border border-slate-200 dark:border-white/5 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/30" id="sale-product-list">
-                        {filteredSaleProducts.length === 0 ? (
-                          <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
-                            {saleSelectedOperator !== 'SEMUA' 
-                              ? `Tidak ada voucher ${saleSelectedOperator} yang cocok`
-                              : `Tidak ada voucher yang cocok dengan "${saleSearchQuery}"`
-                            }
-                          </div>
-                        ) : (
-                          filteredSaleProducts.map((p) => {
-                            const isSelected = activeSelectedId === p.id;
+                  {quickSaleStep === 1 ? (
+                    <div className="flex-1 overflow-y-auto flex flex-col relative no-scrollbar min-h-0">
+                      {/* Filter Chips & Search */}
+                      <div className={`px-3 py-2 shrink-0 shadow-sm z-10 mb-1 border-b ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/5'}`}>
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                          {OPERATOR_CHIPS.map(chip => {
+                            const isSelected = saleSelectedOperator === chip.opValue;
                             return (
                               <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => setFormProductId(p.id)}
-                                className={`w-full text-left px-2 py-1 rounded-lg border transition-all flex items-center justify-between gap-1.5 ${
+                                key={chip.id}
+                                onClick={() => setSaleSelectedOperator(chip.opValue)}
+                                className={`px-3 py-1 rounded-full text-[9px] font-black tracking-wide whitespace-nowrap transition-all border ${
                                   isSelected 
-                                    ? `bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm dark:bg-emerald-500/10 dark:text-emerald-300` 
-                                    : `bg-white hover:bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-white/10 dark:hover:bg-slate-800 ${isLight ? 'text-slate-700' : 'text-slate-300'}`
+                                    ? (isLight ? "bg-emerald-500 text-white border-emerald-500 shadow-sm" : "bg-emerald-500 text-white border-emerald-500 shadow-sm")
+                                    : (isLight ? "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100" : "bg-slate-800 border-white/10 text-slate-300 hover:bg-slate-700")
                                 }`}
                               >
-                                <div className="min-w-0 flex-1 flex items-center gap-1.5 pr-1">
-                                  <div className={`w-1 h-3 rounded-full shrink-0 ${isSelected ? 'bg-emerald-500' : (p.currentStock <= p.minStockLevel ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600')}`}></div>
-                                  <h4 className="text-[10px] font-black truncate leading-tight">{p.name}</h4>
-                                </div>
-                                <div className={`w-12 text-center text-[9px] font-bold shrink-0 ${p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-slate-500'}`}>
-                                  Stok: {p.currentStock}
-                                </div>
-                                <div className="w-[70px] text-right shrink-0">
-                                  <div className={`text-[11px] font-black leading-tight ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
-                                    Rp {p.sellingPrice.toLocaleString('id-ID')}
-                                  </div>
-                                </div>
+                                {chip.label}
                               </button>
                             );
+                          })}
+                        </div>
+                        <div className="relative mt-1.5">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Cari & Pilih Voucher..."
+                            value={saleSearchQuery}
+                            onChange={e => setSaleSearchQuery(e.target.value)}
+                            className={`w-full border rounded-xl pl-8 pr-3 py-1.5 text-[11px] font-bold focus:outline-none focus:ring-1 transition-all shadow-inner ${
+                              isLight 
+                                ? 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-emerald-500' 
+                                : 'bg-slate-950 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Product List */}
+                      <div className="flex-1 overflow-y-auto px-3 space-y-1.5 pt-1 pb-3 relative">
+                        {/* Qty Modal Overlay */}
+                        <AnimatePresence>
+                          {showQtyModalFor && activeQtyModalProduct && (
+                            <motion.div 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm"
+                            >
+                              <div className={`w-full max-w-[240px] rounded-2xl p-4 shadow-xl border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                                <h4 className={`text-[12px] font-black text-center mb-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>{activeQtyModalProduct.name}</h4>
+                                <p className={`text-[9px] font-bold text-center mb-4 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Tentukan jumlah beli</p>
+                                
+                                <div className={`flex items-center justify-between border rounded-xl p-1 mb-4 shadow-inner ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/5 bg-slate-950'}`}>
+                                  <button 
+                                    onClick={() => setQtyModalValue(Math.max(0, qtyModalValue - 1))}
+                                    className={`w-10 h-8 rounded-lg flex items-center justify-center transition-all ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+                                  >
+                                    <Minus className="w-4 h-4" strokeWidth={3} />
+                                  </button>
+                                  <div className={`text-[16px] font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>{qtyModalValue}</div>
+                                  <button 
+                                    onClick={() => setQtyModalValue(qtyModalValue + 1)}
+                                    className={`w-10 h-8 rounded-lg flex items-center justify-center transition-all ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+                                  >
+                                    <Plus className="w-4 h-4" strokeWidth={3} />
+                                  </button>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => setShowQtyModalFor(null)} 
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition-all ${isLight ? 'bg-white border-slate-200 text-slate-600' : 'bg-slate-800 border-white/10 text-slate-300'}`}
+                                  >
+                                    Batal
+                                  </button>
+                                  <button 
+                                    onClick={handleSaveQty} 
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black text-white shadow-md transition-all ${isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'}`}
+                                  >
+                                    OK
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {filteredSaleProducts.length === 0 ? (
+                          <div className="text-center py-4">
+                            <p className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Tidak ada voucher yang cocok</p>
+                          </div>
+                        ) : (
+                          filteredSaleProducts.map(p => {
+                            const cartItem = saleCart.find(i => i.id === p.id);
+                            const isSel = !!cartItem;
+                            const isLowStock = p.currentStock <= p.minStockLevel;
+                            return (
+                              <div 
+                                key={p.id}
+                                onClick={() => {
+                                  setQtyModalValue(cartItem ? cartItem.qty : 1);
+                                  setShowQtyModalFor(p.id);
+                                }}
+                                className={`backdrop-blur-xl border rounded-xl p-2 shadow-sm transition-all duration-200 cursor-pointer relative flex items-center justify-between group select-none ${
+                                  isLight 
+                                    ? (isSel ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500 text-slate-800' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800') 
+                                    : (isSel ? 'bg-emerald-900/20 border-emerald-500 ring-1 ring-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 border-white/5 text-slate-300')
+                                }`}
+                              >
+                                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                  {/* Left: Logo */}
+                                  <div className="scale-[0.8] origin-left shrink-0">
+                                    <ProviderLogo operator={p.operator} category={p.category} size="sm" />
+                                  </div>
+
+                                  {/* Middle: Title & Price */}
+                                  <div className="min-w-0 flex-1 flex flex-col justify-center -ml-1">
+                                    <h4 className={`text-[11px] font-bold tracking-tight truncate leading-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                                      {p.name}
+                                    </h4>
+                                    <div className={`flex items-center gap-2 mt-0.5 text-[9px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                                      <span className={isLight ? 'text-emerald-600 font-extrabold' : 'text-emerald-400 font-black'}>Rp {p.sellingPrice.toLocaleString('id-ID')}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Right: Stock Badge / Cart Qty */}
+                                <div className="flex items-center justify-center shrink-0 pl-1 gap-1.5">
+                                  <div className={`px-2 py-1 rounded-lg border flex flex-col items-center justify-center min-w-[36px] transition-all shadow-sm ${
+                                    isLowStock 
+                                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 font-black' 
+                                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 font-black'
+                                  }`}>
+                                    <span className="text-[13px] font-black leading-none tracking-tight">
+                                      {p.currentStock}
+                                    </span>
+                                    <span className="text-[6px] font-black tracking-widest uppercase leading-none mt-0.5 opacity-90">
+                                      STOK
+                                    </span>
+                                  </div>
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all ${isSel ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : (isLight ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-700 bg-slate-800 text-slate-500")}`}>
+                                    {isSel ? (
+                                      <span className="text-[10px] font-black leading-none">{cartItem.qty}</span>
+                                    ) : (
+                                      <Plus className="w-3 h-3" strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
                           })
                         )}
                       </div>
-                    </div>
-
-                    {selectedProduct && (
-                      <div className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between">
-                        <div className="min-w-0">
-                          <span className="text-[9px] uppercase font-black text-amber-950 flex items-center gap-0.5">
-                            <ArrowUpRight className="w-3 h-3 shrink-0" />
-                            Dipilih:
-                          </span>
-                          <h4 className="text-[12px] font-black text-black leading-tight truncate">{selectedProduct.name}</h4>
-                        </div>
-                        <div className="text-right shrink-0 ml-2">
-                          <span className="text-[8px] font-bold text-amber-900 uppercase">Harga</span>
-                          <p className="text-xs font-black text-amber-950">
-                            Rp {selectedProduct.sellingPrice.toLocaleString('id-ID')}
-                          </p>
-                        </div>
+                      
+                      {/* Bottom Bar Step 1 */}
+                      <div className={`shrink-0 border-t p-3 z-20 mt-auto ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                         <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2.5">
+                             <div className={`w-8 h-8 rounded-lg border flex items-center justify-center ${isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400'}`}>
+                               <ShoppingCart className="w-4 h-4" />
+                             </div>
+                             <div>
+                               <p className={`text-[9px] font-black ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>{saleCart.length} Produk Dipilih</p>
+                               <p className={`text-[8px] font-bold truncate max-w-[100px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{saleCart.reduce((sum, i) => sum + i.qty, 0)} Pcs Total</p>
+                             </div>
+                           </div>
+                           <button
+                             onClick={() => { if (!isKonfirmasiDisabled) setQuickSaleStep(2); }}
+                             disabled={isKonfirmasiDisabled}
+                             className={`disabled:opacity-50 text-white px-4 py-2 rounded-lg font-black text-[11px] flex items-center gap-1 shadow-md transition-all active:scale-95 uppercase tracking-wide ${
+                               isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'
+                             }`}
+                           >
+                             Lanjut <ChevronRight className="w-3 h-3" />
+                           </button>
+                         </div>
                       </div>
-                    )}
+                    </div>
+                  ) : (
+                    <form onSubmit={(e) => { e.preventDefault(); handleQuickSaleSubmit(e); }} className="flex-1 flex flex-col relative no-scrollbar overflow-hidden min-h-0">
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2 pb-3">
+                        {/* Selected Products List (Cart) */}
+                        <div className={`rounded-xl p-2 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                          <div className="flex items-center gap-2 mb-2 px-1">
+                            <div className={`w-5 h-5 rounded flex items-center justify-center ${isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                              <ShoppingCart className="w-3 h-3" />
+                            </div>
+                            <h3 className={`text-[10px] font-black ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Daftar Produk ({saleCart.length})</h3>
+                          </div>
+                          <div className="space-y-1.5">
+                            {saleCart.map(item => {
+                              const p = products.find(prod => prod.id === item.id);
+                              if (!p) return null;
+                              return (
+                                <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-white/5'}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center font-black text-[9px] ${isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300'}`}>
+                                      {item.qty}x
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className={`text-[9px] font-black truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{p.name}</p>
+                                      <p className={`text-[8px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Rp {p.sellingPrice.toLocaleString('id-ID')}</p>
+                                    </div>
+                                  </div>
+                                  <div className={`text-[10px] font-black shrink-0 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>
+                                    Rp {(p.sellingPrice * item.qty).toLocaleString('id-ID')}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className={`text-[10px] font-bold uppercase ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>Jumlah Jual (Pcs)</label>
-                        <div className="flex gap-1">
-                          {[1, 2, 5, 10].map((qty) => (
+                        {/* Payment Method Card */}
+                        <div className={`rounded-xl p-2.5 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`w-6 h-6 rounded-md flex items-center justify-center ${isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                              <Banknote className="w-3 h-3" />
+                            </div>
+                            <div>
+                              <h4 className={`text-[10px] font-black leading-none ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Metode Pembayaran</h4>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
                             <button
-                              key={qty}
                               type="button"
-                              onClick={() => setFormQuantity(qty)}
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition border ${
-                                formQuantity === qty 
-                                  ? 'bg-emerald-600 text-white border-emerald-500' 
-                                  : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
+                              onClick={() => setFormPaymentMethod('TUNAI')}
+                              className={`flex flex-col items-center justify-center gap-0.5 p-1.5 rounded-lg border-2 transition-all relative ${
+                                formPaymentMethod === 'TUNAI' 
+                                  ? (isLight ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-900/30") 
+                                  : (isLight ? "border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-300" : "border-white/5 bg-slate-800 text-slate-300 hover:border-emerald-500/50")
                               }`}
                             >
-                              +{qty}
+                              <Banknote className="w-4 h-4" />
+                              <span className="text-[9px] font-black tracking-wide">Tunai</span>
+                              {formPaymentMethod === 'TUNAI' && <div className="absolute right-1 top-1 bg-white rounded-full"><CheckCircle2 className={`w-3 h-3 ${isLight ? 'text-emerald-500' : 'text-emerald-600'}`} /></div>}
                             </button>
-                          ))}
+                            <button
+                              type="button"
+                              onClick={() => setFormPaymentMethod('NON_TUNAI')}
+                              className={`flex flex-col items-center justify-center gap-0.5 p-1.5 rounded-lg border-2 transition-all relative ${
+                                formPaymentMethod === 'NON_TUNAI' 
+                                  ? (isLight ? "border-indigo-500 bg-indigo-500 text-white shadow-md shadow-indigo-500/20" : "border-indigo-500 bg-indigo-500 text-white shadow-md shadow-indigo-900/30") 
+                                  : (isLight ? "border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300" : "border-white/5 bg-slate-800 text-slate-300 hover:border-indigo-500/50")
+                              }`}
+                            >
+                              <QrCode className="w-4 h-4" />
+                              <span className="text-[9px] font-black tracking-wide">Non Tunai</span>
+                              {formPaymentMethod === 'NON_TUNAI' && <div className="absolute right-1 top-1 bg-white rounded-full"><CheckCircle2 className={`w-3 h-3 ${isLight ? 'text-indigo-500' : 'text-indigo-600'}`} /></div>}
+                            </button>
+                          </div>
+
+                          <label className={`flex items-center justify-between p-2 mt-2 rounded-lg border-2 cursor-pointer transition-all ${
+                            isPostClosing 
+                              ? (isLight ? 'border-amber-400 bg-amber-50' : 'border-amber-500/50 bg-amber-900/20') 
+                              : (isLight ? 'border-slate-100 bg-slate-50 hover:border-amber-200' : 'border-white/5 bg-slate-800 hover:border-amber-500/30')
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-6 h-6 rounded-md flex items-center justify-center ${isLight ? 'bg-slate-200 text-slate-600' : 'bg-slate-700 text-slate-300'}`}>
+                                <History className="w-3 h-3" />
+                              </div>
+                              <div>
+                                <span className={`text-[9px] font-black block ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Pasca-Closing</span>
+                                <span className={`text-[7px] font-bold block leading-tight mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Jualan setelah hitung stok.</span>
+                              </div>
+                            </div>
+                            <div className={`w-6 h-4 rounded-full flex items-center px-0.5 transition-colors ${isPostClosing ? "bg-amber-500" : (isLight ? "bg-slate-300" : "bg-slate-600")}`}>
+                              <div className={`w-3 h-3 rounded-full bg-white transition-transform shadow-sm ${isPostClosing ? "translate-x-2" : "translate-x-0"}`} />
+                            </div>
+                            <input type="checkbox" className="sr-only" checked={isPostClosing} onChange={e => setIsPostClosing(e.target.checked)} />
+                          </label>
+                        </div>
+
+                        {/* Informasi Penjualan Card */}
+                        <div className={`rounded-xl p-2 shadow-sm border flex items-center justify-between ${isLight ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-900/20 border-emerald-500/30'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isLight ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-800/50 text-emerald-400'}`}>
+                              <Banknote className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className={`text-[8px] font-bold uppercase tracking-wider ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>Total Tagihan</p>
+                              <p className={`text-[14px] font-black leading-none mt-0.5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>Rp {totalSellingPrice.toLocaleString('id-ID')}</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center">
-                        <button
-                          type="button"
-                          onClick={() => setFormQuantity(Math.max(1, formQuantity - 1))}
-                          className={`w-10 h-10 flex items-center justify-center rounded-l-xl border-y border-l transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-800 dark:hover:bg-slate-800'}`}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          max={selectedProduct?.currentStock || 1}
-                          required
-                          value={formQuantity}
-                          onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                          className={`flex-1 w-full border-y px-4 py-2.5 font-black text-lg text-center focus:outline-none focus:border-emerald-500 transition appearance-none ${isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-white border-slate-200 dark:bg-slate-950 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'}`}
-                          style={{ MozAppearance: 'textfield' }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setFormQuantity(Math.min(selectedProduct?.currentStock || 1, formQuantity + 1))}
-                          className={`w-10 h-10 flex items-center justify-center rounded-r-xl border-y border-r transition ${isLight ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-800 dark:hover:bg-slate-800'}`}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
+
+                      {/* Bottom Bar Step 2 */}
+                      <div className={`shrink-0 border-t p-3 z-20 mt-auto ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                         <div className="flex gap-2">
+                           <button
+                             type="button"
+                             onClick={() => setQuickSaleStep(1)}
+                             className={`w-[80px] border py-2 rounded-lg font-black text-[10px] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                               isLight ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-slate-800 border-white/10 text-slate-300 hover:bg-slate-700'
+                             }`}
+                           >
+                             <ArrowLeft className="w-3.5 h-3.5" /> Batal
+                           </button>
+                           <button
+                             type="submit"
+                             disabled={isKonfirmasiDisabled}
+                             className={`flex-1 disabled:opacity-50 text-white py-2 rounded-lg font-black text-[11px] flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 uppercase tracking-wide ${
+                               isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'
+                             }`}
+                           >
+                             <Store className="w-3.5 h-3.5" /> Simpan Jual
+                           </button>
+                         </div>
                       </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold uppercase text-slate-600 dark:text-slate-400">Metode Pembayaran</label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setFormPaymentMethod('TUNAI')}
-                          className={`py-1.5 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
-                            formPaymentMethod === 'TUNAI'
-                              ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20'
-                              : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10')
-                          }`}
-                        >
-                          <Banknote className="w-3.5 h-3.5" />
-                          TUNAI
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormPaymentMethod('NON_TUNAI')}
-                          className={`py-1.5 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1.5 ${
-                            formPaymentMethod === 'NON_TUNAI'
-                              ? 'bg-indigo-500 border-indigo-400 text-white shadow-lg shadow-indigo-500/20'
-                              : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10'
-                          }`}
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                          NON TUNAI
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Keterangan tambahan (Opsional)"
-                        value={formNote}
-                        onChange={(e) => setFormNote(e.target.value)}
-                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1 text-[9px] text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition mt-0.5"
-                      />
-
-                      <label className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-colors ${
-                        isPostClosing 
-                          ? 'bg-yellow-50 border-yellow-300 dark:bg-yellow-500/10 dark:border-yellow-500/30' 
-                          : 'bg-slate-50 border-slate-200 dark:bg-white/5 dark:border-white/10 hover:bg-yellow-50/50 dark:hover:bg-yellow-500/5'
-                      }`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                          isPostClosing 
-                            ? 'bg-yellow-500 border-yellow-600 dark:border-yellow-400 text-white' 
-                            : 'bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600'
-                        }`}>
-                          {isPostClosing && <Check className="w-3 h-3" />}
-                        </div>
-                        <input 
-                          type="checkbox" 
-                          className="sr-only" 
-                          checked={isPostClosing}
-                          onChange={(e) => setIsPostClosing(e.target.checked)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-[10px] font-bold block ${
-                            isPostClosing ? 'text-yellow-800 dark:text-yellow-400' : 'text-slate-700 dark:text-slate-300'
-                          }`}>Tandai sebagai Pasca-Closing</span>
-                          <span className={`text-[8px] leading-tight block ${
-                            isPostClosing ? 'text-yellow-700/80 dark:text-yellow-500/80' : 'text-slate-500'
-                          }`}>Jualan setelah hitungan stok (simpan uang tunai/qris terpisah).</span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {selectedProduct && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded-xl flex justify-between items-center mt-1">
-                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Total Jual:</span>
-                        <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                          Rp {(selectedProduct.sellingPrice * formQuantity).toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 pt-1 mt-auto">
-                      <button
-                        type="button"
-                        id="btn-cancel-quick-sale"
-                        onClick={() => setShowQuickSale(false)}
-                        className="flex-1 py-2 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition cursor-pointer"
-                      >
-                        Batal
-                      </button>
-                      <button
-                        type="submit"
-                        id="btn-confirm-quick-sale"
-                        disabled={!selectedProduct}
-                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl transition cursor-pointer shadow-lg shadow-emerald-950/50"
-                      >
-                        Konfirmasi Jual
-                      </button>
-                    </div>
-                  </form>
+                    </form>
+                  )}
                 </motion.div>
               </div>
             );
@@ -3064,6 +3159,17 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
               </div>
             </li>
 
+            {/* CENTER BUTTON: ATUR STOK */}
+            <li className="flex-1" onClick={() => { setActiveTab('stok'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1 relative">
+                <div className={`absolute -top-5 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-xl shadow-blue-500/40 border-[3px] border-white dark:border-slate-900 group-active:scale-95 transition-transform ${activeTab === 'stok' ? 'bg-blue-700 scale-105' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                  <ClipboardList className="w-6 h-6 stroke-[2.5px]" />
+                </div>
+                <span className={`text-[9px] font-black tracking-tight transition-colors duration-300 mt-6 ${activeTab === 'stok' ? 'text-blue-700' : 'text-slate-500'}`}>ATUR STOK</span>
+              </div>
+            </li>
+
+            {/* JUAL CEPAT */}
             <li className="flex-1" onClick={() => {
               setSaleSearchQuery('');
               setSaleSelectedOperator('SEMUA');
@@ -3071,31 +3177,24 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
               if (products.length > 0) setFormProductId(products[0].id);
               setFormQuantity(1);
               setFormNote('');
+              setQuickSaleStep(1);
               setShowQuickSale(true);
             }}>
-              <div className="flex flex-col items-center cursor-pointer group py-1 relative">
-                <div className="absolute -top-3 bg-rose-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg shadow-rose-500/40 border-2 border-white dark:border-slate-900 group-active:scale-95 transition-transform">
-                  <ShoppingCart className="w-4 h-4 stroke-[2.5px]" />
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className="transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+                  <ShoppingCart className="w-5 h-5 stroke-[2px]" />
                 </div>
-                <span className="text-[9px] font-black tracking-tight text-slate-500 transition-colors duration-300 mt-5">Jual</span>
+                <span className="text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500">Jual Cepat</span>
               </div>
             </li>
 
+            {/* PRODUK */}
             <li className="flex-1" onClick={() => { setActiveTab('produk'); setSelectedProduct(null); }}>
               <div className="flex flex-col items-center cursor-pointer group py-1">
                 <div className={activeTab === 'produk' || selectedProduct ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
                   <Package className={activeTab === 'produk' || selectedProduct ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
                 </div>
                 <span className={activeTab === 'produk' || selectedProduct ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Produk</span>
-              </div>
-            </li>
-
-            <li className="flex-1" onClick={() => { setActiveTab('riwayat'); setSelectedProduct(null); }}>
-              <div className="flex flex-col items-center cursor-pointer group py-1">
-                <div className={activeTab === 'riwayat' ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
-                  <History className={activeTab === 'riwayat' ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
-                </div>
-                <span className={activeTab === 'riwayat' ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Riwayat</span>
               </div>
             </li>
           </ul>

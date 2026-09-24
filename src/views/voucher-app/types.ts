@@ -17,6 +17,7 @@ export interface VoucherProduct {
   description: string;
   barcode: string;
   sku: string;
+  isHidden?: boolean; // Jika true, produk disembunyikan dari tampilan kasir (tidak bisa dijual)
 }
 
 export interface Cashier {
