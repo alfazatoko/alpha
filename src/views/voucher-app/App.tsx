@@ -1928,7 +1928,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         if (products.length > 0) setFormProductId(products[0].id);
                         setFormQuantity(1);
                         setFormNote('');
-                        if (!isActiveCashierOnDuty) return; // Blokir jika bukan kasir aktif
+                        if (!isActiveCashierOnDuty && currentUserRole !== 'owner') return; // Blokir jika bukan kasir aktif dan bukan owner
                         setShowQuickSale(true);
                       }}
                       onOpenQuickRestock={() => {
@@ -1937,7 +1937,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
                         if (products.length > 0) setFormProductId(products[0].id);
                         setFormQuantity(1);
                         setFormNote('');
-                        if (!isActiveCashierOnDuty) return; // Blokir jika bukan kasir aktif
+                        if (!isActiveCashierOnDuty && currentUserRole !== 'owner') return; // Blokir jika bukan kasir aktif dan bukan owner
                         setShowQuickRestock(true);
                       }}
                       onOpenHandoverModal={() => setShowHandoverModal(true)}
