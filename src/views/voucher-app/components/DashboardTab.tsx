@@ -358,7 +358,7 @@ export default function DashboardTab({
 
         {/* 2-Row Menu (Produk, Atur Stok, Restok, Riwayat + Secondary Row) */}
         <div className="space-y-3">
-          <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="owner-quick-access-grid">
+          <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="owner-priority-actions-bar">
             {/* 1. PRODUK */}
             <button
               type="button"
@@ -368,7 +368,9 @@ export default function DashboardTab({
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
                 <Package className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>PRODUK</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                PRODUK
+              </span>
             </button>
 
             {/* 2. ATUR STOK */}
@@ -380,19 +382,23 @@ export default function DashboardTab({
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-sky-500 shadow-lg shadow-sky-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
                 <SlidersHorizontal className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>ATUR STOK</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                ATUR STOK
+              </span>
             </button>
 
-            {/* 3. TAMBAH STOK */}
+            {/* 3. LAPORAN */}
             <button
               type="button"
-              onClick={onOpenQuickRestock}
+              onClick={() => onNavigate('laporan')}
               className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             >
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
-                <PlusCircle className="w-6 h-6 sm:w-7 sm:h-7" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+                <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>TAMBAH STOK</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                LAPORAN
+              </span>
             </button>
 
             {/* 4. RIWAYAT */}
@@ -404,28 +410,68 @@ export default function DashboardTab({
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
                 <History className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>RIWAYAT</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                RIWAYAT
+              </span>
             </button>
           </div>
 
-          <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`}>
-            <button onClick={onOpenQuickSale} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30"><ShoppingCart className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Jual Cepat</span>
+          {/* ROW 2: 4 Standard Compact Buttons */}
+          <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="owner-secondary-actions-bar">
+            {/* 1. Jual Cepat */}
+            <button
+              type="button"
+              onClick={onOpenQuickSale}
+              className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
+            >
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30">
+                <ShoppingCart className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                Jual Cepat
+              </span>
             </button>
-            <button onClick={() => onNavigate('pencarian')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30"><Search className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Pencarian</span>
+
+            {/* 2. Pencarian */}
+            <button
+              type="button"
+              onClick={() => onNavigate('pencarian')}
+              className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
+            >
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30">
+                <Search className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                Pencarian
+              </span>
             </button>
-            <button onClick={() => onNavigate('laporan')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-blue-500/30"><BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Laporan</span>
+
+            {/* 3. Notifikasi */}
+            <button
+              type="button"
+              onClick={() => onNavigate('notif')}
+              className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
+            >
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-indigo-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-indigo-500/30">
+                <Bell className="w-6 h-6 sm:w-7 sm:h-7" />
+              </div>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                Notifikasi
+              </span>
             </button>
-            <button onClick={() => onNavigate('profil')} className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer" id="btn-owner-sistem">
-              <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
+
+            {/* 4. Sistem */}
+            <button
+              type="button"
+              onClick={() => onNavigate('profil')}
+              className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
+            >
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
                 <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Sistem</span>
+              <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+                Sistem
+              </span>
             </button>
           </div>
         </div>
