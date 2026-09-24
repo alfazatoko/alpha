@@ -23,7 +23,7 @@ export interface VoucherProduct {
 export interface Cashier {
   id: string;
   name: string;
-  role: 'Administrator' | 'Kasir Utama' | 'Kasir Shift';
+  role: 'Administrator' | 'Kasir Utama' | 'Kasir Shift' | 'Owner' | 'System';
   email: string;
   avatar: string;
   isOnline: boolean;
