@@ -161,6 +161,7 @@ export default function ProductsTab({
         if (!error && data?.voucher_app_data?.global_hidden_products) {
           setHiddenProductIds(data.voucher_app_data.global_hidden_products);
           localStorage.setItem(`alphaPro_${activeStoreId}_hidden_products`, JSON.stringify(data.voucher_app_data.global_hidden_products));
+          window.dispatchEvent(new CustomEvent('hidden-products-changed', { detail: data.voucher_app_data.global_hidden_products }));
         }
       });
 
@@ -171,6 +172,7 @@ export default function ProductsTab({
          if (newData?.global_hidden_products) {
            setHiddenProductIds(newData.global_hidden_products);
            localStorage.setItem(`alphaPro_${activeStoreId}_hidden_products`, JSON.stringify(newData.global_hidden_products));
+           window.dispatchEvent(new CustomEvent('hidden-products-changed', { detail: newData.global_hidden_products }));
          }
       }).subscribe();
 
@@ -415,6 +417,7 @@ export default function ProductsTab({
     // Optimistic Update (Instant)
     setHiddenProductIds(newHidden);
     localStorage.setItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`, JSON.stringify(newHidden));
+    window.dispatchEvent(new CustomEvent('hidden-products-changed', { detail: newHidden }));
 
     // Online Sync
     if (activeStoreId) {

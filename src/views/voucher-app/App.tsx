@@ -100,6 +100,48 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
   // Core Persistent States
   const [products, setProducts] = useState<VoucherProduct[]>([]);
+
+  // --- HIDDEN PRODUCTS SYNC ---
+  const [hiddenProductIds, setHiddenProductIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`);
+      if (stored) {
+        setHiddenProductIds(JSON.parse(stored));
+      } else {
+        setHiddenProductIds([]);
+      }
+    } catch {}
+  }, [activeStoreId]);
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      const key = `alphaPro_${activeStoreId || 'default'}_hidden_products`;
+      if (e.key === key && e.newValue) {
+        try { setHiddenProductIds(JSON.parse(e.newValue)); } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [activeStoreId]);
+  
+  useEffect(() => {
+    const handler = (e: any) => setHiddenProductIds(e.detail);
+    window.addEventListener('hidden-products-changed', handler as EventListener);
+    return () => window.removeEventListener('hidden-products-changed', handler as EventListener);
+  }, []);
+
+  const visibleProducts = products.filter(p => !hiddenProductIds.includes(p.id) && !p.isHidden);
+  // -----------------------------
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [notifications, setNotifications] = useState<LiveNotification[]>([]);
   const [shiftHandovers, setShiftHandovers] = useState<ShiftHandover[]>([]);
@@ -1901,7 +1943,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
                   {activeTab === 'beranda' && (
                     <DashboardTab
-                      products={products}
+                      products={visibleProducts}
                       transactions={transactions}
                       notifications={notifications}
                       activeCashier={activeCashier}
@@ -1986,7 +2028,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
                   {activeTab === 'pencarian' && (
                     <SearchTab
-                      products={products}
+                      products={visibleProducts}
                       onSelectProduct={setSelectedProduct}
                       onNavigate={setActiveTab}
                     />
@@ -2007,7 +2049,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
 
                   {activeTab === 'stok' && (
                     <AturStokTab 
-                      products={products}
+                      products={visibleProducts}
                       activeCashier={activeCashier}
                       nextCashier={nextCashier}
                       allCashiers={cashiers}
@@ -2201,7 +2243,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         {/* DIALOG MODAL: QUICK SALE */}
         <AnimatePresence>
                               {showQuickSale && (() => {
-            const filteredSaleProducts = filterProductsByOperatorAndTitle(products, saleSelectedOperator, saleSearchQuery);
+            const filteredSaleProducts = filterProductsByOperatorAndTitle(visibleProducts, saleSelectedOperator, saleSearchQuery);
             const activeQtyModalProduct = products.find(p => p.id === showQtyModalFor) || null;
             
             const totalSellingPrice = saleCart.reduce((sum, item) => {
@@ -2575,7 +2617,7 @@ export default function App({ onExit, externalRole, externalCashierName, activeS
         {/* DIALOG MODAL: QUICK RESTOCK */}
         <AnimatePresence>
           {showQuickRestock && (() => {
-            const filteredRestockProducts = filterProductsByOperatorAndTitle(products, restockSelectedOperator, restockSearchQuery);
+            const filteredRestockProducts = filterProductsByOperatorAndTitle(visibleProducts, restockSelectedOperator, restockSearchQuery);
             const activeSelectedId = formProductId || (filteredRestockProducts.length > 0 ? filteredRestockProducts[0].id : (products.length > 0 ? products[0].id : ''));
             const selectedProduct = products.find(p => p.id === activeSelectedId) || null;
 

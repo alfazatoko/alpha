@@ -99,6 +99,7 @@ export default function DashboardTab({
   const [showAturStokModal, setShowAturStokModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [showFullRecapModal, setShowFullRecapModal] = useState(false);
 
   // --- OWNER DASHBOARD CALCULATIONS ---
   
@@ -670,7 +671,7 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {stockMovement.map((item) => (
+                {stockMovement.slice(0, 3).map((item) => (
                   <tr key={item.id} className="active:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent transition-colors">
                     <td className="pl-5 py-3">
                       <p className="text-[8px] font-black text-slate-900 dark:text-white truncate max-w-[80px] uppercase leading-tight">{item.name}</p>
@@ -706,7 +707,94 @@ export default function DashboardTab({
               </tbody>
             </table>
           </div>
+          {stockMovement.length > 3 && (
+            <div className="p-3 border-t border-slate-200 dark:border-white/5">
+              <button 
+                type="button"
+                onClick={() => setShowFullRecapModal(true)}
+                className="w-full py-2.5 bg-slate-100 dark:bg-slate-900/50 hover:bg-slate-200 dark:hover:bg-slate-800 text-[9px] font-black text-indigo-600 dark:text-indigo-400 rounded-xl uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                Lihat Semua Rincian ({stockMovement.length} Item)
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Modal Full Recap Owner */}
+        <AnimatePresence>
+          {showFullRecapModal && (
+            <div className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/15 w-full max-w-sm rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh]"
+              >
+                <div className="p-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-800 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Rincian Audit Selisih</h3>
+                      <p className="text-[9px] text-slate-600 dark:text-slate-400 mt-0.5">Pergerakan stok harian ({stockMovement.length} item)</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowFullRecapModal(false)}
+                    className="text-slate-500 hover:text-rose-500 dark:text-slate-400 dark:hover:text-rose-400 p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto flex-1 bg-white dark:bg-slate-800 p-0">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[7px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/50">
+                        <th className="pl-3 py-3 w-[25%] sticky left-0 bg-slate-50 dark:bg-slate-900/50 z-10 shadow-[1px_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_rgba(255,255,255,0.05)]">VOUCHER</th>
+                        <th className="px-1.5 py-3 text-center">AWAL</th>
+                        <th className="px-1.5 py-3 text-center">MASUK</th>
+                        <th className="px-1.5 py-3 text-center">AKHIR</th>
+                        <th className="px-1.5 py-3 text-center">KELUAR</th>
+                        <th className="pr-3 py-3 text-right">OMZET</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {stockMovement.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                          <td className="pl-3 py-3 sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[1px_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_rgba(255,255,255,0.05)]">
+                            <p className="text-[8px] font-black text-slate-900 dark:text-white uppercase leading-tight line-clamp-2">{item.name}</p>
+                          </td>
+                          <td className="px-1.5 py-3 text-center text-[9px] font-bold text-slate-600 dark:text-slate-400">
+                            {item.currentStock + item.sold - item.restock}
+                          </td>
+                          <td className="px-1.5 py-3 text-center">
+                            <span className={`text-[9px] font-black ${item.restock > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                              {item.restock > 0 ? `+${item.restock}` : '0'}
+                            </span>
+                          </td>
+                          <td className="px-1.5 py-3 text-center">
+                            <span className="text-[9px] font-black text-slate-900 dark:text-white">{item.currentStock}</span>
+                          </td>
+                          <td className="px-1.5 py-3 text-center">
+                            <span className={`text-[9px] font-black ${item.sold > 0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                              {item.sold > 0 ? `-${item.sold}` : '0'}
+                            </span>
+                          </td>
+                          <td className="pr-3 py-3 text-right">
+                            <p className="text-[9px] font-black text-amber-500 dark:text-amber-400">Rp {item.revenue.toLocaleString('id-ID')}</p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Modal Low Stock Owner */}
         <AnimatePresence>
