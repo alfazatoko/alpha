@@ -357,9 +357,8 @@ export default function DashboardTab({
           </div>
         </div>
 
-        {/* 2-Row Menu (Produk, Atur Stok, Restok, Riwayat + Secondary Row) */}
-        <div className="space-y-3">
-          <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="owner-priority-actions-bar">
+        {/* 8-Button Grid Menu */}
+        <div className="grid grid-cols-4 gap-y-4 gap-x-2 sm:gap-4 px-1" id="owner-actions-bar">
             {/* 1. PRODUK */}
             <button
               type="button"
@@ -415,10 +414,6 @@ export default function DashboardTab({
                 RIWAYAT
               </span>
             </button>
-          </div>
-
-          {/* ROW 2: 4 Standard Compact Buttons */}
-          <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="owner-secondary-actions-bar">
             {/* 1. Jual Cepat */}
             <button
               type="button"
@@ -475,7 +470,6 @@ export default function DashboardTab({
               </span>
             </button>
           </div>
-        </div>
 
         
         {/* Cashier Filter for Owner */}
@@ -878,7 +872,7 @@ export default function DashboardTab({
   }
 
   return (
-    <div className="space-y-4" id="dashboard-tab-container">
+    <div className="space-y-4 pb-32" id="dashboard-tab-container">
       {/* Quick Action Buttons Section */}
       <div className="space-y-4" id="dashboard-quick-actions-panel">
 
@@ -908,8 +902,8 @@ export default function DashboardTab({
           </button>
         )}
 
-        {/* ROW 1: 4 Large Priority Action Buttons (PRODUK, ATUR STOK, TAMBAH STOK, RIWAYAT) */}
-        <div className={`grid grid-cols-4 gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-priority-actions-bar">
+        {/* 8-Button Grid Menu */}
+        <div className="grid grid-cols-4 gap-y-4 gap-x-2 sm:gap-4 px-1" id="dashboard-actions-bar">
           {/* 1. PRODUK */}
           <button
             type="button"
@@ -972,7 +966,7 @@ export default function DashboardTab({
         </div>
 
         {/* ROW 2: 4 Standard Compact Buttons (Jual Cepat, Pencarian, Laporan, Sistem) */}
-        <div className={`grid grid-cols-4 gap-1 sm:gap-2 rounded-3xl p-3 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700/50'}`} id="dashboard-secondary-actions-bar">
+        <div className="grid grid-cols-4 gap-y-4 gap-x-2 sm:gap-4 px-1" id="dashboard-secondary-actions-bar">
           {/* 1. Jual Cepat */}
           <button
             type="button"
@@ -1184,15 +1178,24 @@ export default function DashboardTab({
 
       {/* Aktivitas Terbaru (Transparency audit feed) */}
       <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-3" id="recent-activities-panel">
-        <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-300">
-          Aktivitas Terbaru
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-300">
+            Aktivitas Terbaru
+          </h4>
+          <button
+            type="button"
+            onClick={() => onNavigate('riwayat')}
+            className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 uppercase flex items-center gap-0.5 cursor-pointer transition-colors"
+          >
+            semua <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
 
         <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1" id="activity-log-list">
           {transactions.length === 0 ? (
             <p className="text-[10px] text-slate-600 dark:text-slate-400 py-3 text-center italic">Belum ada transaksi hari ini.</p>
           ) : (
-            transactions.slice(0, 10).map((trx) => (
+            transactions.slice(0, 3).map((trx) => (
               <div 
                 key={trx.id}
                 className="p-2.5 rounded-xl bg-slate-50 border-slate-200 shadow-sm dark:bg-slate-950/40 border border-slate-200 dark:border-white/5 flex items-start gap-4 justify-between"

@@ -212,8 +212,11 @@ export default function AturStokTab({
   const [selectedOperator, setSelectedOperator] = useState<string>('SEMUA');
 
   const filteredItems = useMemo(() => {
-    if (selectedOperator === 'SEMUA') return items;
-    return items.filter(item => {
+    // Filter to ensure only products that are still visible (not hidden by owner) are shown
+    const activeItems = items.filter(item => products.some(p => p.id === item.productId));
+    
+    if (selectedOperator === 'SEMUA') return activeItems;
+    return activeItems.filter(item => {
       const brand = item.productName.split(' ')[0].toLowerCase();
       const op = selectedOperator.toLowerCase();
       
@@ -528,12 +531,14 @@ export default function AturStokTab({
       isSelfHandover,        // ← flag penting untuk App.tsx
       items: items.map(i => ({
         productId: i.productId,
-        name: i.productName,
+        productName: i.productName,
+        price: i.price,
+        previousStock: i.previousStock,
+        incomingStock: i.incomingStock,
         initialStock: i.initialStock,
         finalStock: i.finalStock,
-        soldPcs: Math.max(0, i.initialStock - i.finalStock),
-        price: i.price,
-        subtotal: Math.max(0, i.initialStock - i.finalStock) * i.price
+        soldStock: Math.max(0, i.initialStock - i.finalStock),
+        subtotalSales: Math.max(0, i.initialStock - i.finalStock) * i.price
       }))
     });
   };
@@ -1056,39 +1061,42 @@ export default function AturStokTab({
           </div>
 
           {/* VOUCHER TABLE - STRICTLY 100% FIT IN 1 SCREEN (NO HORIZONTAL SCROLL) */}
-          <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
             isLight 
               ? 'bg-white border-slate-200' 
               : 'bg-white dark:bg-slate-800 border-blue-900/40 shadow-md'
           }`}>
-            <table className="w-full table-fixed text-left border-collapse bg-transparent">
-              <thead className={`border-b ${
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
                 isLight 
-                  ? 'bg-slate-50/90 border-slate-200 text-slate-800 font-bold' 
-                  : 'bg-white dark:bg-slate-800 border-blue-900/40 text-slate-600 dark:text-slate-300 font-bold'
+                  ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' 
+                  : 'bg-slate-800/95 border-blue-900/40 text-slate-300 font-bold'
               }`}>
-                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
-                  <th className={`py-2 px-2 font-bold ${
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className={`py-2 px-2 font-bold align-bottom first:rounded-tl-xl ${
                     showStatusColumn ? 'w-[45%]' : 'w-[55%]'
                   }`}>
                     VOUCHER
                   </th>
-                  <th className={`py-2 px-1 text-center font-bold opacity-50 ${
+                  <th className={`py-2 px-1 text-center font-bold opacity-70 align-bottom leading-tight ${
                     showStatusColumn ? 'w-[18%]' : 'w-[20%]'
                   }`}>
-                    LALU
+                    STOK<br/>LALU
                   </th>
-                  <th className={`py-2 px-1.5 text-center font-bold ${
+                  <th className={`py-2 px-1.5 text-center font-bold align-bottom leading-tight ${
                     showStatusColumn ? 'w-[20%]' : 'w-[25%]'
                   } ${
                     isLight ? 'text-blue-700' : 'text-blue-400'
-                  }`}>
-                    <div className="flex items-center justify-center gap-1">
-                      <Pencil className="w-2.5 h-2.5" /> STOK AWAL
+                  } ${!showStatusColumn ? 'last:rounded-tr-xl' : ''}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <Pencil className="w-2.5 h-2.5 shrink-0" />
+                        <span>STOK<br/>AWAL</span>
+                      </div>
                     </div>
                   </th>
                   {showStatusColumn && (
-                    <th className={`py-2 px-1 text-center font-bold w-[17%]`}>
+                    <th className={`py-2 px-1 text-center font-bold w-[17%] align-bottom last:rounded-tr-xl`}>
                       STATUS
                     </th>
                   )}
@@ -1135,7 +1143,7 @@ export default function AturStokTab({
                             <span className={`text-[10px] sm:text-xs font-mono font-bold ${
                               isLight ? 'text-blue-700' : 'text-blue-400'
                             }`}>
-                              @Rp{item.price.toLocaleString('id-ID')}
+                              Rp{item.price.toLocaleString('id-ID')}
                             </span>
                           </div>
                         </div>
@@ -1307,22 +1315,24 @@ export default function AturStokTab({
             </div>
           </div>
 
-          <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
             isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-indigo-900/40 shadow-md'
           }`}>
-            <table className="w-full table-fixed text-left border-collapse bg-transparent">
-              <thead className={`border-b ${
-                isLight ? 'bg-slate-50/90 border-slate-200 text-slate-800 font-bold' : 'bg-white dark:bg-slate-800 border-indigo-900/40 text-slate-600 dark:text-slate-300 font-bold'
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
+                isLight ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' : 'bg-slate-800/95 border-indigo-900/40 text-slate-300 font-bold'
               }`}>
-                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
-                  <th className="py-2 px-2 w-[42%] sm:w-[40%] font-bold">VOUCHER</th>
-                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold opacity-50">AWAL</th>
-                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>
-                    <div className="flex items-center justify-center gap-1">
-                      <Pencil className="w-2.5 h-2.5" /> + MASUK
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className="py-2 px-2 w-[42%] sm:w-[40%] font-bold align-bottom first:rounded-tl-xl">VOUCHER</th>
+                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold opacity-70 align-bottom leading-tight">STOK<br/>AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold align-bottom leading-tight ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <span>+ STOK<br/>BARU</span>
+                      </div>
                     </div>
                   </th>
-                  <th className="py-2 px-2 text-right w-[16%] sm:w-[20%] font-bold">TOTAL</th>
+                  <th className="py-2 px-2 text-right w-[16%] sm:w-[20%] font-bold align-bottom last:rounded-tr-xl">TOTAL</th>
                 </tr>
               </thead>
               <tbody className={`text-xs divide-y ${
@@ -1607,23 +1617,26 @@ export default function AturStokTab({
           </div>
 
           {/* Table: Strictly 100% Fit in 1 Screen without Horizontal Scroll */}
-          <div className={`w-full overflow-hidden rounded-xl border shadow-xs ${
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
             isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-900/40 shadow-md'
           }`}>
-            <table className="w-full table-fixed text-left border-collapse bg-transparent">
-              <thead className={`border-b ${
-                isLight ? 'bg-slate-50/90 border-slate-200 text-slate-800 font-bold' : 'bg-white dark:bg-slate-800 border-blue-900/40 text-slate-600 dark:text-slate-300 font-bold'
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
+                isLight ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' : 'bg-slate-800/95 border-blue-900/40 text-slate-600 dark:text-slate-300 font-bold'
               }`}>
-                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight">
-                  <th className="py-2 px-2 w-[36%] sm:w-[32%] font-bold">VOUCHER</th>
-                  <th className="py-2 px-1 text-center w-[14%] sm:w-[14%] font-bold opacity-50">AWAL</th>
-                  <th className={`py-2 px-1 text-center w-[22%] sm:w-[24%] font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
-                    <div className="flex items-center justify-center gap-1">
-                      <Pencil className="w-2.5 h-2.5" /> AKHIR
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className="py-2 px-2 w-[36%] sm:w-[32%] font-bold align-bottom first:rounded-tl-xl">VOUCHER</th>
+                  <th className="py-2 px-1 text-center w-[14%] sm:w-[14%] font-bold opacity-70 align-bottom leading-tight">STOK<br/>AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[22%] sm:w-[24%] font-bold align-bottom leading-tight ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <Pencil className="w-2.5 h-2.5 shrink-0" />
+                        <span>STOK<br/>AKHIR</span>
+                      </div>
                     </div>
                   </th>
-                  <th className={`py-2 px-1 text-center w-[12%] sm:w-[14%] font-bold opacity-70 ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>TERJUAL</th>
-                  <th className="py-2 px-2 text-right w-[16%] sm:w-[16%] font-bold">TOTAL</th>
+                  <th className={`py-2 px-1 text-center w-[12%] sm:w-[14%] font-bold opacity-70 align-bottom ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>TERJUAL</th>
+                  <th className="py-2 px-2 text-right w-[16%] sm:w-[16%] font-bold align-bottom last:rounded-tr-xl">TOTAL</th>
                 </tr>
               </thead>
               <tbody className={`text-xs divide-y ${
@@ -1637,17 +1650,21 @@ export default function AturStokTab({
                   const nameParts = item.productName.split(' ');
                   const brandTitle = nameParts[0];
                   const variantSubtitle = nameParts.slice(1).join(' ');
-                  const soldCount = Math.max(0, item.initialStock - item.finalStock);
+                  const totalInitialForShift = item.initialStock + item.incomingStock;
+                  const soldCount = Math.max(0, totalInitialForShift - item.finalStock);
                   const subtotal = soldCount * item.price;
+                  const isStockEmpty = totalInitialForShift === 0;
 
                   return (
                     <tr 
                       key={item.productId} 
-                      onClick={() => !isOwnerMode && setActiveEditingRow({ step: 3, type: 'final', productId: item.productId })}
-                      className={`transition-colors ${isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
+                      onClick={() => !isOwnerMode && !isStockEmpty && setActiveEditingRow({ step: 3, type: 'final', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode || isStockEmpty ? 'cursor-default' : 'cursor-pointer'} ${
                         isEditingFinal 
                           ? (isLight ? 'bg-emerald-100/70 ring-1 ring-emerald-400' : 'bg-emerald-900/40 ring-1 ring-emerald-500/50')
-                          : (isLight ? 'hover:bg-emerald-50/60 bg-white' : 'hover:bg-blue-950/30')
+                          : soldCount > 0
+                            ? (isLight ? 'bg-emerald-50/60 hover:bg-emerald-100/60' : 'bg-emerald-950/30 hover:bg-emerald-900/40')
+                            : (isLight ? 'hover:bg-emerald-50/60 bg-white' : 'hover:bg-blue-950/30')
                       }`}
                     >
                       {/* PRODUK VOUCHER */}
@@ -1667,7 +1684,7 @@ export default function AturStokTab({
                             <span className={`text-[10px] sm:text-xs font-mono font-bold ${
                               isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'
                             }`}>
-                              @Rp{item.price.toLocaleString('id-ID')}
+                              Rp{item.price.toLocaleString('id-ID')}
                             </span>
                           </div>
                         </div>
@@ -1676,7 +1693,7 @@ export default function AturStokTab({
                       {/* AWAL */}
                       <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
                         <div className="flex items-center justify-center gap-1 sm:gap-2">
-                          <span>{item.initialStock}</span>
+                          <span>{totalInitialForShift}</span>
                           <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
                         </div>
                       </td>
@@ -1688,21 +1705,23 @@ export default function AturStokTab({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (!isOwnerMode) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
+                              if (!isOwnerMode && !isStockEmpty) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
                             }}
-                            disabled={isOwnerMode}
-                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
-                              isLight 
-                                ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
-                                : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+                            disabled={isOwnerMode || isStockEmpty}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isStockEmpty ? 'cursor-default opacity-50 bg-slate-100 dark:bg-slate-800' : 'cursor-pointer active:scale-95'} ${
+                              !isOwnerMode && !isStockEmpty ? (
+                                isLight 
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
+                                  : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+                              ) : 'text-slate-400 dark:text-slate-500'
                             }`}
-                            title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : 'Ketuk untuk ubah sisa akhir'}
+                            title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : (isStockEmpty ? 'Stok kosong, tidak bisa diedit' : 'Ketuk untuk ubah sisa akhir')}
                           >
                             <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
                               {item.finalStock}
                             </span>
                           </button>
-                          {!isOwnerMode && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-emerald-500' : 'text-emerald-400'}`} />}
+                          {!isOwnerMode && !isStockEmpty && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-emerald-500' : 'text-emerald-400'}`} />}
                         </div>
                       </td>
 
