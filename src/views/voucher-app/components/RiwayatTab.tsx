@@ -463,7 +463,7 @@ export default function RiwayatTab({
                           <button
                             type="button"
                             onClick={() => setExpandedRecordId(isExpanded ? null : record.id)}
-                            className="px-3 py-1.5 bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase rounded-xl transition cursor-pointer flex items-center gap-1.5 border border-slate-700 shadow-sm"
+                            className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[10px] font-black uppercase rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
                           >
                             {isExpanded ? 'Tutup Detail' : 'Rincian Voucher'}
                             <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
