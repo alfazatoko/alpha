@@ -1,0 +1,29 @@
+# ============================================
+# ALFAZA CELL - Git Language Detection Config
+# Mengelola statistik bahasa di GitHub
+# ============================================
+
+# Tandai semua kode Android/Capacitor sebagai "vendored"
+# agar tidak terhitung sebagai bahasa utama project.
+android/**          linguist-vendored=true
+android/**          linguist-generated=true
+
+# File build/config Android
+*.gradle            linguist-vendored=true
+*.pro               linguist-vendored=true
+gradlew             linguist-vendored=true
+gradle/**           linguist-vendored=true
+
+# Abaikan file distribusi & cache
+dist/**             linguist-generated=true
+node_modules/**     linguist-vendored=true
+
+# Abaikan file konfigurasi non-kode utama
+*.json              linguist-detectable=false
+*.config.js         linguist-detectable=false
+*.bat               linguist-detectable=false
+
+# Tetapkan bahwa kode utama adalah TypeScript/TSX
+*.ts                linguist-detectable=true
+*.tsx               linguist-detectable=true
+*.css               linguist-detectable=true

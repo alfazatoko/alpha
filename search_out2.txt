@@ -1,0 +1,15 @@
+===================
+<USER_REQUEST>
+
+Tambah Stok Baru (Barang Masuk)
+Catat penambahan voucher baru jika ada barang masuk di tengah shift.
+
+atur tombol = Kembali ke Stok Awal
+Simpan Stok & Buka Toko
+
+agar di muculkan saja, tidak ikut terscroll ke bawah.
+atur pas di atas tombol navigasi.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T11:28:20+08:00.
+</ADDITIONAL_METADATA>

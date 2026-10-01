@@ -1,0 +1,2981 @@
+/** 
+ * @license 
+ * SPDX-License-Identifier: Apache-2.0 
+ */
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Package, 
+  CheckCircle2, 
+  ArrowRight, 
+  ArrowLeft,
+  Lock, 
+  Unlock, 
+  Check, 
+  Banknote, 
+  Handshake, 
+  AlertCircle,
+  QrCode,
+  Tag,
+  Plus,
+  Minus,
+  Database,
+  ListFilter,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  PackagePlus,
+  ClipboardCheck,
+  Pencil,
+  RefreshCcw,
+  Store,
+  Loader2,
+  Eye,
+  LogOut
+} from 'lucide-react';
+import type { VoucherProduct, Cashier, Transaction, UserRole } from '../types';
+
+export interface StockAuditItem {
+  productId: string;
+  productName: string;
+  price: number;
+  previousStock: number;
+  incomingStock: number;
+  initialStock: number;
+  finalStock: number;
+  auditReason: 'penjualan' | 'audit' | null;
+}
+
+interface AturStokTabProps {
+  products: VoucherProduct[];
+  activeCashier: Cashier;
+  nextCashier: Cashier;
+  allCashiers?: Cashier[];
+  sessionKey: string; // key unik per kasir+toko untuk localStorage
+  transactions: Transaction[];
+  userRole: UserRole;
+  theme?: 'dark' | 'light';
+  isActiveCashierOnDuty?: boolean;
+  activeShiftCashierName?: string;
+  onUpdateProductStock: (productId: string, newStock: number, subReason?: 'penjualan' | 'audit' | 'restock') => void;
+  onBulkUpdateProductStock: (updates: { productId: string; newStock: number; subReason?: 'penjualan' | 'audit' }[]) => void;
+  onRecordHandover: (handoverData: any) => void;
+  onSwitchCashier: () => void;
+  onBackToDashboard: () => void;
+  onTakeoverStock?: () => void;
+  onBukaTokoSuccess?: () => void;
+  cloudSession?: any;
+  onSyncSession?: (data: any) => void;
+}
+
+/**
+ * Compact circular operator logo for the stock table and modal
+ */
+function CompactOperatorLogo({ name, operator, size = 'sm' }: { name: string; operator?: string; size?: 'sm' | 'md' | 'lg' }) {
+  const text = (operator || name || '').toLowerCase();
+  
+  const dim = size === 'lg' 
+    ? 'w-8 h-8 sm:w-9 sm:h-9' 
+    : size === 'md'
+    ? 'w-6 h-6 sm:w-7 sm:h-7'
+    : 'w-5 h-5 sm:w-6 sm:h-6';
+
+  const fontText = size === 'lg' ? 'text-xs sm:text-sm' : size === 'md' ? 'text-[9.5px] sm:text-[10.5px]' : 'text-[8px] sm:text-[8.5px]';
+  const svgSize = size === 'lg' ? 'w-4 h-4 sm:w-5 sm:h-5' : size === 'md' ? 'w-3.5 h-3.5 sm:w-4 sm:h-4' : 'w-3 h-3 sm:w-3.5 sm:h-3.5';
+
+  if (text.includes('axis')) {
+    return (
+      <div className={`${dim} rounded-full bg-[#7c2d82] flex items-center justify-center text-slate-900 dark:text-white font-black ${fontText} tracking-tight shadow-xs shrink-0 border border-purple-400/30`}>
+        axis
+      </div>
+    );
+  }
+  if (text.includes('telkomsel') || text.includes('tsel')) {
+    return (
+      <div className={`${dim} rounded-full bg-[#e11424] flex items-center justify-center text-slate-900 dark:text-white shadow-xs shrink-0 border border-red-400/30`}>
+        <svg viewBox="0 0 100 100" className={svgSize}>
+          <polygon points="50,5 92,50 50,95 8,50" fill="#ffffff" />
+          <path d="M 28 32 L 72 32 L 72 44 L 56 44 L 56 75 L 44 75 L 44 44 L 28 44 Z" fill="#e11424" />
+        </svg>
+      </div>
+    );
+  }
+  if (text.includes('im3') || text.includes('indosat') || text.includes('isat')) {
+    return (
+      <div className={`${dim} rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center text-black font-black ${fontText} tracking-tight shadow-xs border border-yellow-300/50`}>
+        im3
+      </div>
+    );
+  }
+  if (text.includes('tri') || text.includes('3')) {
+    return (
+      <div className={`${dim} rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-slate-900 dark:text-white font-black ${fontText} shadow-xs shrink-0 border border-slate-700`}>
+        3
+      </div>
+    );
+  }
+  if (text.includes('xl')) {
+    return (
+      <div className={`${dim} rounded-full bg-[#0284c7] flex items-center justify-center text-slate-900 dark:text-white font-black ${fontText} shadow-xs shrink-0 border border-blue-400/40`}>
+        XL
+      </div>
+    );
+  }
+  if (text.includes('smartfren') || text.includes('smart')) {
+    return (
+      <div className={`${dim} rounded-full bg-[#e11d48] flex items-center justify-center text-slate-900 dark:text-white font-black ${fontText} shadow-xs shrink-0 border border-pink-400/30`}>
+        S
+      </div>
+    );
+  }
+  return (
+    <div className={`${dim} rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-slate-900 dark:text-white font-bold ${fontText} shadow-xs shrink-0`}>
+      {name.substring(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+export default function AturStokTab({
+  products,
+  activeCashier,
+  nextCashier,
+  allCashiers,
+  sessionKey,
+  transactions,
+  userRole,
+  theme = 'dark',
+  isActiveCashierOnDuty = true,
+  activeShiftCashierName = 'Kasir Lain',
+  onUpdateProductStock,
+  onBulkUpdateProductStock,
+  onRecordHandover,
+  onSwitchCashier,
+  onBackToDashboard,
+  onTakeoverStock,
+  onBukaTokoSuccess,
+  cloudSession,
+  onSyncSession
+}: AturStokTabProps) {
+  const [forcePantau, setForcePantau] = useState(false);
+
+  // ─── SESSION PERSISTENCE KEY ───────────────────────────────────────────────
+  const isOwnerMode = userRole === 'owner';
+  // Owner masuk sebagai read-only di kolom atur stok (tidak bisa edit/input stok)
+  // Kasir non-aktif (bukan giliran) juga read-only
+  const isReadOnly = isOwnerMode || !isActiveCashierOnDuty || forcePantau;
+
+  // ─── LOAD SESSION DARI CLOUD ────────────────────
+  const loadedSession = cloudSession || null;
+
+  const [isRestoredSession] = useState(!!loadedSession);
+  const [isBukaTokoCompleted, setIsBukaTokoCompleted] = useState(loadedSession?.isBukaTokoCompleted ?? false);
+
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(loadedSession?.currentStep as any ?? 1);
+  const [viewMode, setViewMode] = useState<'lobby' | 'buka' | 'tutup'>('lobby');
+  // States for Buka Toko PIN
+  const [showBukaTokoPin, setShowBukaTokoPin] = useState(false);
+  const [bukaTokoPinInput, setBukaTokoPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  
+  const handleBukaTokoSubmit = () => {
+    // Ambil PIN kasir yang tersimpan. Jika tidak ada PIN (kosong/undefined), tolak login.
+    const kasirPin = (activeCashier.pin || '').trim();
+    const inputPin = bukaTokoPinInput.trim();
+
+    if (!kasirPin) {
+      // Kasir belum punya PIN — tampilkan pesan khusus
+      alert(`${activeCashier.name} belum memiliki PIN. Hubungi Owner untuk mengatur PIN terlebih dahulu.`);
+      setBukaTokoPinInput('');
+      return;
+    }
+
+    if (inputPin === kasirPin) {
+      setPinError(false);
+      setShowBukaTokoPin(false);
+      setBukaTokoPinInput('');
+      
+      // Animasi megah buka toko
+      setIsOpeningStore(true);
+      setTimeout(() => {
+        setIsOpeningStore(false);
+        setViewMode('buka');
+        setCurrentStep(1);
+        if (onBukaTokoSuccess) {
+          onBukaTokoSuccess();
+        }
+      }, 2000);
+    } else {
+      setPinError(true);
+      setBukaTokoPinInput('');
+      setTimeout(() => setPinError(false), 2000);
+    }
+  };
+
+  const [isOpeningStore, setIsOpeningStore] = useState(false);
+  const [isClosingStore, setIsClosingStore] = useState(false);
+  
+  const isStep1ReadOnly = isReadOnly || viewMode === 'lobby';
+
+  const [items, setItems] = useState<StockAuditItem[]>(loadedSession?.items ?? []);
+  const [isInitialLocked, setIsInitialLocked] = useState(loadedSession?.isInitialLocked ?? false);
+  const [isIncomingLocked, setIsIncomingLocked] = useState(loadedSession?.isIncomingLocked ?? false);
+  const [activeEditingRow, setActiveEditingRow] = useState<{ step: 1 | 2 | 3; type: 'incoming' | 'initial' | 'final'; productId: string | null }>({ step: 1, type: 'initial', productId: null });
+  const [showIncomingStock, setShowIncomingStock] = useState(loadedSession?.showIncomingStock ?? false);
+  const [showStatusColumn, setShowStatusColumn] = useState(loadedSession?.showStatusColumn ?? false);
+  const [selectedOperator, setSelectedOperator] = useState<string>('SEMUA');
+
+  const filteredItems = useMemo(() => {
+    // Filter to ensure only products that are still visible (not hidden by owner) are shown
+    const activeItems = items.filter(item => products.some(p => p.id === item.productId));
+    
+    let result = activeItems;
+    if (selectedOperator !== 'SEMUA') {
+      result = activeItems.filter(item => {
+        const brand = item.productName.split(' ')[0].toLowerCase();
+        const op = selectedOperator.toLowerCase();
+        
+        if (op === 'indosat' || op === 'im3') {
+          return brand.includes('indosat') || brand.includes('im3') || brand.includes('isat');
+        }
+        if (op === 'tsel' || op === 'telkomsel') {
+          return brand.includes('telkomsel') || brand.includes('tsel');
+        }
+        if (op === 'three' || op === '3') {
+          return brand.includes('three') || brand.includes('3');
+        }
+        return brand.includes(op);
+      });
+    }
+
+    // SORT THE ARRAY TO MATCH THE VISUAL GROUPING ORDER
+    const operatorsList = ['Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren', 'Lainnya'];
+    const checkOp = (safeOp: string, tgt: string) => {
+      if (tgt === 'telkomsel' && (safeOp.includes('tsel') || safeOp.includes('telkomsel'))) return true;
+      if (tgt === 'tri' && (safeOp.includes('tri') || safeOp.includes('three') || safeOp.includes('3'))) return true;
+      if (tgt === 'indosat' && (safeOp.includes('indosat') || safeOp.includes('im3') || safeOp.includes('isat'))) return true;
+      return safeOp.includes(tgt);
+    };
+
+    const sortedResult: StockAuditItem[] = [];
+    operatorsList.forEach(op => {
+      const opItems = result.filter(item => {
+        const p = products.find(prod => prod.id === item.productId);
+        if (!p) return false;
+        const safeOp = (p.operator || '').toLowerCase();
+        return checkOp(safeOp, op.toLowerCase()) || 
+          (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => checkOp(safeOp, o.toLowerCase())));
+      });
+      sortedResult.push(...opItems);
+    });
+
+    return sortedResult;
+  }, [items, selectedOperator, products]);
+
+  // Global Keyboard Shortcuts for Edit Modal
+  useEffect(() => {
+    if (!activeEditingRow.productId) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Allow default input behavior for text inputs but let Enter save
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          setActiveEditingRow(prev => ({ ...prev, productId: null }));
+        }
+        return;
+      }
+      
+      const currentIdx = filteredItems.findIndex(i => i.productId === activeEditingRow.productId);
+      const hasPrev = currentIdx > 0;
+      const hasNext = currentIdx < filteredItems.length - 1;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setActiveEditingRow(prev => ({ ...prev, productId: null }));
+      } else if (e.key === 'ArrowLeft' && hasPrev) {
+        e.preventDefault();
+        setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx - 1].productId }));
+      } else if (e.key === 'ArrowRight' && hasNext) {
+        e.preventDefault();
+        setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx + 1].productId }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeEditingRow, filteredItems]);
+
+  // Step 3 Cash States
+  const [cashPhysical, setCashPhysical] = useState(loadedSession?.cashPhysical ?? '');
+  const [catatanSelisih, setCatatanSelisih] = useState(loadedSession?.catatanSelisih ?? '');
+  const [isHandoverSuccess, setIsHandoverSuccess] = useState(false);
+
+  // Kasir penerima serah terima (bisa dipilih dari daftar)
+  const [selectedToCashierId, setSelectedToCashierId] = useState<string>(loadedSession?.selectedToCashierId ?? nextCashier.id);
+
+  // ── SELF-HANDOVER: Kasir bisa serah terima ke diri sendiri (untuk toko 1 kasir / rotasi jadwal) ──
+  // Buat virtual entry "diri sendiri" yang selalu tersedia
+  const selfCashierOption = { ...activeCashier, name: activeCashier.name + ' (Tutup Shift)', id: activeCashier.id + '__self' };
+  // Daftar kasir lain (exclude diri sendiri)
+  const otherCashiers = (allCashiers || [nextCashier]).filter(c => c.id !== activeCashier.id);
+  // Gabungkan: kasir lain DULU, lalu opsi diri sendiri di bawah
+  const availableToCashiers = [...otherCashiers, selfCashierOption];
+  // Resolve kasir terpilih — jika self, gunakan selfCashierOption
+  const selectedToCashier = availableToCashiers.find(c => c.id === selectedToCashierId) || (otherCashiers[0] || selfCashierOption);
+  // Flag apakah ini self-handover
+  const isSelfHandover = selectedToCashier.id === selfCashierOption.id;
+
+  const isLight = theme === 'light';
+
+  // ─── SINKRONISASI REAL-TIME UNTUK MODE PANTAU (READ-ONLY) ──────────────────
+  useEffect(() => {
+    if (isReadOnly && cloudSession) {
+      if (cloudSession.currentStep) setCurrentStep(cloudSession.currentStep as any);
+      if (cloudSession.items) setItems(cloudSession.items);
+      if (cloudSession.isInitialLocked !== undefined) setIsInitialLocked(cloudSession.isInitialLocked);
+      if (cloudSession.isIncomingLocked !== undefined) setIsIncomingLocked(cloudSession.isIncomingLocked);
+      if (cloudSession.showIncomingStock !== undefined) setShowIncomingStock(cloudSession.showIncomingStock);
+      if (cloudSession.showStatusColumn !== undefined) setShowStatusColumn(cloudSession.showStatusColumn);
+      if (cloudSession.cashPhysical !== undefined) setCashPhysical(cloudSession.cashPhysical);
+      if (cloudSession.catatanSelisih !== undefined) setCatatanSelisih(cloudSession.catatanSelisih);
+      if (cloudSession.selectedToCashierId !== undefined) setSelectedToCashierId(cloudSession.selectedToCashierId);
+
+      if (cloudSession.isBukaTokoCompleted !== undefined) setIsBukaTokoCompleted(cloudSession.isBukaTokoCompleted);
+    }
+  }, [cloudSession, isReadOnly]);
+
+  // ─── AUTO-SAVE KE CLOUD ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (isHandoverSuccess) return; // Jangan simpan state "sudah selesai"
+    // Jangan push data jika kita sedang di mode pantau (readonly)
+    if (isReadOnly) return;
+
+    const session = {
+      currentStep,
+      items,
+      isInitialLocked,
+      isIncomingLocked,
+      showIncomingStock,
+      showStatusColumn,
+      cashPhysical,
+      catatanSelisih,
+      selectedToCashierId,
+      sessionStartedAt: loadedSession?.sessionStartedAt ?? new Date().toISOString(),
+      isBukaTokoCompleted
+    };
+    if (onSyncSession) {
+      onSyncSession(session);
+    }
+  }, [currentStep, items, isInitialLocked, isIncomingLocked, showIncomingStock, showStatusColumn, cashPhysical, catatanSelisih, selectedToCashierId, isHandoverSuccess, isBukaTokoCompleted, isReadOnly, loadedSession, onSyncSession]);
+
+
+  // Initialize items from products — hanya jika TIDAK ada sesi yang di-restore
+  useEffect(() => {
+    if (isRestoredSession) return; // Sesi lama sudah di-load, jangan overwrite
+    if (items.length === 0 && products.length > 0) {
+      const initialItems = products.map(p => ({
+        productId: p.id,
+        productName: p.name,
+        price: p.sellingPrice || 0,
+        previousStock: p.currentStock || 0,
+        incomingStock: 0,
+        initialStock: p.currentStock || 0,
+        finalStock: p.currentStock || 0,
+        auditReason: null as 'penjualan' | 'audit' | null
+      }));
+      setItems(initialItems);
+    }
+  }, [products, isRestoredSession]);
+
+  // Find current shift transactions
+  const currentShiftTransactions = useMemo(() => {
+    const shiftTrx = [];
+    for (const trx of transactions) {
+      if (trx.type === 'SERAH_TERIMA') break;
+      shiftTrx.push(trx);
+    }
+    return shiftTrx;
+  }, [transactions]);
+
+  // Aggregate values
+  const totalPreviousStock = items.reduce((sum, i) => sum + i.previousStock, 0);
+  const totalIncomingStock = items.reduce((sum, i) => sum + i.incomingStock, 0);
+  const totalInitialStock = items.reduce((sum, i) => sum + i.initialStock, 0);
+  const totalFinalStock = items.reduce((sum, i) => sum + i.finalStock, 0);
+
+  // Sales calculations
+  const totalSoldPcs = items.reduce((sum, i) => sum + Math.max(0, (i.initialStock + i.incomingStock) - i.finalStock), 0);
+  const totalSalesAmount = items.reduce((sum, i) => sum + (Math.max(0, (i.initialStock + i.incomingStock) - i.finalStock) * i.price), 0);
+  
+  // Calculate digital payments from shift transactions
+  const { totalDigitalAmount, totalDigitalPcs } = useMemo(() => {
+    const digitalTrx = currentShiftTransactions.filter(trx => 
+      trx.type === 'PENJUALAN' && 
+      (trx.paymentMethod === 'NON_TUNAI' || trx.paymentMethod === 'QRIS' || trx.paymentMethod === 'TRANSFER')
+    );
+    return {
+      totalDigitalAmount: digitalTrx.reduce((sum, trx) => sum + trx.amount, 0),
+      totalDigitalPcs: digitalTrx.reduce((sum, trx) => sum + trx.quantity, 0)
+    };
+  }, [currentShiftTransactions]);
+
+  const totalCashExpected = totalSalesAmount - totalDigitalAmount;
+  const totalCashPcs = totalSoldPcs - totalDigitalPcs;
+  const physicalCashValue = parseInt(cashPhysical.replace(/[^\d-]/g, ''), 10) || 0;
+  const cashDifference = physicalCashValue - totalCashExpected;
+  const isCashMatched = physicalCashValue === totalCashExpected;
+
+  const handleCashPhysicalChange = (raw: string) => {
+    const isNegative = raw.startsWith('-');
+    const clean = raw.replace(/\D/g, '');
+    if (!clean) {
+      setCashPhysical(isNegative ? '-' : '');
+      return;
+    }
+    const formatted = parseInt(clean, 10).toLocaleString('id-ID');
+    setCashPhysical(isNegative ? `-${formatted}` : formatted);
+  };
+
+  const handleSyncCashPhysical = () => {
+    if (totalCashExpected === 0) {
+      setCashPhysical('0');
+    } else {
+      setCashPhysical(totalCashExpected.toLocaleString('id-ID'));
+    }
+  };
+
+  const handleInitialDelta = (productId: string, delta: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newInitial = Math.max(0, item.initialStock + delta);
+        const expected = item.previousStock + item.incomingStock;
+        let reason = item.auditReason;
+        if (newInitial < expected && !reason) {
+          reason = 'penjualan';
+        } else if (newInitial >= expected) {
+          reason = null;
+        }
+        return { 
+          ...item, 
+          initialStock: newInitial,
+          finalStock: newInitial,
+          auditReason: reason
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleIncomingDelta = (productId: string, delta: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newIncoming = Math.max(0, item.incomingStock + delta);
+        return { 
+          ...item, 
+          incomingStock: newIncoming,
+          finalStock: item.finalStock + delta
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleSetIncomingDirect = (productId: string, val: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newIncoming = Math.max(0, val);
+        const delta = newIncoming - item.incomingStock;
+        return { 
+          ...item, 
+          incomingStock: newIncoming,
+          finalStock: item.finalStock + delta
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleFinalDelta = (productId: string, delta: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, finalStock: Math.max(0, item.finalStock + delta) };
+      }
+      return item;
+    }));
+  };
+
+  const handleSetInitialDirect = (productId: string, val: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newInitial = Math.max(0, val);
+        const expected = item.previousStock + item.incomingStock;
+        let reason = item.auditReason;
+        if (newInitial < expected && !reason) {
+          reason = 'penjualan';
+        } else if (newInitial >= expected) {
+          reason = null;
+        }
+        return { 
+          ...item, 
+          initialStock: newInitial,
+          finalStock: newInitial,
+          auditReason: reason
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleSetFinalDirect = (productId: string, val: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, finalStock: Math.max(0, val) };
+      }
+      return item;
+    }));
+  };
+
+  const handleLockInitialStock = () => {
+    setIsInitialLocked(true);
+    setCurrentStep(2);
+    // Push updates to parent state
+    items.forEach(item => {
+      if (item.initialStock !== item.previousStock) {
+        onUpdateProductStock(item.productId, item.initialStock, item.auditReason || undefined);
+      }
+    });
+  };
+
+  // Takeover function removed — semua kasir kini bisa jaga toko secara langsung
+
+  const handleCompleteHandover = () => {
+    if (onSyncSession) onSyncSession(null);
+    setIsHandoverSuccess(true);
+    onRecordHandover({
+      initialStock: totalInitialStock,
+      incomingStock: totalIncomingStock,
+      finalStock: totalFinalStock,
+      totalSold: totalSoldPcs,
+      totalSales: totalSalesAmount,
+      qrisAmount: totalDigitalAmount,
+      qrisPcs: totalDigitalPcs,
+      cashExpected: totalCashExpected,
+      cashPhysical: physicalCashValue,
+      cashDiff: cashDifference,
+      note: catatanSelisih,
+      toCashierId: 'NONE',
+      toCashierName: 'Tutup Toko',
+      isSelfHandover: true,
+      items: items.map(i => ({
+        ...i
+      }))
+    });
+  };
+
+  const handleFinishAndSwitch = () => {
+    if (onSyncSession) onSyncSession(null);
+    // ✅ Tidak ganti kasir — kasir yang login tetap
+    // Kasir penerima harus login sendiri menggunakan akunnya
+    onSwitchCashier(); // Hanya trigger notifikasi di App.tsx
+    onBackToDashboard();
+  };
+
+  return (
+    <div className={`w-full space-y-3 font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-700 dark:text-slate-200'}`} id="atur-stok-container">
+      
+      {/* 🌟 ANIMASI BUKA TOKO MEGAH */}
+      <AnimatePresence>
+        {isOpeningStore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.5 } }}
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-slate-900"
+          >
+            {/* Background Glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-900/40 to-slate-900"></div>
+            
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                  className="absolute -inset-8 bg-blue-500/20 blur-3xl rounded-full"
+                ></motion.div>
+                <div className="w-28 h-28 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-3xl shadow-2xl shadow-blue-500/50 flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/20 blur-xl mix-blend-overlay"></div>
+                  <Store className="w-16 h-16 text-white drop-shadow-lg" />
+                </div>
+              </div>
+              
+              <motion.h1
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-cyan-200 mt-8 tracking-widest uppercase"
+              >
+                Membuka Toko
+              </motion.h1>
+              
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="flex items-center gap-2 mt-6"
+              >
+                <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                <span className="text-blue-300/80 text-sm font-semibold tracking-wider">Mempersiapkan Rak...</span>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🌟 ANIMASI TUTUP TOKO MEGAH */}
+      <AnimatePresence>
+        {isClosingStore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.5 } }}
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-slate-900"
+          >
+            {/* Background Glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-rose-900/40 to-slate-900"></div>
+            
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ rotate: -360 }}
+                  transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                  className="absolute -inset-8 bg-rose-500/20 blur-3xl rounded-full"
+                ></motion.div>
+                <div className="w-28 h-28 bg-gradient-to-tr from-rose-600 to-red-400 rounded-3xl shadow-2xl shadow-rose-500/50 flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/20 blur-xl mix-blend-overlay"></div>
+                  <Lock className="w-16 h-16 text-white drop-shadow-lg" />
+                </div>
+              </div>
+              
+              <motion.h1
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-200 to-rose-200 mt-8 tracking-widest uppercase"
+              >
+                Menutup Toko
+              </motion.h1>
+              
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="flex items-center gap-2 mt-6"
+              >
+                <Loader2 className="w-5 h-5 text-rose-400 animate-spin" />
+                <span className="text-rose-300/80 text-sm font-semibold tracking-wider">Merekap Penjualan...</span>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODE PANTAU BANNER (READ-ONLY) — hanya tampil jika ada kasir lain yang benar-benar aktif */}
+      {isReadOnly && (isOwnerMode || (activeShiftCashierName && activeShiftCashierName !== 'Tidak Ada')) && (
+        <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border shadow-xs ${
+          isLight 
+            ? 'bg-amber-100/90 border-amber-300/80 text-amber-950' 
+            : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+        }`}>
+          <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+            <Lock className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-950' : 'text-amber-300'}`}>
+              {isOwnerMode ? 'Mode Pantau (Owner)' : 'Mode Pantau — Bukan Giliran Anda'}
+            </p>
+            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-900' : 'text-amber-200'}`}>
+              {isOwnerMode 
+                ? 'Atur stok hanya bisa dilakukan oleh Kasir aktif.' 
+                : `Shift saat ini dipegang oleh Kasir: ${activeShiftCashierName}. Anda hanya dapat melihat data stok.`
+              }
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* BANNER: Sesi Dilanjutkan (jika restore dari localStorage/cloud) */}
+      {isRestoredSession && !isHandoverSuccess && !isReadOnly && viewMode !== 'lobby' && (() => {
+        const isUnfinishedBukaToko = currentStep <= 2 && !isBukaTokoCompleted;
+        const isUnfinishedTutupToko = currentStep > 2;
+        if (!isUnfinishedBukaToko && !isUnfinishedTutupToko) return null;
+        return (
+        <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border ${
+          isLight
+            ? 'bg-amber-50 border-amber-300 text-amber-800'
+            : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+        }`}>
+          <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-black uppercase tracking-wide ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>Melanjutkan Sesi Sebelumnya</p>
+            <p className={`text-[9px] font-medium mt-0.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
+              {viewMode === 'buka'
+                ? `Step ${currentStep}/2 tersimpan`
+                : `Step ${currentStep - 2}/3 tersimpan`
+              }
+              {loadedSession?.sessionStartedAt ? ` · Dimulai ${new Date(loadedSession.sessionStartedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB` : ''}
+            </p>
+          </div>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                if (viewMode === 'buka') {
+                  if (window.confirm('Reset seluruh data Buka Toko dan mulai dari awal?')) {
+                    if (onSyncSession) onSyncSession(null);
+                    window.location.reload();
+                  }
+                } else if (viewMode === 'tutup') {
+                  if (window.confirm('Ulangi proses Tutup Toko? (Data Buka Toko Anda akan tetap aman)')) {
+                    // Reset Tutup Toko fields only
+                    setCurrentStep(3);
+                    setCashPhysical('');
+                    setCatatanSelisih('');
+                    setSelectedToCashierId('');
+                    
+                    // Reset finalStock in items to match initial + incoming
+                    const resettedItems = items.map(item => ({
+                      ...item,
+                      finalStock: (item.initialStock || 0) + (item.incomingStock || 0),
+                      auditReason: null
+                    }));
+                    setItems(resettedItems);
+                    
+                    // Force save the new state immediately
+                    if (onSyncSession) {
+                      onSyncSession({
+                        currentStep: 3,
+                        items: resettedItems,
+                        isInitialLocked,
+                        isIncomingLocked,
+                        showIncomingStock,
+                        showStatusColumn,
+                        cashPhysical: '',
+                        catatanSelisih: '',
+                        selectedToCashierId: '',
+                        sessionStartedAt: loadedSession?.sessionStartedAt ?? new Date().toISOString(),
+                        isBukaTokoCompleted
+                      });
+                    }
+                  }
+                }
+              }}
+              className={`text-[9px] font-black px-2 py-1 rounded-lg border cursor-pointer transition ${
+                isLight ? 'border-amber-400 text-amber-700 hover:bg-amber-100' : 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'
+              }`}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* 0. LOBBY: PILIH MODE BUKA / TUTUP TOKO */}
+      {/* ========================================================================= */}
+      {viewMode === 'lobby' && !isHandoverSuccess && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 mt-2 mb-8">
+          <div className="text-center px-4">
+            <h2 className={`text-xl font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Alur Shift Kasir</h2>
+            <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Pilih proses yang ingin Anda lakukan saat ini.</p>
+          </div>
+
+          <div className="max-w-xs mx-auto px-4 flex flex-col gap-4 relative">
+            
+            {/* PANTAU STOK VOUCHER (Bisa diklik semua: Owner & Kasir Lain) */}
+            <button
+              onClick={() => {
+                setForcePantau(true);
+                const targetStep = loadedSession ? loadedSession.currentStep : 2;
+                setCurrentStep(targetStep === 1 ? 2 : targetStep);
+                setViewMode(targetStep <= 2 ? 'buka' : 'tutup');
+              }}
+              className={`w-full relative overflow-hidden rounded-xl p-2.5 text-left border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                isLight 
+                  ? 'bg-amber-50/80 border-amber-200 shadow-xs'
+                  : 'bg-amber-900/20 border-amber-500/30'
+              }`}
+            >
+              <div className="flex items-center gap-3 relative z-10">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  isLight ? 'bg-amber-100 text-amber-500' : 'bg-amber-900/50 text-amber-400'
+                }`}>
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className={`text-[11px] font-bold uppercase tracking-wider ${
+                    isLight ? 'text-amber-800' : 'text-amber-300'
+                  }`}>
+                    Pantau Stok
+                  </h3>
+                  <p className={`text-[9px] font-medium ${
+                    isLight ? 'text-amber-600/70' : 'text-amber-400/60'
+                  }`}>
+                    Lihat stok tanpa buka shift
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {!isReadOnly && (
+              <>
+                {/* Connecting Line */}
+                <div className={`w-0.5 h-6 mx-auto ${isLight ? 'bg-slate-200' : 'bg-slate-700'}`}></div>
+
+                {/* PIN Input Form (Only shows when trying to open store) */}
+                {viewMode === 'lobby' && showBukaTokoPin && !isBukaTokoCompleted && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className={`p-4 rounded-xl border mb-2 shadow-inner ${
+                      pinError
+                        ? 'border-red-500/60 bg-red-500/10'
+                        : isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/50 border-slate-700'
+                    }`}
+                  >
+                    <p className={`text-xs font-bold mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                      Masukkan PIN Anda ({activeCashier.name}):
+                    </p>
+                    {pinError && (
+                      <p className="text-[10px] font-bold text-red-400 mb-2">
+                        ❌ PIN salah. Coba lagi.
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        autoFocus
+                        value={bukaTokoPinInput}
+                        onChange={(e) => { setBukaTokoPinInput(e.target.value); if (pinError) setPinError(false); }}
+                        placeholder="PIN Kasir..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleBukaTokoSubmit();
+                        }}
+                        className={`flex-1 min-w-0 text-sm rounded-lg px-3 py-2 border outline-none transition ${
+                          pinError
+                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                            : isLight 
+                              ? 'bg-white border-slate-300 focus:border-blue-500' 
+                              : 'bg-slate-900 border-slate-700 text-white focus:border-blue-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleBukaTokoSubmit}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition"
+                      >
+                        Buka
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBukaTokoPin(false);
+                        setBukaTokoPinInput('');
+                        setPinError(false);
+                      }}
+                      className={`mt-3 text-[10px] underline w-full text-center ${
+                        isLight ? 'text-slate-500' : 'text-slate-400'
+                      }`}
+                    >
+                      Batal
+                    </button>
+                  </motion.div>
+                )}
+
+                {/* BUKA TOKO BUTTON */}
+                {(!showBukaTokoPin || isBukaTokoCompleted) && (
+                <button
+                  onClick={() => {
+                    if (!isBukaTokoCompleted) {
+                      // Munculkan input PIN dulu
+                      setShowBukaTokoPin(true);
+                    } else {
+                      // Kalau sudah dibuka, langsung masuk ke Step 2 (stok masuk) tanpa animasi lama
+                      setViewMode('buka');
+                      setCurrentStep(2);
+                    }
+                  }}
+                  className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                    isLight 
+                      ? (isBukaTokoCompleted 
+                          ? 'bg-gradient-to-br from-emerald-50 to-green-100 border-emerald-300 shadow-sm' 
+                          : 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-400 shadow-xl shadow-blue-500/30 text-white')
+                      : (isBukaTokoCompleted
+                          ? 'bg-gradient-to-br from-emerald-950/40 to-green-900/40 border-emerald-500/50'
+                          : 'bg-gradient-to-br from-blue-600 to-indigo-700 border-blue-500 shadow-xl shadow-blue-900/50 text-white')
+                  }`}
+                >
+                  {/* Watermark Icon (Transparan di kanan bawah) */}
+                  <Store className={`absolute -right-4 -bottom-4 w-28 h-28 opacity-10 rotate-[-10deg] pointer-events-none ${isBukaTokoCompleted ? (isLight ? 'text-emerald-900' : 'text-emerald-100') : 'text-white'}`} />
+                  
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                      isBukaTokoCompleted
+                        ? (isLight ? 'bg-emerald-500 text-white' : 'bg-emerald-500 text-slate-900')
+                        : 'bg-white/20 text-white backdrop-blur-sm'
+                    }`}>
+                      {isBukaTokoCompleted ? <CheckCircle2 className="w-8 h-8" /> : <Store className="w-8 h-8" />}
+                    </div>
+                    <div>
+                      <h3 className={`text-sm font-black uppercase tracking-wider ${
+                        isBukaTokoCompleted
+                          ? (isLight ? 'text-emerald-900' : 'text-emerald-300')
+                          : 'text-white drop-shadow-md'
+                      }`}>
+                        {isBukaTokoCompleted ? 'Toko Dibuka' : 'Buka Toko'}
+                      </h3>
+                      <p className={`text-[10px] mt-0.5 font-medium ${
+                        isBukaTokoCompleted
+                          ? (isLight ? 'text-emerald-700/80' : 'text-emerald-400/80')
+                          : 'text-blue-100/90'
+                      }`}>
+                        {isBukaTokoCompleted ? 'Lihat / edit stok masuk' : 'Klik untuk mulai shift hari ini'}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                )}
+
+                {/* Connecting Line */}
+                <div className={`w-0.5 h-6 mx-auto ${isLight ? 'bg-slate-200' : 'bg-slate-700'}`}></div>
+
+                {/* TUTUP TOKO BUTTON */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      if (!isBukaTokoCompleted) return;
+                      const soldMap: Record<string, number> = {};
+                      currentShiftTransactions.forEach(trx => {
+                        if (trx.type === 'PENJUALAN' && trx.productId) {
+                          soldMap[trx.productId] = (soldMap[trx.productId] || 0) + (trx.quantity || 1);
+                    } else if (trx.type === 'PENJUALAN' && (trx as any).items) {
+                      (trx as any).items.forEach((item: any) => {
+                        soldMap[item.productId] = (soldMap[item.productId] || 0) + item.quantity;
+                      });
+                    }
+                  });
+                  setItems(prev => prev.map(item => ({
+                    ...item,
+                    finalStock: Math.max(0, item.initialStock + item.incomingStock - (soldMap[item.productId] || 0))
+                  })));
+                  
+                  // Munculkan animasi Tutup Toko
+                  setIsClosingStore(true);
+                  setTimeout(() => {
+                    setIsClosingStore(false);
+                    setViewMode('tutup');
+                    setCurrentStep(3);
+                  }, 2000);
+                }}
+                disabled={!isBukaTokoCompleted}
+                className={`w-full relative overflow-hidden rounded-2xl p-4 text-left border transition-all ${
+                  isBukaTokoCompleted
+                    ? `cursor-pointer hover:scale-105 active:scale-95 ${
+                        isLight
+                          ? 'bg-gradient-to-br from-red-500 to-rose-600 border-red-400 shadow-xl shadow-red-500/30 text-white'
+                          : 'bg-gradient-to-br from-red-600 to-rose-800 border-red-500 shadow-xl shadow-red-900/50 text-white'
+                      }`
+                    : `cursor-not-allowed opacity-60 ${
+                        isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/20 border-slate-700/50'
+                      }`
+                }`}
+              >
+                {/* Watermark Icon (Transparan di kanan bawah) */}
+                <Lock className={`absolute -right-4 -bottom-4 w-28 h-28 opacity-10 rotate-[10deg] pointer-events-none ${isBukaTokoCompleted ? 'text-white' : (isLight ? 'text-slate-400' : 'text-slate-500')}`} />
+                
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                    isBukaTokoCompleted
+                      ? 'bg-white/20 text-white backdrop-blur-sm'
+                      : (isLight ? 'bg-slate-300 text-slate-500' : 'bg-slate-700 text-slate-400')
+                  }`}>
+                    {isBukaTokoCompleted ? <ClipboardCheck className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-black uppercase tracking-wider ${
+                      isBukaTokoCompleted
+                        ? 'text-white drop-shadow-md'
+                        : (isLight ? 'text-slate-500' : 'text-slate-400')
+                    }`}>
+                      Tutup Toko
+                    </h3>
+                    <p className={`text-[10px] mt-0.5 font-medium ${
+                      isBukaTokoCompleted
+                        ? 'text-red-100/90'
+                        : (isLight ? 'text-slate-400' : 'text-slate-500')
+                    }`}>
+                      {isBukaTokoCompleted ? 'Hitung stok akhir & serah terima' : 'Selesaikan Buka Toko dulu'}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            </>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Takeover modal dihapus — semua kasir bisa buka toko secara langsung dengan PIN masing-masing */}
+
+      {/* Header lama (Top Card & Stepper) disembunyikan sesuai permintaan agar UI lebih minimalis */}
+
+
+      {/* ========================================================================= */}
+      {/* 1. LANGKAH 1: HITUNG STOK AWAL (BUKA SHIFT) / LOBBY TABLE */}
+      {/* ========================================================================= */}
+      {currentStep === 1 && viewMode !== 'lobby' && !isHandoverSuccess && (() => {
+        return (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2.5"
+        >
+          {/* Teks Judul disembunyikan agar lebih bersih */}
+
+          {/* Quick Metric & Action Row - 3 BALANCED MODERN CARDS */}
+          <div className="grid grid-cols-3 gap-1.5 px-0.5">
+            {/* 1. Total Stok Awal */}
+            <div className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800' 
+                : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
+            }`}>
+              <div className="flex items-center justify-between gap-0.5">
+                <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
+                  Stok Awal
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItems(prev => prev.map(item => ({
+                      ...item,
+                      initialStock: item.previousStock + item.incomingStock,
+                      finalStock: item.previousStock + item.incomingStock,
+                      auditReason: null
+                    })));
+                  }}
+                  className="text-blue-500 hover:text-emerald-500 p-0.5 transition cursor-pointer"
+                  title="Samakan semua stok awal dengan shift lalu"
+                >
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                </button>
+              </div>
+              <div className="flex items-baseline gap-0.5 mt-0.5">
+                <span className={`text-sm sm:text-lg font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  {totalInitialStock}
+                </span>
+                <span className={`text-[8px] sm:text-[9px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  Pcs
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Stok Shift Lalu */}
+            <div className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800' 
+                : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
+            }`}>
+              <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                Shift Lalu
+              </span>
+              <div className="flex items-baseline gap-0.5 mt-0.5">
+                <span className={`text-sm sm:text-lg font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  {totalPreviousStock}
+                </span>
+                <span className={`text-[8px] sm:text-[9px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  Pcs
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Filter / Kolom Status */}
+            <button 
+              type="button"
+              onClick={() => setShowStatusColumn(!showStatusColumn)}
+              className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs transition cursor-pointer text-left ${
+                showStatusColumn 
+                  ? (isLight ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-amber-500 bg-amber-950/50 text-amber-300')
+                  : (isLight ? 'bg-white border-slate-200 hover:border-amber-400 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/30 hover:border-amber-500/60 text-slate-900 dark:text-white')
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${
+                  showStatusColumn ? 'text-amber-700 dark:text-amber-300' : (isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400')
+                }`}>
+                  Status
+                </span>
+                <ListFilter className="w-3 h-3 shrink-0" />
+              </div>
+              <div className="flex items-baseline gap-0.5 mt-0.5">
+                <span className={`text-[10px] sm:text-xs font-black tracking-tight ${
+                  showStatusColumn ? (isLight ? 'text-amber-700' : 'text-amber-300') : (isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300')
+                }`}>
+                  {showStatusColumn ? 'Aktif' : 'Ringkas'}
+                </span>
+              </div>
+            </button>
+          </div>
+
+          {/* Operator Filter Chips */}
+          <div className="flex gap-1 overflow-x-auto pb-1.5 pt-1 px-0.5 custom-scrollbar">
+            {['SEMUA', 'AXIS', 'XL', 'TSEL', 'INDOSAT', 'THREE', 'SMARTFREN'].map(op => {
+              const isActive = selectedOperator === op;
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setSelectedOperator(op)}
+                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-850 hover:bg-slate-750 text-slate-300')
+                  }`}
+                >
+                  {op === 'TSEL' ? 'TELKOMSEL' : op === 'THREE' ? '3' : op}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* VOUCHER TABLE - STRICTLY 100% FIT IN 1 SCREEN (NO HORIZONTAL SCROLL) */}
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
+            isLight 
+              ? 'bg-white border-slate-200' 
+              : 'bg-white dark:bg-slate-800 border-blue-900/40 shadow-md'
+          }`}>
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
+                isLight 
+                  ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' 
+                  : 'bg-slate-800/95 border-blue-900/40 text-slate-300 font-bold'
+              }`}>
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className={`py-2 px-2 font-bold align-bottom first:rounded-tl-xl ${
+                    showStatusColumn ? 'w-[45%]' : 'w-[55%]'
+                  }`}>
+                    VOUCHER
+                  </th>
+                  <th className={`py-2 px-1 text-center font-bold opacity-70 align-bottom leading-tight ${
+                    showStatusColumn ? 'w-[18%]' : 'w-[20%]'
+                  }`}>
+                    STOK<br/>LALU
+                  </th>
+                  <th className={`py-2 px-1.5 text-center font-bold align-bottom leading-tight ${
+                    showStatusColumn ? 'w-[20%]' : 'w-[25%]'
+                  } ${
+                    isLight ? 'text-blue-700' : 'text-blue-400'
+                  } ${!showStatusColumn ? 'last:rounded-tr-xl' : ''}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <Pencil className="w-2.5 h-2.5 shrink-0" />
+                        <span>STOK<br/>AWAL</span>
+                      </div>
+                    </div>
+                  </th>
+                  {showStatusColumn && (
+                    <th className={`py-2 px-1 text-center font-bold w-[17%] align-bottom last:rounded-tr-xl`}>
+                      STATUS
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className={`text-xs divide-y ${
+                isLight ? 'divide-slate-100 bg-white' : 'divide-blue-900/20'
+              }`}>
+                {(() => {
+                  const operatorsList = ['Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren', 'Lainnya'];
+                  const OP_COLORS: Record<string, string> = {
+                    'Telkomsel': 'bg-rose-600 text-slate-900 dark:text-white',
+                    'Axis': 'bg-purple-600 text-slate-900 dark:text-white',
+                    'Indosat': 'bg-yellow-500 text-slate-900',
+                    'XL': 'bg-blue-600 text-slate-900 dark:text-white',
+                    'Tri': 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-900 dark:text-white',
+                    'Smartfren': 'bg-pink-600 text-slate-900 dark:text-white'
+                  };
+
+                  return operatorsList.map(op => {
+                    const opItems = filteredItems.filter(item => {
+                      const p = products.find(prod => prod.id === item.productId);
+                      if (!p) return false;
+                      const safeOp = (p.operator || '').toLowerCase();
+                      const checkOp = (o: string) => {
+                        const tgt = o.toLowerCase();
+                        if (tgt === 'telkomsel' && (safeOp.includes('tsel') || safeOp.includes('telkomsel'))) return true;
+                        if (tgt === 'tri' && (safeOp.includes('tri') || safeOp.includes('three') || safeOp.includes('3'))) return true;
+                        if (tgt === 'indosat' && (safeOp.includes('indosat') || safeOp.includes('im3') || safeOp.includes('isat'))) return true;
+                        return safeOp.includes(tgt);
+                      };
+                      return checkOp(op) || (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => checkOp(o)));
+                    });
+
+                    if (opItems.length === 0) return null;
+
+                    return (
+                      <React.Fragment key={op}>
+                        <tr className="bg-white dark:bg-slate-900">
+                          <td colSpan={7} className={`py-1.5 px-3 font-black text-[9px] text-left uppercase tracking-widest sticky left-0 z-10 border-y border-slate-200 dark:border-white/10 ${OP_COLORS[op] || 'bg-slate-700 text-slate-900 dark:text-white'}`}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-1 h-3 bg-white/30 rounded-full" />
+                              {op}
+                            </div>
+                          </td>
+                        </tr>
+                        {opItems.map((item) => {
+                  const expectedInitial = item.previousStock + item.incomingStock;
+                  const isMatched = item.initialStock === expectedInitial;
+                  const diffWithExpected = item.initialStock - expectedInitial;
+                  const productDetails = products.find(p => p.id === item.productId);
+                  const isEditingThis = activeEditingRow.productId === item.productId && activeEditingRow.type === 'initial';
+
+                  const nameParts = item.productName.split(' ');
+                  const brandTitle = nameParts[0];
+                  const variantSubtitle = nameParts.slice(1).join(' ');
+
+                  return (
+                    <tr 
+                      key={item.productId} 
+                      onClick={() => !isStep1ReadOnly && !isInitialLocked && !isOwnerMode && setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId })}
+                      className={`transition-colors ${isStep1ReadOnly || isOwnerMode ? 'cursor-default' : 'cursor-pointer'} ${
+                        isEditingThis 
+                          ? (isLight ? 'bg-blue-100/70 ring-1 ring-blue-400' : 'bg-blue-900/40 ring-1 ring-blue-500/50')
+                          : (isLight ? 'hover:bg-blue-50/60 bg-white' : 'hover:bg-blue-950/30')
+                      }`}
+                    >
+                      {/* PRODUK VOUCHER */}
+                      <td className="py-2.5 px-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            {/* Baris 1: Nama Provider */}
+                            <span className={`text-sm sm:text-base font-black truncate ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                              {brandTitle}
+                            </span>
+                            {/* Baris 2: Total GB / Masa Aktif */}
+                            <span className={`text-xs sm:text-[13px] font-bold truncate ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {variantSubtitle || item.productName}
+                            </span>
+                            {/* Baris 3: Harga */}
+                            <span className={`text-[10px] sm:text-xs font-mono font-bold ${
+                              isLight ? 'text-blue-700' : 'text-blue-400'
+                            }`}>
+                              Rp{item.price.toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* STOK SHIFT LALU */}
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{item.previousStock}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
+                      </td>
+
+                      {/* STOK FISIK AWAL */}
+                      <td className="py-2 px-1 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isStep1ReadOnly && !isInitialLocked) {
+                                setActiveEditingRow({ step: 1, type: 'initial', productId: item.productId });
+                              }
+                            }}
+                            disabled={isStep1ReadOnly || isInitialLocked}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isStep1ReadOnly || isInitialLocked ? 'cursor-default' : 'cursor-pointer active:scale-95'} ${
+                              isLight 
+                                ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700' 
+                                : 'bg-blue-950/40 hover:bg-blue-900/50 border-blue-500/30 text-blue-400'
+                            }`}
+                            title={isStep1ReadOnly || isInitialLocked ? 'Tidak bisa diedit saat ini' : 'Ketuk untuk ubah stok awal'}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.initialStock}
+                            </span>
+                          </button>
+                          {!isStep1ReadOnly && !isInitialLocked && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-blue-500' : 'text-blue-400'}`} />}
+                        </div>
+                      </td>
+
+                      {/* STATUS (OPTIONAL) */}
+                      {showStatusColumn && (
+                        <td className="py-2 px-1 text-center">
+                          {isMatched ? (
+                            <span className={`inline-flex items-center gap-0.5 text-[8.5px] font-bold px-1 py-0.5 rounded border ${
+                              isLight ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-950/60 text-emerald-500 font-black dark:text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Pas
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center gap-0.5 text-[8.5px] font-bold px-1 py-0.5 rounded border ${
+                              diffWithExpected > 0 
+                                ? (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-950/60 text-blue-400 border-blue-500/30')
+                                : (isLight ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-rose-950/60 text-rose-500 font-black dark:text-rose-400 border-rose-500/30')
+                            }`}>
+                              {diffWithExpected > 0 ? `+${diffWithExpected}` : diffWithExpected}
+                              {diffWithExpected < 0 && (
+                                <span className="ml-0.5 text-[7px] uppercase opacity-80 font-black">
+                                  ({item.auditReason === 'audit' ? 'Hilang' : 'Jual'})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                        })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Bottom Bar: Total Stok & Kunci */}
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-3 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${
+              isLight 
+                ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' 
+                : 'bg-slate-900/95 border-white/10 shadow-black/50 text-white'
+            }`}>
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                isLight 
+                  ? 'bg-slate-100 border-slate-200 text-slate-600' 
+                  : 'bg-white dark:bg-slate-800 border-slate-700/70 text-slate-600 dark:text-slate-400'
+              }`}>
+                <Database className="w-4 h-4" />
+              </div>
+              
+              <div className="flex flex-col">
+                <span className={`text-[8px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Stok Shift Lalu</span>
+                <span className={`text-xs sm:text-sm font-bold leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  {totalPreviousStock}
+                </span>
+              </div>
+              
+              <div className={`w-[1px] h-5 mx-1 ${isLight ? 'bg-slate-200' : 'bg-slate-700/60'}`} />
+              
+              <div className="flex flex-col">
+                <span className={`text-[8px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>Total Siap Jual</span>
+                <div className="flex items-baseline gap-0.5">
+                  <span className={`text-xs sm:text-sm font-bold leading-tight ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    {totalInitialStock}
+                  </span>
+                  <span className={`text-[8.5px] font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-500/70'}`}>
+                    Pcs
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {!isReadOnly && (isInitialLocked ? (
+              <div className="flex gap-1.5">
+                <button 
+                  onClick={() => setIsInitialLocked(false)} 
+                  className={`px-2.5 py-1.5 rounded-lg font-bold text-[9px] sm:text-[10px] transition flex items-center gap-1 cursor-pointer border ${
+                    isLight 
+                      ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' 
+                      : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-700'
+                  }`}
+                >
+                  <Unlock className="w-3 h-3" /> Buka Kunci
+                </button>
+                <button 
+                  onClick={() => setCurrentStep(2)} 
+                  className="px-3.5 py-1.5 bg-blue-600 text-slate-900 dark:text-white rounded-lg font-bold text-[9px] sm:text-[10px] hover:bg-blue-500 transition flex items-center gap-1 shadow-md shadow-blue-500/20 cursor-pointer"
+                >
+                  Lanjut <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleLockInitialStock} 
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-900 dark:text-white rounded-xl font-bold text-[9.5px] sm:text-xs transition flex items-center gap-1.5 shadow-md shadow-emerald-600/25 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" /> Kunci Stok Awal & Lanjut
+              </button>
+            ))}
+            </div>
+          </div>
+        </motion.div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* 2. LANGKAH 2: TAMBAH STOK BARU (BARANG MASUK) */}
+      {/* ========================================================================= */}
+      {currentStep === 2 && viewMode !== 'lobby' && !isHandoverSuccess && (
+        <div className="pb-24">
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2.5"
+        >
+
+          {/* Header */}
+          <div className="px-1 flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <div className="w-5 h-5 rounded-full bg-indigo-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
+                2
+              </div>
+              <div>
+                <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  Tambah Stok Baru (Barang Masuk)
+                </h3>
+                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 leading-tight ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
+                  Catat penambahan voucher baru jika ada barang masuk di tengah shift.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-indigo-900/40 shadow-md'
+          }`}>
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
+                isLight ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' : 'bg-slate-800/95 border-indigo-900/40 text-slate-300 font-bold'
+              }`}>
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className="py-2 px-2 w-[42%] sm:w-[40%] font-bold align-bottom first:rounded-tl-xl">VOUCHER</th>
+                  <th className="py-2 px-1 text-center w-[16%] sm:w-[20%] font-bold opacity-70 align-bottom leading-tight">STOK<br/>AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[26%] sm:w-[20%] font-bold align-bottom leading-tight ${isLight ? 'text-indigo-700' : 'text-indigo-400'}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <span>+ STOK<br/>BARU</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th className="py-2 px-2 text-right w-[16%] sm:w-[20%] font-bold align-bottom last:rounded-tr-xl">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody className={`text-xs divide-y ${
+                isLight ? 'divide-slate-100 bg-white' : 'divide-indigo-900/20'
+              }`}>
+                {(() => {
+                  const operatorsList = ['Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren', 'Lainnya'];
+                  const OP_COLORS: Record<string, string> = {
+                    'Telkomsel': 'bg-rose-600 text-slate-900 dark:text-white',
+                    'Axis': 'bg-purple-600 text-slate-900 dark:text-white',
+                    'Indosat': 'bg-yellow-500 text-slate-900',
+                    'XL': 'bg-blue-600 text-slate-900 dark:text-white',
+                    'Tri': 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-900 dark:text-white',
+                    'Smartfren': 'bg-pink-600 text-slate-900 dark:text-white'
+                  };
+
+                  return operatorsList.map(op => {
+                    const opItems = filteredItems.filter(item => {
+                      const p = products.find(prod => prod.id === item.productId);
+                      if (!p) return false;
+                      const safeOp = (p.operator || '').toLowerCase();
+                      const checkOp = (o: string) => {
+                        const tgt = o.toLowerCase();
+                        if (tgt === 'telkomsel' && (safeOp.includes('tsel') || safeOp.includes('telkomsel'))) return true;
+                        if (tgt === 'tri' && (safeOp.includes('tri') || safeOp.includes('three') || safeOp.includes('3'))) return true;
+                        if (tgt === 'indosat' && (safeOp.includes('indosat') || safeOp.includes('im3') || safeOp.includes('isat'))) return true;
+                        return safeOp.includes(tgt);
+                      };
+                      return checkOp(op) || (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => checkOp(o)));
+                    });
+
+                    if (opItems.length === 0) return null;
+
+                    return (
+                      <React.Fragment key={op}>
+                        <tr className="bg-white dark:bg-slate-900">
+                          <td colSpan={7} className={`py-1.5 px-3 font-black text-[9px] text-left uppercase tracking-widest sticky left-0 z-10 border-y border-slate-200 dark:border-white/10 ${OP_COLORS[op] || 'bg-slate-700 text-slate-900 dark:text-white'}`}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-1 h-3 bg-white/30 rounded-full" />
+                              {op}
+                            </div>
+                          </td>
+                        </tr>
+                        {opItems.map((item) => {
+                  const isEditingIncoming = activeEditingRow.step === 2 && 
+                                         activeEditingRow.type === 'incoming' && 
+                                         activeEditingRow.productId === item.productId;
+                  const productDetails = products.find(p => p.id === item.productId);
+                  const nameParts = item.productName.split(' ');
+                  const brandTitle = nameParts[0];
+                  const variantSubtitle = nameParts.slice(1).join(' ');
+
+                  return (
+                    <tr 
+                      key={item.productId} 
+                      onClick={() => !isOwnerMode && !isIncomingLocked && setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode || isIncomingLocked ? 'cursor-default' : 'cursor-pointer'} ${
+                        isEditingIncoming 
+                          ? (isLight ? 'bg-indigo-50 ring-1 ring-indigo-400' : 'bg-indigo-900/40 ring-1 ring-indigo-500/50')
+                          : (isLight ? 'hover:bg-slate-50 bg-white' : 'hover:bg-blue-950/30')
+                      }`}
+                    >
+                      <td className="py-2.5 px-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            <span className={`text-sm sm:text-base font-black truncate ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                              {brandTitle}
+                            </span>
+                            <span className={`text-xs sm:text-[13px] font-bold truncate ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {variantSubtitle || item.productName}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{item.initialStock}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
+                      </td>
+                      
+                      <td className="py-2 px-1 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isOwnerMode && !isIncomingLocked) setActiveEditingRow({ step: 2, type: 'incoming', productId: item.productId });
+                            }}
+                            disabled={isOwnerMode || isIncomingLocked}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isIncomingLocked ? 'cursor-default opacity-70' : 'cursor-pointer active:scale-95'} ${
+                              isLight 
+                                ? (item.incomingStock > 0 ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700')
+                                : (item.incomingStock > 0 ? 'bg-indigo-900/60 border-indigo-400/50 text-indigo-300' : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-400')
+                            }`}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.incomingStock > 0 ? '+' + item.incomingStock : 0}
+                            </span>
+                          </button>
+                          {!isReadOnly && !isIncomingLocked && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-indigo-500' : 'text-indigo-400'}`} />}
+                        </div>
+                      </td>
+
+                      <td className={`py-2 px-2 text-right font-mono font-black text-xs sm:text-sm leading-tight ${
+                        isLight ? 'text-slate-900' : 'text-slate-100'
+                      }`}>
+                        {item.initialStock + item.incomingStock}
+                      </td>
+                    </tr>
+                  );
+                        })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Edit toggle for locked incoming stock MOVED TO BOTTOM BAR */}
+
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                  isLight 
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Kembali</span>
+              </button>
+              
+              {/* Edit toggle button in the middle */}
+              {isIncomingLocked && viewMode === 'buka' && (
+                <button
+                  type="button"
+                  onClick={() => setIsIncomingLocked(false)}
+                  className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl border ${
+                    isLight 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                      : 'bg-slate-800 text-emerald-400 border-emerald-500/40 hover:bg-slate-700'
+                  }`}
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+              )}
+              
+              {/* Tombol Aksi */}
+              {!isReadOnly && (viewMode === 'buka' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBukaTokoCompleted(true);
+                    setIsIncomingLocked(true);
+                    // Simpan stok masuk ke parent
+                    items.forEach(item => {
+                      if (item.incomingStock > 0) {
+                        onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
+                      }
+                    });
+                    alert('Stok berhasil disimpan & Toko Dibuka! 🎉\nSelamat bertugas dan semoga laris manis hari ini!');
+                    setViewMode('lobby');
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+                >
+                  SIMPAN & BUKA TOKO <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  Tutup Shift <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. LANGKAH 3: HITUNG STOK AKHIR (TUTUP SHIFT) */}
+      {/* ========================================================================= */}
+      {currentStep === 3 && viewMode !== 'lobby' && !isHandoverSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2.5"
+        >
+          {/* Header */}
+          <div className="px-1 flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <div className="w-5 h-5 rounded-full bg-emerald-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 shadow-xs">
+                3
+              </div>
+              <div>
+                <h3 className={`text-xs sm:text-sm font-bold tracking-tight leading-tight ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  Hitung Stok Akhir (Tutup Shift)
+                </h3>
+                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 leading-tight ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
+                  Ketuk angka sisa fisik voucher untuk mengatur sisa akhir. Terjual dihitung otomatis.
+                </p>
+              </div>
+            </div>
+            
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
+              isLight 
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 font-black dark:text-emerald-400'
+            }`}>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+
+          {/* Summary Badges - 2x2 BALANCED MODERN CARDS */}
+          <div className="grid grid-cols-2 gap-2 px-0.5">
+            {/* 1. Stok Buka Toko (Sudah Termasuk Stok Masuk) */}
+            <div className={`rounded-xl p-2.5 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800' 
+                : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
+            }`}>
+              <span className={`text-[9px] sm:text-[10px] font-bold uppercase truncate ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                Stok Buka Toko
+              </span>
+              <div className="flex flex-col mt-1">
+                <div className="flex items-baseline gap-0.5">
+                  <span className={`text-base sm:text-xl font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                    {totalInitialStock + totalIncomingStock}
+                  </span>
+                  <span className={`text-[9px] sm:text-[10px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    Pcs
+                  </span>
+                </div>
+                <span className={`text-[8px] sm:text-[9px] font-medium tracking-tight mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                  (Stok Awal + Stok Masuk)
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Sisa Akhir */}
+            <div className={`rounded-xl p-2.5 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-white border-slate-200 text-slate-800' 
+                : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
+            }`}>
+              <span className={`text-[9px] sm:text-[10px] font-bold uppercase truncate ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                Sisa Akhir
+              </span>
+              <div className="flex flex-col mt-1">
+                <div className="flex items-baseline gap-0.5">
+                  <span className={`text-base sm:text-xl font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                    {totalFinalStock}
+                  </span>
+                  <span className={`text-[9px] sm:text-[10px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    Pcs
+                  </span>
+                </div>
+                <span className={`text-[8px] sm:text-[9px] font-medium tracking-tight mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                  (Fisik saat tutup shift)
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Terjual */}
+            <div className={`rounded-xl p-2.5 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' 
+                : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+            }`}>
+              <span className={`text-[9px] sm:text-[10px] font-bold uppercase truncate ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                Terjual
+              </span>
+              <div className="flex flex-col mt-1">
+                <div className="flex items-baseline gap-0.5">
+                  <span className={`text-base sm:text-xl font-black tracking-tight font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    {totalSoldPcs}
+                  </span>
+                  <span className={`text-[9px] sm:text-[10px] font-semibold ${isLight ? 'text-emerald-600' : 'text-emerald-500/80'}`}>
+                    Pcs
+                  </span>
+                </div>
+                <span className={`text-[8px] sm:text-[9px] font-medium tracking-tight mt-0.5 ${isLight ? 'text-emerald-600/70' : 'text-emerald-500/70'}`}>
+                  (Barang keluar / laku)
+                </span>
+              </div>
+            </div>
+
+            {/* 4. Total Uang */}
+            <div className={`rounded-xl p-2.5 flex flex-col justify-between min-w-0 border shadow-xs ${
+              isLight 
+                ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900' 
+                : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+            }`}>
+              <span className={`text-[9px] sm:text-[10px] font-bold uppercase truncate ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                Total Uang
+              </span>
+              <div className="flex flex-col mt-1 truncate">
+                <div className="flex items-baseline gap-0.5 truncate">
+                  <span className={`text-[13px] sm:text-base font-black tracking-tight font-mono truncate ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    Rp{totalSalesAmount.toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <span className={`text-[8px] sm:text-[9px] font-medium tracking-tight mt-0.5 truncate ${isLight ? 'text-emerald-600/70' : 'text-emerald-500/70'}`}>
+                  (Estimasi omzet kotor)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Operator Filter Chips */}
+          <div className="flex gap-1 overflow-x-auto pb-1.5 pt-1 px-0.5 custom-scrollbar">
+            {['SEMUA', 'AXIS', 'XL', 'TSEL', 'INDOSAT', 'THREE', 'SMARTFREN'].map(op => {
+              const isActive = selectedOperator === op;
+              return (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setSelectedOperator(op)}
+                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : (isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-850 hover:bg-slate-750 text-slate-300')
+                  }`}
+                >
+                  {op === 'TSEL' ? 'TELKOMSEL' : op === 'THREE' ? '3' : op}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Table: Strictly 100% Fit in 1 Screen without Horizontal Scroll */}
+          <div className={`w-full overflow-clip rounded-xl border shadow-xs ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-900/40 shadow-md'
+          }`}>
+            <table className="w-full table-fixed text-left border-collapse bg-transparent relative">
+              <thead className={`sticky top-0 z-20 border-b shadow-sm backdrop-blur-md ${
+                isLight ? 'bg-slate-50/95 border-slate-200 text-slate-800 font-bold' : 'bg-slate-800/95 border-blue-900/40 text-slate-600 dark:text-slate-300 font-bold'
+              }`}>
+                <tr className="text-[9px] sm:text-[10px] uppercase tracking-tight align-bottom">
+                  <th className="py-2 px-2 w-[36%] sm:w-[32%] font-bold align-bottom first:rounded-tl-xl">VOUCHER</th>
+                  <th className="py-2 px-1 text-center w-[14%] sm:w-[14%] font-bold opacity-70 align-bottom leading-tight">STOK<br/>AWAL</th>
+                  <th className={`py-2 px-1 text-center w-[22%] sm:w-[24%] font-bold align-bottom leading-tight ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>
+                    <div className="flex flex-col items-center justify-end h-full">
+                      <div className="flex items-center justify-center gap-1">
+                        <Pencil className="w-2.5 h-2.5 shrink-0" />
+                        <span>STOK<br/>AKHIR</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th className={`py-2 px-1 text-center w-[12%] sm:w-[14%] font-bold opacity-70 align-bottom ${isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'}`}>TERJUAL</th>
+                  <th className="py-2 px-2 text-right w-[16%] sm:w-[16%] font-bold align-bottom last:rounded-tr-xl">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody className={`text-xs divide-y ${
+                isLight ? 'divide-slate-100 bg-white' : 'divide-blue-900/20'
+              }`}>
+                {(() => {
+                  const operatorsList = ['Telkomsel', 'Axis', 'Indosat', 'XL', 'Tri', 'Smartfren', 'Lainnya'];
+                  const OP_COLORS: Record<string, string> = {
+                    'Telkomsel': 'bg-rose-600 text-slate-900 dark:text-white',
+                    'Axis': 'bg-purple-600 text-slate-900 dark:text-white',
+                    'Indosat': 'bg-yellow-500 text-slate-900',
+                    'XL': 'bg-blue-600 text-slate-900 dark:text-white',
+                    'Tri': 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-900 dark:text-white',
+                    'Smartfren': 'bg-pink-600 text-slate-900 dark:text-white'
+                  };
+
+                  return operatorsList.map(op => {
+                    const opItems = filteredItems.filter(item => {
+                      const p = products.find(prod => prod.id === item.productId);
+                      if (!p) return false;
+                      const safeOp = (p.operator || '').toLowerCase();
+                      const checkOp = (o: string) => {
+                        const tgt = o.toLowerCase();
+                        if (tgt === 'telkomsel' && (safeOp.includes('tsel') || safeOp.includes('telkomsel'))) return true;
+                        if (tgt === 'tri' && (safeOp.includes('tri') || safeOp.includes('three') || safeOp.includes('3'))) return true;
+                        if (tgt === 'indosat' && (safeOp.includes('indosat') || safeOp.includes('im3') || safeOp.includes('isat'))) return true;
+                        return safeOp.includes(tgt);
+                      };
+                      return checkOp(op) || (op === 'Lainnya' && !operatorsList.slice(0,6).some(o => checkOp(o)));
+                    });
+
+                    if (opItems.length === 0) return null;
+
+                    return (
+                      <React.Fragment key={op}>
+                        <tr className="bg-white dark:bg-slate-900">
+                          <td colSpan={7} className={`py-1.5 px-3 font-black text-[9px] text-left uppercase tracking-widest sticky left-0 z-10 border-y border-slate-200 dark:border-white/10 ${OP_COLORS[op] || 'bg-slate-700 text-slate-900 dark:text-white'}`}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-1 h-3 bg-white/30 rounded-full" />
+                              {op}
+                            </div>
+                          </td>
+                        </tr>
+                        {opItems.map((item) => {
+                  const isEditingFinal = activeEditingRow.step === 3 && 
+                                         activeEditingRow.type === 'final' && 
+                                         activeEditingRow.productId === item.productId;
+                  const productDetails = products.find(p => p.id === item.productId);
+                  const nameParts = item.productName.split(' ');
+                  const brandTitle = nameParts[0];
+                  const variantSubtitle = nameParts.slice(1).join(' ');
+                  const totalInitialForShift = item.initialStock + item.incomingStock;
+                  const soldCount = Math.max(0, totalInitialForShift - item.finalStock);
+                  const subtotal = soldCount * item.price;
+                  const isStockEmpty = totalInitialForShift === 0;
+
+                  return (
+                    <tr 
+                      key={item.productId} 
+                      onClick={() => !isOwnerMode && !isStockEmpty && setActiveEditingRow({ step: 3, type: 'final', productId: item.productId })}
+                      className={`transition-colors ${isOwnerMode || isStockEmpty ? 'cursor-default' : 'cursor-pointer'} ${
+                        isEditingFinal 
+                          ? (isLight ? 'bg-emerald-100/70 ring-1 ring-emerald-400' : 'bg-emerald-900/40 ring-1 ring-emerald-500/50')
+                          : soldCount > 0
+                            ? (isLight ? 'bg-emerald-50/60 hover:bg-emerald-100/60' : 'bg-emerald-950/30 hover:bg-emerald-900/40')
+                            : (isLight ? 'hover:bg-emerald-50/60 bg-white' : 'hover:bg-blue-950/30')
+                      }`}
+                    >
+                      {/* PRODUK VOUCHER */}
+                      <td className="py-2.5 px-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            {/* Baris 1: Nama Provider */}
+                            <span className={`text-sm sm:text-base font-black truncate ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                              {brandTitle}
+                            </span>
+                            {/* Baris 2: Total GB / Masa Aktif */}
+                            <span className={`text-xs sm:text-[13px] font-bold truncate ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {variantSubtitle || item.productName}
+                            </span>
+                            {/* Baris 3: Harga */}
+                            <span className={`text-[10px] sm:text-xs font-mono font-bold ${
+                              isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'
+                            }`}>
+                              Rp{item.price.toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* AWAL */}
+                      <td className={`py-2 px-1 text-center font-mono font-bold text-xs sm:text-sm ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          <span>{totalInitialForShift}</span>
+                          <ArrowRight className={`w-3 h-3 ${isLight ? 'text-slate-300' : 'text-slate-600'}`} />
+                        </div>
+                      </td>
+                      
+                      {/* SISA AKHIR */}
+                      <td className="py-2 px-1 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isOwnerMode && !isStockEmpty) setActiveEditingRow({ step: 3, type: 'final', productId: item.productId });
+                            }}
+                            disabled={isOwnerMode || isStockEmpty}
+                            className={`inline-flex items-center justify-center min-w-[36px] py-1 px-2 rounded-lg border transition ${isOwnerMode || isStockEmpty ? 'cursor-default opacity-50 bg-slate-100 dark:bg-slate-800' : 'cursor-pointer active:scale-95'} ${
+                              !isOwnerMode && !isStockEmpty ? (
+                                isLight 
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700' 
+                                  : 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+                              ) : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                            title={isOwnerMode ? 'Hanya bisa dilihat oleh Owner' : (isStockEmpty ? 'Stok kosong, tidak bisa diedit' : 'Ketuk untuk ubah sisa akhir')}
+                          >
+                            <span className="text-xs sm:text-sm font-black font-mono tracking-tight">
+                              {item.finalStock}
+                            </span>
+                          </button>
+                          {!isReadOnly && !isStockEmpty && <Pencil className={`w-3 h-3 opacity-60 shrink-0 ${isLight ? 'text-emerald-500' : 'text-emerald-400'}`} />}
+                        </div>
+                      </td>
+
+                      {/* TERJUAL */}
+                      <td className={`py-2 px-1 text-center font-mono font-black text-xs sm:text-sm ${
+                        isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'
+                      }`}>
+                        {soldCount}
+                      </td>
+
+                      {/* TOTAL NILAI */}
+                      <td className={`py-2 px-2 text-right font-mono font-black text-[11px] sm:text-xs leading-tight ${
+                        isLight ? 'text-slate-900' : 'text-slate-100'
+                      }`}>
+                        {subtotal.toLocaleString('id-ID')}
+                      </td>
+                    </tr>
+                  );
+                        })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Bottom Actions - hidden for owner */}
+          {!isReadOnly && (
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+            {viewMode === 'tutup' ? null : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                  isLight 
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Tambah Stok</span>
+              </button>
+            )}
+              <button
+                type="button"
+                onClick={() => setCurrentStep(4)}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+              >
+                Cek Uang Laci <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            </div>
+          </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. LANGKAH 4: CEK TUNAI VS NON-TUNAI / QRIS */}
+      {currentStep === 4 && viewMode === 'tutup' && !isHandoverSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          {/* UANG KAS FISIK & REKONSILIASI (MODERN EXCEL STYLE) */}
+          <div className={`rounded-xl p-3.5 sm:p-4 border shadow-xs space-y-4 ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-blue-500/20'
+          }`}>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <span className={`text-sm sm:text-base font-black flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <Banknote className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
+                Uang Laci (Tunai)
+              </span>
+              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                isCashMatched
+                  ? (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/40 text-emerald-400')
+                  : (isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-900/40 text-amber-400')
+              }`}>
+                {isCashMatched ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                {isCashMatched ? 'PAS' : 'SELISIH'}
+              </span>
+            </div>
+            
+            {/* Rincian Excel-style */}
+            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-2 text-xs sm:text-sm font-semibold">
+              
+              {/* Total Penjualan */}
+              <div className={`${isLight ? 'text-slate-900' : 'text-slate-100'} font-black`}>
+                Total penjualan <span className="text-[10px] sm:text-xs font-normal opacity-70">({totalSoldPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-900' : 'text-slate-100'} font-black`}>:</div>
+              <div className={`text-right font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                Rp{totalSalesAmount.toLocaleString('id-ID')}
+              </div>
+
+              {/* Laku Tunai */}
+              <div className={`pl-4 ${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>
+                &gt; Laku Tunai <span className="opacity-70">({totalCashPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>:</div>
+              <div className={`text-right font-mono font-bold text-[11px] sm:text-xs ${
+                totalCashExpected < 0 ? (isLight ? 'text-rose-600' : 'text-rose-400') : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+              }`}>
+                {totalCashExpected < 0 ? '- Rp' : 'Rp'}{Math.abs(totalCashExpected).toLocaleString('id-ID')}
+              </div>
+
+              {/* Laku Non tunai / QRIS */}
+              <div className={`pl-4 ${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>
+                &gt; Laku Non tunai <span className="opacity-70">({totalDigitalPcs} pcs)</span>
+              </div>
+              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} text-[11px] sm:text-xs`}>:</div>
+              <div className={`text-right font-mono font-bold text-[11px] sm:text-xs ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>
+                Rp{totalDigitalAmount.toLocaleString('id-ID')}
+              </div>
+
+              <div className="col-span-3 border-t-2 border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
+
+              {/* Uang Tunai Seharusnya */}
+              <div className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Laci Seharusnya</div>
+              <div className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>:</div>
+              <div className={`text-right font-mono font-black text-sm sm:text-base ${
+                totalCashExpected < 0 
+                  ? (isLight ? 'text-rose-600' : 'text-rose-400')
+                  : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+              }`}>
+                {totalCashExpected < 0 ? '- Rp' : 'Rp'}{Math.abs(totalCashExpected).toLocaleString('id-ID')}
+              </div>
+
+            </div>
+
+            {/* Input Kas Fisik & Button for better space handling */}
+            <div className="flex flex-col gap-3 pt-2">
+              
+              {/* Row 1: Fisik input with Rp next to number */}
+              <div className="flex items-center gap-2">
+                <span className={`w-14 shrink-0 text-xs sm:text-sm font-bold ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Fisik:</span>
+                <div className={`flex-1 flex items-center gap-1.5 rounded-xl px-3 border h-11 sm:h-12 ${
+                  isLight ? 'bg-slate-50 border-slate-300 focus-within:border-blue-500 shadow-inner' : 'bg-slate-900/50 border-slate-700 focus-within:border-blue-500'
+                }`}>
+                  <span className={`text-sm sm:text-base font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={cashPhysical}
+                    onChange={(e) => handleCashPhysicalChange(e.target.value)}
+                    className={`w-full h-full bg-transparent font-mono font-black text-base sm:text-lg focus:outline-none ${
+                      isLight ? 'text-slate-900 placeholder-slate-400' : 'text-slate-100 placeholder-slate-600'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Samakan text and button separated */}
+              <div className="flex flex-col mt-1">
+                <div className={`text-[10px] sm:text-[11px] text-right mb-1 italic ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  *(Tekan tombol di bawah untuk menyamakan otomatis)
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] sm:text-sm font-bold tracking-tight shrink-0 ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
+                    Samakan dengan pembukuan :
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSyncCashPhysical}
+                    className={`flex-1 flex items-center justify-center px-2 sm:px-3 h-10 sm:h-11 rounded-xl border transition cursor-pointer shadow-md active:scale-95 ${
+                      cashDifference === 0
+                        ? (isLight ? 'bg-emerald-100 border-emerald-300 hover:bg-emerald-200 text-emerald-700' : 'bg-emerald-900/60 hover:bg-emerald-900/80 border-emerald-500/60 text-emerald-400')
+                        : (isLight ? 'bg-blue-600 hover:bg-blue-700 border-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white')
+                    }`}
+                    title="Klik untuk otomatis menyamakan"
+                  >
+                    <div className="flex items-center gap-1.5 font-mono text-sm sm:text-base font-black tracking-tight">
+                      {cashDifference === 0 ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>PAS</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCcw className="w-4 h-4" />
+                          <span>{cashDifference > 0 ? '+' : '-'}Rp{Math.abs(cashDifference).toLocaleString('id-ID')}</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Catatan Selisih */}
+            {!isCashMatched && (
+              <input
+                type="text"
+                placeholder="Tulis alasan selisih (wajib) ..."
+                value={catatanSelisih}
+                onChange={(e) => setCatatanSelisih(e.target.value)}
+                className={`w-full rounded-lg p-2 text-xs focus:outline-none border font-semibold ${
+                  isLight 
+                    ? 'bg-rose-50/50 border-rose-200 text-slate-900 placeholder-rose-400 focus:border-rose-400' 
+                    : 'bg-rose-950/20 border-rose-900/50 text-slate-200 placeholder-rose-700 focus:border-rose-700'
+                }`}
+              />
+            )}
+          </div>
+
+          {/* Navigation - hidden for owner */}
+          {!isReadOnly && (
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                  isLight 
+                    ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Stok Akhir</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(5)}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap"
+              >
+                Tutup Toko <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            </div>
+          </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. LANGKAH 5: SERAH TERIMA KASIR */}
+      {currentStep === 5 && viewMode === 'tutup' && !isHandoverSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <div className="px-1 flex items-center justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-full bg-blue-600 text-slate-900 dark:text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-xs">
+                4
+              </div>
+              <div>
+                <h3 className={`text-sm sm:text-base font-bold tracking-tight leading-snug ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
+                  Rincian Akhir Closing
+                </h3>
+                <p className={`text-xs mt-0.5 leading-snug ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                  Rincian akhir closing tutup toko.
+                </p>
+              </div>
+            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-lg border font-mono font-semibold whitespace-nowrap ${
+              isLight ? 'bg-white border-slate-200 text-slate-700 shadow-2xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+            }`}>
+              {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+            </span>
+          </div>
+
+          {/* Ringkasan Serah Terima (Banking Style) */}
+          <div className={`rounded-xl border shadow-xs overflow-hidden ${
+            isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-slate-700'
+          }`}>
+            <div className={`px-4 py-2.5 border-b flex items-center justify-between ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-900/50 border-slate-700/50'}`}>
+              <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ringkasan</span>
+              <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Nilai</span>
+            </div>
+            
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              
+              {/* Sisa Stok */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Sisa Stok</span>
+                  <span className={`text-[10px] sm:text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Awal: {totalInitialStock} • Terjual: {totalSoldPcs}</span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {totalFinalStock} Pcs
+                </div>
+              </div>
+
+              {/* Uang Tunai */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Uang Tunai Laci</span>
+                  <span className={`text-[10px] sm:text-xs font-semibold ${
+                    isCashMatched 
+                      ? (isLight ? 'text-emerald-600' : 'text-emerald-400') 
+                      : (isLight ? 'text-rose-500' : 'text-rose-400')
+                  }`}>
+                    {isCashMatched ? 'Status: PAS' : `Selisih Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+                  </span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Rp{physicalCashValue.toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              {/* Non-Tunai */}
+              <div className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-xs sm:text-sm font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Non-Tunai (QRIS)</span>
+                  <span className={`text-[10px] sm:text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{totalDigitalPcs} transaksi</span>
+                </div>
+                <div className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Rp{totalDigitalAmount.toLocaleString('id-ID')}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Rincian Voucher Terjual */}
+          {(() => {
+            const soldItems = items.filter(i => Math.max(0, (i.initialStock + i.incomingStock) - i.finalStock) > 0);
+            if (soldItems.length === 0) return null;
+            return (
+              <div className={`rounded-xl border shadow-xs overflow-hidden ${
+                isLight ? 'bg-white border-slate-200' : 'bg-white dark:bg-slate-800 border-slate-700'
+              }`}>
+                {/* Header */}
+                <div className={`px-4 py-2.5 border-b flex items-center justify-between ${isLight ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/40 border-emerald-900/40'}`}>
+                  <span className={`text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                    <Tag className="w-3 h-3" />
+                    Rincian Voucher Terjual
+                  </span>
+                  <span className={`text-[10px] font-bold ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>
+                    {totalSoldPcs} pcs
+                  </span>
+                </div>
+
+                {/* Per-product list */}
+                <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {soldItems.map(item => {
+                    const soldCount = Math.max(0, (item.initialStock + item.incomingStock) - item.finalStock);
+                    const subtotal = soldCount * item.price;
+                    const nameParts = item.productName.split(' ');
+                    const brandTitle = nameParts[0];
+                    const variantSubtitle = nameParts.slice(1).join(' ');
+                    const productDetails = products.find(p => p.id === item.productId);
+                    return (
+                      <div key={item.productId} className="px-4 py-2.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="sm" />
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            <span className={`text-xs font-black truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                              {brandTitle}
+                            </span>
+                            {variantSubtitle && (
+                              <span className={`text-[10px] truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {variantSubtitle}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/50 text-emerald-400'}`}>
+                            {soldCount}×
+                          </span>
+                          <span className={`text-xs font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                            {subtotal.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Financial summary footer */}
+                <div className={`px-4 py-3 border-t space-y-2 ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/40 border-slate-700/50'}`}>
+                  {/* OMSET */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>OMSET</span>
+                      <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>Total Penjualan</span>
+                    </div>
+                    <span className={`text-sm font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      {totalSalesAmount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  <div className={`border-t border-dashed ${isLight ? 'border-slate-200' : 'border-slate-700'}`} />
+
+                  {/* NON-TUNAI */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>NON-TUNAI</span>
+                      <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>QRIS/Transfer · {totalDigitalPcs} TRX</span>
+                    </div>
+                    <span className={`text-xs font-mono font-bold ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>
+                      {totalDigitalAmount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {/* TUNAI HITUNGAN */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>TUNAI</span>
+                      <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>Hitungan Sistem · {totalCashPcs} TRX</span>
+                    </div>
+                    <span className={`text-xs font-mono font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                      {totalCashExpected.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {/* FISIK */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>FISIK</span>
+                      <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>Tunai Laci</span>
+                    </div>
+                    <span className={`text-xs font-mono font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      {physicalCashValue.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {/* STATUS */}
+                  <div className={`flex items-center justify-between pt-1 border-t ${isLight ? 'border-slate-200' : 'border-slate-700'}`}>
+                    <span className={`text-[10px] uppercase tracking-wider font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Status</span>
+                    <span className={`text-xs font-black px-2.5 py-1 rounded-lg flex items-center gap-1 ${
+                      isCashMatched
+                        ? (isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-900/50 text-emerald-400')
+                        : (isLight ? 'bg-rose-100 text-rose-700' : 'bg-rose-900/50 text-rose-400')
+                    }`}>
+                      {isCashMatched ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                      {isCashMatched ? 'PAS' : `SELISIH Rp${Math.abs(cashDifference).toLocaleString('id-ID')}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Action Buttons - hidden for owner */}
+          {!isReadOnly && (
+          <div className={`fixed bottom-[70px] left-0 right-0 z-[140] flex justify-center pointer-events-none transition-all px-4`}>
+            <div className={`pointer-events-auto w-auto inline-flex items-center gap-2.5 p-1.5 rounded-2xl shadow-2xl backdrop-blur-xl border ${isLight ? 'bg-white/95 border-slate-200/80 shadow-slate-300/50' : 'bg-slate-900/95 border-white/10 shadow-black/50'}`}>
+            <button
+              type="button"
+              onClick={() => setCurrentStep(4)}
+              className={`px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer rounded-xl ${
+                isLight 
+                  ? 'bg-transparent text-slate-700 hover:bg-slate-100' 
+                  : 'bg-transparent text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Cek Uang</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCompleteHandover}
+                className="px-4 py-2.5 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" /> SELESAI & TUTUP TOKO
+              </button>
+            </div>
+          </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* SUCCESS MODAL AFTER HANDOVER */}
+      {isHandoverSuccess && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`rounded-2xl p-5 shadow-2xl text-center space-y-3 border ${
+            isLight 
+              ? 'bg-white border-emerald-200 text-slate-800' 
+              : 'bg-white dark:bg-slate-800 border-emerald-500/30 text-slate-100'
+          }`}
+        >
+          <div className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center border ${
+            isLight 
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400'
+          }`}>
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className={`text-sm sm:text-base font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+              Tutup Toko Berhasil!
+            </h3>
+            <p className={`text-[10px] sm:text-[11px] max-w-sm mx-auto ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
+              Shift {activeCashier.name} telah selesai ditutup. Semua sisa stok fisik ({totalFinalStock} Pcs) dan laporan tersimpan aman. Toko sekarang siap dibuka kembali oleh kasir manapun.
+            </p>
+          </div>
+
+          <div className="flex justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleFinishAndSwitch}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+            >
+              <ArrowRight className="w-3.5 h-3.5" /> Selesai &amp; Kembali ke Beranda
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* FLOATING FOCUS EDIT CARD (1 BARIS MELAYANG DENGAN LATAR SEDIKIT BLUR) */}
+      <AnimatePresence>
+        {activeEditingRow.productId && !isReadOnly && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2.5px] flex items-center justify-center p-3.5 sm:p-4 overflow-y-auto"
+            onClick={() => setActiveEditingRow(prev => ({ ...prev, productId: null }))}
+          >
+            {(() => {
+              const item = items.find(i => i.productId === activeEditingRow.productId);
+              if (!item) return null;
+              const currentIdx = filteredItems.findIndex(i => i.productId === activeEditingRow.productId);
+              const hasPrev = currentIdx > 0;
+              const hasNext = currentIdx < filteredItems.length - 1;
+              const productDetails = products.find(p => p.id === item.productId);
+              const nameParts = item.productName.split(' ');
+              const brandTitle = nameParts[0];
+              const variantSubtitle = nameParts.slice(1).join(' ');
+              const isStep1 = activeEditingRow.step === 1;
+              const soldCount = Math.max(0, item.initialStock - item.finalStock);
+              const subtotal = soldCount * item.price;
+              const expectedInitial = item.previousStock + item.incomingStock;
+
+              return (
+                <motion.div
+                  initial={{ scale: 0.9, y: 25, opacity: 0 }}
+                  animate={{ scale: 1, y: 0, opacity: 1 }}
+                  exit={{ scale: 0.9, y: 25, opacity: 0 }}
+                  transition={{ type: 'spring', damping: 24, stiffness: 350 }}
+                  className={`w-full max-w-sm sm:max-w-md rounded-2xl p-4 sm:p-5 shadow-2xl border flex flex-col gap-3.5 relative ${
+                    isLight 
+                      ? 'bg-white border-slate-200 text-slate-900 shadow-2xl' 
+                      : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white shadow-2xl shadow-blue-950/90'
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header Bar */}
+                  <div className="flex items-center justify-between border-b pb-2.5 border-slate-100 dark:border-blue-900/30">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isLight ? 'bg-slate-100 text-slate-700' : 'bg-blue-950 text-blue-300 border border-blue-800/40'
+                      }`}>
+                        Item {currentIdx + 1} dari {filteredItems.length}
+                      </span>
+                      <span className={`text-[11px] font-bold ${
+                        isStep1 ? (isLight ? 'text-blue-600' : 'text-blue-400') : (activeEditingRow.step === 2 ? (isLight ? 'text-indigo-600' : 'text-indigo-400') : (isLight ? 'text-emerald-600' : 'text-emerald-500 font-black dark:text-emerald-400'))
+                      }`}>
+                        {isStep1 ? 'Edit Stok Awal' : activeEditingRow.step === 2 ? 'Tambah Stok Baru' : 'Edit Sisa Akhir'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditingRow(prev => ({ ...prev, productId: null }))}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition ${
+                        isLight ? 'hover:bg-slate-100 text-slate-600 dark:text-slate-400' : 'hover:bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Product Card Box - Centered Grid Block */}
+                  <div className={`p-3 sm:p-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 ${
+                    isLight 
+                      ? 'bg-slate-50/80 border-slate-200 shadow-xs' 
+                      : 'bg-slate-50 dark:bg-slate-800 border-blue-900/40 shadow-xs'
+                  }`}>
+                    {/* Inner wrapper to keep grid tight and centered */}
+                    <div className="grid grid-cols-[auto_auto_1fr] items-center text-left gap-x-2 gap-y-2 w-fit">
+                      
+                      {/* Provider Row */}
+                      <div className="flex items-center justify-start">
+                        <CompactOperatorLogo name={brandTitle} operator={productDetails?.operator} size="md" />
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-sm sm:text-base font-black uppercase tracking-wide ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                        {brandTitle}
+                      </div>
+                      
+                      {/* Nama Produk Row */}
+                      <div className={`text-[11px] sm:text-xs font-bold whitespace-nowrap capitalize ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Nama Produk
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-xs sm:text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                        {brandTitle} {variantSubtitle || item.productName}
+                      </div>
+
+                      {/* Harga Row */}
+                      <div className={`text-[11px] sm:text-xs font-bold whitespace-nowrap capitalize ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Harga Jual
+                      </div>
+                      <div className={`text-[11px] sm:text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        :
+                      </div>
+                      <div className={`text-xs sm:text-sm font-mono font-black truncate ${
+                        isStep1
+                          ? (isLight ? 'text-blue-700' : 'text-blue-400')
+                          : activeEditingRow.step === 2
+                            ? (isLight ? 'text-indigo-700' : 'text-indigo-400')
+                            : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+                      }`}>
+                        Rp{item.price.toLocaleString('id-ID')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content for Step 1 (Stok Awal) */}
+                  {isStep1 && (
+                    <div className="space-y-3">
+                      {/* Context Stats */}
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className={`p-2 rounded-xl border ${
+                          isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800'
+                        }`}>
+                          <div className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400">Shift Lalu</div>
+                          <div className="text-sm sm:text-base font-black font-mono">{item.previousStock} Pcs</div>
+                        </div>
+                        <div className={`p-2 rounded-xl border ${
+                          isLight ? 'bg-blue-50/60 border-blue-200' : 'bg-blue-950/40 border-blue-800/40'
+                        }`}>
+                          <div className="text-[10px] uppercase font-bold text-blue-500">Stok Masuk</div>
+                          <div className="text-sm sm:text-base font-black font-mono text-blue-600 dark:text-blue-400">
+                            +{item.incomingStock} Pcs
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Big Stepper Container */}
+                      <div className={`p-4 rounded-2xl border text-center flex flex-col items-center gap-2.5 ${
+                        isLight 
+                          ? 'bg-blue-50/40 border-blue-200' 
+                          : 'bg-blue-950/20 border-blue-500/20'
+                      }`}>
+                        <span className="text-[11px] font-bold tracking-wider uppercase text-blue-600 dark:text-blue-400">
+                          STOK AWAL FISIK SAAT INI
+                        </span>
+
+                        {/* Giant Stepper */}
+                        <div className="flex items-center justify-center gap-3 w-full">
+                          <button
+                            type="button"
+                            onClick={() => !isOwnerMode && handleInitialDelta(item.productId, -1)}
+                            disabled={isOwnerMode}
+                            className={`w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition border shadow-xs ${
+                              isLight 
+                                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300' 
+                                : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 text-slate-900 dark:text-white border-slate-700'
+                            }`}
+                            title="Kurangi 1"
+                          >
+                            <Minus className="w-6 h-6 stroke-[3]" />
+                          </button>
+
+                          <div className="flex flex-col items-center min-w-[90px]">
+                            <span className={`font-mono font-black text-4xl sm:text-5xl ${
+                              isLight ? 'text-blue-700' : 'text-blue-400'
+                            }`}>
+                              {item.initialStock}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">Pcs</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => !isOwnerMode && handleInitialDelta(item.productId, 1)}
+                            disabled={isOwnerMode}
+                            className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30"
+                            title="Tambah 1"
+                          >
+                            <Plus className="w-6 h-6 stroke-[3]" />
+                          </button>
+                        </div>
+
+                        {/* Quick Preset Buttons */}
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSetInitialDirect(item.productId, expectedInitial)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                              item.initialStock === expectedInitial
+                                ? (isLight ? 'bg-blue-600 text-slate-900 dark:text-white border-blue-600' : 'bg-blue-600 text-slate-900 dark:text-white border-blue-500')
+                                : (isLight ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200')
+                            }`}
+                          >
+                            Pas dg Lalu ({expectedInitial})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInitialDelta(item.productId, 5)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer ${
+                              isLight ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            +5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInitialDelta(item.productId, 10)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer ${
+                              isLight ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            +10
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Reason Selector when Initial Stock < Expected */}
+                      {item.initialStock < expectedInitial && (
+                        <div className={`p-3 rounded-xl border flex flex-col gap-2 shadow-inner ${
+                          isLight ? 'bg-amber-50/50 border-amber-200' : 'bg-amber-950/20 border-amber-500/30'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
+                              Keterangan Stok Berkurang
+                            </span>
+                            <span className={`text-[9px] font-black ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>
+                              -{expectedInitial - item.initialStock} PCS
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, auditReason: 'penjualan' } : i));
+                              }}
+                              className={`p-2 rounded-lg text-[10px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                                item.auditReason === 'penjualan'
+                                  ? (isLight ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-500 text-slate-900 border-amber-500 shadow-sm')
+                                  : (isLight ? 'bg-white text-slate-600 border-slate-300 hover:bg-amber-50/50' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700')
+                              }`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.auditReason === 'penjualan' ? 'bg-current' : 'bg-transparent'}`}></div>
+                              Terjual / Laku
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, auditReason: 'audit' } : i));
+                              }}
+                              className={`p-2 rounded-lg text-[10px] font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                                item.auditReason === 'audit'
+                                  ? (isLight ? 'bg-rose-500 text-white border-rose-600 shadow-sm' : 'bg-rose-500 text-slate-900 border-rose-500 shadow-sm')
+                                  : (isLight ? 'bg-white text-slate-600 border-slate-300 hover:bg-rose-50/50' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700')
+                              }`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.auditReason === 'audit' ? 'bg-current' : 'bg-transparent'}`}></div>
+                              Hilang / Rusak
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Content for Step 2 (Sisa Akhir) */}
+                  {/* Content for Step 2 (Tambah Stok Baru) */}
+                  {activeEditingRow.step === 2 && (
+                    <div className="space-y-4">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <label className={`text-xs font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          JUMLAH BARANG MASUK SAAT INI
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock - 1)}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition active:scale-90 ${
+                              isLight 
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200' 
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 shadow-lg'
+                            }`}
+                          >
+                            <Minus className="w-5 h-5" />
+                          </button>
+
+                          <div className={`relative w-28 h-16 rounded-2xl flex items-center justify-center border-2 ${
+                            isLight 
+                              ? 'bg-white border-indigo-200 shadow-inner' 
+                              : 'bg-slate-900 border-indigo-500/30 shadow-inner'
+                          }`}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.incomingStock || ''}
+                              onChange={(e) => handleSetIncomingDirect(item.productId, parseInt(e.target.value) || 0)}
+                              className={`w-full text-center bg-transparent border-none outline-none font-black text-3xl font-mono ${
+                                isLight ? 'text-indigo-700' : 'text-indigo-400'
+                              }`}
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock + 1)}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition active:scale-90 shadow-md ${
+                              isLight 
+                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500' 
+                                : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500'
+                            }`}
+                          >
+                            <Plus className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                        {[1, 5, 10, 50].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleSetIncomingDirect(item.productId, item.incomingStock + val)}
+                            className={`py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 border ${
+                              isLight 
+                                ? 'bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700' 
+                                : 'bg-slate-800 hover:bg-indigo-900/40 border-slate-700 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-300'
+                            }`}
+                          >
+                            <span className="text-[10px] opacity-70">Tambah</span>
+                            <span>+{val}</span>
+                          </button>
+                        ))}
+                      </div>
+                      
+                      {/* Simpan & Push ke Global Stock */}
+                      <button
+                        onClick={() => {
+                          if (productDetails && item.incomingStock > 0) {
+                            onUpdateProductStock(item.productId, item.initialStock + item.incomingStock, 'restock');
+                          }
+                          setActiveEditingRow(prev => ({ ...prev, productId: null }));
+                        }}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg transition active:scale-95 flex flex-col items-center justify-center"
+                      >
+                        <span>Simpan Stok Baru (Enter)</span>
+                        <span className="text-[9px] font-normal opacity-80">Otomatis menambah stok kasir jualan saat ini</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Content for Step 3 (Sisa Akhir) */}
+                  {activeEditingRow.step === 3 && (
+                    <div className="space-y-3">
+                      {/* Context Stats */}
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className={`p-2 rounded-xl border ${
+                          isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800'
+                        }`}>
+                          <div className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400">Stok Awal</div>
+                          <div className="text-sm sm:text-base font-black font-mono">{item.initialStock} Pcs</div>
+                        </div>
+                        <div className={`p-2 rounded-xl border ${
+                          isLight ? 'bg-emerald-50/60 border-emerald-200' : 'bg-emerald-950/40 border-emerald-800/40'
+                        }`}>
+                          <div className="text-[10px] uppercase font-bold text-emerald-500 font-black dark:text-emerald-400">Terjual</div>
+                          <div className="text-sm sm:text-base font-black font-mono text-emerald-500 font-black dark:text-emerald-400">
+                            {soldCount} Pcs
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Big Stepper Container */}
+                      <div className={`p-4 rounded-2xl border text-center flex flex-col items-center gap-2.5 ${
+                        isLight 
+                          ? 'bg-emerald-50/40 border-emerald-200' 
+                          : 'bg-emerald-950/20 border-emerald-500/20'
+                      }`}>
+                        <span className="text-[11px] font-bold tracking-wider uppercase text-emerald-500 font-black dark:text-emerald-400">
+                          SISA VOUCHER DI ETALASE (AKHIR)
+                        </span>
+
+                        {/* Giant Stepper */}
+                        <div className="flex items-center justify-center gap-3 w-full">
+                          <button
+                            type="button"
+                            onClick={() => handleFinalDelta(item.productId, -1)}
+                            className={`w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition border shadow-xs ${
+                              isLight 
+                                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300' 
+                                : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 text-slate-900 dark:text-white border-slate-700'
+                            }`}
+                            title="Kurangi 1"
+                          >
+                            <Minus className="w-6 h-6 stroke-[3]" />
+                          </button>
+
+                          <div className="flex flex-col items-center min-w-[90px]">
+                            <span className={`font-mono font-black text-4xl sm:text-5xl ${
+                              isLight ? 'text-emerald-700' : 'text-emerald-500 font-black dark:text-emerald-400'
+                            }`}>
+                              {item.finalStock}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">Pcs Sisa</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleFinalDelta(item.productId, 1)}
+                            className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl font-black cursor-pointer active:scale-90 transition bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30"
+                            title="Tambah 1"
+                          >
+                            <Plus className="w-6 h-6 stroke-[3]" />
+                          </button>
+                        </div>
+
+                        {/* Quick Preset Buttons */}
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSetFinalDirect(item.productId, 0)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                              item.finalStock === 0
+                                ? 'bg-rose-600 text-slate-900 dark:text-white border-rose-600'
+                                : (isLight ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200')
+                            }`}
+                          >
+                            Habis (0)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetFinalDirect(item.productId, item.initialStock)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                              item.finalStock === item.initialStock
+                                ? 'bg-emerald-600 text-slate-900 dark:text-white border-emerald-600'
+                                : (isLight ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200')
+                            }`}
+                          >
+                            Utuh ({item.initialStock})
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Subtotal Banner */}
+                      <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                        isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800'
+                      }`}>
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Total Uang Penjualan</span>
+                        <span className="text-sm font-black font-mono text-emerald-500 font-black dark:text-emerald-400">
+                          Rp{subtotal.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer Navigation & Finish */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-blue-900/30">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={!hasPrev}
+                        onClick={() => {
+                          if (hasPrev) {
+                            setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx - 1].productId }));
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition cursor-pointer ${
+                          !hasPrev 
+                            ? 'opacity-40 cursor-not-allowed border-transparent' 
+                            : (isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200')
+                        }`}
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!hasNext}
+                        onClick={() => {
+                          if (hasNext) {
+                            setActiveEditingRow(prev => ({ ...prev, productId: filteredItems[currentIdx + 1].productId }));
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition cursor-pointer ${
+                          !hasNext 
+                            ? 'opacity-40 cursor-not-allowed border-transparent' 
+                            : (isLight ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-700 dark:text-slate-200')
+                        }`}
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditingRow(prev => ({ ...prev, productId: null }))}
+                      className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition active:scale-95 text-slate-900 dark:text-white ${
+                        isStep1 ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                      }`}
+                    >
+                      <Check className="w-4 h-4" /> Simpan & Tutup
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })()}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+}

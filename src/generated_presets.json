@@ -1,0 +1,450 @@
+[
+  {
+    "id": "1779775428330",
+    "kategori": "Order Kuota",
+    "keterangan": "PLN Token Listrik isi 20",
+    "modal": 21850,
+    "jual": 23000
+  },
+  {
+    "id": "1779775428331",
+    "kategori": "Order Kuota",
+    "keterangan": "PLN Token Listrik isi 25",
+    "modal": 26964,
+    "jual": 28000
+  },
+  {
+    "id": "1779775428332",
+    "kategori": "Order Kuota",
+    "keterangan": "PLN Token Listrik isi 50",
+    "modal": 51850,
+    "jual": 53000
+  },
+  {
+    "id": "1779775428333",
+    "kategori": "Order Kuota",
+    "keterangan": "PLN Token Listrik isi 100",
+    "modal": 101850,
+    "jual": 104000
+  },
+  {
+    "id": "1779775428334",
+    "kategori": "Order Kuota",
+    "keterangan": "Maxim isi 10",
+    "modal": 12387,
+    "jual": 14000
+  },
+  {
+    "id": "1779775428335",
+    "kategori": "Order Kuota",
+    "keterangan": "Maxim isi 20",
+    "modal": 22387,
+    "jual": 24000
+  },
+  {
+    "id": "1779775428336",
+    "kategori": "Order Kuota",
+    "keterangan": "Maxim isi 15",
+    "modal": 17387,
+    "jual": 19000
+  },
+  {
+    "id": "1779775428337",
+    "kategori": "Order Kuota",
+    "keterangan": "Maxim isi 40",
+    "modal": 42387,
+    "jual": 44000
+  },
+  {
+    "id": "1779775428338",
+    "kategori": "Order Kuota",
+    "keterangan": "Maxim isi 50",
+    "modal": 52387,
+    "jual": 54000
+  },
+  {
+    "id": "1779775428339",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 5",
+    "modal": 5300,
+    "jual": 7000
+  },
+  {
+    "id": "1779775428340",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 10",
+    "modal": 10300,
+    "jual": 12000
+  },
+  {
+    "id": "1779775428341",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 15",
+    "modal": 14990,
+    "jual": 17000
+  },
+  {
+    "id": "1779775428342",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 20",
+    "modal": 19900,
+    "jual": 22000
+  },
+  {
+    "id": "1779775428343",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 25",
+    "modal": 24900,
+    "jual": 27000
+  },
+  {
+    "id": "1779775428344",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 30",
+    "modal": 29900,
+    "jual": 32000
+  },
+  {
+    "id": "1779775428345",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 40",
+    "modal": 39900,
+    "jual": 42000
+  },
+  {
+    "id": "1779775428346",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 60",
+    "modal": 59450,
+    "jual": 62000
+  },
+  {
+    "id": "1779775428347",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa Telkomsel isi 70",
+    "modal": 69500,
+    "jual": 72000
+  },
+  {
+    "id": "1779775428348",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 5",
+    "modal": 5800,
+    "jual": 7000
+  },
+  {
+    "id": "1779775428349",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 10",
+    "modal": 10800,
+    "jual": 12000
+  },
+  {
+    "id": "1779775428350",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 15",
+    "modal": 15045,
+    "jual": 17000
+  },
+  {
+    "id": "1779775428351",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 25",
+    "modal": 25100,
+    "jual": 27000
+  },
+  {
+    "id": "1779775428352",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 30",
+    "modal": 31100,
+    "jual": 32000
+  },
+  {
+    "id": "1779775428353",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 40",
+    "modal": 40200,
+    "jual": 47000
+  },
+  {
+    "id": "1779775428354",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 50",
+    "modal": 50100,
+    "jual": 52000
+  },
+  {
+    "id": "1779775428355",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa xl isi 60",
+    "modal": 60100,
+    "jual": 62000
+  },
+  {
+    "id": "1779775428356",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 5",
+    "modal": 5800,
+    "jual": 7000
+  },
+  {
+    "id": "1779775428357",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 10",
+    "modal": 10850,
+    "jual": 12000
+  },
+  {
+    "id": "1779775428358",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 15",
+    "modal": 15100,
+    "jual": 17000
+  },
+  {
+    "id": "1779775428359",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 25",
+    "modal": 25100,
+    "jual": 27000
+  },
+  {
+    "id": "1779775428360",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 30",
+    "modal": 30100,
+    "jual": 32000
+  },
+  {
+    "id": "1779775428361",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 40",
+    "modal": 40100,
+    "jual": 42000
+  },
+  {
+    "id": "1779775428362",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa axis isi 50",
+    "modal": 50100,
+    "jual": 52000
+  },
+  {
+    "id": "1779775428363",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 5",
+    "modal": 6600,
+    "jual": 8000
+  },
+  {
+    "id": "1779775428364",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 10",
+    "modal": 11500,
+    "jual": 13000
+  },
+  {
+    "id": "1779775428365",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 15",
+    "modal": 15700,
+    "jual": 17000
+  },
+  {
+    "id": "1779775428366",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 20",
+    "modal": 20600,
+    "jual": 22000
+  },
+  {
+    "id": "1779775428367",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 25",
+    "modal": 25400,
+    "jual": 27000
+  },
+  {
+    "id": "1779775428368",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 30",
+    "modal": 30300,
+    "jual": 32000
+  },
+  {
+    "id": "1779775428369",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 40",
+    "modal": 40300,
+    "jual": 42000
+  },
+  {
+    "id": "1779775428370",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa im3 isi 50",
+    "modal": 49000,
+    "jual": 52000
+  },
+  {
+    "id": "1779775428371",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 5",
+    "modal": 5172,
+    "jual": 7000
+  },
+  {
+    "id": "1779775428372",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 10",
+    "modal": 10125,
+    "jual": 12000
+  },
+  {
+    "id": "1779775428373",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 15",
+    "modal": 14775,
+    "jual": 17000
+  },
+  {
+    "id": "1779775428374",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 20",
+    "modal": 19775,
+    "jual": 22000
+  },
+  {
+    "id": "1779775428375",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 25",
+    "modal": 24800,
+    "jual": 27000
+  },
+  {
+    "id": "1779775428376",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 30",
+    "modal": 29750,
+    "jual": 32000
+  },
+  {
+    "id": "1779775428377",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 40",
+    "modal": 39500,
+    "jual": 42000
+  },
+  {
+    "id": "1779775428378",
+    "kategori": "Order Kuota",
+    "keterangan": "Pulsa tri isi 50",
+    "modal": 48700,
+    "jual": 52000
+  },
+  {
+    "id": "1779775428379",
+    "kategori": "Transfer Bank",
+    "keterangan": "Bank BNI",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428380",
+    "kategori": "Transfer Bank",
+    "keterangan": "Bank BRI",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428381",
+    "kategori": "Transfer Bank",
+    "keterangan": "Bank BCA",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428382",
+    "kategori": "Transfer Bank",
+    "keterangan": "Bank BNI",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428383",
+    "kategori": "FLIP",
+    "keterangan": "Ovo",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428384",
+    "kategori": "FLIP",
+    "keterangan": "Link Aja",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428385",
+    "kategori": "FLIP",
+    "keterangan": "Gopay",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428386",
+    "kategori": "FLIP",
+    "keterangan": "Shopeepay",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428387",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Qris",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428388",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer ATM",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428389",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer Ke BNI",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428390",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer Ke Mandiri",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428391",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer Ke BRI",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428392",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer Ke Gopay",
+    "modal": 0,
+    "jual": 0
+  },
+  {
+    "id": "1779775428393",
+    "kategori": "Tarik Tunai",
+    "keterangan": "Transfer Ke DANA",
+    "modal": 0,
+    "jual": 0
+  }
+]

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "256990495801",
+    "project_id": "alfalia",
+    "storage_bucket": "alfalia.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:256990495801:android:d04f3be5bdf6ee00f639e8",
+        "android_client_info": {
+          "package_name": "com.alfazacell.alpha"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "256990495801-52u02imi589vcdrpiu9kvncfiuvt095q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.alfazacell.alpha",
+            "certificate_hash": "93f435acf57f5fe4bcedeb1f1354000e928a276f"
+          }
+        },
+        {
+          "client_id": "256990495801-l3lohe96pfple3136lgiomejm4eh1r0a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkYYd3AjoV8EdYnmXj4j_DIpYWjLeUHAA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "256990495801-l3lohe96pfple3136lgiomejm4eh1r0a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

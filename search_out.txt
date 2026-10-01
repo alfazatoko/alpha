@@ -1,0 +1,15 @@
+===================
+<USER_REQUEST>
+saya tanya dulu ini, jawab saja.
+kenapa codign saya sblm nya2 jadi error lgi, kembali ke seperti semula.
+
+Alur Shift Kasir
+Pilih proses yang ingin Anda lakukan saat ini.
+
+halaman ini, jadi kembali ke asal lgi, pdhl sudah di edit tdi,
+
+jawab dulu kenapa,jgn bikin kode
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T11:50:12+08:00.
+</ADDITIONAL_METADATA>

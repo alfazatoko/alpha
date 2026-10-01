@@ -1,0 +1,269 @@
+import React, { useState, useEffect } from 'react'
+import { getLocalDateString, getShiftInfo } from '../lib/utils'
+
+export interface KasirAccount {
+  pin: string
+  role: 'owner' | 'kasir'
+  name: string
+  targetTrx?: number
+  alamat?: string
+  tempatLahir?: string
+  tanggalLahir?: string
+  tanggalJoin?: string
+  gajiPokok?: number
+  totalOffBulanIni?: number
+  avatar?: string
+  paymentHistory?: any[]
+}
+
+export const getDefaultKasirAccounts = (): Record<string, KasirAccount> => ({
+  'owner': { pin: '0000', role: 'owner', name: 'Owner' },
+  'kasir1': { pin: '1234', role: 'kasir', name: 'Kasir 1' },
+  'kasir2': { pin: '5678', role: 'kasir', name: 'Kasir 2' },
+})
+
+export const getKasirAccounts = (): Record<string, KasirAccount> => {
+  const stored = localStorage.getItem('alphaPro_kasir_list')
+  if (stored) {
+    try { return JSON.parse(stored) } catch(e) {}
+  }
+  return getDefaultKasirAccounts()
+}
+
+export const saveKasirAccounts = (accounts: Record<string, KasirAccount>) => {
+  localStorage.setItem('alphaPro_kasir_list', JSON.stringify(accounts))
+}
+
+
+interface LoginScreenProps {
+  onLogin: (username: string, account: KasirAccount, alasan_telat?: string) => void
+  storeName?: string
+  kasirListOverride?: Record<string, KasirAccount>
+  financialSettings?: Record<string, string>
+}
+
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, storeName, kasirListOverride, financialSettings }) => {
+  const [selectedUser, setSelectedUser] = useState('')
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [isShaking, setIsShaking] = useState(false)
+  const [isPinEnabled, setIsPinEnabled] = useState(true)
+  const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
+  const [hasAbsenToday, setHasAbsenToday] = useState(false)
+  const [isAbsenChecked, setIsAbsenChecked] = useState(false)
+  const [alasanTelat, setAlasanTelat] = useState('')
+  const [currentTimeStr, setCurrentTimeStr] = useState(() => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeStr(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+    }, 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (selectedUser && kasirList[selectedUser]?.role !== 'owner') {
+      const today = getLocalDateString()
+      const absens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+      if (absens[selectedUser]?.date === today) {
+        setHasAbsenToday(true)
+      } else {
+        setHasAbsenToday(false)
+      }
+      setIsAbsenChecked(false)
+    }
+  }, [selectedUser, kasirList])
+
+  useEffect(() => {
+    if (kasirListOverride) {
+      setKasirList(kasirListOverride)
+    } else {
+      setKasirList(getKasirAccounts())
+    }
+  }, [kasirListOverride])
+
+
+
+  // Check if PIN is enabled from localStorage
+  useEffect(() => {
+    const enabled = localStorage.getItem('alphaPro_isPinEnabled')
+    if (enabled === 'false') {
+      setIsPinEnabled(false)
+    }
+  }, [])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!selectedUser) {
+      setError('Silakan pilih pengguna.')
+      triggerShake()
+      return
+    }
+
+    const account = kasirList[selectedUser]
+    if (!account) {
+      setError('Akun tidak valid.')
+      triggerShake()
+      return
+    }
+
+    if (account.role !== 'owner' && !hasAbsenToday && !isAbsenChecked) {
+      setError('Harap centang Absen Masuk untuk hari ini.')
+      triggerShake()
+      return
+    }
+
+    const shiftInfo = account.role !== 'owner' ? getShiftInfo(currentTimeStr, financialSettings) : null;
+    const isLate = shiftInfo?.isLate || false;
+
+    if (account.role !== 'owner' && !hasAbsenToday && isAbsenChecked) {
+      if (isLate && !alasanTelat.trim()) {
+        setError('Anda terlambat masuk shift. Harap isi alasan keterlambatan.')
+        triggerShake()
+        return
+      }
+    }
+
+    // Only validate PIN if enabled
+    if (isPinEnabled) {
+      if (!pin) {
+        setError('PIN harus diisi.')
+        triggerShake()
+        return
+      }
+
+      if (account.pin !== pin) {
+        setError('PIN salah. Coba lagi.')
+        setPin('')
+        triggerShake()
+        return
+      }
+    }
+
+    // Success
+    if (account.role !== 'owner' && !hasAbsenToday && isAbsenChecked) {
+       const today = getLocalDateString()
+       const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+       const absens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+       absens[selectedUser] = { date: today, time }
+       localStorage.setItem('alphaPro_absen_harian', JSON.stringify(absens))
+    }
+
+    onLogin(selectedUser, account, isAbsenChecked && isLate ? alasanTelat.trim() : undefined)
+  }
+
+  const triggerShake = () => {
+    setIsShaking(true)
+    setTimeout(() => setIsShaking(false), 500)
+  }
+
+  return (
+    <div className="login-screen">
+      <div className={`login-card ${isShaking ? 'shake' : ''}`}>
+        {/* Logo / Title */}
+        <div className="login-header">
+          <img src="/logo_icon.png" alt="ALPHA Logo" className="w-20 h-20 object-contain mx-auto mb-4 drop-shadow-xl" />
+          <h1 className="login-title">
+            {storeName ? storeName.toUpperCase() : 'ALPHA'} <span className="login-title-accent">{storeName ? '' : 'Pro'}</span>
+          </h1>
+          <p className="login-subtitle">{storeName ? 'Login Kasir' : 'Pembukuan Agen brilink & Konter'}</p>
+
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="login-form">
+          {/* User Select */}
+          <div className="login-field">
+            <label className="login-label">Pilih Pengguna</label>
+            <div className="login-select-wrapper">
+              <select
+                value={selectedUser}
+                onChange={(e) => { setSelectedUser(e.target.value); setError('') }}
+                className="login-select"
+              >
+                <option value="" disabled>Pilih Pengguna</option>
+                {Object.entries(kasirList)
+                  .filter(([_id, acc]) => acc.role !== 'owner')
+                  .map(([id, acc]) => (
+                  <option key={id} value={id}>
+                    {acc.name} (Kasir)
+                  </option>
+                ))}
+              </select>
+              <i className="fa-solid fa-chevron-down login-select-icon"></i>
+            </div>
+          </div>
+
+          {/* Absen Checkbox */}
+          {selectedUser && kasirList[selectedUser]?.role !== 'owner' && !hasAbsenToday && (
+            <div className="login-field" style={{ marginBottom: '1rem' }}>
+               <label className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors shadow-sm">
+                  <input type="checkbox" checked={isAbsenChecked} onChange={e => { setIsAbsenChecked(e.target.checked); setError(''); }} className="w-5 h-5 accent-amber-500 rounded" />
+                  <span className="text-xs font-black text-amber-700 uppercase tracking-widest flex-1">
+                     ABSEN MASUK
+                     <div className="text-[9px] text-amber-600 font-bold mt-0.5 tracking-normal">Jam {currentTimeStr}</div>
+                  </span>
+                  <i className="fa-solid fa-clock text-amber-400 text-lg"></i>
+               </label>
+               {isAbsenChecked && getShiftInfo(currentTimeStr, financialSettings).isLate && (
+                 <div className="mt-3 bg-red-50 p-3 rounded-xl border border-red-200 shadow-inner animate-in slide-in-from-top-2">
+                   <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation"></i> Anda Terlambat ({getShiftInfo(currentTimeStr, financialSettings).lateMins} Menit)</p>
+                   <textarea 
+                     className="w-full text-xs p-2 rounded-lg border-red-300 focus:border-red-500 focus:ring-red-500 bg-white placeholder-red-300 text-red-900" 
+                     placeholder="Tulis alasan keterlambatan Anda di sini secara jelas..." 
+                     rows={3} 
+                     value={alasanTelat}
+                     onChange={e => { setAlasanTelat(e.target.value); setError(''); }}
+                   />
+                 </div>
+               )}
+            </div>
+          )}
+
+          {/* PIN Input (Hidden if PIN is disabled) */}
+          {isPinEnabled && (
+            <div className="login-field">
+              <label className="login-label">PIN</label>
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/[^0-9]/g, '')); setError('') }}
+                placeholder="Masukkan PIN"
+                maxLength={6}
+                className="login-input"
+                inputMode="numeric"
+              />
+            </div>
+          )}
+
+          {/* PIN Info if disabled */}
+          {!isPinEnabled && selectedUser && (
+            <p className="text-[10px] text-emerald-600 font-bold text-center mt-1 animate-pulse">
+              <i className="fa-solid fa-shield-check mr-1"></i> Mode Tanpa PIN Aktif
+            </p>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="login-error">
+              <i className="fa-solid fa-circle-exclamation"></i>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button type="submit" className="login-btn">
+            MASUK
+          </button>
+        </form>
+
+        {/* Footer */}
+        <p className="login-footer">ALPHA Pro v1.0</p>
+      </div>
+    </div>
+  )
+}
+
+export default LoginScreen

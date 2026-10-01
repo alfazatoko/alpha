@@ -1,0 +1,733 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  History, 
+  Calendar, 
+  Lock, 
+  User, 
+  Package, 
+  Banknote, 
+  QrCode, 
+  CheckCircle2, 
+  AlertCircle, 
+  ChevronRight, 
+  ChevronDown, 
+  Clock, 
+  ArrowRight, 
+  Filter, 
+  ShieldCheck,
+  Search,
+  FileSpreadsheet,
+  Layers,
+  Sparkles,
+  Receipt
+} from 'lucide-react';
+import type { DetailedHandoverRecord, Cashier } from '../types';
+
+interface RiwayatTabProps {
+  handoverRecords: DetailedHandoverRecord[];
+  transactions?: any[];
+  allCashiers?: Cashier[];
+  onSelectRecord?: (record: DetailedHandoverRecord) => void;
+  onNavigateToStock?: () => void;
+  onBackToDashboard?: () => void;
+}
+
+export default function RiwayatTab({
+  handoverRecords,
+  transactions = [],
+  allCashiers = [],
+  onSelectRecord,
+  onNavigateToStock,
+  onBackToDashboard
+}: RiwayatTabProps) {
+  // Today's date string in YYYY-MM-DD
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // Filter states
+  const [viewMode, setViewMode] = useState<'daily' | 'archive'>('daily');
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<'all' | '1' | '2'>('all');
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('all');
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+  const [searchVoucherQuery, setSearchVoucherQuery] = useState<string>('');
+
+  // Group records by date for archive view
+  const archivedDates = useMemo(() => {
+    const dates: Record<string, { count: number; sales: number }> = {};
+    handoverRecords.forEach(rec => {
+      if (!dates[rec.date]) {
+        dates[rec.date] = { count: 0, sales: 0 };
+      }
+      dates[rec.date].count++;
+      dates[rec.date].sales += rec.totalSalesAmount;
+    });
+    return Object.entries(dates).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [handoverRecords]);
+
+  // Filtered records based on selected date, shift & cashier
+  const filteredRecords = useMemo(() => {
+    return handoverRecords.filter((rec) => {
+      const matchDate = selectedDate ? rec.date === selectedDate : true;
+      const matchShift = selectedShiftFilter === 'all' ? true : String(rec.shiftNumber) === selectedShiftFilter;
+      const matchCashier = selectedCashierFilter === 'all' ? true : (rec.cashierFromName === selectedCashierFilter || rec.cashierToName === selectedCashierFilter);
+      return matchDate && matchShift && matchCashier;
+    });
+  }, [handoverRecords, selectedDate, selectedShiftFilter, selectedCashierFilter]);
+
+  // Aggregate totals for the selected date
+  const daySummary = useMemo(() => {
+    const recordsForDay = handoverRecords.filter((rec) => rec.date === selectedDate);
+    const totalTrx      = recordsForDay.reduce((sum, r) => sum + r.totalSoldPcs, 0);
+    const totalUangMasuk = recordsForDay.reduce((sum, r) => sum + r.totalSalesAmount, 0);
+    const totalTarikTunai = recordsForDay.reduce((sum, r) => sum + r.cashPhysical, 0);
+    const totalAdmin    = recordsForDay.reduce((sum, r) => sum + r.cashExpected, 0);
+    const totalQris     = recordsForDay.reduce((sum, r) => sum + r.qrisAmount, 0);
+    const completedShifts = recordsForDay.length;
+
+    return {
+      totalTrx,
+      totalUangMasuk,
+      totalTarikTunai,
+      totalAdmin,
+      totalQris,
+      completedShifts
+    };
+  }, [handoverRecords, selectedDate]);
+
+  // Helper: format currency full (sekarang kolom sudah besar, tidak perlu disingkat)
+  const fmtCompact = (n: number) => {
+    return n.toLocaleString('id-ID');
+  };
+
+  // Format date helper: "17 Agustus 2026"
+  const formatDateLabel = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const [year, month, day] = dateStr.split('-');
+      const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      return d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Quick date presets
+  const handleSetQuickDate = (type: 'today' | 'yesterday') => {
+    const d = new Date();
+    if (type === 'yesterday') {
+      d.setDate(d.getDate() - 1);
+    }
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    setSelectedDate(`${year}-${month}-${day}`);
+  };
+
+  return (
+    <div className="space-y-2 w-full max-w-5xl mx-auto pb-32 overflow-x-hidden px-0.5 text-slate-700 dark:text-slate-200" id="riwayat-serah-terima-container">
+      
+      {/* HEADER SECTION: Clean & Minimalist */}
+      <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-sm backdrop-blur-md">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-start gap-2">
+            <div className="w-9 h-9 rounded-xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
+              <History className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight flex flex-col gap-1">
+                <span className="truncate">{viewMode === 'daily' ? 'Riwayat Serah Terima' : 'Arsip Audit Lengkap'}</span>
+                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 w-max leading-none">
+                  <ShieldCheck className="w-3 h-3" /> Arsip Terkunci
+                </span>
+              </h2>
+              <p className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug truncate">
+                {viewMode === 'daily' 
+                  ? 'Catatan resmi serah terima stok & uang antar kasir per shift.' 
+                  : 'Kumpulan seluruh data audit dari waktu ke waktu.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/60 p-1 rounded-xl border border-slate-200 dark:border-slate-800 w-full">
+            <button
+              onClick={() => setViewMode('daily')}
+              className={`flex-1 py-1 rounded-lg text-xs font-black transition ${viewMode === 'daily' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              Harian
+            </button>
+            <button
+              onClick={() => setViewMode('archive')}
+              className={`flex-1 py-1 rounded-lg text-xs font-black transition ${viewMode === 'archive' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              Semua Arsip
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {viewMode === 'daily' ? (
+        <>
+          {/* FILTER BAR & DATE SELECTOR */}
+          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 space-y-1">
+            {/* ROW 1: COMPACT SINGLE ROW DATE SELECTOR */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/60 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSetQuickDate('today')}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                    selectedDate === todayStr 
+                      ? 'bg-slate-700 text-white shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  Hari Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetQuickDate('yesterday')}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                    selectedDate !== todayStr 
+                      ? 'bg-slate-700 text-white shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  Kemarin
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner shrink-0">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent font-bold text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer w-[95px]"
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Shift & Cashier Filters */}
+            <div className="grid grid-cols-2 gap-0.5 pt-1 border-t border-slate-200 dark:border-slate-800/40">
+              {/* Cashier Filter Dropdown */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <User className="w-2.5 h-2.5"/> Filter Kasir
+                </span>
+                <div className="relative w-full">
+                  <select
+                    value={selectedCashierFilter}
+                    onChange={(e) => setSelectedCashierFilter(e.target.value)}
+                    className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-800 dark:text-white rounded-xl pl-2 pr-6 py-1 focus:outline-none focus:border-indigo-500 transition cursor-pointer shadow-sm"
+                  >
+                    <option value="all">Semua Kasir</option>
+                    {allCashiers.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Shift Filter Pills */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Shift</span>
+                <div className="flex items-center gap-1 w-full bg-slate-50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedShiftFilter('all')}
+                    className={`flex-1 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      selectedShiftFilter === 'all'
+                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white border-transparent'
+                        : 'bg-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedShiftFilter('1')}
+                    className={`flex-1 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      selectedShiftFilter === '1'
+                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white border-transparent'
+                        : 'bg-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    S1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedShiftFilter('2')}
+                    className={`flex-1 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      selectedShiftFilter === '2'
+                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white border-transparent'
+                        : 'bg-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    S2
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                REKAP TOTAL HARIAN — 4 Kolom: TRX | Omset | Kas Fisik | Kas Sistem
+            ───────────────────────────────────────────────────────────────── */}
+            <div className="pt-1 border-t border-slate-200 dark:border-slate-800/80 space-y-1">
+
+              {/* Row 1: TRX + Shift */}
+              <div className="grid grid-cols-2 gap-0.5">
+                {/* TRX */}
+                <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/60 dark:to-indigo-900/30 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-1.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] uppercase font-black text-indigo-600 dark:text-indigo-400 tracking-widest block">TRX</span>
+                    <div className="text-2xl font-black font-mono text-indigo-900 dark:text-white mt-0.5 leading-none">
+                      {daySummary.totalTrx}
+                    </div>
+                    <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold">Voucher Terjual</span>
+                  </div>
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100/50 dark:bg-indigo-500/20 border border-indigo-200/50 dark:border-indigo-500/30 flex items-center justify-center">
+                    <Receipt className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                </div>
+
+                {/* Shift Selesai */}
+                <div className="bg-gradient-to-br from-white to-slate-50/50 dark:from-slate-900/60 dark:to-slate-800/30 border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] uppercase font-black text-slate-500 dark:text-slate-400 tracking-widest block">Shift</span>
+                    <div className="text-2xl font-black font-mono text-slate-800 dark:text-white mt-0.5 leading-none">
+                      {daySummary.completedShifts}
+                    </div>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400 font-bold">Selesai Hari Ini</span>
+                  </div>
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-600/20 border border-slate-200 dark:border-slate-600/30 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Omset + QRIS + Kas Sistem + Kas Fisik — 2x2 grid to prevent text wrapping on mobile */}
+              <div className="grid grid-cols-2 gap-0.5 pt-0.5">
+                {/* Omset */}
+                <div className="bg-emerald-50 dark:bg-slate-950/50 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-1.5 flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest">OMSET</span>
+                      <Banknote className="w-3 h-3 text-emerald-500/60" />
+                    </div>
+                    <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm leading-tight truncate">
+                      Rp {fmtCompact(daySummary.totalUangMasuk)}
+                    </div>
+                  </div>
+                  <div className="text-[8px] text-emerald-600/80 font-bold mt-0.5 leading-tight">Total Penjualan (Tunai + QRIS)</div>
+                </div>
+
+                {/* QRIS / Non-Tunai */}
+                <div className="bg-purple-50 dark:bg-slate-950/50 border border-purple-200 dark:border-purple-500/20 rounded-xl p-1.5 flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] uppercase font-black text-purple-700 dark:text-purple-400 tracking-widest">NON-TUNAI</span>
+                      <QrCode className="w-3 h-3 text-purple-500/60" />
+                    </div>
+                    <div className="font-mono font-black text-purple-700 dark:text-purple-400 text-xs sm:text-sm leading-tight truncate">
+                      Rp {fmtCompact(daySummary.totalQris)}
+                    </div>
+                  </div>
+                  <div className="text-[8px] text-purple-600/80 font-bold mt-0.5 leading-tight">Pendapatan via QRIS/Transfer</div>
+                </div>
+
+                {/* Kas Sistem */}
+                <div className="bg-amber-50 dark:bg-slate-950/50 border border-amber-200 dark:border-amber-500/20 rounded-xl p-1.5 flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest">KAS SISTEM</span>
+                      <ShieldCheck className="w-3 h-3 text-amber-500/60" />
+                    </div>
+                    <div className="font-mono font-black text-amber-700 dark:text-amber-400 text-xs sm:text-sm leading-tight truncate">
+                      Rp {fmtCompact(daySummary.totalAdmin)}
+                    </div>
+                  </div>
+                  <div className="text-[8px] text-amber-600/80 font-bold mt-0.5 leading-tight">Tunai Hitungan (Omset - QRIS)</div>
+                </div>
+
+                {/* Kas Fisik */}
+                <div className="bg-cyan-50 dark:bg-slate-950/50 border border-cyan-200 dark:border-cyan-500/20 rounded-xl p-1.5 flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest">KAS FISIK</span>
+                      <Banknote className="w-3 h-3 text-cyan-500/60" />
+                    </div>
+                    <div className="font-mono font-black text-cyan-700 dark:text-cyan-400 text-xs sm:text-sm leading-tight truncate">
+                      Rp {fmtCompact(daySummary.totalTarikTunai)}
+                    </div>
+                  </div>
+                  <div className="text-[8px] text-cyan-600/80 font-bold mt-0.5 leading-tight">Tunai Fisik di Laci Kasir</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* LIST OF SHIFT HANDOVER CARDS FOR THE SELECTED DATE */}
+          <div className="space-y-2">
+            {filteredRecords.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
+                  <History className="w-6 h-6" />
+                </div>
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Belum Ada Riwayat Serah Terima</h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Tidak ada catatan serah terima kasir pada tanggal <strong className="text-slate-600 dark:text-slate-300">{formatDateLabel(selectedDate)}</strong>.
+                  </p>
+                </div>
+                {onNavigateToStock && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToStock}
+                    className="px-4 py-2 bg-white border-slate-200 shadow-sm dark:bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Package className="w-3.5 h-3.5" /> Buka Atur Stok Shift Sekarang
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredRecords.map((record) => {
+                const isExpanded = expandedRecordId === record.id;
+                const isCashMatched = record.cashDifference === 0;
+
+                const timeFormatted = (() => {
+                  try {
+                    return new Date(record.timestamp).toLocaleTimeString('id-ID', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }) + ' WIB';
+                  } catch {
+                    return 'Waktu Selesai';
+                  }
+                })();
+
+                // Only show products that were sold (soldStock > 0), and apply search filter
+                const displayedProducts = (record.productsSummary || []).filter(p => {
+                  const soldCount = p.soldStock ?? (p as any).soldPcs ?? Math.max(0, (p.initialStock + (p.incomingStock || 0)) - p.finalStock);
+                  const isSold = soldCount > 0;
+                  const pName = p.productName || (p as any).name || '';
+                  const matchesSearch = searchVoucherQuery.trim() === '' || 
+                    pName.toLowerCase().includes(searchVoucherQuery.toLowerCase());
+                  return isSold && matchesSearch;
+                });
+
+                return (
+                  <div 
+                    key={record.id}
+                    className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition hover:border-slate-700"
+                  >
+                    {/* RECORD MAIN HEADER & SUMMARY ROW */}
+                    <div className="p-2 sm:p-3 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1.5 pb-2 border-b border-slate-200 dark:border-slate-800/80">
+                        
+                        {/* Shift & Time */}
+                        <div className="flex items-start gap-2.5">
+                          <span className="w-7 h-7 rounded-lg bg-white border-slate-200 shadow-sm dark:bg-slate-800 border border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center shrink-0">
+                            {record.shiftNumber}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate">{record.shiftName}</h3>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                                <Clock className="w-3 h-3 text-slate-600 dark:text-slate-400" /> {timeFormatted}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-1 break-words">
+                              Oleh: <span className="text-slate-700 dark:text-slate-200 font-semibold">{record.cashierFromName}</span> ➔ Ke: <span className="text-slate-700 dark:text-slate-200 font-semibold">{record.cashierToName || 'Belum di-set'}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Lock Status & Toggle Detail Button */}
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRecordId(isExpanded ? null : record.id)}
+                            className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[10px] font-black uppercase rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                          >
+                            {isExpanded ? 'Tutup Detail' : 'Rincian Voucher'}
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* ───────────────────────────────────────────────────────────
+                          SUMMARY STATS — 6 kolom (3x2 Grid): Omset | QRIS | TRX -- Sistem | Fisik | Status
+                      ─────────────────────────────────────────────────────────── */}
+                      <div className="grid grid-cols-3 gap-0.5 text-xs">
+
+                        {/* 1. Omset */}
+                        <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg p-1.5 flex flex-col justify-between h-full">
+                          <div className="text-[8px] uppercase font-black text-emerald-700 dark:text-emerald-400 tracking-widest mb-0.5">OMSET</div>
+                          <div className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-[11px] sm:text-xs leading-tight truncate">
+                            {fmtCompact(record.totalSalesAmount)}
+                          </div>
+                          <div className="text-[8px] text-emerald-600/80 font-bold mt-1 leading-none truncate">Total Penjualan</div>
+                        </div>
+
+                        {/* 2. QRIS (Non-Tunai) */}
+                        <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 rounded-lg p-1.5 flex flex-col justify-between h-full">
+                          <div className="text-[8px] uppercase font-black text-purple-700 dark:text-purple-400 tracking-widest mb-0.5">NON-TUNAI</div>
+                          <div className="font-mono font-black text-purple-700 dark:text-purple-400 text-[11px] sm:text-xs leading-tight truncate">
+                            {fmtCompact(record.qrisAmount)}
+                          </div>
+                          <div className="text-[8px] text-purple-600/80 font-bold mt-1 leading-none truncate">QRIS/Transfer</div>
+                        </div>
+
+                        {/* 3. TRX */}
+                        <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-lg p-1.5 flex flex-col justify-between h-full">
+                          <div className="text-[8px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-widest mb-0.5">TRX</div>
+                          <div className="font-mono font-black text-indigo-800 dark:text-indigo-300 text-[11px] sm:text-xs leading-tight truncate">
+                            {record.totalSoldPcs}
+                          </div>
+                          <div className="text-[8px] text-indigo-600/80 font-bold mt-1 leading-none truncate">Voucher Laku</div>
+                        </div>
+
+                        {/* 4. Kas Sistem */}
+                        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-1.5 flex flex-col justify-between h-full">
+                          <div className="text-[8px] uppercase font-black text-amber-700 dark:text-amber-400 tracking-widest mb-0.5">SISTEM</div>
+                          <div className="font-mono font-black text-amber-600 dark:text-amber-400 text-[11px] sm:text-xs leading-tight truncate">
+                            {fmtCompact(record.cashExpected)}
+                          </div>
+                          <div className="text-[8px] text-amber-600/80 font-bold mt-1 leading-none truncate">Tunai Hitungan</div>
+                        </div>
+
+                        {/* 5. Kas Fisik */}
+                        <div className="bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/20 rounded-lg p-1.5 flex flex-col justify-between h-full">
+                          <div className="text-[8px] uppercase font-black text-cyan-700 dark:text-cyan-400 tracking-widest mb-0.5">FISIK</div>
+                          <div className="font-mono font-black text-cyan-600 dark:text-cyan-400 text-[11px] sm:text-xs leading-tight truncate">
+                            {fmtCompact(record.cashPhysical)}
+                          </div>
+                          <div className="text-[8px] text-cyan-600/80 font-bold mt-1 leading-none truncate">Tunai Laci</div>
+                        </div>
+
+                        {/* 6. Status Kas */}
+                        <div className={`rounded-lg p-1.5 flex flex-col justify-between items-center h-full border ${
+                          isCashMatched
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20'
+                            : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20'
+                        }`}>
+                          <div className={`text-[8px] uppercase font-black tracking-widest ${
+                            isCashMatched ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                          }`}>Status</div>
+                          <div className={`flex items-center justify-center py-1 ${
+                            isCashMatched ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                          }`}>
+                            {isCashMatched
+                              ? <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              : <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            }
+                          </div>
+                          <div className={`text-[8px] font-black text-center leading-none mt-1 ${
+                            isCashMatched ? 'text-emerald-600 dark:text-emerald-400/80' : 'text-rose-600 dark:text-rose-400/80'
+                          }`}>
+                            {isCashMatched ? 'PAS' : `SELISIH`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EXPANDABLE PRODUCT-LEVEL DETAIL TABLE */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-3 space-y-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                              Rincian Voucher
+                            </span>
+
+                            <div className="relative">
+                              <Search className="w-3 h-3 text-slate-600 dark:text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="Cari..."
+                                value={searchVoucherQuery}
+                                onChange={(e) => setSearchVoucherQuery(e.target.value)}
+                                className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-6 pr-2 py-0.5 text-[10px] text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Product Detail Table */}
+                          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 no-scrollbar">
+                            <table className="w-full text-left text-[10px] border-collapse">
+                              <thead>
+                                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-black uppercase tracking-tighter bg-white dark:bg-slate-900/80">
+                                  <th className="py-2 px-2">Nama Voucher</th>
+                                  <th className="py-2 px-1 text-center">Awal</th>
+                                  <th className="py-2 px-1 text-center">Akhir</th>
+                                  <th className="py-2 px-1 text-center text-emerald-700 dark:text-emerald-400">Laku</th>
+                                  <th className="py-2 px-2 text-right">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-mono">
+                                {displayedProducts.map((p, idx) => (
+                                  <tr key={p.productId || idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition">
+                                    <td className="py-2 px-2 font-sans font-bold text-slate-800 dark:text-slate-200">{p.productName || (p as any).name}</td>
+                                    <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.initialStock}</td>
+                                    <td className="py-2 px-1 text-center font-bold text-slate-700 dark:text-slate-400">{p.finalStock}</td>
+                                    <td className="py-2 px-1 text-center font-black text-emerald-700 dark:text-emerald-400">{p.soldStock ?? (p as any).soldPcs ?? Math.max(0, (p.initialStock + (p.incomingStock || 0)) - p.finalStock)}</td>
+                                    <td className="py-2 px-2 text-right font-bold text-slate-800 dark:text-slate-200">
+                                      {((p.soldStock ?? (p as any).soldPcs ?? Math.max(0, (p.initialStock + (p.incomingStock || 0)) - p.finalStock)) * p.price).toLocaleString('id-ID')}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* BOX PENJUALAN PASCA CLOSING UNTUK TANGGAL TERPILIH */}
+          {(() => {
+            const postClosingTrx = transactions.filter(t => {
+               try {
+                 const d = new Date(new Date(t.timestamp).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                 return d === selectedDate && t.type === 'PENJUALAN' && (t.notes || '').includes('[PASCA-CLOSING]');
+               } catch { return false; }
+            });
+            if (postClosingTrx.length === 0) return null;
+
+            const totalPascaAmount = postClosingTrx.reduce((sum, t) => sum + (t.amount || 0), 0);
+            
+            const getPaymentLabel = (log: any): string => {
+              const notes = (log.notes || '').trim();
+              if (notes.includes('[NON_TUNAI]')) return 'QRIS';
+              if (notes.includes('[QRIS]')) return 'QRIS';
+              if (notes.includes('[TRANSFER]')) return 'TF';
+              if (notes.includes('[TUNAI]')) return 'TUNAI';
+              if (log.paymentMethod === 'NON_TUNAI' || log.paymentMethod === 'QRIS' || log.paymentMethod === 'TRANSFER') return 'QRIS';
+              return 'TUNAI';
+            };
+
+            return (
+              <div className="relative mt-7 mb-3">
+                <div className="absolute -top-2.5 left-0 right-0 flex justify-center z-10">
+                  <span className="bg-[#fffbeb] dark:bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black tracking-widest text-amber-700 dark:text-amber-400 uppercase rounded-full border border-amber-200 dark:border-amber-500/30 flex items-center gap-1 shadow-sm">
+                    <span className="w-3 h-3 rounded-full border-2 border-amber-500 flex items-center justify-center text-[8px] leading-none">!</span>
+                    INFO PENJUALAN SETELAH CLOSING
+                  </span>
+                </div>
+                <div className="border-2 border-amber-300 dark:border-amber-500/40 bg-[#fffbeb] dark:bg-amber-950/20 rounded-2xl pt-6 pb-3 px-3 shadow-sm">
+                  <p className="text-[9px] font-extrabold text-amber-700/70 dark:text-amber-500/70 uppercase tracking-widest mb-3 px-1 text-center">Tercatat pada hari ini</p>
+                  
+                  <div className="space-y-2 mb-3 bg-white dark:bg-black/20 rounded-xl p-2 border border-amber-100 dark:border-amber-900/30">
+                    {postClosingTrx.map((trx: any, idx) => {
+                      const payLabel = getPaymentLabel(trx);
+                      return (
+                        <div key={trx.id || idx} className="flex justify-between items-center py-1">
+                           <div className="flex items-center gap-1.5">
+                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                             <span className="text-[11px] font-bold text-amber-950 dark:text-amber-100">
+                               {trx.quantity}x {trx.productName || 'Produk'}
+                             </span>
+                             <span className="text-[7px] font-black uppercase px-1 py-px rounded ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border border-amber-200/50">
+                               {payLabel}
+                             </span>
+                           </div>
+                           <span className="text-[11px] font-black text-amber-900 dark:text-amber-300 shrink-0">
+                             Rp {(trx.amount || 0).toLocaleString('id-ID')}
+                           </span>
+                        </div>
+                      );
+                    })}
+
+                    <div className="flex justify-between items-center border-t border-amber-200/50 dark:border-amber-800/50 pt-2 mt-2 px-1">
+                       <span className="text-[10px] font-bold text-amber-800 dark:text-amber-400">Total Uang Fisik / QRIS:</span>
+                       <span className="text-[16px] font-black text-amber-700 dark:text-amber-500">Rp {totalPascaAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {archivedDates.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-4">
+              <div className="w-16 h-16 mx-auto rounded-3xl bg-white border-slate-200 shadow-sm dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 shadow-inner">
+                <FileSpreadsheet className="w-8 h-8" />
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto font-bold">Belum ada arsip data audit tersimpan. Selesaikan shift hari ini untuk mulai mencatat riwayat.</p>
+            </div>
+          ) : (
+            archivedDates.map(([date, stats]) => (
+              <button
+                key={date}
+                onClick={() => {
+                  setSelectedDate(date);
+                  setViewMode('daily');
+                }}
+                className="group flex items-center justify-between p-4 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl transition hover:border-indigo-500/50 hover:bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-left relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-24 h-full bg-gradient-to-l from-indigo-500/5 to-transparent pointer-events-none" />
+                
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center justify-center text-indigo-700 dark:text-indigo-300">
+                    <span className="text-[10px] font-black uppercase leading-none opacity-60">
+                      {new Date(date).toLocaleDateString('id-ID', { month: 'short' })}
+                    </span>
+                    <span className="text-lg font-black leading-none mt-1">
+                      {new Date(date).getDate()}
+                    </span>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 dark:text-white">{formatDateLabel(date)}</h4>
+                    <div className="flex items-center gap-2.5 mt-1">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                        <Layers className="w-3 h-3" /> {stats.count} Audit
+                      </span>
+                      <span className="text-slate-700">•</span>
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Rp{stats.sales.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-8 h-8 rounded-full bg-white border-slate-200 shadow-sm dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:bg-indigo-500 group-hover:text-slate-900 dark:hover:text-white transition shadow-sm">
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

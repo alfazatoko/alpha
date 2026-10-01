@@ -1,0 +1,3356 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import ProviderLogo from './components/ProviderLogo';
+import { 
+  Layers, 
+  Search, 
+  Tag, 
+  User, 
+  Bell, 
+  X, 
+  Clock, 
+  Check,
+  CheckCircle,
+  HelpCircle,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Smartphone,
+  ChevronRight,
+  Activity,
+  Wifi,
+  Battery,
+  Flame,
+  FileText,
+  RotateCcw,
+  Home,
+  History,
+  Menu,
+  ShoppingCart,
+  ClipboardList,
+  ShieldCheck,
+  Lock,
+  Unlock,
+  Shield,
+  Settings,
+  Sun,
+  Moon,
+  ArrowLeft,
+  Package, 
+  Minus, 
+  Plus, 
+  Banknote, 
+  QrCode, 
+  Zap, 
+  PackageOpen,
+  Info,
+  LogOut,
+  Palette,
+  Store,
+  CheckCircle2,
+} from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+
+// Core types & data
+import type { VoucherProduct, Cashier, Transaction, LiveNotification, ShiftHandover, DetailedHandoverRecord, UserRole } from './types';
+import { INITIAL_PRODUCTS, INITIAL_CASHIERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_DETAILED_HANDOVERS, OPERATOR_STYLES } from './data';
+
+// Tab components
+import DashboardTab from './components/DashboardTab';
+import ProductsTab from './components/ProductsTab';
+import SearchTab from './components/SearchTab';
+import ProfileTab from './components/ProfileTab';
+import LaporanTab from './components/LaporanTab';
+import DetailProductView from './components/DetailProductView';
+import AturStokTab from './components/AturStokTab';
+import RiwayatTab from './components/RiwayatTab';
+import LogAktivitasTab from './components/LogAktivitasTab';
+
+interface VoucherAppProps {
+  onExit?: () => void;
+  externalRole?: 'owner' | 'kasir';
+  externalCashierName?: string;     // display name — untuk ditampilkan di UI
+  externalCashierUsername?: string; // username/ID unik — untuk pencocokan internal
+  activeStoreId?: string;
+  googleUid?: string;
+  kasirList?: Record<string, { name?: string; role?: string; pin?: string; avatar?: string }>;
+  externalSearchQuery?: string;
+  externalTab?: string;
+  onClearExternalTab?: () => void;
+  onClearExternalSearchQuery?: () => void;
+  /** Daftar semua toko milik user — untuk fitur salin produk antar toko */
+  storeList?: Array<{ id: string; name: string; subtext?: string }>;
+}
+
+
+export const sortVoucherProducts = (products: VoucherProduct[]) => {
+  return [...products].sort((a, b) => {
+    // 1. Kelompokkan berdasarkan Provider (Operator)
+    const opA = (a?.operator || '').toLowerCase();
+    const opB = (b?.operator || '').toLowerCase();
+    if (opA !== opB) {
+      return opA.localeCompare(opB);
+    }
+    
+    // 2. Urutkan berdasarkan harga termurah
+    if (a?.sellingPrice !== b?.sellingPrice) {
+      return (a?.sellingPrice || 0) - (b?.sellingPrice || 0);
+    }
+    
+    // 3. Urutkan berdasarkan masa aktif (Hari) jika harga sama
+    const getDays = (name: string) => {
+      if (!name) return 999;
+      const match = name.match(/(\d+)\s*Hari/i);
+      if (match) return parseInt(match[1], 10);
+      return 999;
+    };
+    const daysA = getDays(a?.name);
+    const daysB = getDays(b?.name);
+    
+    if (daysA !== daysB) {
+      return daysA - daysB;
+    }
+    
+    // 4. Urutkan berdasarkan Kuota (GB) jika harga dan hari sama
+    const getGB = (name: string) => {
+      if (!name) return 0;
+      const match = name.match(/([\d\.]+)\s*GB/i);
+      if (match) return parseFloat(match[1]);
+      return 0;
+    };
+    const gbA = getGB(a?.name);
+    const gbB = getGB(b?.name);
+    if (gbA !== gbB) {
+      return gbA - gbB;
+    }
+    
+    // 5. Urutkan abjad nama sebagai fallback terakhir
+    return (a?.name || '').localeCompare(b?.name || '');
+  });
+};
+
+export default function App({ onExit, externalRole, externalCashierName, externalCashierUsername, activeStoreId, googleUid, kasirList, externalSearchQuery, externalTab, onClearExternalTab, onClearExternalSearchQuery, storeList }: VoucherAppProps = {}) {
+  // Navigation tabs (Home, Catalog, Search, Reports, Profile/Settings, Atur Stok, Riwayat)
+  const [activeTab, setActiveTab] = useState<'beranda' | 'produk' | 'pencarian' | 'laporan' | 'profil' | 'stok' | 'riwayat' | 'notif'>('beranda');
+  
+  // Theme state
+  const [theme, setTheme] = useState<'dark' | 'light'>(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  const isLight = theme === 'light';
+
+  // Core Persistent States
+  const [products, setProducts] = useState<VoucherProduct[]>([]);
+
+  // --- HIDDEN PRODUCTS SYNC ---
+  const [hiddenProductIds, setHiddenProductIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`alphaPro_${activeStoreId || 'default'}_hidden_products`);
+      if (stored) {
+        setHiddenProductIds(JSON.parse(stored));
+      } else {
+        setHiddenProductIds([]);
+      }
+    } catch {}
+  }, [activeStoreId]);
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      const key = `alphaPro_${activeStoreId || 'default'}_hidden_products`;
+      if (e.key === key && e.newValue) {
+        try { setHiddenProductIds(JSON.parse(e.newValue)); } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [activeStoreId]);
+  
+  useEffect(() => {
+    const handler = (e: any) => setHiddenProductIds(e.detail);
+    window.addEventListener('hidden-products-changed', handler as EventListener);
+    return () => window.removeEventListener('hidden-products-changed', handler as EventListener);
+  }, []);
+
+  const visibleProducts = products.filter(p => !hiddenProductIds.includes(p.id) && !p.isHidden);
+  // -----------------------------
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [notifications, setNotifications] = useState<LiveNotification[]>([]);
+  const [shiftHandovers, setShiftHandovers] = useState<ShiftHandover[]>([]);
+  const [detailedHandovers, setDetailedHandovers] = useState<DetailedHandoverRecord[]>([]);
+
+  // ✅ SOLUSI 3: State banner "Stok Diterima" saat kasir penerima login
+  const [pendingHandoverInfo, setPendingHandoverInfo] = useState<{
+    fromCashierName: string;
+    toCashierName: string;
+    totalStockTransferred: number;
+    timestamp: string;
+  } | null>(null);
+
+  // Role & Access Control States
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>(externalRole || 'kasir');
+  const [showRoleSidebar, setShowRoleSidebar] = useState(false);
+
+  useEffect(() => {
+    if (externalTab) {
+      setActiveTab(externalTab as any);
+      if (onClearExternalTab) onClearExternalTab();
+    }
+  }, [externalTab, onClearExternalTab]);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSaleSearchQuery(externalSearchQuery);
+      setRestockSearchQuery(externalSearchQuery);
+      if (onClearExternalSearchQuery) onClearExternalSearchQuery();
+    }
+  }, [externalSearchQuery, onClearExternalSearchQuery]);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+
+  // Shift & Cashier states
+  const [cashiers, setCashiers] = useState<Cashier[]>(INITIAL_CASHIERS);
+  const [activeCashierIndex, setActiveCashierIndex] = useState<number>(0);
+
+  // ── ACTIVE SHIFT CASHIER ────────────────────────────────────────────────────
+  // Hanya 1 kasir per toko yang boleh edit stok/jual di waktu bersamaan.
+  // ID disimpan di localStorage dengan key: v_${storeId}_active_shift_cashier_id
+  const [activeShiftCashierId, setActiveShiftCashierId] = useState<string | null>(null);
+  const [globalShiftSession, setGlobalShiftSession] = useState<any>(null);
+
+  // --- CLOUD SYNC HELPERS ---
+  const broadcastChannelRef = useRef<any>(null);
+  const sessionSaveTimeoutRef = useRef<any>(null);
+
+  const isWipingRef = useRef(false);
+
+  const clearActiveShift = async () => {
+    isWipingRef.current = true;
+    if (sessionSaveTimeoutRef.current) clearTimeout(sessionSaveTimeoutRef.current);
+    
+    setActiveShiftCashierId(null);
+    setGlobalShiftSession(null);
+    
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.send({
+        type: 'broadcast',
+        event: 'sync_shift',
+        payload: { activeShiftCashierId: null, globalShiftSession: null }
+      });
+    }
+
+    if (activeStoreId) {
+      // Force fully nullify everything in one DB call
+      await supabase.from('voucher_active_shifts').upsert({
+        store_id: activeStoreId,
+        active_cashier_id: null,
+        session_data: null
+      }, { onConflict: 'store_id' });
+    }
+
+    // Allow future syncs after 3 seconds
+    setTimeout(() => { isWipingRef.current = false; }, 3000);
+  };
+
+  const syncGlobalActiveCashier = async (cashierId: string | null) => {
+    if (isWipingRef.current) return;
+    setActiveShiftCashierId(cashierId);
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.send({
+        type: 'broadcast',
+        event: 'sync_shift',
+        payload: { activeShiftCashierId: cashierId }
+      });
+    }
+    if (!activeStoreId) return;
+    await supabase.from('voucher_active_shifts').upsert({
+      store_id: activeStoreId,
+      active_cashier_id: cashierId
+    }, { onConflict: 'store_id' });
+  };
+
+  const syncGlobalShiftSession = async (sessionData: any) => {
+    if (isWipingRef.current && sessionData !== null) return;
+    setGlobalShiftSession(sessionData);
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.send({
+        type: 'broadcast',
+        event: 'sync_shift',
+        payload: { globalShiftSession: sessionData }
+      });
+    }
+    if (sessionSaveTimeoutRef.current) clearTimeout(sessionSaveTimeoutRef.current);
+    
+    if (sessionData === null) {
+      if (!activeStoreId) return;
+      await supabase.from('voucher_active_shifts').upsert({
+        store_id: activeStoreId,
+        session_data: null
+      }, { onConflict: 'store_id' });
+    } else {
+      sessionSaveTimeoutRef.current = setTimeout(async () => {
+        if (!activeStoreId || isWipingRef.current) return;
+        await supabase.from('voucher_active_shifts').upsert({
+          store_id: activeStoreId,
+          session_data: sessionData,
+          active_cashier_id: activeShiftCashierId
+        }, { onConflict: 'store_id' });
+      }, 1500);
+    }
+  };
+
+  // Auto-Sync States
+  const isDataLoadedRef = useRef(false);
+  const [unsyncedChanges, setUnsyncedChanges] = useState(false);
+  const [forceSync, setForceSync] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showExitWarning, setShowExitWarning] = useState(false);
+  const [pendingExitAction, setPendingExitAction] = useState<(() => void) | null>(null);
+
+  const performSyncToCloud = async () => {
+    if (!activeStoreId) return;
+    setIsSyncing(true);
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    
+    try {
+      const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+      const existingData = data?.voucher_app_data || {};
+      const existingCashierData = existingData[cashierId] || {};
+
+      // ── Pembatasan Data Harian (Auto-Archive) ──
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 2); // Simpan 2 hari terakhir di memori aktif
+      const cutoffTime = cutoff.getTime();
+
+      const activeTrx = transactions.filter(t => new Date(t.timestamp).getTime() >= cutoffTime);
+      const newlyArchivedTrx = transactions.filter(t => new Date(t.timestamp).getTime() < cutoffTime);
+      
+      const activeNotifs = notifications.filter(n => new Date(n.timestamp).getTime() >= cutoffTime);
+      const newlyArchivedNotifs = notifications.filter(n => new Date(n.timestamp).getTime() < cutoffTime);
+
+      const existingArchiveTrx = existingCashierData.transactions_archive || [];
+      const existingArchiveNotifs = existingCashierData.notifications_archive || [];
+
+      // Gabungkan arsip baru & lama tanpa duplikat
+      const mergedArchiveTrx = [...newlyArchivedTrx, ...existingArchiveTrx].reduce((acc, curr) => {
+        if (!acc.find((x: any) => x.id === curr.id)) acc.push(curr);
+        return acc;
+      }, [] as Transaction[]);
+
+      const mergedArchiveNotifs = [...newlyArchivedNotifs, ...existingArchiveNotifs].reduce((acc, curr) => {
+        if (!acc.find((x: any) => x.id === curr.id)) acc.push(curr);
+        return acc;
+      }, [] as LiveNotification[]);
+
+      const newData = {
+        ...existingData,
+        all_detailed_handovers: detailedHandovers,
+        [cashierId]: {
+          ...existingCashierData, // Pertahankan data lain jika ada
+          products,
+          transactions: activeTrx,
+          notifications: activeNotifs,
+          handovers: shiftHandovers,
+          transactions_archive: mergedArchiveTrx,
+          notifications_archive: mergedArchiveNotifs
+        }
+      };
+      
+      const { error } = await supabase.from('store_settings').upsert({
+        store_id: activeStoreId,
+        voucher_app_data: newData
+      }, { onConflict: 'store_id' });
+      
+      if (!error) {
+        setUnsyncedChanges(false);
+        // Jika ada data yang berhasil diarsipkan, bersihkan dari State dan LocalStorage
+        if (newlyArchivedTrx.length > 0) {
+          setTransactions(activeTrx);
+          localStorage.setItem(`v_${activeStoreId}_${cashierId}_transactions`, JSON.stringify(activeTrx));
+        }
+        if (newlyArchivedNotifs.length > 0) {
+          setNotifications(activeNotifs);
+          localStorage.setItem(`v_${activeStoreId}_${cashierId}_notifications`, JSON.stringify(activeNotifs));
+        }
+      }
+    } catch (error) {
+      console.error("Exception syncing voucher app data", error);
+    }
+    setIsSyncing(false);
+  };
+
+  // Auto-sync when internet reconnects
+  useEffect(() => {
+    const handleOnline = () => {
+      if (unsyncedChanges && !isSyncing) {
+        performSyncToCloud();
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [unsyncedChanges, isSyncing]);
+
+  // Immediate force sync effect
+  useEffect(() => {
+    if (forceSync && !isSyncing) {
+      performSyncToCloud();
+      setForceSync(false);
+    }
+  }, [forceSync, isSyncing, products, transactions]);
+
+  // Migrate dates in detailedHandovers to ensure they match local timezone dates
+  useEffect(() => {
+    let changed = false;
+    const fixedHandovers = detailedHandovers.map(h => {
+      const correctDate = new Date(new Date(h.timestamp).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      if (h.date !== correctDate) {
+        changed = true;
+        return { ...h, date: correctDate };
+      }
+      return h;
+    });
+    
+    if (changed) {
+      setDetailedHandovers(fixedHandovers);
+    }
+  }, [detailedHandovers, setDetailedHandovers]);
+
+  // Sync with external props from Host App
+  // FIXED: 'cashiers' removed from deps to prevent infinite loop
+  // Syncs `cashiers` list with `kasirList` from the host app (Owner settings)
+  useEffect(() => {
+    if (externalRole) setCurrentUserRole(externalRole);
+    if (kasirList && Object.keys(kasirList).length > 0) {
+      const newCashiers: Cashier[] = Object.entries(kasirList)
+        .map(([uname, data]) => {
+          const isOwner = data.role === 'owner';
+          // Nama display selalu pakai nama asli dari profil — tidak hardcode 'Owner'
+          const displayName = data.name || uname;
+          return {
+            id: `c_${uname}`,            // ID internal = c_ + username unik
+            name: displayName,            // Nama tampilan = nama asli
+            role: isOwner ? 'Owner' : 'Kasir Shift',
+            email: `${uname.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+            avatar: data.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(displayName)),
+            isOnline: true,
+            pin: data.pin
+          };
+        });
+      setCashiers(newCashiers);
+
+      // Cocokkan berdasarkan username/ID unik (c_username), BUKAN display name
+      // Ini memastikan: login sbg "rima" → kasir rima yang aktif, bukan berdasarkan tebakan nama
+      if (externalCashierUsername) {
+        const targetId = `c_${externalCashierUsername}`;
+        const idx = newCashiers.findIndex(c => c.id === targetId);
+        if (idx !== -1) setActiveCashierIndex(idx);
+      } else if (externalCashierName) {
+        // Fallback: jika username tidak dikirim, coba cocokkan via display name
+        const idx = newCashiers.findIndex(c => c.name === externalCashierName);
+        if (idx !== -1) setActiveCashierIndex(idx);
+      }
+    } else if (externalCashierName) {
+      // Tidak ada kasirList — buat kasir sementara dari display name
+      setCashiers(prev => {
+        const idx = prev.findIndex(c => c.name === externalCashierName);
+        if (idx !== -1) {
+          setActiveCashierIndex(idx);
+          return prev;
+        } else {
+          const newCashier: Cashier = { 
+            id: externalCashierUsername ? `c_${externalCashierUsername}` : `c${prev.length + 1}`, 
+            name: externalCashierName, 
+            role: 'Kasir Shift', 
+            email: `${externalCashierName.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
+            avatar: 'https://ui-avatars.com/api/?name=' + externalCashierName,
+            isOnline: true 
+          };
+          setActiveCashierIndex(prev.length);
+          return [...prev, newCashier];
+        }
+      });
+    }
+  }, [externalRole, externalCashierName, externalCashierUsername, kasirList]);
+
+  // ✅ SOLUSI 3: Cek flag pending_handover saat kasir aktif berubah
+  // Jika ada flag, tampilkan banner sekali lalu hapus flag tersebut
+  useEffect(() => {
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id;
+    if (!cashierId) return;
+
+    // CEGAH PEMBACAAN FLAG JIKA KASIR MASIH DATA DUMMY TAPI KITA MENUNGGU KASIR LIST DARI PROPS
+    if (kasirList && Object.keys(kasirList).length > 0 && (cashierId === 'cashier-1' || cashierId === 'c1' || cashierId === 'cashier-2')) return;
+
+    const flagKey = `v_${storeKey}_${cashierId}_pending_handover`;
+    try {
+      const raw = localStorage.getItem(flagKey);
+      if (raw) {
+        const flag = JSON.parse(raw);
+        setPendingHandoverInfo(flag);
+        // Hapus flag agar tidak muncul lagi saat refresh
+        localStorage.removeItem(flagKey);
+      } else {
+        setPendingHandoverInfo(null);
+      }
+    } catch {
+      setPendingHandoverInfo(null);
+    }
+  }, [activeCashierIndex, cashiers, activeStoreId, kasirList]);
+
+  // Detail view context routing state
+  const [selectedProduct, setSelectedProduct] = useState<VoucherProduct | null>(null);
+
+  // Notification / Toast UI
+  const [showNotificationDrop, setShowNotificationDrop] = useState(false);
+  const [latestToast, setLatestToast] = useState<LiveNotification | null>(null);
+
+  // Modals / Overlays
+  const [showQuickSale, setShowQuickSale] = useState(false);
+  const [quickSaleStep, setQuickSaleStep] = useState<1 | 2>(1);
+  const [showQuickRestock, setShowQuickRestock] = useState(false);
+  const [showHandoverModal, setShowHandoverModal] = useState(false);
+  const [showHandoverSuccessOverlay, setShowHandoverSuccessOverlay] = useState(false);
+
+  // External event listener to trigger Quick Sale from Beranda
+  useEffect(() => {
+    const handleOpenQuickSaleEvent = () => {
+      setSaleSearchQuery('');
+      setSaleSelectedOperator('SEMUA');
+      setFormPaymentMethod('NON_TUNAI'); // default to NON TUNAI as requested by user
+      setFormQuantity(1);
+      setFormNote('');
+              setQuickSaleStep(1);
+      setShowQuickSale(true);
+    };
+    window.addEventListener('open-voucher-quick-sale', handleOpenQuickSaleEvent);
+    return () => window.removeEventListener('open-voucher-quick-sale', handleOpenQuickSaleEvent);
+  }, []);
+
+  // Global Keyboard Shortcuts for Quick Sale
+  useEffect(() => {
+    if (!showQuickSale) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        // If the user presses Enter while focused on a button (like + or TUNAI),
+        // we override it to confirm the sale instead, unless it's the cancel button.
+        if (e.target instanceof HTMLButtonElement && e.target.id === 'btn-cancel-quick-sale') {
+          return; // Let cancel button work normally
+        }
+        
+        e.preventDefault();
+        document.getElementById('btn-confirm-quick-sale')?.click();
+      }
+      
+      // Shortcut P untuk toggle Pasca-Closing
+      if (e.key.toLowerCase() === 'p') {
+        // Jangan trigger jika user sedang mengetik di input box (seperti catatan)
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+          return;
+        }
+        e.preventDefault();
+        setIsPostClosing(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showQuickSale]);
+  const [handoverSuccessSummary, setHandoverSuccessSummary] = useState<ShiftHandover | null>(null);
+
+
+  // Quick Action Forms Fields
+  const [saleCart, setSaleCart] = useState<{id: string, qty: number}[]>([]);
+  const [showQtyModalFor, setShowQtyModalFor] = useState<string | null>(null);
+  const [qtyModalValue, setQtyModalValue] = useState<number>(1);
+  const [formProductId, setFormProductId] = useState('');
+  const [formQuantity, setFormQuantity] = useState<number>(1);
+  const [formNote, setFormNote] = useState('');
+  const [formPaymentMethod, setFormPaymentMethod] = useState<'TUNAI' | 'NON_TUNAI' | 'QRIS' | 'TRANSFER'>('TUNAI');
+  const [isPostClosing, setIsPostClosing] = useState(false);
+  const [dismissedPostClosing, setDismissedPostClosing] = useState<string[]>([]);
+  const [saleSearchQuery, setSaleSearchQuery] = useState('');
+  const [restockSearchQuery, setRestockSearchQuery] = useState('');
+  const [saleSelectedOperator, setSaleSelectedOperator] = useState<string>('SEMUA');
+  const [restockSelectedOperator, setRestockSelectedOperator] = useState<string>('SEMUA');
+
+  // List of operator options for quick filtering
+  const OPERATOR_CHIPS = [
+    { id: 'SEMUA', label: 'SEMUA', opValue: 'SEMUA' },
+    { id: 'AXIS', label: 'AXIS', opValue: 'AXIS' },
+    { id: 'XL', label: 'XL', opValue: 'XL' },
+    { id: 'TSEL', label: 'TSEL', opValue: 'TELKOMSEL' },
+    { id: 'INDOSAT', label: 'INDOSAT', opValue: 'INDOSAT' },
+    { id: 'TRI', label: 'TRI', opValue: 'TRI' },
+    { id: 'SMARTFREN', label: 'SMARTFREN', opValue: 'SMARTFREN' },
+  ];
+
+  // Helper filter matching operator & product title with fuzzy multi-word support
+  const filterProductsByOperatorAndTitle = (
+    productList: VoucherProduct[],
+    selectedOpValue: string,
+    query: string
+  ) => {
+    let list = productList;
+    if (selectedOpValue && selectedOpValue !== 'SEMUA') {
+      list = list.filter((p) => {
+        const pOp = p.operator.toUpperCase();
+        const targetOp = selectedOpValue.toUpperCase();
+        return pOp === targetOp || (targetOp === 'TELKOMSEL' && pOp === 'TSEL') || (targetOp === 'TSEL' && pOp === 'TELKOMSEL');
+      });
+    }
+
+    if (!query.trim()) return list;
+    const cleanQuery = query.toLowerCase().trim();
+    const compactQuery = cleanQuery.replace(/[\s-_]+/g, '');
+    const words = cleanQuery.split(/[\s-_]+/).filter(Boolean);
+
+    return list.filter((p) => {
+      const nameLower = p.name.toLowerCase();
+      const nameCompact = nameLower.replace(/[\s-_]+/g, '');
+      const opLower = p.operator.toLowerCase();
+      const descLower = (p.description || '').toLowerCase();
+      const full = `${nameLower} ${opLower} ${descLower}`;
+      const fullCompact = full.replace(/[\s-_]+/g, '');
+
+      // Check compact substring (e.g. "axis1hari" in "axis6gb1hari")
+      if (nameCompact.includes(compactQuery) || fullCompact.includes(compactQuery)) return true;
+
+      // Check all separate words match
+      return words.every(w => full.includes(w) || fullCompact.includes(w));
+    });
+  };
+
+  // Live clock state
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Audio Context reference
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Setup Real-time Broadcast Channel untuk sinkronisasi antar HP
+  useEffect(() => {
+    if (!activeStoreId) return;
+    const channel = supabase.channel(`shift_sync_${activeStoreId}`, {
+      config: { broadcast: { ack: false } }
+    });
+    
+    channel.on('broadcast', { event: 'sync_shift' }, (payload) => {
+      if (isWipingRef.current) return; // Abaikan update jika sedang membersihkan sesi
+      if (payload.payload.activeShiftCashierId !== undefined) {
+        setActiveShiftCashierId(payload.payload.activeShiftCashierId);
+      }
+      if (payload.payload.globalShiftSession !== undefined) {
+        setGlobalShiftSession(payload.payload.globalShiftSession);
+      }
+    }).subscribe();
+    
+    broadcastChannelRef.current = channel;
+    return () => { channel.unsubscribe(); }
+  }, [activeStoreId]);
+
+  // Load state from localStorage on mount & when cashier changes
+  useEffect(() => {
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    const prefix = `v_${storeKey}_${cashierId}`;
+    // ✅ SOLUSI 1: detailedHandovers kini GLOBAL per-toko (bukan per-kasir)
+    // Key: v_${storeKey}_all_detailed_handovers
+    // Semua kasir dalam satu toko berbagi riwayat serah terima yang sama
+    const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
+
+    const cachedProducts = localStorage.getItem(`${prefix}_products`);
+    const cachedTransactions = localStorage.getItem(`${prefix}_transactions`);
+    const cachedNotifications = localStorage.getItem(`${prefix}_notifications`);
+    const cachedHandovers = localStorage.getItem(`${prefix}_handovers`);
+    // Baca dari global key; fallback ke per-cashier key lama (migrasi data lama)
+    const cachedDetailedHandovers =
+      localStorage.getItem(globalDetailedHandoversKey) ||
+      localStorage.getItem(`${prefix}_detailed_handovers`);
+    const cachedLastResetDate = localStorage.getItem(`v_${storeKey}_last_reset_date`);
+    const cachedTheme = localStorage.getItem('v_theme') as 'dark' | 'light' | null;
+
+    let loadedProducts = cachedProducts ? JSON.parse(cachedProducts) : INITIAL_PRODUCTS;
+    // Auto-recovery: Jika produk kosong (terhapus karena bug sebelumnya), kembalikan katalog dengan stok 0
+    if (Array.isArray(loadedProducts) && loadedProducts.length === 0) {
+      loadedProducts = INITIAL_PRODUCTS.map(p => ({ ...p, currentStock: 0 }));
+    }
+    let loadedTransactions = cachedTransactions ? JSON.parse(cachedTransactions) : INITIAL_TRANSACTIONS;
+    let loadedNotifications = cachedNotifications ? JSON.parse(cachedNotifications) : INITIAL_NOTIFICATIONS;
+    let loadedHandovers = cachedHandovers ? JSON.parse(cachedHandovers) : [];
+    let loadedDetailedHandovers = cachedDetailedHandovers ? JSON.parse(cachedDetailedHandovers) : INITIAL_DETAILED_HANDOVERS;
+
+    // Daily Reset Check (Store wide, not just per cashier)
+    const today = new Date().toLocaleDateString('id-ID');
+    if (cachedLastResetDate && cachedLastResetDate !== today) {
+      loadedTransactions = [];
+      loadedNotifications = [
+        {
+          id: `notif-reset-${Date.now()}`,
+          type: 'info',
+          title: 'Awal Buku Baru',
+          message: `Sistem telah mereset Saldo Laci & Omzet ke Rp 0 untuk tanggal ${today}. Selamat berjualan!`,
+          timestamp: new Date().toISOString(),
+          isRead: false
+        }
+      ];
+      localStorage.setItem(`${prefix}_transactions`, JSON.stringify([]));
+      localStorage.setItem(`${prefix}_notifications`, JSON.stringify(loadedNotifications));
+      localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
+    } else if (!cachedLastResetDate) {
+      localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
+    }
+
+    // setProducts(loadedProducts); // Diambil alih oleh SQL (fetchSQLData)
+    setTransactions(loadedTransactions);
+    setNotifications(loadedNotifications);
+    setShiftHandovers(loadedHandovers);
+    setDetailedHandovers(loadedDetailedHandovers);
+    if (cachedTheme) setTheme(cachedTheme);
+
+    isDataLoadedRef.current = false;
+
+    // If online mode is active, fetch from cloud
+    if (activeStoreId) {
+      const fetchCloudData = async () => {
+        try {
+          // Fetch global shift data from new table
+          const { data: shiftData } = await supabase.from('voucher_active_shifts').select('*').eq('store_id', activeStoreId).maybeSingle();
+          if (shiftData) {
+            if (shiftData.active_cashier_id !== undefined) setActiveShiftCashierId(shiftData.active_cashier_id);
+            if (shiftData.session_data !== undefined) setGlobalShiftSession(shiftData.session_data);
+          }
+
+          const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+          if (data && data.voucher_app_data) {
+            // Remove legacy loading code (handled by new table)
+
+            const cashierData = data.voucher_app_data[cashierId];
+            const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
+            if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
+            if (cashierData) {
+                // Produk tidak lagi diambil dari store_settings, melainkan dari voucher_products (SQL)
+              let needsArchiving = false;
+
+              if (cashierData.transactions) {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - 2);
+                const cutoffTime = cutoff.getTime();
+                const activeTrx = cashierData.transactions.filter((t: any) => new Date(t.timestamp).getTime() >= cutoffTime);
+                
+                if (activeTrx.length < cashierData.transactions.length) {
+                  setTransactions(activeTrx);
+                  needsArchiving = true;
+                } else {
+                  setTransactions(activeTrx);
+                }
+              }
+
+              if (cashierData.notifications) {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - 2);
+                const cutoffTime = cutoff.getTime();
+                const activeNotifs = cashierData.notifications.filter((n: any) => new Date(n.timestamp).getTime() >= cutoffTime);
+                
+                if (activeNotifs.length < cashierData.notifications.length) {
+                  setNotifications(activeNotifs);
+                  needsArchiving = true;
+                } else {
+                  setNotifications(activeNotifs);
+                }
+              }
+
+              if (cashierData.handovers) setShiftHandovers(cashierData.handovers);
+              
+              if (needsArchiving) {
+                setTimeout(() => setUnsyncedChanges(true), 2000);
+              }
+            } else if (!cachedProducts && data.voucher_app_data.products) {
+                const p = data.voucher_app_data.products;
+                if (Array.isArray(p) && p.length === 0) {
+                  // setProducts dihapus karena SQL
+                } else {
+                  // setProducts dihapus karena SQL
+                }
+            }
+          }
+        } catch (error) {
+          console.error("Gagal load data dari cloud:", error);
+        }
+        
+        // Tandai bahwa load awal dari cloud sudah selesai agar tidak memicu unsynced false positive
+        setTimeout(() => {
+          isDataLoadedRef.current = true;
+          setUnsyncedChanges(false);
+        }, 300);
+      };
+      
+      fetchCloudData();
+    } else {
+      isDataLoadedRef.current = true;
+    }
+  }, [activeStoreId, activeCashierIndex, cashiers]);
+
+  // Push to Supabase on every change (Debounced to 60s)
+  useEffect(() => {
+    // Jika belum selesai load awal, jangan simpan apapun ke lokal apalagi cloud
+    // Ini mencegah data lama menimpa data kasir baru saat proses ganti kasir
+    if (!isDataLoadedRef.current) return;
+
+    const storeKey = activeStoreId || 'default';
+    const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
+    const prefix = `v_${storeKey}_${cashierId}`;
+    const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
+    const savedAt = new Date().toISOString();
+
+    // Save locally per-store & per-cashier
+    localStorage.setItem(`${prefix}_products`, JSON.stringify(products));
+    localStorage.setItem(`${prefix}_transactions`, JSON.stringify(transactions));
+    localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
+    localStorage.setItem(`${prefix}_handovers`, JSON.stringify(shiftHandovers));
+    localStorage.setItem(globalDetailedHandoversKey, JSON.stringify(detailedHandovers));
+    localStorage.setItem(`${prefix}_savedAt`, savedAt);
+
+    if (!activeStoreId) return;
+
+    // Tandai ada perubahan yang belum tersync ke cloud
+    setUnsyncedChanges(true);
+
+    // Immediate background save to Supabase (menggantikan delay 60s)
+    setForceSync(true);
+
+  }, [products, transactions, notifications, shiftHandovers, detailedHandovers, activeStoreId, activeCashierIndex, cashiers]);
+
+  // --- NEW SUPABASE REALTIME SYNC ---
+  useEffect(() => {
+    if (!activeStoreId) return;
+    const fetchSQLData = async () => {
+      try {
+        // SELALU gunakan activeShiftCashierId jika ada, agar semua kasir dan owner melihat stok dari kasir yang aktif
+        const targetCashierId = activeShiftCashierId || cashiers[activeCashierIndex]?.id || 'c1';
+        
+        // Fetch Products
+        const { data: prods, error: err1 } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
+        if (err1) alert("Fetch Prods Error: " + err1.message);
+        // Fetch Stocks
+        const { data: stocks, error: err2 } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', 'GLOBAL');
+        if (err2) alert("Fetch Stocks Error: " + err2.message);
+        
+        if (prods) {
+          const mapped = prods.map(p => {
+             const stockRecord = stocks?.find(s => s.product_id === p.id);
+             return {
+                id: p.id,
+                name: p.name,
+                category: p.category,
+                operator: p.operator,
+                costPrice: p.cost_price,
+                sellingPrice: p.selling_price,
+                minStockLevel: p.min_stock_level,
+                description: p.description || '',
+                barcode: p.barcode || '',
+                sku: p.sku || '',
+                currentStock: stockRecord ? stockRecord.current_stock : 0
+             };
+          });
+          setProducts(sortVoucherProducts(mapped));
+        }
+      } catch (err) {
+        console.error("Fetch SQL Error:", err);
+      }
+    };
+    
+    fetchSQLData();
+    
+    const sub = supabase.channel(`voucher_realtime_sql_${Date.now()}_${Math.random().toString(36).substring(7)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_stocks', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voucher_products', filter: `store_id=eq.${activeStoreId}` }, () => fetchSQLData())
+      .subscribe();
+      
+    return () => { supabase.removeChannel(sub); };
+  }, [activeStoreId, activeCashierIndex, cashiers, activeShiftCashierId]);
+  // ----------------------------------
+
+
+
+  // Watch for day change while app is open
+  useEffect(() => {
+    const checkDayChange = setInterval(() => {
+      const storeKey = activeStoreId || 'default';
+      const today = new Date().toLocaleDateString('id-ID');
+      // FIXED: Use the correct scoped key (v_${storeKey}_last_reset_date)
+      // Previously used 'v_last_reset_date' (wrong key) which could trigger
+      // unexpected reloads if stale value existed from old sessions.
+      const cachedLastResetDate = localStorage.getItem(`v_${storeKey}_last_reset_date`);
+      if (cachedLastResetDate && cachedLastResetDate !== today) {
+        // Instead of hard reload, just update state gracefully
+        setTransactions([]);
+        localStorage.setItem(`v_${storeKey}_last_reset_date`, today);
+      }
+    }, 60000); // Check every minute
+    return () => clearInterval(checkDayChange);
+  }, [activeStoreId]);
+
+  // Save states helper
+  const saveState = (
+    updatedProducts: VoucherProduct[], 
+    updatedTrx: Transaction[], 
+    updatedNotifs: LiveNotification[], 
+    updatedHandovers?: ShiftHandover[],
+    updatedDetailedHandovers?: DetailedHandoverRecord[]
+  ) => {
+    // (Saving is now handled by the global debounced useEffect)
+  };
+
+  // Clock trigger
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Soft synth sound cue
+  const playBeep = (freq = 600, duration = 0.15) => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {
+      // Audio blocked or failed
+    }
+  };
+
+  // Push Notifications with custom real-time messaging
+  const pushNotification = (
+    type: 'info' | 'warning' | 'success' | 'transfer', 
+    title: string, 
+    message: string, 
+    list: LiveNotification[],
+    metadata?: LiveNotification['metadata'],
+    forRole?: 'owner' | 'kasir' | 'all'
+  ) => {
+    const newNotif: LiveNotification = {
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type,
+      title,
+      message,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      metadata,
+      forRole: forRole || 'all'
+    };
+
+    const updated = [newNotif, ...list];
+    setNotifications(updated);
+    
+    // Only show toast and play beep if it's meant for the current role
+    if (!forRole || forRole === 'all' || forRole === currentUserRole) {
+      setLatestToast(newNotif);
+
+      if (type === 'warning') playBeep(380, 0.35);
+      else if (type === 'transfer') playBeep(720, 0.28);
+      else playBeep(580, 0.12);
+
+      setTimeout(() => {
+        setLatestToast(prev => prev?.id === newNotif.id ? null : prev);
+      }, 5000);
+    }
+    
+    return updated;
+  };
+
+  const handleBulkUpdateProductStock = (updates: { productId: string, newStock: number, subReason?: 'penjualan' | 'audit' }[]) => {
+    let currentProducts = [...products];
+    let currentTransactions = [...transactions];
+    let currentNotifications = [...notifications];
+
+    updates.forEach(update => {
+      const p = currentProducts.find(prod => prod.id === update.productId);
+      if (p && p.currentStock !== update.newStock) {
+        const delta = update.newStock - p.currentStock;
+        const isAudit = update.subReason === 'audit';
+        
+        // Push notification
+        const newNotif: LiveNotification = {
+          id: `notif-${Date.now()}-${Math.random()}`,
+          type: isAudit ? "warning" : "success",
+          title: isAudit ? "SELISIH AUDIT" : "UPDATE STOK",
+          message: isAudit 
+            ? `${activeCashier.name} melaporkan selisih: "${p.name}" berkurang ${Math.abs(delta)} pcs (Barang Hilang).`
+            : `${activeCashier.name} mengupdate stok "${p.name}" menjadi ${update.newStock} pcs.`,
+          timestamp: new Date().toISOString(),
+          isRead: false,
+          metadata: {
+            oldStock: p.currentStock,
+            newStock: update.newStock,
+            delta,
+            productId: p.id,
+            productName: p.name,
+            cashierName: activeCashier.name,
+            unitPrice: p.sellingPrice,
+            reason: "audit",
+            subReason: update.subReason || (delta < 0 ? "penjualan" : "restock")
+          }
+        };
+        currentNotifications = [newNotif, ...currentNotifications];
+
+        // Create transaction log if it's a significant change
+        const newTrx: Transaction = {
+          id: `trx-${Date.now()}-${Math.random()}`,
+          type: 'EDIT_STOK',
+          productId: p.id,
+          productName: p.name,
+          quantity: Math.abs(delta),
+          // If it's an audit loss, it doesn't add to cash revenue
+          amount: isAudit ? 0 : p.sellingPrice * Math.abs(delta),
+          cashierName: activeCashier.name,
+          timestamp: new Date().toISOString(),
+          notes: delta > 0 
+            ? `Selisih bertambah ${delta}` 
+            : `Selisih kurang ${Math.abs(delta)}${isAudit ? ' (Audit Hilang)' : ''}`
+        };
+        currentTransactions = [newTrx, ...currentTransactions];
+
+        // Update product in the temp list
+        currentProducts = currentProducts.map(prod => prod.id === p.id ? { ...prod, currentStock: update.newStock } : prod);
+      }
+    });
+
+    setProducts(sortVoucherProducts(currentProducts));
+    setTransactions(currentTransactions);
+    setNotifications(currentNotifications);
+  };
+
+  const activeCashier = cashiers[activeCashierIndex] || cashiers[0];
+  const nextCashier = cashiers[activeCashierIndex === 0 ? 1 : 0] || cashiers[1];
+
+  // ── Derived: apakah kasir yang sedang login adalah kasir aktif shift? ──
+  // Owner selalu bisa lihat tapi tidak bisa edit (ditangani di isOwnerMode)
+  const isActiveCashierOnDuty = currentUserRole === 'owner'
+    ? false  // Owner tidak pernah dianggap "on duty" untuk edit
+    : activeShiftCashierId === null || 
+      activeShiftCashierId === activeCashier?.id ||
+      activeShiftCashierId === activeCashier?.name ||
+      `c_${activeShiftCashierId}` === activeCashier?.id ||
+      !!(activeShiftCashierId && activeCashier?.id && activeShiftCashierId.replace(/^c_/, '') === activeCashier.id.replace(/^c_/, ''));
+
+  const activeShiftCashierObj = cashiers.find(c => 
+    c.id === activeShiftCashierId || 
+    c.name === activeShiftCashierId ||
+    c.id === `c_${activeShiftCashierId}` ||
+    !!(c.id && activeShiftCashierId && c.id.replace(/^c_/, '') === activeShiftCashierId.replace(/^c_/, ''))
+  );
+  const activeShiftCashierName = activeShiftCashierObj?.name || (kasirList && activeShiftCashierId ? (kasirList[activeShiftCashierId.replace(/^c_/, '')]?.name || activeShiftCashierId) : (activeCashier?.name || 'Kasir Aktif'));
+
+  // Manual & quick stock modifier
+  const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
+    let updatedNotifs = [...notifications];
+    const targetProduct = products.find(p => p.id === productId);
+    
+    if (skipStockUpdate && type === 'PENJUALAN') {
+      const totalAmount = (targetProduct?.sellingPrice || 0) * quantity;
+      updatedNotifs = pushNotification(
+        'transfer',
+        'Catatan Penjualan Voucher Digital',
+        `Berhasil mencatat dana NON-TUNAI/QRIS sebesar Rp ${totalAmount.toLocaleString('id-ID')} untuk ${quantity} pcs "${targetProduct?.name || 'Voucher'}". Catatan: Transaksi ini hanya mencatat saldo digital tanpa mengurangi stok fisik sistem.`,
+        updatedNotifs
+      );
+    }
+
+    let updatedProducts = products;
+    if (!skipStockUpdate) {
+      updatedProducts = products.map(p => {
+        if (p.id === productId) {
+          const delta = type === 'RESTOCK' ? quantity : -quantity;
+          const nextStock = p.currentStock + delta;
+          const oldStock = p.currentStock;
+          
+          if (type === 'PENJUALAN' && nextStock === 0) {
+            updatedNotifs = pushNotification(
+              'warning',
+              'STOK HABIS (0)!',
+              `Voucher "${p.name}" sudah HABIS TOTAL (0 pcs). Segera RESTOCK sekarang!`,
+              updatedNotifs
+            );
+          } else if (type === 'PENJUALAN' && nextStock <= p.minStockLevel) {
+            updatedNotifs = pushNotification(
+              'warning',
+              'Stok Voucher Rendah!',
+              `Voucher "${p.name}" tersisa ${nextStock} pcs. Restock disarankan.`,
+              updatedNotifs
+            );
+          }
+
+          if (type === 'RESTOCK') {
+            updatedNotifs = pushNotification(
+              'success',
+              'TAMBAH STOK',
+              `${activeCashier.name} telah menambahkan stok baru sebanyak ${quantity} pcs (Owner Supply).`,
+              updatedNotifs,
+              {
+                oldStock,
+                newStock: nextStock,
+                delta: quantity,
+                productId: p.id,
+                productName: p.name,
+                cashierName: activeCashier.name,
+                unitPrice: p.sellingPrice,
+                reason: 'restock'
+              }
+            );
+          } else {
+            const isAudit = subReason === 'audit';
+            updatedNotifs = pushNotification(
+              isAudit ? 'warning' : 'info',
+              isAudit ? 'SELISIH STOK' : 'Voucher Terjual',
+              isAudit 
+                ? `Audit selisih: Stok "${p.name}" dikurangi ${quantity} pcs (Tidak menambah omzet).`
+                : `Berhasil mencatat penjualan ${quantity} pcs Voucher "${p.name}" (${note}).`,
+              updatedNotifs,
+              {
+                oldStock,
+                newStock: nextStock,
+                delta: -quantity,
+                productId: p.id,
+                productName: p.name,
+                cashierName: activeCashier.name,
+                unitPrice: p.sellingPrice,
+                reason: isAudit ? 'audit' : 'sale',
+                subReason: isAudit ? 'audit' : 'penjualan'
+              }
+            );
+          }
+
+          return { ...p, currentStock: nextStock };
+        }
+        return p;
+      });
+    }
+
+    const newTrx: Transaction = {
+      id: `trx-${Date.now()}`,
+      type,
+      productId,
+      productName: targetProduct?.name || 'Voucher',
+      quantity,
+      // RESTOCK from owner doesn't touch cashier money
+      amount: type === 'RESTOCK' ? 0 : (targetProduct?.sellingPrice || 0) * quantity,
+      cogs: type === 'PENJUALAN' ? (targetProduct?.costPrice || 0) * quantity : undefined,
+      cashierName: activeCashier.name,
+      timestamp: new Date().toISOString(),
+      notes: note,
+      paymentMethod: type === 'PENJUALAN' ? paymentMethod : undefined
+    };
+
+    const updatedTrx = [newTrx, ...transactions];
+    
+    setProducts(sortVoucherProducts(updatedProducts));
+    setTransactions(updatedTrx);
+
+    // SQL SYNC STOCKS
+    if (!skipStockUpdate && activeStoreId) {
+      const p = updatedProducts.find(prod => prod.id === productId);
+      if (p) {
+        supabase.from('voucher_stocks').upsert({
+          store_id: activeStoreId,
+          product_id: p.id,
+          cashier_id: 'GLOBAL',
+          current_stock: p.currentStock
+        }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock trx:', res));
+      }
+    }
+
+    // SQL SYNC STOCKS
+    if (!skipStockUpdate && activeStoreId) {
+      const p = updatedProducts.find(prod => prod.id === productId);
+      if (p) {
+        supabase.from('voucher_stocks').upsert({
+          store_id: activeStoreId,
+          product_id: p.id,
+          cashier_id: 'GLOBAL',
+          current_stock: p.currentStock
+        }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock trx:', res));
+      }
+    }
+
+    // Keep active selectedProduct in details view updated
+    if (selectedProduct && selectedProduct.id === productId && !skipStockUpdate) {
+      setSelectedProduct({
+        ...selectedProduct,
+        currentStock: selectedProduct.currentStock + (type === 'RESTOCK' ? quantity : -quantity)
+      });
+    }
+  };
+
+  const handleQuickAdjustStock = (productId: string, delta: number) => {
+    const isSale = delta < 0;
+    const absDelta = Math.abs(delta);
+    handleAdjustStock(
+      productId,
+      absDelta,
+      isSale ? 'PENJUALAN' : 'RESTOCK',
+      isSale ? 'Penyesuaian penjualan' : 'Restock cepat'
+    );
+  };
+
+  const handleAddProduct = (newProductData: Omit<VoucherProduct, 'id'>) => {
+    const newProduct: VoucherProduct = {
+      ...newProductData,
+      id: `prod-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+    };
+
+    const newTransaction: Transaction = {
+      id: `trx-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+      type: 'TAMBAH_STOK',
+      productId: newProduct.id,
+      productName: newProduct.name,
+      quantity: newProduct.currentStock,
+      amount: newProduct.costPrice * newProduct.currentStock,
+      cashierName: activeCashier.name,
+      timestamp: new Date().toISOString(),
+      notes: 'Pendaftaran voucher baru'
+    };
+
+    // Use functional updater to avoid stale closure issues
+    setProducts(prev => {
+      const updated = sortVoucherProducts([newProduct, ...prev]);
+      if (activeStoreId) {
+        supabase.from('voucher_products').insert({
+          id: newProduct.id,
+          store_id: activeStoreId,
+          name: newProduct.name,
+          category: newProduct.category,
+          operator: newProduct.operator,
+          cost_price: newProduct.costPrice,
+          selling_price: newProduct.sellingPrice,
+          min_stock_level: newProduct.minStockLevel,
+          description: newProduct.description,
+          barcode: newProduct.barcode,
+          sku: newProduct.sku
+        }).then(res1 => {
+          if (res1.error) alert("Error Insert Product: " + res1.error.message);
+          supabase.from('voucher_stocks').upsert({
+            store_id: activeStoreId,
+            product_id: newProduct.id,
+            cashier_id: 'GLOBAL',
+            current_stock: newProduct.currentStock
+          }, { onConflict: 'store_id,product_id,cashier_id' }).then(res2 => {
+            if (res2.error) alert("Error Insert Stock: " + res2.error.message);
+          });
+        });
+      }
+      return updated;
+    });
+    setTransactions(prev => [newTransaction, ...prev]);
+
+    pushNotification(
+      'success',
+      'Voucher Terdaftar',
+      `Voucher "${newProduct.name}" berhasil dimasukkan ke sistem.`,
+      notifications
+    );
+  };
+
+  /**
+   * handleBulkAddProducts — Menambahkan banyak produk sekaligus dalam SATU setState call.
+   * Ini solusi untuk bug di mana forEach + onAddProduct hanya menyimpan produk terakhir
+   * karena React mem-batch update state dan setiap call closure membaca state lama (stale closure).
+   */
+  const handleBulkAddProducts = (productsData: Omit<VoucherProduct, 'id'>[]) => {
+    if (!productsData || productsData.length === 0) return;
+
+    const now = Date.now();
+    const cashierName = activeCashier.name;
+
+    // Buat semua produk baru dengan ID unik
+    const newProducts: VoucherProduct[] = productsData.map((data, index) => ({
+      ...data,
+      id: `prod-${now}-${index}-${Math.floor(Math.random() * 100000)}`
+    }));
+
+    // Buat semua transaksi log sekaligus
+    const newTransactions: Transaction[] = newProducts.map((p, index) => ({
+      id: `trx-${now}-${index}-${Math.floor(Math.random() * 100000)}`,
+      type: 'TAMBAH_STOK' as const,
+      productId: p.id,
+      productName: p.name,
+      quantity: p.currentStock,
+      amount: p.costPrice * p.currentStock,
+      cashierName,
+      timestamp: new Date().toISOString(),
+      notes: 'Ditambahkan via upload massal'
+    }));
+
+    // Satu atomic setState call — tidak ada stale closure, semua produk tersimpan
+    const updatedProducts = [...newProducts, ...products];
+    const updatedTransactions = [...newTransactions, ...transactions];
+    
+    setProducts(sortVoucherProducts(updatedProducts));
+    setTransactions(updatedTransactions);
+    
+    // Masukkan ke database Supabase (tabel utama)
+    if (activeStoreId) {
+      const productsToInsert = newProducts.map(p => ({
+        id: p.id,
+        store_id: activeStoreId,
+        name: p.name,
+        category: p.category,
+        operator: p.operator,
+        cost_price: p.costPrice,
+        selling_price: p.sellingPrice,
+        min_stock_level: p.minStockLevel,
+        description: p.description,
+        barcode: p.barcode,
+        sku: p.sku
+      }));
+      const stocksToInsert = newProducts.map(p => ({
+        store_id: activeStoreId,
+        product_id: p.id,
+        cashier_id: 'GLOBAL',
+        current_stock: p.currentStock
+      }));
+      
+      supabase.from('voucher_products').insert(productsToInsert).then(res1 => {
+        if (res1.error) console.error("Error Bulk Insert Products: ", res1.error);
+        supabase.from('voucher_stocks').upsert(stocksToInsert).then(res2 => {
+          if (res2.error) console.error("Error Bulk Insert Stocks: ", res2.error);
+        });
+      });
+    }
+
+    // Simpan ke local storage
+    saveState(updatedProducts, updatedTransactions, notifications, shiftHandovers, detailedHandovers);
+    
+    // Trigger immediate cloud sync
+    setForceSync(true);
+
+    const updatedNotifs = pushNotification(
+      'success',
+      `${newProducts.length} Voucher Ditambahkan`,
+      `Berhasil mendaftarkan ${newProducts.length} produk voucher baru ke sistem secara massal.`,
+      notifications
+    );
+    setNotifications(updatedNotifs);
+  };
+
+  const handleUpdateProduct = (updatedProduct: VoucherProduct) => {
+    const oldProduct = products.find(p => p.id === updatedProduct.id);
+    const updatedProducts = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+    
+    let updatedTransactions = [...transactions];
+    // If stock changed during edit, log it
+    if (oldProduct && oldProduct.currentStock !== updatedProduct.currentStock) {
+      const stockDiff = updatedProduct.currentStock - oldProduct.currentStock;
+      const newTransaction: Transaction = {
+        id: `trx-${Date.now()}`,
+        type: 'EDIT_STOK',
+        productId: updatedProduct.id,
+        productName: updatedProduct.name,
+        quantity: Math.abs(stockDiff),
+        amount: updatedProduct.costPrice * Math.abs(stockDiff),
+        cashierName: activeCashier.name,
+        timestamp: new Date().toISOString(),
+        notes: `Edit stok (${stockDiff > 0 ? '+' : ''}${stockDiff})`
+      };
+      updatedTransactions = [newTransaction, ...transactions];
+      setTransactions(updatedTransactions);
+    }
+
+    const updatedNotifs = pushNotification(
+      'success',
+      'Informasi Diperbarui',
+      `Perubahan voucher "${updatedProduct.name}" berhasil disimpan.`,
+      notifications
+    );
+
+    setProducts(sortVoucherProducts(updatedProducts));
+
+    // SQL SYNC
+    if (activeStoreId) {
+      supabase.from('voucher_products').update({
+        name: updatedProduct.name,
+        category: updatedProduct.category,
+        operator: updatedProduct.operator,
+        cost_price: updatedProduct.costPrice,
+        selling_price: updatedProduct.sellingPrice,
+        min_stock_level: updatedProduct.minStockLevel,
+        description: updatedProduct.description,
+        barcode: updatedProduct.barcode,
+        sku: updatedProduct.sku
+      }).eq('id', updatedProduct.id).then(() => {
+         supabase.from('voucher_stocks').upsert({
+           store_id: activeStoreId,
+           product_id: updatedProduct.id,
+           cashier_id: 'GLOBAL',
+           current_stock: updatedProduct.currentStock
+         }, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert stock update:', res));
+      });
+    }
+
+    if (selectedProduct && selectedProduct.id === updatedProduct.id) {
+      setSelectedProduct(updatedProduct);
+    }
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    const targetProduct = products.find(p => p.id === productId);
+    const updatedProducts = products.filter(p => p.id !== productId);
+    const updatedNotifs = pushNotification(
+      'info',
+      'Voucher Dihapus',
+      `Voucher "${targetProduct?.name || ''}" dihapus dari sistem.`,
+      notifications
+    );
+
+    setProducts(sortVoucherProducts(updatedProducts));
+
+    if (selectedProduct && selectedProduct.id === productId) {
+      setSelectedProduct(null);
+    }
+  };
+
+  // Tutup Shift / Serah Terima — TIDAK mengganti kasir aktif
+  // Hanya mencatat handover record ke riwayat & localStorage
+  const handleExecuteShiftHandover = (
+    customNotes: string,
+    toCashierIdOverride?: string,
+    toCashierNameOverride?: string,
+    finalProductsOverride?: VoucherProduct[],
+    isSelfHandover?: boolean
+  ) => {
+    const storeKey = activeStoreId || 'default';
+    const finalProducts = finalProductsOverride || products;
+    const totalProductsCount = finalProducts.length;
+    const totalStockTransferred = finalProducts.reduce((acc, p) => acc + p.currentStock, 0);
+    const inventoryValue = finalProducts.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0);
+
+    const fromCashierName = activeCashier.name;
+
+    const newHandover: ShiftHandover = {
+      id: `handover-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      fromCashierId: activeCashier.id,
+      fromCashierName,
+      toCashierId: 'NONE',
+      toCashierName: 'Tutup Toko',
+      totalProductsCount,
+      totalStockTransferred,
+      inventoryValue,
+      status: 'Tutup Toko (Closing)',
+      notes: customNotes || 'Tutup shift toko - stok direkap'
+    };
+
+    const updatedHandovers = [newHandover, ...shiftHandovers];
+    
+    // OVERWRITE STOCKS ON HANDOVER (SQL SYNC)
+    if (activeStoreId) {
+      const handoverUpserts = finalProducts.map(p => ({
+        store_id: activeStoreId,
+        product_id: p.id,
+        cashier_id: 'GLOBAL',
+        current_stock: p.currentStock
+      }));
+      supabase.from('voucher_stocks').upsert(handoverUpserts, { onConflict: 'store_id,product_id,cashier_id' }).then(res => console.log('Upsert handover:', res));
+    }
+
+    const newTrx: Transaction = {
+      id: `trx-handover-${Date.now()}`,
+      type: 'SERAH_TERIMA',
+      quantity: totalStockTransferred,
+      amount: inventoryValue,
+      cashierName: fromCashierName,
+      timestamp: new Date().toISOString(),
+      notes: customNotes || `Tutup shift ${fromCashierName}`
+    };
+
+    const updatedTrx = [newTrx, ...transactions];
+
+    const updatedNotifs = pushNotification(
+      'transfer',
+      'Tutup Toko Berhasil!',
+      `${fromCashierName} telah menutup toko. Siap untuk shift berikutnya.`,
+      notifications
+    );
+
+    // KOSONGKAN STOK LOKAL AGAR KASIR BERIKUTNYA BISA MULAI DARI 0 SEBELUM REKAP ONLINE
+    const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
+    const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
+    localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
+    setProducts(sortVoucherProducts(zeroedProducts));
+
+    setShiftHandovers(updatedHandovers);
+    setTransactions(updatedTrx);
+    setNotifications(updatedNotifs);
+
+    // RESET SESI ONLINE (AGAR TIDAK ADA KASIR YANG AKTIF MENJAGA TOKO)
+    // Gunakan fungsi clearActiveShift agar tidak ada race condition di Supabase
+    clearActiveShift();
+
+    setHandoverSuccessSummary(newHandover);
+    setShowHandoverSuccessOverlay(true);
+    setShowHandoverModal(false);
+  };
+
+  const handleTakeoverStock = () => {
+    const storeKey = activeStoreId || 'default';
+    const toPrefix = `v_${storeKey}_${activeCashier.id}`;
+    
+    const currentActiveId = activeShiftCashierId || 'c1';
+    
+    if (currentActiveId !== activeCashier.id) {
+      const fromPrefix = `v_${storeKey}_${currentActiveId}`;
+      let theirProducts = null;
+      try {
+        const raw = localStorage.getItem(`${fromPrefix}_products`);
+        if (raw) theirProducts = JSON.parse(raw) as VoucherProduct[];
+      } catch (e) {}
+
+      if (theirProducts && theirProducts.length > 0) {
+        localStorage.setItem(`${toPrefix}_products`, JSON.stringify(theirProducts));
+        setProducts(sortVoucherProducts(theirProducts));
+        const zeroed = theirProducts.map(p => ({ ...p, currentStock: 0 }));
+        localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroed));
+      }
+      
+      syncGlobalActiveCashier(activeCashier.id);
+    }
+    
+    localStorage.removeItem(`${toPrefix}_pending_handover`);
+    setPendingHandoverInfo(null);
+    
+    const updatedNotifs = pushNotification('success', 'Ambil Alih Berhasil', `Stok telah berhasil ditarik paksa ke laci Anda.`, notifications);
+    setNotifications(updatedNotifs);
+  };
+
+  const handleQuickSaleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saleCart.length === 0) return;
+    
+    const baseNote = formNote ? ' ' + formNote : '';
+    const finalNote = isPostClosing 
+      ? `[${formPaymentMethod}] [PASCA-CLOSING]${baseNote}` 
+      : `[${formPaymentMethod}]${baseNote}`;
+    
+    saleCart.forEach(item => {
+      handleAdjustStock(
+        item.id,
+        item.qty,
+        'PENJUALAN',
+        finalNote,
+        true,
+        undefined,
+        formPaymentMethod
+      );
+    });
+
+    setFormProductId('');
+    setSaleCart([]);
+    setFormQuantity(1);
+    setFormNote('');
+    setFormPaymentMethod('TUNAI');
+    setIsPostClosing(false);
+    setShowQuickSale(false);
+  };
+
+  const handleQuickRestockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formProductId) return;
+
+    handleAdjustStock(
+      formProductId,
+      formQuantity,
+      'RESTOCK',
+      formNote || 'Input restock supplier'
+    );
+
+    setFormProductId('');
+    setFormQuantity(1);
+    setFormNote('');
+    setShowQuickRestock(false);
+  };
+
+  const handleSeedDemoData = () => {
+    setProducts(sortVoucherProducts(INITIAL_PRODUCTS));
+    setTransactions(INITIAL_TRANSACTIONS);
+    setNotifications(INITIAL_NOTIFICATIONS);
+    setShiftHandovers([]);
+    setActiveCashierIndex(0);
+    
+    const storeKey = activeStoreId || 'default';
+    localStorage.removeItem(`v_${storeKey}_c1_products`);
+    localStorage.removeItem(`v_${storeKey}_c1_transactions`);
+    localStorage.removeItem(`v_${storeKey}_c1_notifications`);
+    localStorage.removeItem(`v_${storeKey}_c1_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c1_detailed_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c2_products`);
+    localStorage.removeItem(`v_${storeKey}_c2_transactions`);
+    localStorage.removeItem(`v_${storeKey}_c2_notifications`);
+    localStorage.removeItem(`v_${storeKey}_c2_handovers`);
+    localStorage.removeItem(`v_${storeKey}_c2_detailed_handovers`);
+    localStorage.removeItem(`v_${storeKey}_cashier_idx`);
+    localStorage.setItem(`v_${storeKey}_cashier_idx`, '0');
+
+    // Also clear from Supabase if online
+    if (activeStoreId) {
+      supabase.from('store_settings').upsert({
+        store_id: activeStoreId,
+        voucher_app_data: null
+      }, { onConflict: 'store_id' });
+    }
+    
+    // Force reload to completely wipe memory state
+    window.location.reload(); 
+  };
+
+  const handleClearAllData = () => {
+    setProducts([]);
+    setTransactions([]);
+    setNotifications([]);
+    setShiftHandovers([]);
+    setActiveCashierIndex(0);
+    localStorage.clear();
+  };
+
+  const handleImportBackup = (data: any) => {
+    if (data.products) setProducts(sortVoucherProducts(data.products));
+    if (data.transactions) setTransactions(data.transactions);
+    if (data.handovers) setShiftHandovers(data.handovers);
+    
+    saveState(data.products || [], data.transactions || [], notifications, data.handovers || []);
+  };
+
+  const handleSwitchRole = (role: UserRole) => {
+    if (role === 'owner' && currentUserRole !== 'owner') {
+      setShowPinModal(true);
+      setPinInput('');
+      setPinError(false);
+    } else if (role === 'kasir') {
+      setCurrentUserRole('kasir');
+      setShowRoleSidebar(false);
+      
+      const updatedNotifs = pushNotification(
+        'info',
+        'Mode Kasir Aktif',
+        'Anda sekarang menggunakan hak akses Kasir (Terbatas).',
+        notifications
+      );
+      setNotifications(updatedNotifs);
+    }
+    setShowRoleSidebar(false);
+  };
+
+  const handlePinSubmit = () => {
+    if (pinInput === '0000') {
+      setCurrentUserRole('owner');
+      setShowPinModal(false);
+      setPinInput('');
+      setPinError(false);
+      
+      const updatedNotifs = pushNotification(
+        'success',
+        'Akses Owner Terbuka',
+        'Selamat datang Owner! Seluruh fitur manajemen sekarang aktif.',
+        notifications
+      );
+      setNotifications(updatedNotifs);
+    } else {
+      setPinError(true);
+      setPinInput('');
+      // Shake effect or just error text
+    }
+  };
+
+  const handleThemeChange = (newTheme: 'dark' | 'light') => {
+    setTheme(newTheme);
+    localStorage.setItem('v_theme', newTheme);
+  };
+
+  const visibleNotifications = notifications.filter(n => !n.forRole || n.forRole === 'all' || n.forRole === currentUserRole);
+
+  return (
+    <div className={`w-full h-full bg-slate-50 dark:bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 overflow-x-hidden relative ${theme === 'light' ? 'theme-light' : ''}`} id="mobile-root-shell">
+      
+
+      {/* SEAMLESS APP CONTAINER */}
+      <div className="relative w-full h-full bg-transparent flex flex-col overflow-hidden z-10 transition-all duration-300">
+
+
+
+        {/* Dynamic Application Header (Logo VS BERANDA, bells, alerts) - shown on tabs other than 'produk' */}
+        {activeTab !== 'produk' && !selectedProduct && (
+          <header className="h-14 bg-[#0000c6] border-b border-[#0000a3] px-5 flex items-center justify-between sticky top-0 z-30 shadow-md shrink-0">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => {
+                  if (activeTab !== 'beranda') {
+                    setActiveTab('beranda');
+                  } else if (onExit) {
+                    if (unsyncedChanges) {
+                      setPendingExitAction(() => onExit);
+                      setShowExitWarning(true);
+                    } else {
+                      onExit();
+                    }
+                  }
+                }}
+                className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer"
+                title="Kembali"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-lg">
+                <Package className="w-4 h-4 text-[#0000c6]" />
+              </div>
+              <div className="flex flex-col">
+                <h1 className="text-[10px] font-black tracking-widest text-white uppercase leading-none mb-0.5">
+                  {activeTab === 'beranda' ? 'BERANDA VOUCHER' : activeTab === 'pencarian' ? 'CARI VOUCHER' : activeTab === 'laporan' ? 'LAPORAN' : activeTab === 'profil' ? 'PROFIL' : activeTab === 'stok' ? 'ATUR STOK' : activeTab === 'riwayat' ? 'RIWAYAT' : 'LOG AUDIT'}
+                </h1>
+                <div className="flex items-center gap-1">
+                  {currentUserRole === 'owner' ? (
+                    <span className="flex items-center gap-1 text-[7px] font-black text-amber-300 uppercase tracking-tighter">
+                      <ShieldCheck className="w-1.5 h-1.5" /> Owner
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-[9px] font-black text-blue-100 tracking-tight">
+                      <User className="w-2.5 h-2.5" />
+                      <span className="max-w-[90px] truncate">{activeCashier.name}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* KASIR AKTIF BADGE - info utama di header */}
+
+            <div className="flex items-center gap-2">
+
+              {/* Tiny Sync Indicator removed based on user request */}
+
+              {/* Theme Toggle Button */}
+              <button
+                onClick={() => handleThemeChange(theme === 'dark' ? 'light' : 'dark')}
+                className="p-1 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer border border-transparent"
+                title={`Beralih ke tema ${theme === 'dark' ? 'Terang' : 'Gelap'}`}
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              {/* Notification bell drop */}
+              <div className="relative">
+                <button 
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setActiveTab('notif');
+                  }}
+                  className={`p-1.5 transition relative cursor-pointer rounded-lg flex items-center justify-center ${
+                    activeTab === 'notif' 
+                      ? 'bg-white text-[#0000c6]' 
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                >
+                  <Bell className={`h-4 w-4 ${activeTab === 'notif' ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+                  {visibleNotifications.filter(n => !n.isRead).length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600 border border-slate-900" />
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </header>
+        )}
+
+        {/* Floating Active Toast Banner */}
+        <AnimatePresence>
+          {latestToast && (
+            <motion.div 
+              initial={{ opacity: 0, y: -15, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -15, scale: 0.95 }}
+              className={`absolute top-15 inset-x-3 z-50 border p-3 rounded-xl shadow-2xl flex gap-2.5 items-start ${
+                latestToast.type === 'transfer' 
+                  ? 'bg-indigo-950 border-indigo-500/50 shadow-indigo-500/20' 
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-white/15 shadow-black/40'
+              }`}
+              id="toast-notification-banner"
+            >
+              <div className="text-xs shrink-0 mt-0.5">
+                {latestToast.type === 'warning' ? '🚨' : latestToast.type === 'transfer' ? '📱' : '✅'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className={`text-[10px] font-black ${latestToast.type === 'transfer' ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-900 dark:text-white'}`}>{latestToast.title}</h4>
+                <p className="text-[9px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{latestToast.message}</p>
+              </div>
+              <button onClick={() => setLatestToast(null)} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white p-0.5">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* CORE APP TAB VIEW CONTENT (Encapsulated screen) */}
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'stok' ? 'p-4 sm:p-6' : 'p-4 sm:p-6'} pb-20 z-10`} id="main-scroll-pane">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedProduct ? 'details' : activeTab}
+              initial={{ opacity: 0, x: selectedProduct ? 20 : 0, y: selectedProduct ? 0 : 5 }}
+              animate={{ opacity: 1, x: 0, y: 0 }}
+              exit={{ opacity: 0, x: selectedProduct ? -20 : 0, y: selectedProduct ? 0 : -5 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              {/* If a product is currently selected, render the Middle "Detail Produk" phone mockup view */}
+              {selectedProduct ? (
+                <DetailProductView 
+                  product={selectedProduct} userRole={currentUserRole}
+                  transactions={transactions}
+                  onBack={() => setSelectedProduct(null)}
+                  onUpdateProduct={handleUpdateProduct}
+                  onDelete={handleDeleteProduct}
+                  onAdjustStock={handleAdjustStock}
+                />
+              ) : (
+                <>
+                  {/* ✅ SOLUSI 3: Banner "Stok Diterima" — tampil sekali saat login setelah menerima serah terima */}
+                  {activeTab === 'beranda' && pendingHandoverInfo && (
+                    <div className="mx-3 mt-3 mb-0 animate-in slide-in-from-top-2 duration-300">
+                      <div className="relative flex items-start gap-3 rounded-2xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/15 to-teal-500/10 px-4 py-3 shadow-md backdrop-blur-sm overflow-hidden">
+                        {/* Decorative glow */}
+                        <div className="absolute -top-6 -right-6 w-24 h-24 bg-emerald-500/20 blur-2xl rounded-full pointer-events-none" />
+
+                        {/* Icon */}
+                        <div className="shrink-0 w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center mt-0.5">
+                          <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                        </div>
+
+                        {/* Text */}
+                        <div className="flex-1 min-w-0 relative z-10">
+                          <p className="text-[11px] font-black text-emerald-300 uppercase tracking-widest leading-none mb-1">
+                            Stok Diterima — Shift Dimulai!
+                          </p>
+                          <p className="text-xs text-emerald-100 font-medium leading-snug">
+                            <span className="font-bold text-white">{pendingHandoverInfo.fromCashierName}</span> telah menyerahkan{' '}
+                            <span className="font-black text-emerald-300">{pendingHandoverInfo.totalStockTransferred} pcs</span> voucher kepada Anda.
+                          </p>
+                          <p className="text-[9px] text-emerald-400/70 font-semibold mt-1">
+                            {new Date(pendingHandoverInfo.timestamp).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB · Silakan mulai shift Anda.
+                          </p>
+                        </div>
+
+                        {/* Close Button */}
+                        <button
+                          type="button"
+                          onClick={() => setPendingHandoverInfo(null)}
+                          className="shrink-0 w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-emerald-300 transition cursor-pointer relative z-10 mt-0.5"
+                          title="Tutup notifikasi"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── BANNER: Kasir Bukan Giliran Aktif ── */}
+                  {/* Hanya tampilkan jika ada kasir lain yang benar-benar aktif (activeShiftCashierId bukan null) */}
+                  {currentUserRole !== 'owner' && !isActiveCashierOnDuty && activeShiftCashierId !== null && activeTab === 'beranda' && (
+                    <div className="mx-3 mt-3 mb-0 animate-in slide-in-from-top-2 duration-300">
+                      <div className={`relative flex items-start gap-3 rounded-2xl border px-4 py-3.5 shadow-md overflow-hidden ${
+                        isLight 
+                          ? 'border-amber-400/60 bg-gradient-to-r from-amber-100 via-amber-50 to-orange-100 text-amber-950 shadow-amber-500/10'
+                          : 'border-amber-400/40 bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900/90 text-amber-100'
+                      }`}>
+                        <div className={`shrink-0 w-9 h-9 rounded-xl border flex items-center justify-center mt-0.5 ${
+                          isLight
+                            ? 'bg-amber-500/20 border-amber-400/60 text-amber-900 shadow-xs'
+                            : 'bg-amber-500/20 border-amber-400/30 text-amber-400'
+                        }`}>
+                          <Lock className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0 relative z-10">
+                          <p className={`text-[11px] font-black uppercase tracking-widest leading-none mb-1.5 ${
+                            isLight ? 'text-amber-950' : 'text-amber-300'
+                          }`}>
+                            MODE PANTAU — BUKAN GILIRAN ANDA
+                          </p>
+                          <p className={`text-xs font-medium leading-relaxed ${
+                            isLight ? 'text-amber-950' : 'text-amber-100'
+                          }`}>
+                            Shift aktif saat ini sedang dipegang oleh: <span className={`font-black underline decoration-amber-500/50 px-1.5 py-0.5 rounded ${isLight ? 'bg-amber-200/80 text-amber-950 border border-amber-300/60' : 'bg-amber-500/20 text-white'}`}>{activeShiftCashierName}</span>. Anda hanya dapat <span className="font-bold">melihat data</span> tanpa akses mengedit stok atau transaksi.
+                          </p>
+                          <p className={`text-[9.5px] font-bold mt-1.5 ${
+                            isLight ? 'text-amber-800' : 'text-amber-400/80'
+                          }`}>
+                            ℹ️ Hak akses edit akan otomatis berpindah ke Anda setelah Kasir Aktif menutup toko.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'beranda' && (
+                    <DashboardTab
+                      products={visibleProducts}
+                      transactions={transactions}
+                      notifications={visibleNotifications}
+                      detailedHandovers={detailedHandovers}
+                      activeCashier={activeCashier}
+                      nextCashier={nextCashier}
+                      userRole={currentUserRole}
+                      theme={theme}
+                      kasirList={kasirList}
+                      hasActiveAuditSession={isActiveCashierOnDuty && (() => {
+                        if (!globalShiftSession) return false;
+                        const session = globalShiftSession;
+                        if (session.currentStep > 2) return 'tutup';
+                        if (session.isBukaTokoCompleted) return 'aktif';
+                        // Hanya anggap 'Sesi Buka Toko Belum Selesai' jika pengguna sudah mengetikkan Saldo Awal (>0)
+                        if (session.currentStep <= 2 && session.cashPhysical !== undefined && session.cashPhysical > 0) return 'buka';
+                        return false;
+                      })()}
+                      onResumeAudit={() => setActiveTab('stok')}
+                      onNavigate={setActiveTab}
+                      onOpenQuickSale={() => {
+                        setSaleSearchQuery('');
+                        setSaleSelectedOperator('SEMUA');
+                        setFormPaymentMethod('NON_TUNAI');
+                        if (products.length > 0) setFormProductId(products[0].id);
+                        setFormQuantity(1);
+                        setFormNote('');
+                        if (!isActiveCashierOnDuty && currentUserRole !== 'owner') return; // Blokir jika bukan kasir aktif dan bukan owner
+                        setShowQuickSale(true);
+                      }}
+                      onOpenQuickRestock={() => {
+                        setRestockSearchQuery('');
+                        setRestockSelectedOperator('SEMUA');
+                        if (products.length > 0) setFormProductId(products[0].id);
+                        setFormQuantity(1);
+                        setFormNote('');
+                        if (!isActiveCashierOnDuty && currentUserRole !== 'owner') return; // Blokir jika bukan kasir aktif dan bukan owner
+                        setShowQuickRestock(true);
+                      }}
+                      onOpenHandoverModal={() => setShowHandoverModal(true)}
+                      onSearchQueryChange={() => {}}
+                      onQuickAdjustStock={handleQuickAdjustStock}
+                      onSelectProduct={setSelectedProduct}
+                      onMarkNotificationsRead={() => {
+                        const updated = notifications.map(n => ({ ...n, isRead: true }));
+                        setNotifications(updated);
+                        saveState(products, transactions, updated, shiftHandovers);
+                      }}
+                    />
+                  )}
+
+                  {activeTab === 'produk' && (
+                    <ProductsTab
+                      products={products}
+                      activeCashierName={activeCashier.name}
+                      userRole={currentUserRole}
+                      theme={theme}
+                      onAddProduct={handleAddProduct}
+                      onBulkAddProducts={handleBulkAddProducts}
+                      onUpdateProduct={handleUpdateProduct}
+                      onDeleteProduct={handleDeleteProduct}
+                      onSelectProduct={setSelectedProduct}
+                      onBack={() => setActiveTab('beranda')}
+                      onOpenQuickSale={(productId?: string) => {
+                        setSaleSearchQuery('');
+                        setSaleSelectedOperator('SEMUA');
+                        if (productId) {
+                          setFormProductId(productId);
+                        } else if (products.length > 0) {
+                          setFormProductId(products[0].id);
+                        }
+                        setFormQuantity(1);
+                        setFormNote('');
+              setQuickSaleStep(1);
+                        setShowQuickSale(true);
+                      }}
+                      activeStoreId={activeStoreId}
+                      googleUid={googleUid}
+                      cashiers={cashiers}
+                      storeList={storeList}
+                    />
+                  )}
+
+                  {activeTab === 'pencarian' && (
+                    <SearchTab
+                      products={visibleProducts}
+                      onSelectProduct={setSelectedProduct}
+                      onNavigate={setActiveTab}
+                    />
+                  )}
+
+                  {activeTab === 'laporan' && (
+                    <LaporanTab 
+                      shiftHandovers={shiftHandovers}
+                      detailedHandovers={detailedHandovers}
+                      transactions={transactions}
+                      products={products}
+                      activeCashierName={activeCashier.name}
+                      nextCashierName={nextCashier.name}
+                      allCashiers={cashiers}
+                      userRole={currentUserRole}
+                      onOpenHandoverModal={() => setShowHandoverModal(true)}
+                    />
+                  )}
+
+                  {activeTab === 'stok' && (
+                    <AturStokTab 
+                      products={visibleProducts}
+                      activeCashier={activeCashier}
+                      nextCashier={nextCashier}
+                      allCashiers={cashiers}
+                      sessionKey={`audit_${activeStoreId || 'default'}_${activeCashier.id}`}
+                      transactions={transactions}
+                      userRole={currentUserRole}
+                      theme={theme}
+                      isActiveCashierOnDuty={isActiveCashierOnDuty}
+                      activeShiftCashierName={activeShiftCashierName}
+                      cloudSession={globalShiftSession}
+                      onSyncSession={syncGlobalShiftSession}
+                      onTakeoverStock={handleTakeoverStock}
+                      onBukaTokoSuccess={() => {
+                        syncGlobalActiveCashier(activeCashier.id);
+                        const updatedNotifs = pushNotification(
+                          'info',
+                          'Toko Dibuka',
+                          `${activeCashier.name} telah membuka toko dan memulai shift.`,
+                          notifications,
+                          { cashierName: activeCashier.name },
+                          'owner' // only notify owner
+                        );
+                        setNotifications(updatedNotifs);
+                      }}
+                      onUpdateProductStock={(productId, newStock, subReason) => {
+                        const p = products.find(prod => prod.id === productId);
+                        if (p) {
+                          if (p.currentStock !== newStock) {
+                             const delta = newStock - p.currentStock;
+                             const isAudit = subReason === 'audit';
+                             const updatedNotifs = pushNotification(
+                               isAudit ? "warning" : "success",
+                               isAudit ? "SELISIH AUDIT" : "UPDATE STOK",
+                               isAudit 
+                                 ? `${activeCashier.name} melaporkan selisih: "${p.name}" berkurang ${Math.abs(delta)} pcs (Barang Hilang).`
+                                 : `${activeCashier.name} mengupdate stok "${p.name}" menjadi ${newStock} pcs.`,
+                               notifications,
+                               {
+                                 oldStock: p.currentStock,
+                                 newStock,
+                                 delta,
+                                 productId: p.id,
+                                 productName: p.name,
+                                 cashierName: activeCashier.name,
+                                 unitPrice: p.sellingPrice,
+                                 reason: "audit",
+                                 subReason: subReason || (delta < 0 ? "penjualan" : "restock")
+                               }
+                             );
+                            setNotifications(updatedNotifs);
+                          }
+                          handleUpdateProduct({ ...p, currentStock: newStock });
+                        }
+                      }}
+                      onBulkUpdateProductStock={handleBulkUpdateProductStock}
+                      onRecordHandover={(handoverData) => {
+                        // ====================================================
+                        // SERAH TERIMA — LOGIKA BARU:
+                        // 1. Catat riwayat handover di Riwayat tab
+                        // 2. Salin stok akhir ke storage kasir penerima
+                        // 3. Kasir yang login TIDAK BERUBAH
+                        // ====================================================
+                        const now = new Date();
+                        const dateStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+                        // Cari kasir penerima dari daftar cashiers berdasarkan id
+                        const toCashier = cashiers.find(c => c.id === handoverData.toCashierId) || cashiers.find(c => c.name === handoverData.toCashierName);
+                        const toCashierId = toCashier?.id || handoverData.toCashierId || 'unknown';
+                        const toCashierName = toCashier?.name || handoverData.toCashierName || 'Kasir Berikutnya';
+
+                        // Hitung shiftNumber berdasarkan urutan di hari ini
+                        const todayRecords = detailedHandovers.filter(r => r.date === dateStr);
+                        const shiftNum = todayRecords.length + 1;
+                        const shiftTitle = `Shift ${shiftNum} (${activeCashier.name})`;
+
+                        // Bangun daftar produk dengan stok = finalStock dari audit
+                        // Ini yang akan disalin ke storage kasir penerima
+                        const finalProductsForReceiver: VoucherProduct[] = products.map(p => {
+                          const auditItem = (handoverData.items || []).find((i: any) => i.productId === p.id);
+                          const finalStock = auditItem ? auditItem.finalStock : p.currentStock;
+                          return { ...p, currentStock: finalStock };
+                        });
+
+                        const newDetailedRecord: DetailedHandoverRecord = {
+                          id: `rec-${Date.now()}`,
+                          date: dateStr,
+                          timestamp: now.toISOString(),
+                          shiftNumber: shiftNum,
+                          shiftName: shiftTitle,
+                          cashierFromId: activeCashier.id,
+                          cashierFromName: activeCashier.name,
+                          cashierToId: toCashierId,
+                          cashierToName: toCashierName,
+                          totalInitialStock: handoverData.initialStock,
+                          totalIncomingStock: handoverData.incomingStock,
+                          totalFinalStock: handoverData.finalStock,
+                          totalSoldPcs: handoverData.totalSold,
+                          totalSalesAmount: handoverData.totalSales,
+                          qrisAmount: handoverData.qrisAmount,
+                          qrisPcs: handoverData.qrisPcs || 0,
+                          cashExpected: handoverData.cashExpected,
+                          cashPhysical: handoverData.cashPhysical || 0,
+                          cashDifference: handoverData.cashDiff || 0,
+                          note: handoverData.note || 'Serah terima kasir reguler',
+                          isLocked: true,
+                          productsSummary: handoverData.items || []
+                        };
+
+                        const updatedDetailed = [newDetailedRecord, ...detailedHandovers];
+                        setDetailedHandovers(updatedDetailed);
+
+                        // Generate transactions for items sold during shift (pasca closing)
+                        const newTransactions: any[] = [];
+                        (handoverData.items || []).forEach((item: any) => {
+                          const initial = item.initialStock || 0;
+                          const incoming = item.incomingStock || 0;
+                          const final = item.finalStock || 0;
+                          const soldQty = (initial + incoming) - final;
+                          
+                          if (soldQty > 0) {
+                            const p = products.find(prod => prod.id === item.productId);
+                            newTransactions.push({
+                              id: `trx-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                              type: 'PENJUALAN',
+                              productId: item.productId,
+                              productName: item.productName,
+                              quantity: soldQty,
+                              amount: soldQty * item.price,
+                              cogs: p ? (p.costPrice * soldQty) : 0,
+                              cashierName: activeCashier.name,
+                              timestamp: now.toISOString(),
+                              notes: '[TUNAI] [PASCA-CLOSING]',
+                              paymentMethod: 'TUNAI' // Default asumsi tunai jika tidak tercatat qris per item
+                            });
+                          }
+                        });
+                        
+                        const updatedTransactions = [...newTransactions, ...transactions];
+                        if (newTransactions.length > 0) {
+                          setTransactions(updatedTransactions);
+                        }
+
+                        // Jalankan handover — menyalin stok ke kasir penerima
+                        // Kasir yang login TIDAK DIGANTI
+                        handleExecuteShiftHandover(
+                          `Serah terima: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`,
+                          toCashierId,
+                          toCashierName,
+                          finalProductsForReceiver,
+                          handoverData.isSelfHandover
+                        );
+                        saveState(products, updatedTransactions, notifications, shiftHandovers, updatedDetailed);
+                      }}
+                      onSwitchCashier={() => {
+                        // ✅ Tidak ganti kasir — hanya notifikasi saja
+                        // Kasir penerima harus login sendiri
+                        const updatedNotifs = pushNotification(
+                          'success',
+                          'Serah Terima Selesai',
+                          `Stok telah diserahkan. Anda masih login sebagai ${activeCashier.name}. Kasir penerima silakan login sendiri.`,
+                          notifications
+                        );
+                        setNotifications(updatedNotifs);
+                      }}
+                      onBackToDashboard={() => setActiveTab('beranda')}
+                    />
+                  )}
+
+                  {activeTab === 'riwayat' && (
+                    <RiwayatTab 
+                      handoverRecords={detailedHandovers}
+                      transactions={transactions}
+                      allCashiers={cashiers}
+                      onBackToDashboard={() => setActiveTab('beranda')}
+                    />
+                  )}
+
+                  {activeTab === 'notif' && (() => {
+                    const postClosingTrx = transactions.filter(t => 
+                      t.notes?.includes('[PASCA-CLOSING]') && !dismissedPostClosing.includes(t.id)
+                    );
+                    
+                    return (
+                      <LogAktivitasTab 
+                        notifications={visibleNotifications}
+                        userRole={currentUserRole}
+                        theme={theme}
+                        postClosingTransactions={postClosingTrx}
+                        onResolvePostClosing={(ids) => {
+                          setDismissedPostClosing(prev => [...prev, ...ids]);
+                          const updatedNotifs = pushNotification(
+                            'success',
+                            'Penjualan Pasca Closing Diarsipkan',
+                            `${ids.length} transaksi pasca closing telah ditandai selesai dan diarsipkan.`,
+                            notifications
+                          );
+                          setNotifications(updatedNotifs);
+                          saveState(products, transactions, updatedNotifs, shiftHandovers, detailedHandovers);
+                        }}
+                        onMarkAllRead={() => {
+                          const updated = notifications.map(n => ({ ...n, isRead: true }));
+                          setNotifications(updated);
+                          saveState(products, transactions, updated, shiftHandovers, detailedHandovers);
+                        }}
+                        onClearAll={() => {
+                          const retainedNotifs = notifications.filter(n => 
+                            n.type === 'transfer' && (n.title.includes('Penjualan') || n.title.includes('Voucher Digital'))
+                          );
+                          setNotifications(retainedNotifs);
+                          saveState(products, transactions, retainedNotifs, shiftHandovers, detailedHandovers);
+                        }}
+                      />
+                    );
+                  })()}
+
+                  {activeTab === 'profil' && (
+                    <ProfileTab
+                      activeCashier={activeCashier}
+                      nextCashier={nextCashier}
+                      shiftHandovers={shiftHandovers}
+                      transactions={transactions}
+                      products={products}
+                      userRole={currentUserRole}
+                      onOpenHandoverModal={() => setShowHandoverModal(true)}
+                      onSeedDemoData={handleSeedDemoData}
+                      onClearAllData={handleClearAllData}
+                      onImportBackup={handleImportBackup}
+                    />
+                  )}
+                </>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+
+        {/* DIALOG MODAL: QUICK SALE */}
+        <AnimatePresence>
+                              {showQuickSale && (() => {
+            const filteredSaleProducts = filterProductsByOperatorAndTitle(visibleProducts, saleSelectedOperator, saleSearchQuery);
+            const activeQtyModalProduct = products.find(p => p.id === showQtyModalFor) || null;
+            
+            const totalSellingPrice = saleCart.reduce((sum, item) => {
+              const p = products.find(prod => prod.id === item.id);
+              return sum + ((p?.sellingPrice || 0) * item.qty);
+            }, 0);
+
+            const isKonfirmasiDisabled = saleCart.length === 0;
+
+            const handleSaveQty = () => {
+              if (showQtyModalFor) {
+                if (qtyModalValue <= 0) {
+                  setSaleCart(saleCart.filter(i => i.id !== showQtyModalFor));
+                } else {
+                  const existing = saleCart.find(i => i.id === showQtyModalFor);
+                  if (existing) {
+                    setSaleCart(saleCart.map(i => i.id === showQtyModalFor ? { ...i, qty: qtyModalValue } : i));
+                  } else {
+                    setSaleCart([...saleCart, { id: showQtyModalFor, qty: qtyModalValue }]);
+                  }
+                }
+              }
+              setShowQtyModalFor(null);
+            };
+
+            return (
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-[100] flex items-center justify-center p-3 pb-20" id="quick-sale-modal">
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className={`w-full max-w-sm rounded-3xl shadow-2xl relative max-h-[85vh] flex flex-col overflow-hidden border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-white/10'}`}
+                >
+                  {/* Top Header */}
+                  <div className={`px-3 py-2 flex items-center justify-between shadow-sm shrink-0 border-b ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => quickSaleStep === 2 ? setQuickSaleStep(1) : setShowQuickSale(false)} className={`p-1 rounded-full transition-all ${isLight ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-white/10'}`}>
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <div>
+                        <h2 className={`text-[13px] font-black leading-tight tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Catat Penjualan</h2>
+                        <p className={`text-[9px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{quickSaleStep === 1 ? 'Cari & Pilih Voucher' : 'Konfirmasi & Simpan'}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setShowQuickSale(false)} 
+                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${isLight ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {quickSaleStep === 1 ? (
+                    <div className="flex-1 overflow-y-auto flex flex-col relative no-scrollbar min-h-0">
+                      {/* Filter Chips & Search */}
+                      <div className={`px-3 py-2 shrink-0 shadow-sm z-10 mb-1 border-b ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/5'}`}>
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                          {OPERATOR_CHIPS.map(chip => {
+                            const isSelected = saleSelectedOperator === chip.opValue;
+                            return (
+                              <button
+                                key={chip.id}
+                                onClick={() => setSaleSelectedOperator(chip.opValue)}
+                                className={`px-3 py-1 rounded-full text-[9px] font-black tracking-wide whitespace-nowrap transition-all border ${
+                                  isSelected 
+                                    ? (isLight ? "bg-emerald-500 text-white border-emerald-500 shadow-sm" : "bg-emerald-500 text-white border-emerald-500 shadow-sm")
+                                    : (isLight ? "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100" : "bg-slate-800 border-white/10 text-slate-300 hover:bg-slate-700")
+                                }`}
+                              >
+                                {chip.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="relative mt-1.5">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Cari & Pilih Voucher..."
+                            value={saleSearchQuery}
+                            onChange={e => setSaleSearchQuery(e.target.value)}
+                            className={`w-full border rounded-xl pl-8 pr-8 py-1.5 text-[11px] font-bold focus:outline-none focus:ring-1 transition-all shadow-inner ${
+                              isLight 
+                                ? 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-emerald-500' 
+                                : 'bg-slate-950 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500'
+                            }`}
+                          />
+                          {saleSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setSaleSearchQuery('')}
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Product List */}
+                      <div className="flex-1 overflow-y-auto px-3 space-y-1.5 pt-1 pb-3 relative">
+                        {/* Qty Modal Overlay */}
+                        <AnimatePresence>
+                          {showQtyModalFor && activeQtyModalProduct && (
+                            <motion.div 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm"
+                            >
+                              <div className={`w-full max-w-[240px] rounded-2xl p-4 shadow-xl border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                                <h4 className={`text-[12px] font-black text-center mb-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>{activeQtyModalProduct.name}</h4>
+                                <p className={`text-[9px] font-bold text-center mb-4 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Tentukan jumlah beli</p>
+                                
+                                <div className={`flex items-center justify-between border rounded-xl p-1 mb-4 shadow-inner ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/5 bg-slate-950'}`}>
+                                  <button 
+                                    onClick={() => setQtyModalValue(Math.max(0, qtyModalValue - 1))}
+                                    className={`w-10 h-8 rounded-lg flex items-center justify-center transition-all ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+                                  >
+                                    <Minus className="w-4 h-4" strokeWidth={3} />
+                                  </button>
+                                  <div className={`text-[16px] font-black ${isLight ? 'text-slate-800' : 'text-white'}`}>{qtyModalValue}</div>
+                                  <button 
+                                    onClick={() => setQtyModalValue(qtyModalValue + 1)}
+                                    className={`w-10 h-8 rounded-lg flex items-center justify-center transition-all ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+                                  >
+                                    <Plus className="w-4 h-4" strokeWidth={3} />
+                                  </button>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => setShowQtyModalFor(null)} 
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition-all ${isLight ? 'bg-white border-slate-200 text-slate-600' : 'bg-slate-800 border-white/10 text-slate-300'}`}
+                                  >
+                                    Batal
+                                  </button>
+                                  <button 
+                                    onClick={handleSaveQty} 
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black text-white shadow-md transition-all ${isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'}`}
+                                  >
+                                    OK
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {filteredSaleProducts.length === 0 ? (
+                          <div className="text-center py-4">
+                            <p className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Tidak ada voucher yang cocok</p>
+                          </div>
+                        ) : (
+                          filteredSaleProducts.map(p => {
+                            const cartItem = saleCart.find(i => i.id === p.id);
+                            const isSel = !!cartItem;
+                            const isLowStock = p.currentStock <= p.minStockLevel;
+                            return (
+                              <div 
+                                key={p.id}
+                                onClick={() => {
+                                  setQtyModalValue(cartItem ? cartItem.qty : 1);
+                                  setShowQtyModalFor(p.id);
+                                }}
+                                className={`backdrop-blur-xl border rounded-xl p-2 shadow-sm transition-all duration-200 cursor-pointer relative flex items-center justify-between group select-none ${
+                                  isLight 
+                                    ? (isSel ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500 text-slate-800' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800') 
+                                    : (isSel ? 'bg-emerald-900/20 border-emerald-500 ring-1 ring-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 border-white/5 text-slate-300')
+                                }`}
+                              >
+                                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                  {/* Left: Logo */}
+                                  <div className="scale-[0.8] origin-left shrink-0">
+                                    <ProviderLogo operator={p.operator} category={p.category} size="sm" />
+                                  </div>
+
+                                  {/* Middle: Title & Price */}
+                                  <div className="min-w-0 flex-1 flex flex-col justify-center -ml-1">
+                                    <h4 className={`text-[11px] font-bold tracking-tight truncate leading-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                                      {p.name}
+                                    </h4>
+                                    <div className={`flex items-center gap-2 mt-0.5 text-[9px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                                      <span className={isLight ? 'text-emerald-600 font-extrabold' : 'text-emerald-400 font-black'}>Rp {p.sellingPrice.toLocaleString('id-ID')}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Right: Stock Badge / Cart Qty */}
+                                <div className="flex items-center justify-center shrink-0 pl-1 gap-1.5">
+                                  <div className={`px-2 py-1 rounded-lg border flex flex-col items-center justify-center min-w-[36px] transition-all shadow-sm ${
+                                    isLowStock 
+                                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 font-black' 
+                                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 font-black'
+                                  }`}>
+                                    <span className="text-[13px] font-black leading-none tracking-tight">
+                                      {p.currentStock}
+                                    </span>
+                                    <span className="text-[6px] font-black tracking-widest uppercase leading-none mt-0.5 opacity-90">
+                                      STOK
+                                    </span>
+                                  </div>
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all ${isSel ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : (isLight ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-700 bg-slate-800 text-slate-500")}`}>
+                                    {isSel ? (
+                                      <span className="text-[10px] font-black leading-none">{cartItem.qty}</span>
+                                    ) : (
+                                      <Plus className="w-3 h-3" strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                      
+                      {/* Bottom Bar Step 1 */}
+                      <div className={`shrink-0 border-t p-3 z-20 mt-auto ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                         <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2.5">
+                             <div className={`w-8 h-8 rounded-lg border flex items-center justify-center ${isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-emerald-900/30 border-emerald-500/30 text-emerald-400'}`}>
+                               <ShoppingCart className="w-4 h-4" />
+                             </div>
+                             <div>
+                               <p className={`text-[9px] font-black ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>{saleCart.length} Produk Dipilih</p>
+                               <p className={`text-[8px] font-bold truncate max-w-[100px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{saleCart.reduce((sum, i) => sum + i.qty, 0)} Pcs Total</p>
+                             </div>
+                           </div>
+                           <button
+                             onClick={() => { if (!isKonfirmasiDisabled) setQuickSaleStep(2); }}
+                             disabled={isKonfirmasiDisabled}
+                             className={`disabled:opacity-50 text-white px-4 py-2 rounded-lg font-black text-[11px] flex items-center gap-1 shadow-md transition-all active:scale-95 uppercase tracking-wide ${
+                               isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'
+                             }`}
+                           >
+                             Lanjut <ChevronRight className="w-3 h-3" />
+                           </button>
+                         </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={(e) => { e.preventDefault(); handleQuickSaleSubmit(e); }} className="flex-1 flex flex-col relative no-scrollbar overflow-hidden min-h-0">
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2 pb-3">
+                        {/* Selected Products List (Cart) */}
+                        <div className={`rounded-xl p-2 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                          <div className="flex items-center gap-2 mb-2 px-1">
+                            <div className={`w-5 h-5 rounded flex items-center justify-center ${isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                              <ShoppingCart className="w-3 h-3" />
+                            </div>
+                            <h3 className={`text-[10px] font-black ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Daftar Produk ({saleCart.length})</h3>
+                          </div>
+                          <div className="space-y-1.5">
+                            {saleCart.map(item => {
+                              const p = products.find(prod => prod.id === item.id);
+                              if (!p) return null;
+                              return (
+                                <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-white/5'}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center font-black text-[9px] ${isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300'}`}>
+                                      {item.qty}x
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className={`text-[9px] font-black truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{p.name}</p>
+                                      <p className={`text-[8px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Rp {p.sellingPrice.toLocaleString('id-ID')}</p>
+                                    </div>
+                                  </div>
+                                  <div className={`text-[10px] font-black shrink-0 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>
+                                    Rp {(p.sellingPrice * item.qty).toLocaleString('id-ID')}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Payment Method Card */}
+                        <div className={`rounded-xl p-2.5 shadow-sm border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`w-6 h-6 rounded-md flex items-center justify-center ${isLight ? 'bg-emerald-50 text-emerald-600' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                              <Banknote className="w-3 h-3" />
+                            </div>
+                            <div className="flex-1 flex items-center justify-between">
+                              <h4 className={`text-[10px] font-black leading-none ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Metode Pembayaran</h4>
+                              <span className={`text-[9px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {currentTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} - {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setFormPaymentMethod('TUNAI')}
+                              className={`flex flex-col items-center justify-center gap-0.5 p-1.5 rounded-lg border-2 transition-all relative ${
+                                formPaymentMethod === 'TUNAI' 
+                                  ? (isLight ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-900/30") 
+                                  : (isLight ? "border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-300" : "border-white/5 bg-slate-800 text-slate-300 hover:border-emerald-500/50")
+                              }`}
+                            >
+                              <Banknote className="w-4 h-4" />
+                              <span className="text-[9px] font-black tracking-wide">Tunai</span>
+                              {formPaymentMethod === 'TUNAI' && <div className="absolute right-1 top-1 bg-white rounded-full"><CheckCircle2 className={`w-3 h-3 ${isLight ? 'text-emerald-500' : 'text-emerald-600'}`} /></div>}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setFormPaymentMethod('NON_TUNAI')}
+                              className={`flex flex-col items-center justify-center gap-0.5 p-1.5 rounded-lg border-2 transition-all relative ${
+                                formPaymentMethod === 'NON_TUNAI' 
+                                  ? (isLight ? "border-indigo-500 bg-indigo-500 text-white shadow-md shadow-indigo-500/20" : "border-indigo-500 bg-indigo-500 text-white shadow-md shadow-indigo-900/30") 
+                                  : (isLight ? "border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300" : "border-white/5 bg-slate-800 text-slate-300 hover:border-indigo-500/50")
+                              }`}
+                            >
+                              <QrCode className="w-4 h-4" />
+                              <span className="text-[9px] font-black tracking-wide">Non Tunai</span>
+                              {formPaymentMethod === 'NON_TUNAI' && <div className="absolute right-1 top-1 bg-white rounded-full"><CheckCircle2 className={`w-3 h-3 ${isLight ? 'text-indigo-500' : 'text-indigo-600'}`} /></div>}
+                            </button>
+                          </div>
+
+                          <label className={`flex items-center justify-between p-2 mt-2 rounded-lg border-2 cursor-pointer transition-all ${
+                            isPostClosing 
+                              ? (isLight ? 'border-amber-400 bg-amber-50' : 'border-amber-500/50 bg-amber-900/20') 
+                              : (isLight ? 'border-slate-100 bg-slate-50 hover:border-amber-200' : 'border-white/5 bg-slate-800 hover:border-amber-500/30')
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-6 h-6 rounded-md flex items-center justify-center ${isLight ? 'bg-slate-200 text-slate-600' : 'bg-slate-700 text-slate-300'}`}>
+                                <History className="w-3 h-3" />
+                              </div>
+                              <div>
+                                <span className={`text-[9px] font-black block ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Pasca-Closing</span>
+                                <span className={`text-[7px] font-bold block leading-tight mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Jualan setelah hitung stok.</span>
+                              </div>
+                            </div>
+                            <div className={`w-6 h-4 rounded-full flex items-center px-0.5 transition-colors ${isPostClosing ? "bg-amber-500" : (isLight ? "bg-slate-300" : "bg-slate-600")}`}>
+                              <div className={`w-3 h-3 rounded-full bg-white transition-transform shadow-sm ${isPostClosing ? "translate-x-2" : "translate-x-0"}`} />
+                            </div>
+                            <input type="checkbox" className="sr-only" checked={isPostClosing} onChange={e => setIsPostClosing(e.target.checked)} />
+                          </label>
+                        </div>
+
+                        {/* Informasi Penjualan Card */}
+                        <div className={`rounded-xl p-2 shadow-sm border flex items-center justify-between ${isLight ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-900/20 border-emerald-500/30'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isLight ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-800/50 text-emerald-400'}`}>
+                              <Banknote className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className={`text-[8px] font-bold uppercase tracking-wider ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>Total Tagihan</p>
+                              <p className={`text-[14px] font-black leading-none mt-0.5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>Rp {totalSellingPrice.toLocaleString('id-ID')}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom Bar Step 2 */}
+                      <div className={`shrink-0 border-t p-3 z-20 mt-auto ${isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-white/10'}`}>
+                         <div className="flex gap-2">
+                           <button
+                             type="button"
+                             onClick={() => setQuickSaleStep(1)}
+                             className={`w-[80px] border py-2 rounded-lg font-black text-[10px] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                               isLight ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-slate-800 border-white/10 text-slate-300 hover:bg-slate-700'
+                             }`}
+                           >
+                             <ArrowLeft className="w-3.5 h-3.5" /> Batal
+                           </button>
+                           <button
+                             type="submit"
+                             disabled={isKonfirmasiDisabled}
+                             className={`flex-1 disabled:opacity-50 text-white py-2 rounded-lg font-black text-[11px] flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 uppercase tracking-wide ${
+                               isLight ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/30'
+                             }`}
+                           >
+                             <Store className="w-3.5 h-3.5" /> Simpan Jual
+                           </button>
+                         </div>
+                      </div>
+                    </form>
+                  )}
+                </motion.div>
+              </div>
+            );
+          })()}
+        </AnimatePresence>
+
+        {/* DIALOG MODAL: QUICK RESTOCK */}
+        <AnimatePresence>
+          {showQuickRestock && (() => {
+            const filteredRestockProducts = filterProductsByOperatorAndTitle(visibleProducts, restockSelectedOperator, restockSearchQuery);
+            const activeSelectedId = formProductId || (filteredRestockProducts.length > 0 ? filteredRestockProducts[0].id : (products.length > 0 ? products[0].id : ''));
+            const selectedProduct = products.find(p => p.id === activeSelectedId) || null;
+
+            return (
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3" id="quick-restock-modal">
+                <motion.div 
+                  initial={{ y: 50, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 50, opacity: 0 }}
+                  className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-white/15 w-full rounded-3xl p-4 shadow-2xl relative space-y-2 text-xs max-h-[88vh] overflow-y-auto"
+                >
+                  <button 
+                    onClick={() => setShowQuickRestock(false)}
+                    className="absolute top-4 right-4 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:bg-white/10 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+
+                  <h3 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <ArrowDownLeft className="h-5 w-5 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 rounded p-0.5" />
+                    Restock Voucher Masuk
+                  </h3>
+
+                  <form 
+                    onSubmit={(e) => {
+                      if (!formProductId && selectedProduct) {
+                        setFormProductId(selectedProduct.id);
+                      }
+                      handleQuickRestockSubmit(e);
+                    }} 
+                    className="space-y-3"
+                  >
+                    {/* Filter Operator & Kolom Cari */}
+                    <div className="space-y-1.5">
+                      {/* Operator chips - compact pill style */}
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        {OPERATOR_CHIPS.map((chip) => (
+                          <button
+                            key={chip.id}
+                            type="button"
+                            onClick={() => setRestockSelectedOperator(chip.opValue)}
+                            className={`px-2 py-1 rounded-xl text-[9px] font-black whitespace-nowrap transition-all border ${
+                              restockSelectedOperator === chip.opValue
+                                ? 'bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-sm'
+                                : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-indigo-400'
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Search input — label as placeholder */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={restockSearchQuery}
+                          onChange={(e) => setRestockSearchQuery(e.target.value)}
+                          placeholder="🔍 Cari & Pilih Voucher..."
+                          className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/15 focus:border-indigo-500 rounded-xl pl-9 pr-16 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 focus:outline-none transition shadow-inner"
+                          autoFocus={false}
+                        />
+                        {(restockSearchQuery || restockSelectedOperator !== 'SEMUA') && (
+                          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-500 dark:text-indigo-400 pointer-events-none">
+                            {filteredRestockProducts.length}
+                          </span>
+                        )}
+                        {restockSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setRestockSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Filtered Result Product List */}
+                      <div className="max-h-28 overflow-y-auto space-y-1 rounded-xl bg-slate-50 dark:bg-slate-900/40 dark:bg-slate-950/80 border border-slate-200 dark:border-white/10 p-1 no-scrollbar">
+                        {filteredRestockProducts.length === 0 ? (
+                          <div className="text-center py-4 text-slate-600 dark:text-slate-400 text-[10px]">
+                            {restockSelectedOperator !== 'SEMUA' 
+                              ? `Tidak ada voucher ${restockSelectedOperator} yang cocok`
+                              : `Tidak ada voucher yang cocok dengan "${restockSearchQuery}"`
+                            }
+                          </div>
+                        ) : (
+                          filteredRestockProducts.map((p) => {
+                            const isSelected = activeSelectedId === p.id;
+                            const opStyle = OPERATOR_STYLES[p.operator] || { text: 'text-indigo-600 dark:text-indigo-400', border: 'border-slate-200 dark:border-white/10' };
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setFormProductId(p.id)}
+                                className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-indigo-500/20 border-indigo-500 text-slate-900 dark:text-white shadow-sm' 
+                                    : 'bg-white/[0.02] hover:bg-white/[0.06] border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${opStyle.border} ${opStyle.text} bg-white border-slate-200 shadow-sm dark:bg-slate-900 shrink-0`}>
+                                    {p.operator}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
+                                    <p className="text-[9px] text-slate-600 dark:text-slate-400 mt-0.5">
+                                      Stok saat ini: <span className="text-slate-800 dark:text-slate-300 font-bold">{p.currentStock} pcs</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0 ml-2">
+                                  <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 block">
+                                    Rp {p.costPrice.toLocaleString('id-ID')}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[8px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/30 px-1 rounded uppercase">Dipilih</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Selected Product Highlight Banner — compact */}
+                    {selectedProduct && (
+                      <motion.div 
+                        key={selectedProduct.id}
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-amber-400 border border-white/60 shadow-[0_0_14px_rgba(251,191,36,0.35)] rounded-xl px-3 py-2 flex items-center justify-between"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-[9px] uppercase font-black text-amber-950 flex items-center gap-0.5">
+                            <ArrowDownLeft className="w-3 h-3 shrink-0" />
+                            Dipilih:
+                          </span>
+                          <h4 className="text-[12px] font-black text-black leading-tight truncate">{selectedProduct.name}</h4>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-[8px] font-bold text-amber-900 uppercase">Modal</span>
+                          <p className="text-xs font-black text-amber-950">
+                            Rp {selectedProduct.costPrice.toLocaleString('id-ID')}
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Quantity Field with Quick Steppers — compact */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Jumlah Masuk (Pcs)</label>
+                        <div className="flex gap-1">
+                          {[1, 5, 10, 20].map((qty) => (
+                            <button
+                              key={qty}
+                              type="button"
+                              onClick={() => setFormQuantity(qty)}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition border ${
+                                formQuantity === qty 
+                                  ? 'bg-indigo-600 text-white border-indigo-500' 
+                                  : 'bg-white border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10'
+                              }`}
+                            >
+                              +{qty}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Stepper Row: number left, buttons right */}
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-white/10 rounded-xl px-2 py-1.5">
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={formQuantity}
+                          onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
+                          className="w-16 bg-transparent border-none text-slate-900 dark:text-white text-lg font-black focus:outline-none"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setFormQuantity(q => Math.max(1, q - 1))}
+                            className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-600 dark:text-red-400 font-black text-base hover:bg-red-200 dark:hover:bg-red-500/30 transition active:scale-95"
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormQuantity(q => q + 1)}
+                            className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-base hover:bg-indigo-200 dark:hover:bg-indigo-500/30 transition active:scale-95"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Supplier / Catatan</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: PT. Sumber Voucher, Sales Distributor"
+                        value={formNote}
+                        onChange={(e) => setFormNote(e.target.value)}
+                        className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+                      />
+                    </div>
+
+                    {selectedProduct && (
+                      <div className="bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl flex justify-between items-center">
+                        <span className="font-bold text-slate-600 dark:text-slate-300 text-[10px]">Total Modal:</span>
+                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-base">
+                          Rp {(selectedProduct.costPrice * formQuantity).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickRestock(false)}
+                        className="flex-1 py-2.5 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!selectedProduct}
+                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-slate-900 dark:text-white font-bold rounded-xl transition cursor-pointer shadow-lg shadow-indigo-950/50"
+                      >
+                        Simpan Masuk
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            );
+          })()}
+        </AnimatePresence>
+
+        {/* DIALOG MODAL: AUTOMATED SHIFT CLOSING HANDOVER */}
+        <AnimatePresence>
+          {showHandoverModal && (
+            <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-end justify-center p-3" id="handover-modal-box">
+              <motion.div 
+                initial={{ y: 150 }}
+                animate={{ y: 0 }}
+                exit={{ y: 150 }}
+                className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-white/10 w-full rounded-3xl p-5 shadow-2xl relative space-y-4 text-xs"
+              >
+                <button 
+                  onClick={() => setShowHandoverModal(false)}
+                  className="absolute top-5 right-5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                <div className="flex items-center gap-1.5 mb-1">
+                  <RotateCcw className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  <h3 className="text-xs font-black text-slate-900 dark:text-white">Tutup Shift & Handover Otomatis</h3>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div className="flex justify-between items-center bg-slate-50 border-slate-200 shadow-sm dark:bg-slate-950/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+                    <div>
+                      <span className="text-[9px] text-slate-600 dark:text-slate-400 uppercase font-semibold">Kasir Aktif (Shift 1)</span>
+                      <p className="font-bold text-slate-900 dark:text-white text-[11px]">{activeCashier.name}</p>
+                    </div>
+                    <span className="text-slate-600 dark:text-slate-400">➔</span>
+                    <div className="text-right">
+                      <span className="text-[9px] text-slate-600 dark:text-slate-400 uppercase font-semibold">Kasir Penerima (Shift 2)</span>
+                      <p className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px]">{nextCashier.name}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-indigo-500/10 border border-indigo-500/15 p-3 rounded-xl space-y-1.5">
+                    <span className="text-[9px] text-indigo-700 dark:text-indigo-300 font-bold uppercase tracking-wider">Aset Voucher yang Dialihkan</span>
+                    <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                      <span>Total Jenis Voucher:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{products.length} Jenis</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                      <span>Total Volume Stok:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{products.reduce((acc, p) => acc + p.currentStock, 0)} Pcs</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 dark:text-slate-300 pt-1 border-t border-slate-200 dark:border-white/5">
+                      <span className="text-indigo-600 dark:text-indigo-400 font-bold">Nilai Persediaan (Buku):</span>
+                      <span className="font-black text-emerald-500 font-black dark:text-emerald-400">
+                        Rp {products.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">Keterangan / Berita Acara</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Kas sesuai rekap, laci aman..."
+                      value={formNote}
+                      onChange={(e) => setFormNote(e.target.value)}
+                      className="w-full bg-white border-slate-200 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-600 transition"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowHandoverModal(false)}
+                      className="flex-1 py-2 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteShiftHandover(formNote)}
+                      className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-slate-900 dark:text-white font-black rounded-xl transition cursor-pointer shadow-lg shadow-indigo-600/30"
+                    >
+                      Tutup Shift
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* CELEBRATION SHIFT TRANSFER SUCCESS OVERLAY */}
+        <AnimatePresence>
+          {showHandoverSuccessOverlay && handoverSuccessSummary && (
+            <div className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4" id="success-handover-celebration">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white border-slate-200 shadow-sm dark:bg-slate-900 border border-slate-200 dark:border-white/10 w-full rounded-3xl p-5 text-center space-y-3.5 relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="mx-auto w-12 h-12 bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-black dark:text-emerald-400 rounded-full flex items-center justify-center shadow-lg">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">Serah Terima Sukses!</h3>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Pertukaran shift kasir otomatis dicatat real-time.</p>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-white/5 rounded-2xl p-3 text-left space-y-1.5 text-[10px]">
+                  <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-1">
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Shift Lama (Diserahkan):</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{handoverSuccessSummary.fromCashierName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-1">
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Shift Baru (Mulai):</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{handoverSuccessSummary.toCashierName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 dark:border-white/5 pb-1">
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Voucher Diserahkan:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{handoverSuccessSummary.totalStockTransferred} Pcs</span>
+                  </div>
+                  <div className="flex justify-between pt-0.5 font-semibold">
+                    <span className="text-emerald-500 font-black dark:text-emerald-400">Total Nilai Buku:</span>
+                    <span className="font-black text-emerald-500 font-black dark:text-emerald-400">Rp {handoverSuccessSummary.inventoryValue.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-emerald-300 bg-emerald-500/5 p-2 rounded-xl border border-emerald-500/10">
+                  Tanggung jawab fisik sekarang dipegang penuh oleh <strong className="text-slate-900 dark:text-white">{handoverSuccessSummary.toCashierName}</strong>.
+                </p>
+
+                <button
+                  onClick={() => {
+                    setShowHandoverSuccessOverlay(false);
+                    setHandoverSuccessSummary(null);
+                    setActiveTab('beranda');
+                  }}
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-slate-900 dark:text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Mulai Shift Baru
+                </button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* ROLE SELECTION SIDEBAR */}
+        <AnimatePresence>
+          {showRoleSidebar && (
+            <div className="absolute inset-0 z-[100] flex" id="role-sidebar-container">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowRoleSidebar(false)}
+                className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/80 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="relative w-64 h-full bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-white/10 p-5 shadow-2xl flex flex-col"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-slate-900 dark:text-white text-sm shadow-lg shadow-indigo-600/30">
+                      VS
+                    </div>
+                    <span className="text-xs font-black text-slate-900 dark:text-white tracking-widest">VOUCHERKU</span>
+                  </div>
+                  <button onClick={() => setShowRoleSidebar(false)} className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-6 flex-1">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-3">Hak Akses Sistem</p>
+                    <div className="space-y-2">
+                      <button 
+                        onClick={() => handleSwitchRole('kasir')}
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all ${currentUserRole === 'kasir' ? 'bg-indigo-500/20 border-indigo-500/40 text-slate-900 dark:text-white' : 'bg-white border-slate-200 shadow-sm dark:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent dark:border-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        <div className={`p-2 rounded-xl ${currentUserRole === 'kasir' ? 'bg-indigo-500 text-white shadow-lg' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                          <User className="w-4 h-4" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black">Mode Kasir</p>
+                          <p className="text-[9px] font-bold opacity-60">Akses terbatas sistem</p>
+                        </div>
+                        {currentUserRole === 'kasir' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+                      </button>
+
+                      <button 
+                        onClick={() => handleSwitchRole('owner')}
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all ${currentUserRole === 'owner' ? 'bg-amber-500/20 border-amber-500/40 text-slate-900 dark:text-white' : 'bg-white border-slate-200 shadow-sm dark:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent dark:border-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-white/10 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        <div className={`p-2 rounded-xl ${currentUserRole === 'owner' ? 'bg-amber-500 text-white shadow-lg' : 'bg-white border-slate-200 shadow-sm dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black">Mode Owner</p>
+                          <p className="text-[9px] font-bold opacity-60">Kontrol penuh admin</p>
+                        </div>
+                        {currentUserRole === 'owner' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-3">Sistem & Pengaturan</p>
+                    <div className="space-y-1">
+                      <button onClick={() => { setActiveTab('profil'); setShowRoleSidebar(false); }} className="w-full flex items-center gap-3 p-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors text-[11px] font-bold">
+                        <Settings className="w-4 h-4" /> Pengaturan
+                      </button>
+                      {currentUserRole === 'owner' && (
+                        <button onClick={() => { setActiveTab('laporan'); setShowRoleSidebar(false); }} className="w-full flex items-center gap-3 p-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors text-[11px] font-bold">
+                          <Activity className="w-4 h-4" /> Laporan Audit
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-6 border-t border-slate-200 dark:border-white/5">
+                  <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent rounded-2xl border border-slate-200 dark:border-white/5">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase">
+                      {activeCashier.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-900 dark:text-white">{activeCashier.name}</p>
+                      <p className="text-[8px] font-bold text-slate-600 dark:text-slate-400 uppercase">Aktif Sekarang</p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* PIN VERIFICATION MODAL */}
+        <AnimatePresence>
+          {showPinModal && (
+            <div className="absolute inset-0 z-[200] flex items-center justify-center p-6" id="pin-modal-overlay">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/95 backdrop-blur-md"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="relative w-full max-w-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl text-center"
+              >
+                <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/30 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Lock className="w-8 h-8" />
+                </div>
+                
+                <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">Verifikasi Owner</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">Masukkan 4 digit PIN keamanan untuk membuka akses penuh sistem.</p>
+
+                <div className="space-y-4">
+                  <div className="flex justify-center gap-3">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div 
+                        key={i} 
+                        className={`w-12 h-14 rounded-2xl border-2 flex items-center justify-center transition-all ${pinInput.length > i ? 'border-amber-500 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border-slate-200 dark:border-white/10 bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent'}`}
+                      >
+                        {pinInput.length > i && <div className="w-2.5 h-2.5 bg-amber-500 rounded-full" />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {pinError && (
+                    <motion.p 
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-[10px] font-black text-rose-500 uppercase tracking-widest"
+                    >
+                      PIN SALAH! SILAHKAN COBA LAGI
+                    </motion.p>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-3 pt-4">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'OK'].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => {
+                          if (num === 'C') setPinInput('');
+                          else if (num === 'OK') handlePinSubmit();
+                          else if (typeof num === 'number' && pinInput.length < 4) {
+                            setPinInput(prev => prev + num);
+                            setPinError(false);
+                          }
+                        }}
+                        className={`h-12 rounded-xl flex items-center justify-center font-black text-lg transition-all ${num === 'OK' ? 'bg-amber-500 text-white shadow-lg col-span-1' : 'bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent text-slate-900 dark:text-white hover:bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/5'}`}
+                      >
+                        {num === 'OK' ? <ShieldCheck className="w-6 h-6" /> : num}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button 
+                    onClick={() => setShowPinModal(false)}
+                    className="w-full mt-4 text-[10px] font-black text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white uppercase tracking-widest transition"
+                  >
+                    Batal Verifikasi
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* VOUCHER BOTTOM NAVIGATION */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-white/10 px-2 py-1 z-[150] shadow-[0_-4px_20px_rgba(0,0,0,0.03)] pb-safe">
+          <ul className="flex justify-around items-center max-w-lg mx-auto">
+            <li className="flex-1" onClick={() => onExit?.()}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className="transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+                  <ArrowLeft className="w-5 h-5 stroke-[2px]" />
+                </div>
+                <span className="text-[9px] font-black tracking-tight text-slate-500 transition-colors duration-300">Utama</span>
+              </div>
+            </li>
+            
+            <li className="flex-1" onClick={() => { setActiveTab('beranda'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className={activeTab === 'beranda' && !selectedProduct ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                  <Home className={activeTab === 'beranda' && !selectedProduct ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
+                </div>
+                <span className={activeTab === 'beranda' && !selectedProduct ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Beranda</span>
+              </div>
+            </li>
+
+            {/* CENTER BUTTON: ATUR STOK */}
+            <li className="flex-1" onClick={() => { setActiveTab('stok'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1 relative">
+                <div className={`absolute -top-5 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-xl shadow-blue-500/40 border-[3px] border-white dark:border-slate-900 group-active:scale-95 transition-transform ${activeTab === 'stok' ? 'bg-blue-700 scale-105' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                  <ClipboardList className="w-6 h-6 stroke-[2.5px]" />
+                </div>
+                <span className={`text-[9px] font-black tracking-tight transition-colors duration-300 mt-6 ${activeTab === 'stok' ? 'text-blue-700' : 'text-slate-500'}`}>ATUR STOK</span>
+              </div>
+            </li>
+
+            {/* JUAL CEPAT */}
+            <li className="flex-1" onClick={() => {
+              setSaleSearchQuery('');
+              setSaleSelectedOperator('SEMUA');
+              setFormPaymentMethod('NON_TUNAI');
+              if (products.length > 0) setFormProductId(products[0].id);
+              setFormQuantity(1);
+              setFormNote('');
+              setQuickSaleStep(1);
+              setShowQuickSale(true);
+            }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className="transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+                  <ShoppingCart className="w-5 h-5 stroke-[2px]" />
+                </div>
+                <span className="text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500">Jual Cepat</span>
+              </div>
+            </li>
+
+            {/* PRODUK */}
+            <li className="flex-1" onClick={() => { setActiveTab('produk'); setSelectedProduct(null); }}>
+              <div className="flex flex-col items-center cursor-pointer group py-1">
+                <div className={activeTab === 'produk' || selectedProduct ? "transition-all duration-300 mb-0.5 text-[#00529C] scale-110" : "transition-all duration-300 mb-0.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                  <Package className={activeTab === 'produk' || selectedProduct ? "w-5 h-5 stroke-[2.5px]" : "w-5 h-5 stroke-[2px]"} />
+                </div>
+                <span className={activeTab === 'produk' || selectedProduct ? "text-[9px] font-black tracking-tight transition-colors duration-300 text-[#00529C]" : "text-[9px] font-black tracking-tight transition-colors duration-300 text-slate-500"}>Produk</span>
+              </div>
+            </li>
+          </ul>
+        </nav>
+
+        {/* ── Exit Warning Modal (Interceptor) ── */}
+        <AnimatePresence>
+          {showExitWarning && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-2xl max-w-sm w-full"
+              >
+                <div className="flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center">
+                    <i className="fa-solid fa-triangle-exclamation text-xl"></i>
+                  </div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Data Belum Tersimpan!</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Ada beberapa catatan pembukuan atau stok yang belum disinkronkan ke Cloud. 
+                    Jika Anda keluar sekarang atau menghapus memori HP, data ini bisa hilang.
+                  </p>
+                </div>
+                
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    onClick={async () => {
+                      await performSyncToCloud();
+                      setShowExitWarning(false);
+                      if (pendingExitAction) pendingExitAction();
+                      setPendingExitAction(null);
+                    }}
+                    disabled={isSyncing}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition-all text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-70 disabled:scale-100"
+                  >
+                    {isSyncing ? (
+                      <><i className="fa-solid fa-circle-notch fa-spin"></i> MENYINKRONKAN...</>
+                    ) : (
+                      <><i className="fa-solid fa-cloud-arrow-up"></i> SYNC & LANJUTKAN KELUAR</>
+                    )}
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowExitWarning(false)}
+                      disabled={isSyncing}
+                      className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] rounded-xl transition cursor-pointer"
+                    >
+                      Batal Keluar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowExitWarning(false);
+                        if (pendingExitAction) pendingExitAction();
+                        setPendingExitAction(null);
+                      }}
+                      disabled={isSyncing}
+                      className="flex-1 py-2 border border-red-200 dark:border-red-900/30 text-red-500 dark:text-red-400 font-bold text-[11px] rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition cursor-pointer"
+                    >
+                      Tetap Keluar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+      </div> {/* Closing smartphone frame */}
+    </div>
+  );
+}
+

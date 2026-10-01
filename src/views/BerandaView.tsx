@@ -1,0 +1,5724 @@
+import { KasSummary } from '../components/KasSummary';
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { GlobalHeader } from '../components/GlobalHeader';
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo } from '../lib/utils'
+import { supabase } from '../lib/supabase'
+import TransactionForm from '../components/TransactionForm'
+import SummaryCards from '../components/SummaryCards'
+import type { Transaction, Store } from '../types'
+import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
+interface BerandaViewProps {
+  active: boolean
+  activeView: string
+  setIsSidePanelOpen: (v: boolean) => void
+  setActiveView: (v: string) => void
+  saldoBank: number
+  totalPenjualan: number
+  lastTx?: Transaction
+  formKategori?: string
+  setFormKategori?: (v: string) => void
+  formNominal?: string
+  setFormNominal?: (v: string) => void
+  formAdmin?: string
+  setFormAdmin?: (v: string) => void
+  formKeterangan?: string
+  setFormKeterangan?: (v: string) => void
+  handleSimpanTransaksi: () => void
+  handleSyncPast30Days?: () => void
+  transactions: Transaction[]
+  allTransactions?: Transaction[]
+  isSaving: boolean
+  totalAdmin: number
+  totalVolume: number
+  totalAksesoris: number
+  totalTarik: number
+  totalSaldoKas: number
+  penjualanDigital: number
+  kasModal: number
+  penjualanVoucherTunai?: number
+  kasirName: string
+  kasirRole: string
+  filterKasir: string
+  setFilterKasir: (v: string) => void
+  setFilterTanggal?: (v: string) => void
+  onLogout: () => void
+  kasirList: Record<string, KasirAccount>
+  refreshKasirList: (newList?: Record<string, KasirAccount>) => void
+  jamAbsen?: string
+  absensiList: any[]
+  runningTexts: string[]
+  mainAnnouncement: string
+  storeName: string
+  storeSubtext: string
+  storePhoto?: string
+  handleOwnerTambahModal: (kId: string, nom: number, kategori: string) => void
+  kasLainnya: number
+  totalKhusus: number
+  totalNonTunai: number
+  username: string
+  showToast: (m: string) => void
+  onConfirm: (t: string, m: string, c: () => void) => void
+  presets?: any[]
+  adminRules?: Record<string, any>
+  activeStoreId?: string | 'all'
+  pantauStoreId?: string | 'all'
+  targetTrx?: number
+  gajiBonusList?: any[]
+  fetchGajiBonus?: () => void
+  setPantauStoreId?: (id: string | 'all') => void
+  stores?: Store[]
+  isPc?: boolean
+  userId: string
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>
+  onJurnalClick?: () => void
+}
+
+const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
+  const [index, setIndex] = useState(0)
+  const [animKey, setAnimKey] = useState(0)
+  
+  useEffect(() => {
+    if (texts.length <= 1) return
+    const interval = setInterval(() => {
+      setIndex(prev => (prev + 1) % texts.length)
+      setAnimKey(k => k + 1)
+    }, 8000) 
+    return () => clearInterval(interval)
+  }, [texts.length])
+
+  const current = texts[index]
+  if (!current) return null
+
+  return (
+    <div key={animKey} className={cn(
+      "animate-marquee-center font-black uppercase tracking-widest transition-all",
+      current.isMain ? "text-red-600 text-[11px]" : "text-blue-900 text-[10px]"
+    )}>
+      {current.text}
+    </div>
+  )
+}
+
+const GajiPanel: React.FC<{
+  kasirList: Record<string, KasirAccount>
+  absensiList?: any[]
+  storeName?: string
+  showToast: (m: string) => void
+  activeStoreId: string
+  transactions?: any[]
+  gajiBonusList?: any[]
+  fetchGajiBonus?: () => void
+}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId, transactions, gajiBonusList, fetchGajiBonus }) => {
+  if (activeStoreId === 'all') {
+    return (
+      <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+        <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+        <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk mengelola data gajih.</p>
+      </div>
+    );
+  }
+
+  const [selectedKasir, setSelectedKasir] = useState<string>('')
+  const [month, setMonth] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [mode, setMode] = useState<'harian' | 'bulanan'>('harian')
+  const [gajiPerHari, setGajiPerHari] = useState(() => localStorage.getItem(`alfaza_${activeStoreId}_gaji_per_hari`) || "50000")
+  const [gajiBulanan, setGajiBulanan] = useState(() => localStorage.getItem(`alfaza_${activeStoreId}_gaji_bulanan`) || "0")
+  const [bonus, setBonus] = useState("0")
+  const [potonganLain, setPotonganLain] = useState("0")
+  const [ketPotongan, setKetPotongan] = useState("")
+  const [editHariKerja, setEditHariKerja] = useState(false)
+  const [hariKerjaManual, setHariKerjaManual] = useState("")
+  const [editIzin, setEditIzin] = useState(false)
+  const [izinManual, setIzinManual] = useState("")
+  const [catatan, setCatatan] = useState("")
+  const slipRef = React.useRef<HTMLDivElement>(null)
+
+  const [izinList, setIzinList] = useState<any[]>([])
+
+  // State untuk Tab Gaji Panel
+  const [gajiTab, setGajiTab] = useState<'form-gaji' | 'riwayat-gaji' | 'bonus'>('form-gaji')
+  const [expandedRiwayatGaji, setExpandedRiwayatGaji] = useState<string | null>(null)
+  
+  // Filter state for riwayat
+  const [filterGajiKasir, setFilterGajiKasir] = useState<string>('semua')
+  const [filterBonusKasir, setFilterBonusKasir] = useState<string>('semua')
+  
+  // State untuk Form Bonus
+  const [bonusKasir, setBonusKasir] = useState<string>('')
+  const [bonusPeriode, setBonusPeriode] = useState<string>(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  })
+  const [bonusNominal, setBonusNominal] = useState<string>('')
+  const [bonusIsPaid, setBonusIsPaid] = useState<boolean>(true)
+  useEffect(() => {
+    const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`)
+    if (saved) {
+      setIzinList(JSON.parse(saved))
+    }
+  }, [month, activeStoreId])
+
+  useEffect(() => {
+    localStorage.setItem(`alfaza_${activeStoreId}_gaji_per_hari`, gajiPerHari.replace(/\D/g, ''))
+  }, [gajiPerHari, activeStoreId])
+  useEffect(() => {
+    localStorage.setItem(`alfaza_${activeStoreId}_gaji_bulanan`, gajiBulanan.replace(/\D/g, ''))
+  }, [gajiBulanan, activeStoreId])
+
+  const kasirArr = Object.entries(kasirList).filter(([id]) => id !== 'owner')
+  useEffect(() => {
+    if (!selectedKasir && kasirArr.length > 0) {
+      setSelectedKasir(kasirArr[0][0])
+    }
+    if (!bonusKasir && kasirArr.length > 0) {
+      setBonusKasir(kasirArr[0][0])
+    }
+  }, [kasirArr, selectedKasir, bonusKasir])
+
+  const selectedName = kasirList[selectedKasir]?.name || ''
+  const absenCount = new Set((absensiList || []).filter(a => (a.username === selectedKasir || a.nama_kasir === selectedName) && a.tanggal && a.tanggal.startsWith(month)).map(a => a.tanggal)).size
+  const izinCount = izinList.filter(iz => iz.nama === selectedName && iz.tanggal.startsWith(month)).length
+
+  const hariKerja = editHariKerja ? (parseInt(hariKerjaManual) || 0) : absenCount
+  const currentIzin = editIzin ? (parseInt(izinManual) || 0) : izinCount
+  const parseNum = (str: string) => parseInt(str.replace(/\D/g, '')) || 0
+  const formatNum = (str: string) => {
+    const num = parseInt(str.replace(/\D/g, '')) || 0
+    return num.toLocaleString('id-ID')
+  }
+
+  const ratePerHari = mode === "harian" ? parseNum(gajiPerHari) : Math.round(parseNum(gajiBulanan) / 30)
+  const gajiPokok = mode === "harian" ? hariKerja * ratePerHari : parseNum(gajiBulanan)
+  const potonganIzinVal = currentIzin * ratePerHari
+  const totalGaji = gajiPokok + parseNum(bonus) - potonganIzinVal - parseNum(potonganLain)
+
+  const [y, m] = month.split("-").map(Number)
+  const monthDate = new Date(y, m - 1)
+  const monthLabel = monthDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+
+  useEffect(() => {
+    setHariKerjaManual(String(absenCount))
+    setEditHariKerja(false)
+    setIzinManual(String(izinCount))
+    setEditIzin(false)
+  }, [selectedKasir, month, absenCount, izinCount])
+
+  const handleShareText = async () => {
+    const lines = [
+      `Slip Gaji - ${storeName || 'ALFAZA CELL'}`,
+      `Periode: ${monthLabel.toUpperCase()}`,
+      `Nama: ${selectedName}`,
+      `Hari Kerja: ${hariKerja} hari`,
+      `Izin: ${currentIzin} hari ${potonganIzinVal > 0 ? `(-${formatRupiah(potonganIzinVal)})` : ""}`,
+      `Gaji Pokok: ${formatRupiah(gajiPokok)}`,
+      `Bonus: ${formatRupiah(parseNum(bonus))}`,
+      `Potongan Izin: -${formatRupiah(potonganIzinVal)}`,
+      ...(parseNum(potonganLain) > 0 ? [`Potongan Lain: -${formatRupiah(parseNum(potonganLain))}${ketPotongan ? ` (${ketPotongan})` : ""}`] : []),
+      `Total Gaji: ${formatRupiah(totalGaji)}`,
+    ]
+    if (catatan) lines.push(`Catatan: ${catatan}`)
+    const text = lines.join("\n")
+    try {
+      if (navigator.share) {
+        await navigator.share({ text })
+      } else {
+        await navigator.clipboard.writeText(text)
+        showToast("Teks disalin ke clipboard")
+      }
+    } catch {}
+  }
+
+  const handleSharePDF = async () => {
+    if (!slipRef.current) return
+    try {
+      const html2canvasModule = await import('html2canvas')
+      const html2canvas = html2canvasModule.default
+      const canvas = await html2canvas(slipRef.current, { scale: 2, useCORS: true, backgroundColor: null })
+      const imgData = canvas.toDataURL("image/png")
+      const { default: jsPDF } = await import("jspdf")
+      
+      const pdf = new jsPDF("p", "mm", "a5")
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const imgWidth = pdfWidth - 20
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      
+      pdf.addImage(imgData, "PNG", 10, 15, imgWidth, imgHeight)
+      
+      pdf.setFontSize(8)
+      pdf.setFont("helvetica", "italic")
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(`Dicetak pada: ${new Date().toLocaleString("id-ID")}`, pdfWidth / 2, imgHeight + 25, { align: "center" })
+
+      const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.pdf`
+
+      const { Capacitor } = await import('@capacitor/core')
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem')
+        const { Share } = await import('@capacitor/share')
+        
+        const pdfBase64 = pdf.output("datauristring").split(',')[1]
+        
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: pdfBase64,
+          directory: Directory.Cache
+        })
+        
+        await Share.share({
+          title: `Slip Gaji ${selectedName}`,
+          url: result.uri
+        })
+      } else {
+        const blob = pdf.output("blob")
+        const file = new File([blob], filename, { type: "application/pdf" })
+        
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {})
+        } else {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = filename
+          a.click()
+          URL.revokeObjectURL(url)
+        }
+      }
+    } catch (e: any) {
+      showToast("Gagal share PDF: " + (e?.message || "Error unknown"))
+      console.error(e)
+    }
+  }
+
+  const handleSimpanGaji = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast("Gagal: Anda belum login!");
+        return;
+      }
+      const newRecord = {
+        user_id: user.id,
+        store_id: activeStoreId,
+        kasir_id: selectedKasir,
+        jenis: 'Gaji',
+        nominal: totalGaji,
+        keterangan: `Periode: ${monthLabel}, Hari Kerja: ${hariKerja}, Libur: ${currentIzin}, Pokok: Rp ${formatRupiah(gajiPokok)}, Bonus: Rp ${formatRupiah(parseNum(bonus))}, Potongan: Rp ${formatRupiah(potonganIzinVal + parseNum(potonganLain))}`,
+        timestamp: new Date().toISOString()
+      };
+      const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
+      if (error) throw error;
+      showToast("Berhasil menyimpan riwayat gaji ke server!");
+      if (fetchGajiBonus) fetchGajiBonus();
+    } catch (e: any) {
+      showToast("Gagal simpan: " + e.message);
+    }
+  }
+
+  const handleSimpanBonus = async () => {
+    try {
+      if (!bonusKasir || !bonusPeriode || !bonusNominal) {
+         showToast("Harap lengkapi form bonus!"); return;
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast("Gagal: Anda belum login!");
+        return;
+      }
+      const numBonus = parseNum(bonusNominal);
+      const newRecord = {
+        user_id: user.id,
+        store_id: activeStoreId,
+        kasir_id: bonusKasir,
+        jenis: 'Bonus',
+        nominal: bonusIsPaid ? numBonus : 0,
+        keterangan: `Periode: ${bonusPeriode}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${bonusIsPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`,
+        timestamp: new Date().toISOString()
+      };
+      const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
+      if (error) throw error;
+      showToast("Berhasil menyimpan data bonus ke server!");
+      setBonusPeriode(""); setBonusNominal("");
+      if (fetchGajiBonus) fetchGajiBonus();
+    } catch (e: any) {
+      showToast("Gagal simpan bonus: " + e.message);
+    }
+  }
+
+  const handleTandaiDibayar = async (tx: any) => {
+    try {
+       const match = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+       let targetNominal = 0;
+       if (match) {
+         targetNominal = parseNum(match[1]);
+       }
+       const newKeterangan = tx.keterangan.replace('Belum Dibayar', 'Sudah Dibayar');
+       
+       const { error } = await supabase.from('gaji_bonus').update({
+          nominal: targetNominal,
+          keterangan: newKeterangan
+       }).eq('id', tx.id);
+       if (error) throw error;
+       showToast("Bonus berhasil ditandai lunas!");
+       if (fetchGajiBonus) fetchGajiBonus();
+    } catch(e: any) {
+       showToast("Gagal update bonus: " + e.message);
+    }
+  }
+
+  return (
+    <div className="space-y-4 pb-10">
+      {/* TABS (KOLOM BERWARNA BIRU) */}
+      <div className="bg-gradient-to-br from-blue-600 to-sky-500 p-3 rounded-2xl mb-4 shadow-lg border border-blue-400/30">
+        <h3 className="text-[10px] font-black text-white/90 uppercase tracking-widest text-center mb-3 drop-shadow-sm">
+          Menu Pengelolaan Gaji & Bonus
+        </h3>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setGajiTab('form-gaji')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'form-gaji' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-file-invoice text-sm mb-1"></i>
+            Form Gajih
+          </button>
+          <button 
+            onClick={() => setGajiTab('riwayat-gaji')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'riwayat-gaji' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-clock-rotate-left text-sm mb-1"></i>
+            Riwayat Gajih
+          </button>
+          <button 
+            onClick={() => setGajiTab('bonus')}
+            className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all shadow-sm flex flex-col items-center justify-center gap-1", gajiTab === 'bonus' ? "bg-white text-blue-600 ring-2 ring-white/50 scale-105" : "bg-white/20 text-white hover:bg-white/30")}
+          >
+            <i className="fa-solid fa-gift text-sm mb-1"></i>
+            Form Bonus
+          </button>
+        </div>
+      </div>
+
+      {gajiTab === 'form-gaji' && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PILIH KASIR</label>
+            <div className="relative">
+              <select
+                value={selectedKasir}
+                onChange={e => setSelectedKasir(e.target.value)}
+                className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400 appearance-none cursor-pointer"
+              >
+                {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PERIODE BULAN</label>
+            <input
+              type="month"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+            />
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">MODE PENGHITUNGAN</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMode("harian")}
+              className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", mode === "harian" ? "bg-green-600 text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200")}
+            >
+              {mode === "harian" && <i className="fa-solid fa-check mr-1"></i>} Gajih / Hari
+            </button>
+            <button
+              onClick={() => setMode("bulanan")}
+              className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", mode === "bulanan" ? "bg-green-600 text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200")}
+            >
+              {mode === "bulanan" && <i className="fa-solid fa-check mr-1"></i>} Gajih Full 1 Bulan
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+              {mode === "harian" ? "GAJI / HARI" : "GAJI FULL BULAN"}
+            </label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={mode === "harian" ? gajiPerHari : gajiBulanan}
+                onChange={e => mode === "harian" ? setGajiPerHari(formatNum(e.target.value)) : setGajiBulanan(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">BONUS</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={bonus}
+                onChange={e => setBonus(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">POTONGAN LAIN</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-2.5 text-xs font-bold text-red-400">Rp</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={potonganLain}
+                onChange={e => setPotonganLain(formatNum(e.target.value))}
+                className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-red-200 outline-none font-bold bg-red-50 text-red-700 focus:border-red-400"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">KET POTONGAN</label>
+            <input
+              type="text"
+              value={ketPotongan}
+              onChange={e => setKetPotongan(e.target.value)}
+              placeholder="Kasbon, dll"
+              className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-green-400"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
+              HARI KERJA
+              <span className="flex items-center gap-1 cursor-pointer" onClick={() => { setEditHariKerja(!editHariKerja); setHariKerjaManual(String(absenCount)) }}>
+                <input type="checkbox" checked={editHariKerja} readOnly className="w-2.5 h-2.5" /> <span className="text-[8px] text-blue-600">EDIT</span>
+              </span>
+            </label>
+            {editHariKerja ? (
+              <input type="number" value={hariKerjaManual} onChange={e => setHariKerjaManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-blue-200 outline-none font-bold bg-blue-50 text-blue-700" />
+            ) : (
+              <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700">{absenCount} hari</div>
+            )}
+          </div>
+          <div>
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
+              IZIN / ALPHA
+              <span className="flex items-center gap-1 cursor-pointer" onClick={() => { setEditIzin(!editIzin); setIzinManual(String(izinCount)) }}>
+                <input type="checkbox" checked={editIzin} readOnly className="w-2.5 h-2.5" /> <span className="text-[8px] text-blue-600">EDIT</span>
+              </span>
+            </label>
+            {editIzin ? (
+              <input type="number" value={izinManual} onChange={e => setIzinManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-orange-200 outline-none font-bold bg-orange-50 text-orange-700" />
+            ) : (
+              <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700">{izinCount} hari</div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">CATATAN TAMBAHAN</label>
+          <textarea
+            value={catatan}
+            onChange={e => setCatatan(e.target.value)}
+            rows={2}
+            placeholder="Pesan untuk karyawan..."
+            className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white resize-none focus:border-green-400"
+          ></textarea>
+        </div>
+      </div>
+
+      <div ref={slipRef} className="bg-gradient-to-br from-green-700 to-emerald-500 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-xl -ml-5 -mb-5 pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <h2 className="text-center font-black text-lg tracking-widest uppercase mb-0.5 drop-shadow-sm">SLIP GAJI</h2>
+          <p className="text-center text-green-100 text-[10px] font-bold uppercase tracking-widest mb-4">PERIODE {monthLabel}</p>
+
+          <div className="space-y-2.5 bg-black/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
+            <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
+              <span className="text-[10px] font-bold text-green-100 uppercase tracking-widest">NAMA</span>
+              <span className="font-black uppercase tracking-widest">{selectedName}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Hari Kerja</span>
+              <span className="font-black">{hariKerja} hari</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Izin / Alpha</span>
+              <span className="font-black">{currentIzin} hari {potonganIzinVal > 0 && <span className="text-red-200">(-{formatRupiah(potonganIzinVal)})</span>}</span>
+            </div>
+            <div className="flex justify-between text-[11px] pt-1">
+              <span className="text-green-100 font-bold uppercase">Gaji Pokok</span>
+              <span className="font-black">{formatRupiah(gajiPokok)}</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-green-100 font-bold uppercase">Bonus</span>
+              <span className="font-black text-green-200">{formatRupiah(parseNum(bonus))}</span>
+            </div>
+            {parseNum(potonganLain) > 0 && (
+              <div className="flex justify-between text-[11px]">
+                <span className="text-red-200 font-bold uppercase">Potongan {ketPotongan ? `(${ketPotongan})` : ""}</span>
+                <span className="font-black text-red-200">-{formatRupiah(parseNum(potonganLain))}</span>
+              </div>
+            )}
+            {catatan && (
+              <div className="flex justify-between text-[10px] pt-1 border-t border-white/10 mt-1">
+                <span className="text-green-100 font-bold uppercase w-1/3">Catatan</span>
+                <span className="font-black text-right opacity-90">{catatan}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex justify-between items-end">
+            <div>
+              <p className="text-[9px] font-bold text-green-200 uppercase tracking-widest mb-0.5">TOTAL DITERIMA</p>
+              <span className="font-black text-2xl tracking-tighter drop-shadow-md">{formatRupiah(totalGaji)}</span>
+            </div>
+            <div className="text-right">
+              <p className="text-[7px] font-bold text-green-200 uppercase tracking-widest">{storeName || 'ALFAZA CELL'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={handleSimpanGaji}
+          className="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-cloud-arrow-up text-[10px]"></i> SIMPAN GAJIH
+        </button>
+        <button
+          onClick={handleShareText}
+          className="flex-1 bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-copy text-[10px]"></i> SALIN TEKS
+        </button>
+        <button
+          onClick={handleSharePDF}
+          className="flex-1 bg-green-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-share-nodes text-[10px]"></i> PDF
+        </button>
+      </div>
+      </div>
+      )}
+
+      {gajiTab === 'riwayat-gaji' && (
+        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="flex justify-between items-center px-1">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Riwayat Gajih</p>
+            <select
+              value={filterGajiKasir}
+              onChange={e => setFilterGajiKasir(e.target.value)}
+              className="text-[9px] p-1.5 rounded-lg border border-gray-200 outline-none font-bold bg-white text-gray-600 focus:border-green-400"
+            >
+              <option value="semua">SEMUA KASIR</option>
+              {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+            </select>
+          </div>
+          {(gajiBonusList || [])?.filter((t: any) => t.jenis === 'Gaji' && (filterGajiKasir === 'semua' || t.kasir_id === filterGajiKasir)).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((tx: any) => {
+            const isExpanded = expandedRiwayatGaji === tx.id;
+            const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir Terhapus';
+            const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            return (
+              <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                 <div 
+                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                   onClick={() => setExpandedRiwayatGaji(isExpanded ? null : tx.id)}
+                 >
+                   <div>
+                     <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
+                     <p className="text-[10px] text-gray-500 font-bold mt-0.5"><i className="fa-regular fa-calendar text-green-500 mr-1"></i> {dateStr}</p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-[11px] font-black text-green-600 tabular-nums">{formatRupiah(tx.nominal)}</p>
+                     <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px] text-gray-400 mt-1`}></i>
+                   </div>
+                 </div>
+                 {isExpanded && (
+                   <div className="p-4 bg-gray-50 border-t border-gray-100 text-[10px] font-bold text-gray-600 leading-relaxed space-y-1.5">
+                     <p className="text-green-700 font-black text-[9px] uppercase tracking-widest mb-2 border-b border-green-200/50 pb-1">Rincian Slip Gaji:</p>
+                     {tx.keterangan.replace('[GAJI] ', '').split(', ').map((item: string, idx: number) => {
+                       const parts = item.split(': ');
+                       if (parts.length < 2) return null;
+                       const lbl = parts[0];
+                       const val = parts.slice(1).join(': ');
+                       return (
+                         <div key={idx} className="flex justify-between items-center">
+                           <span className="text-gray-500 uppercase text-[8px] font-bold tracking-widest">{lbl}</span>
+                           <span className="font-black text-gray-800">{val}</span>
+                         </div>
+                       )
+                     })}
+                   </div>
+                 )}
+              </div>
+            )
+          })}
+          {(!(gajiBonusList || []) || (gajiBonusList || []).filter((t: any) => t.jenis === 'Gaji').length === 0) && (
+             <div className="text-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+               <i className="fa-solid fa-box-open text-3xl text-gray-200 mb-2"></i>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada riwayat gajih</p>
+             </div>
+          )}
+        </div>
+      )}
+
+      {gajiTab === 'bonus' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+            <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-gift"></i> Form Bonus Kasir
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">PILIH KASIR</label>
+                <div className="relative">
+                  <select
+                    value={bonusKasir}
+                    onChange={e => setBonusKasir(e.target.value)}
+                    className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400 appearance-none cursor-pointer"
+                  >
+                    {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL BONUS</label>
+                <input
+                  type="date"
+                  value={bonusPeriode}
+                  onChange={e => setBonusPeriode(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NOMINAL BONUS</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={bonusNominal}
+                    onChange={e => setBonusNominal(formatNum(e.target.value))}
+                    className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-lg border border-gray-200">
+                <input 
+                  type="checkbox" 
+                  checked={bonusIsPaid} 
+                  onChange={e => setBonusIsPaid(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600 rounded"
+                />
+                <span className="text-[10px] font-black text-gray-700 uppercase tracking-widest">Sudah Dibayarkan Lunas</span>
+              </label>
+              
+              <button
+                onClick={handleSimpanBonus}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-cloud-arrow-up text-xs"></i> SIMPAN DATA BONUS
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center px-1">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Riwayat Bonus</p>
+              <select
+                value={filterBonusKasir}
+                onChange={e => setFilterBonusKasir(e.target.value)}
+                className="text-[9px] p-1.5 rounded-lg border border-gray-200 outline-none font-bold bg-white text-gray-600 focus:border-blue-400"
+              >
+                <option value="semua">SEMUA KASIR</option>
+                {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+              </select>
+            </div>
+            {(gajiBonusList || [])?.filter((t: any) => t.jenis === 'Bonus' && (filterBonusKasir === 'semua' || t.kasir_id === filterBonusKasir)).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((tx: any) => {
+              const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir Terhapus';
+              const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+              const isPaid = tx.keterangan.includes('Sudah Dibayar');
+              const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+              const targetNominal = targetMatch ? targetMatch[1] : formatRupiah(tx.nominal);
+              const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
+              const periode = periodeMatch ? periodeMatch[1] : "-";
+              
+              return (
+                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
+                   <div>
+                     <div className="flex items-center gap-2 mb-1">
+                       <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
+                       <span className={cn("px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest", isPaid ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                         {isPaid ? "LUNAS" : "BELUM DIBAYAR"}
+                       </span>
+                     </div>
+                     <p className="text-[10px] text-gray-500 font-bold"><i className="fa-regular fa-clock text-blue-500 mr-1"></i> Periode {periode}</p>
+                     <p className="text-[9px] text-gray-400 font-bold mt-0.5">Tgl Input: {dateStr}</p>
+                   </div>
+                   <div className="text-right flex flex-col items-end">
+                     <p className="text-xs font-black text-blue-600 tabular-nums mb-2">Rp {targetNominal}</p>
+                     {!isPaid && (
+                       <button
+                         onClick={() => handleTandaiDibayar(tx)}
+                         className="bg-white text-green-600 border border-green-200 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 hover:bg-green-50 transition-all flex items-center gap-1.5 shadow-sm"
+                       >
+                         <i className="fa-solid fa-check"></i> Tandai Lunas
+                       </button>
+                     )}
+                   </div>
+                </div>
+              )
+            })}
+            {(!(gajiBonusList || []) || (gajiBonusList || []).filter((t: any) => t.jenis === 'Bonus').length === 0) && (
+               <div className="text-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                 <i className="fa-solid fa-gift text-3xl text-gray-200 mb-2"></i>
+                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada riwayat bonus</p>
+               </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PengaturanPanel: React.FC<{ 
+  transactions: Transaction[], 
+  absensiList?: any[],
+  storeName?: string,
+  showToast: (m: string) => void,
+  onConfirm: (t: string, m: string, c: () => void) => void,
+  activeStoreId: string,
+  onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>,
+  kasirList?: Record<string, KasirAccount>
+}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId, onSaveCashierSelf, kasirList }) => {
+  if (activeStoreId === 'all') {
+    return (
+      <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+        <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+        <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+        <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko untuk melihat pengaturan.</p>
+      </div>
+    );
+  }
+
+  const [resetStep, setResetStep] = useState(0); // 0: init, 1: confirm, 2: processing
+  const ALL_TRANSFER_METHODS = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'];
+  const [activeMethods, setActiveMethods] = useState<string[]>([]);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
+  const [isFinancialOpen, setIsFinancialOpen] = useState(false);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+
+  // Financial State
+  const defaultFinancial: Record<string, string> = { startDate: '', rentPeriod: 'bulanan', rentAmount: '', rentDueDate: '', electricityBill: '', wifiBill: '' }
+  const [financialSettings, setFinancialSettings] = useState<Record<string, string>>(defaultFinancial)
+
+  useEffect(() => {
+    try {
+      const key = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        setFinancialSettings({ ...defaultFinancial, ...JSON.parse(saved) })
+      } else {
+        setFinancialSettings(defaultFinancial)
+      }
+    } catch (e) {}
+  }, [activeStoreId])
+
+  const handleSaveFinancial = (key: string, value: string) => {
+    const newSettings = { ...financialSettings, [key]: value }
+    setFinancialSettings(newSettings)
+    const storeKey = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+    localStorage.setItem(storeKey, JSON.stringify(newSettings))
+  }
+
+  // Security State
+  const storageKeyPin = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_isPinEnabled` : 'alphaPro_isPinEnabled'
+  const [isPinEnabled, setIsPinEnabled] = useState(localStorage.getItem(storageKeyPin) !== 'false')
+  useEffect(() => { setIsPinEnabled(localStorage.getItem(storageKeyPin) !== 'false') }, [storageKeyPin])
+
+  const togglePin = () => {
+    const newValue = !isPinEnabled
+    setIsPinEnabled(newValue)
+    localStorage.setItem(storageKeyPin, newValue.toString())
+  }
+
+  const [ownerPinOld, setOwnerPinOld] = useState('')
+  const [ownerPinNew, setOwnerPinNew] = useState('')
+  const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
+  const [showOwnerPin, setShowOwnerPin] = useState(false)
+
+  const handleSaveOwnerPin = async () => {
+    if (!ownerPinNew || ownerPinNew.length < 4) return showToast('PIN baru minimal 4 digit!');
+    if (ownerPinNew !== ownerPinConfirm) return showToast('Konfirmasi PIN tidak cocok!');
+    
+    const ownerAcc = kasirList?.['owner'];
+    if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return showToast('PIN lama tidak sesuai!');
+    
+    if (onSaveCashierSelf) {
+      await onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+      setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
+      showToast('PIN Owner berhasil diubah!');
+    } else {
+      showToast('Gagal: Fungsi onSaveCashierSelf tidak tersedia');
+    }
+  }
+
+  // Dashboard Filter State
+  const storageKeyFilter = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_showKasirFilter` : 'alphaPro_showKasirFilter'
+  const [showKasirFilter, setShowKasirFilter] = useState(localStorage.getItem(storageKeyFilter) !== 'false')
+  useEffect(() => { setShowKasirFilter(localStorage.getItem(storageKeyFilter) !== 'false') }, [storageKeyFilter])
+
+  const toggleFilterKasir = () => {
+    const newValue = !showKasirFilter
+    setShowKasirFilter(newValue)
+    localStorage.setItem(storageKeyFilter, newValue.toString())
+    window.dispatchEvent(new Event('storage'))
+  }
+  
+  const handleExportCSV = () => {
+    const txs = transactions || [];
+    if (txs.length === 0) return showToast("Belum ada data transaksi");
+
+    const headers = ["ID Transaksi", "Tanggal", "Waktu", "Kasir", "Kategori", "Keterangan", "Nominal (Rp)", "Admin/Fee (Rp)", "Tipe"];
+    const rows = txs.map((t: any) => {
+      const date = new Date(t.timestamp);
+      const tanggal = date.toLocaleDateString('id-ID');
+      const waktu = date.toLocaleTimeString('id-ID');
+
+      return [
+        t.id,
+        tanggal,
+        waktu,
+        t.kasir_id || '-',
+        t.kategori,
+        (t.keterangan || '').replace(/,/g, ' '),
+        t.nominal,
+        t.adminFee || 0,
+        t.jenis || '-'
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ALPHA_TRANSAKSI_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`);
+      if (saved) {
+        setActiveMethods(JSON.parse(saved));
+      } else {
+        setActiveMethods(ALL_TRANSFER_METHODS);
+      }
+    } catch (e) {
+      setActiveMethods(ALL_TRANSFER_METHODS);
+    }
+  }, [activeStoreId]);
+
+  const toggleMethod = (method: string) => {
+    let newMethods = [...activeMethods];
+    if (newMethods.includes(method)) {
+      newMethods = newMethods.filter(m => m !== method);
+    } else {
+      newMethods.push(method);
+    }
+    setActiveMethods(newMethods);
+    localStorage.setItem(`alphaPro_${activeStoreId}_transferMethods`, JSON.stringify(newMethods));
+    showToast(`Pengaturan transfer diperbarui`);
+    window.dispatchEvent(new Event('alphaSyncUpdate'));
+  };
+
+  const handleBackup = async () => {
+    try {
+      const backupData = {
+        store: storeName || "ALFAZA CELL",
+        timestamp: getLocalISOString(),
+        data: {
+          transactions,
+          absensi: absensiList || [],
+          catatanIzin: JSON.parse(localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`) || '[]')
+        }
+      };
+
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const filename = `ALPHA_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+
+      const { Capacitor } = await import('@capacitor/core');
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+        
+        const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
+        
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+        
+        await Share.share({
+          title: "Backup Data ALPHA",
+          url: result.uri
+        });
+      } else {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      showToast("Gagal backup: " + e.message);
+    }
+  };
+
+  const handleReset = async () => {
+    onConfirm("RESET SISTEM", "Apakah Anda yakin? Seluruh data transaksi dan absensi akan dihapus permanen dan tidak bisa dikembalikan!", async () => {
+      setResetStep(2);
+      try {
+        let txQuery = supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (activeStoreId !== 'all') {
+          txQuery = txQuery.eq('store_id', activeStoreId);
+        }
+        const { error: txError } = await txQuery;
+        
+        let absQuery = supabase.from('absensi').delete().neq('id', 0);
+        if (activeStoreId !== 'all') {
+          absQuery = absQuery.eq('store_id', activeStoreId);
+        }
+        const { error: absError } = await absQuery;
+        
+        localStorage.removeItem(`alphaPro_${activeStoreId}_catatanIzin`);
+        
+        if (txError || absError) throw new Error("Beberapa data gagal dihapus");
+        
+        showToast("Sistem berhasil direset!");
+        setTimeout(() => window.location.reload(), 2000); 
+      } catch (e: any) {
+        showToast("Reset gagal: " + e.message);
+        setResetStep(0);
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-4 pb-10">
+
+      {/* Beban & Finansial Toko */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsFinancialOpen(!isFinancialOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-wallet text-orange-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">BEBAN & FINANSIAL TOKO</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isFinancialOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isFinancialOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-3">Sewa toko, listrik, WiFi (Otomatis Laba Bersih)</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Tgl Mulai Sewa</label>
+                <input type="date" value={financialSettings.startDate} onChange={e => handleSaveFinancial('startDate', e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Periode Sewa</label>
+                <select value={financialSettings.rentPeriod} onChange={e => handleSaveFinancial('rentPeriod', e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all">
+                  <option value="bulanan">Bulanan</option>
+                  <option value="tahunan">Tahunan</option>
+                </select>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Nominal Sewa</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                <input type="text" value={financialSettings.rentAmount} onChange={e => handleSaveFinancial('rentAmount', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">Listrik /bln</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                  <input type="text" value={financialSettings.electricityBill} onChange={e => handleSaveFinancial('electricityBill', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter ml-1 mb-1 block">WiFi /bln</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
+                  <input type="text" value={financialSettings.wifiBill} onChange={e => handleSaveFinancial('wifiBill', e.target.value.replace(/\D/g, ''))} className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Keamanan & Akses */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsSecurityOpen(!isSecurityOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-shield-halved text-emerald-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">KEAMANAN & AKSES</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isSecurityOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isSecurityOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase">PIN Login Kasir</h4>
+                  <p className="text-[9px] text-gray-500 mt-1 uppercase font-bold tracking-widest">Gunakan PIN saat kasir login</p>
+                </div>
+                <button 
+                  onClick={togglePin}
+                  className={cn("w-12 h-6 rounded-full transition-colors relative", isPinEnabled ? "bg-emerald-500" : "bg-gray-200")}
+                >
+                  <div className={cn("w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm", isPinEnabled ? "translate-x-6.5 left-0" : "translate-x-0.5 left-0")} style={{ transform: isPinEnabled ? 'translateX(26px)' : 'translateX(2px)' }}></div>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase mb-3">Ubah PIN Owner</h4>
+              <div className="space-y-3">
+                <div className="relative">
+                  <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinOld} onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))} placeholder="PIN Lama" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                  <button onClick={() => setShowOwnerPin(!showOwnerPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i className={showOwnerPin ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i></button>
+                </div>
+                <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinNew} onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))} placeholder="PIN Baru (Min 4 digit)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                <input type={showOwnerPin ? 'text' : 'password'} value={ownerPinConfirm} onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))} placeholder="Konfirmasi PIN Baru" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all tracking-widest text-center" maxLength={6} />
+                <button onClick={handleSaveOwnerPin} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-blue-500/20">Simpan PIN Baru</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Pantau Dashboard */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsDashboardOpen(!isDashboardOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-eye text-indigo-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">PANTAU DASHBOARD</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isDashboardOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isDashboardOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <h4 className="font-black text-gray-800 text-xs tracking-widest uppercase">Filter Kasir di Beranda</h4>
+                <p className="text-[9px] text-gray-500 mt-1 uppercase font-bold tracking-widest">Tampilkan tombol filter kasir</p>
+              </div>
+              <button 
+                onClick={toggleFilterKasir}
+                className={cn("w-12 h-6 rounded-full transition-colors relative", showKasirFilter ? "bg-indigo-500" : "bg-gray-200")}
+              >
+                <div className={cn("w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm")} style={{ transform: showKasirFilter ? 'translateX(26px)' : 'translateX(2px)' }}></div>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Pengaturan Transfer */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsTransferOpen(!isTransferOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-money-bill-transfer text-blue-500"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">KATEGORI TRANSFER</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isTransferOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isTransferOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+            <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-3">Pilih kategori layanan digital yang muncul di kasir</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_TRANSFER_METHODS.map(method => {
+                const isActive = activeMethods.includes(method);
+                return (
+                  <label key={method} className={cn("flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all", isActive ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100")}>
+                    <span className={cn("text-[10px] font-black uppercase tracking-widest", isActive ? "text-blue-700" : "text-gray-500")}>{method}</span>
+                    <input 
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleMethod(method)}
+                      className="w-3.5 h-3.5 accent-blue-600 rounded-sm cursor-pointer"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Backup & Reset (Minimalist) */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <button 
+          onClick={() => setIsBackupOpen(!isBackupOpen)}
+          className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-cloud-arrow-down text-slate-600"></i>
+            <h3 className="font-black text-gray-800 text-[11px] tracking-widest uppercase">SISTEM & BACKUP</h3>
+          </div>
+          <i className={cn("fa-solid text-[10px] text-slate-400 transition-transform duration-300", isBackupOpen ? "fa-chevron-up" : "fa-chevron-down")}></i>
+        </button>
+
+        {isBackupOpen && (
+          <div className="p-4 border-t border-gray-100 bg-slate-50/50 grid grid-cols-2 gap-3">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center">
+              <h3 className="font-black text-gray-800 text-[10px] tracking-widest uppercase mb-1">BACKUP DATA</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Ekspor ke JSON</p>
+              <button 
+                onClick={handleBackup}
+                className="w-full bg-slate-100 text-slate-700 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-slate-200"
+              >
+                <i className="fa-solid fa-file-export"></i> Unduh File
+              </button>
+            </div>
+
+            <div className="bg-white border border-red-100 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center">
+              <h3 className="font-black text-red-600 text-[10px] tracking-widest uppercase mb-1">RESET SISTEM</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Hapus Seluruh Data</p>
+              <button 
+                onClick={handleReset}
+                disabled={resetStep === 2}
+                className={cn(
+                  "w-full py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5",
+                  resetStep === 2 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-red-50 text-red-600 hover:bg-red-100"
+                )}
+              >
+                {resetStep === 2 ? (
+                  <><i className="fa-solid fa-circle-notch fa-spin"></i> Proses...</>
+                ) : (
+                  <><i className="fa-solid fa-trash-can"></i> Reset</>
+                )}
+              </button>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center col-span-2">
+              <h3 className="font-black text-emerald-600 text-[10px] tracking-widest uppercase mb-1">EKSPOR CSV</h3>
+              <p className="text-gray-400 text-[8px] font-bold uppercase tracking-widest mb-3">Ekspor ke CSV/Excel</p>
+              <button 
+                onClick={handleExportCSV}
+                className="w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5"
+              >
+                <i className="fa-solid fa-file-excel"></i> Unduh CSV
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+};
+
+// Extra panels removed to resolve duplicate declaration error
+
+interface Catatan {
+  id: string;
+  judul: string;
+  isi: string;
+  kategori: string;
+  tanggal: string;
+  selesai: boolean;
+}
+
+const CatatanPanel: React.FC<{
+  showToast: (m: string) => void,
+  onConfirm: (t: string, m: string, c: () => void) => void
+}> = ({ showToast, onConfirm }) => {
+  const STORAGE_KEY = 'alphaPro_global_catatanOwner';
+  const [catatanList, setCatatanList] = useState<Catatan[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  
+  const [judul, setJudul] = useState('');
+  const [isi, setIsi] = useState('');
+  const [kategori, setKategori] = useState('Penting');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  const loadAllNotes = useCallback(() => {
+    try {
+      const map = new Map<string, Catatan>();
+      const addNote = (item: any) => {
+        if (!item || typeof item !== 'object' || !item.judul) return;
+        const uKey = item.id || `${item.judul}-${item.tanggal}`;
+        if (!map.has(uKey)) {
+          map.set(uKey, {
+            id: item.id || Date.now().toString() + Math.random(),
+            judul: item.judul || '',
+            isi: item.isi || '',
+            kategori: item.kategori || 'Penting',
+            tanggal: item.tanggal || new Date().toISOString(),
+            selesai: !!item.selesai
+          });
+        }
+      };
+
+      // 1. Baca dari global key
+      const globalRaw = localStorage.getItem(STORAGE_KEY);
+      if (globalRaw) {
+        try {
+          const parsed = JSON.parse(globalRaw);
+          if (Array.isArray(parsed)) parsed.forEach(addNote);
+        } catch(e) {}
+      }
+
+      // 2. Scan semua kunci toko lokal
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || '';
+        if (k.includes('catatan_owner') || k.includes('catatanOwner')) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) parsed.forEach(addNote);
+            }
+          } catch(e) {}
+        }
+      }
+
+      const list = Array.from(map.values());
+      list.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+      setCatatanList(list);
+    } catch(e) {}
+  }, []);
+
+  useEffect(() => {
+    loadAllNotes();
+    const handleUpdate = () => loadAllNotes();
+    window.addEventListener('alphaSyncUpdate', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('alphaSyncUpdate', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [loadAllNotes]);
+
+  const saveToStorage = (data: Catatan[]) => {
+    setCatatanList(data);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      const activeSid = localStorage.getItem('alphaPro_activeStoreId');
+      if (activeSid && activeSid !== 'all') {
+        localStorage.setItem(`alphaPro_${activeSid}_catatan_owner`, JSON.stringify(data));
+        supabase.from('store_settings').upsert({
+          store_id: activeSid,
+          catatan_owner_data: data,
+          updated_at: new Date().toISOString()
+        }).then();
+      }
+    } catch(e) {}
+    window.dispatchEvent(new Event('alphaSyncUpdate'));
+  };
+
+  const handleSimpan = () => {
+    if (!judul.trim() || !isi.trim()) {
+      return showToast('Judul dan isi catatan harus diisi!');
+    }
+    
+    if (editId) {
+      const updated = catatanList.map(c => 
+        c.id === editId 
+          ? { ...c, judul: judul.trim(), isi: isi.trim(), kategori }
+          : c
+      );
+      saveToStorage(updated);
+      showToast('Catatan berhasil diperbarui');
+    } else {
+      const baru: Catatan = {
+        id: Date.now().toString(),
+        judul: judul.trim(),
+        isi: isi.trim(),
+        kategori,
+        tanggal: new Date().toISOString(),
+        selesai: false
+      };
+      saveToStorage([baru, ...catatanList]);
+      showToast('Catatan berhasil disimpan');
+    }
+    
+    setJudul('');
+    setIsi('');
+    setEditId(null);
+    setFormOpen(false);
+  };
+
+  const handleEdit = (c: Catatan) => {
+    setJudul(c.judul);
+    setIsi(c.isi);
+    setKategori(c.kategori);
+    setEditId(c.id);
+    setFormOpen(true);
+  };
+
+  const hapusCatatan = (id: string) => {
+    onConfirm('HAPUS CATATAN', 'Apakah Anda yakin ingin menghapus catatan ini?', () => {
+      const updated = catatanList.filter(c => c.id !== id);
+      saveToStorage(updated);
+      showToast('Catatan dihapus');
+    });
+  };
+
+  const toggleSelesai = (id: string) => {
+    const updated = catatanList.map(c => c.id === id ? { ...c, selesai: !c.selesai } : c);
+    saveToStorage(updated);
+  };
+
+  const copyCatatan = async (c: Catatan) => {
+    const text = `*${c.judul}*\nKategori: ${c.kategori}\nTanggal: ${new Date(c.tanggal).toLocaleDateString('id-ID')}\n\n${c.isi}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        showToast('Teks disalin ke clipboard');
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        showToast('Teks disalin ke clipboard');
+      }
+    } catch(err) {
+      showToast('Gagal menyalin teks');
+    }
+  };
+
+  const getCatIcon = (kat: string) => {
+    if (kat === 'Belanja') return 'fa-cart-shopping text-blue-500 bg-blue-100';
+    if (kat === 'Ide') return 'fa-lightbulb text-amber-500 bg-amber-100';
+    return 'fa-circle-exclamation text-rose-500 bg-rose-100';
+  };
+
+  return (
+    <div className="space-y-4 pb-10">
+      {!formOpen ? (
+        <>
+          <button
+            onClick={() => {
+              setJudul('');
+              setIsi('');
+              setKategori('Penting');
+              setEditId(null);
+              setFormOpen(true);
+            }}
+            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-orange-200/50 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <i className="fa-solid fa-plus"></i> Buat Catatan Baru
+          </button>
+          
+          {catatanList.length === 0 ? (
+            <div className="p-8 text-center bg-gray-50 border border-gray-100 rounded-3xl mt-4">
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i className="fa-solid fa-clipboard-list text-2xl text-gray-400"></i>
+              </div>
+              <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Belum Ada Catatan</p>
+              <p className="text-[10px] text-gray-400 font-bold mt-1">Catatan Anda akan tampil di sini.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 mt-4">
+              {catatanList.map(c => (
+                <div key={c.id} className={cn("bg-white border rounded-2xl p-4 shadow-sm transition-all", c.selesai ? "border-gray-200 bg-gray-50/50" : "border-orange-100")}>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={cn("w-10 h-10 shrink-0 rounded-xl flex items-center justify-center", getCatIcon(c.kategori), c.selesai && "opacity-50 grayscale")}>
+                        <i className={`fa-solid ${getCatIcon(c.kategori).split(' ')[0]} text-lg`}></i>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={cn("text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md", c.selesai ? "bg-gray-200 text-gray-500" : "bg-orange-100 text-orange-700")}>
+                            {c.kategori}
+                          </span>
+                          <span className="text-[8px] font-bold text-gray-400">{new Date(c.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
+                        </div>
+                        <h4 className={cn("font-black text-sm text-gray-800 truncate", c.selesai && "line-through text-gray-400")}>{c.judul}</h4>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => toggleSelesai(c.id)} className={cn("w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all", c.selesai ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500")}>
+                        <i className="fa-solid fa-check"></i>
+                      </button>
+                      <button onClick={() => copyCatatan(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 active:scale-90 transition-all">
+                        <i className="fa-regular fa-copy"></i>
+                      </button>
+                      <button onClick={() => handleEdit(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-amber-50 text-amber-500 active:scale-90 transition-all">
+                        <i className="fa-solid fa-pen"></i>
+                      </button>
+                      <button onClick={() => hapusCatatan(c.id)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500 active:scale-90 transition-all">
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                    className={cn(
+                      "mt-3 pt-3 border-t text-xs font-bold leading-relaxed cursor-pointer transition-all",
+                      c.selesai ? "border-gray-200 text-gray-400 line-through decoration-gray-300" : "border-orange-50 text-gray-600",
+                      expandedId === c.id ? "whitespace-pre-wrap" : "truncate"
+                    )}
+                    title="Klik untuk melihat catatan lengkap"
+                  >
+                    {c.isi}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="bg-white border border-orange-100 rounded-[2rem] p-5 shadow-sm animate-in fade-in duration-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-black text-orange-600 text-[13px] tracking-widest uppercase">{editId ? 'EDIT CATATAN' : 'CATATAN BARU'}</h3>
+            <button onClick={() => { setFormOpen(false); setEditId(null); setJudul(''); setIsi(''); setKategori('Penting'); }} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">JUDUL CATATAN</label>
+              <input
+                type="text"
+                placeholder="Cth: Belanja Stok XL"
+                value={judul}
+                onChange={e => setJudul(e.target.value)}
+                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 focus:border-orange-400 focus:bg-white transition-colors"
+              />
+            </div>
+            
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">KATEGORI</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['Penting', 'Belanja', 'Ide'].map(kat => (
+                  <button
+                    key={kat}
+                    onClick={() => setKategori(kat)}
+                    className={cn(
+                      "py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                      kategori === kat 
+                        ? "bg-orange-50 border-orange-400 text-orange-600 shadow-sm" 
+                        : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"
+                    )}
+                  >
+                    {kat}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">ISI CATATAN</label>
+              <textarea
+                placeholder="Ketik rincian di sini..."
+                value={isi}
+                onChange={e => setIsi(e.target.value)}
+                rows={5}
+                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 resize-none focus:border-orange-400 focus:bg-white transition-colors"
+              ></textarea>
+            </div>
+            
+            <button
+              onClick={handleSimpan}
+              className="w-full bg-green-600 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-all mt-2"
+            >
+              SIMPAN CATATAN
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export interface OwnerNotificationItem {
+  id: string
+  title: string
+  message: string
+  date: string
+  type: 'bonus' | 'briefing' | 'audit' | 'anomaly' | 'system'
+  isRead: boolean
+  actionView?: string
+  actionLabel?: string
+}
+
+const NotificationLogPanel: React.FC<{
+  activeStoreId: string | 'all'
+  showToast?: (msg: string) => void
+  onConfirm?: (title: string, msg: string, onOk: () => void) => void
+  bonusKasirList?: string[]
+  ownerLateKasirs?: { date: string, name: string, lateMins: number, shift: string, time: string, alasan_telat?: string }[]
+}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [], ownerLateKasirs = [] }) => {
+  const [filterType, setFilterType] = useState<string>('all')
+  const [notifList, setNotifList] = useState<OwnerNotificationItem[]>([])
+
+  const syncToCloud = (items: OwnerNotificationItem[] | null) => {
+    const storeKey = activeStoreId || 'all'
+    if (storeKey !== 'all') {
+      supabase.from('store_settings').upsert({
+        store_id: storeKey,
+        owner_notifications_data: items,
+        updated_at: new Date().toISOString()
+      }).then()
+    }
+  }
+
+  useEffect(() => {
+    const storeKey = activeStoreId || 'all'
+    const raw = localStorage.getItem(`alphaPro_${storeKey}_notification_history`)
+    let items: OwnerNotificationItem[] = []
+    if (raw) {
+      try { items = JSON.parse(raw) } catch(e) {}
+    }
+
+    // AUTO-PRUNING: Batasi maksimal 100 notifikasi terbaru agar tidak menyebabkan lag
+    if (items.length > 100) {
+      items = items.slice(0, 100);
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const nowISO = new Date().toISOString()
+    let hasChanges = false
+
+    // 1. Executive Briefing Record
+    const briefingId = `briefing_${todayStr}`
+    if (!items.some(i => i.id === briefingId)) {
+      items.unshift({
+        id: briefingId,
+        title: '🌅 Executive Briefing Pagi',
+        message: 'Rekap Pagi, Forecasting Stok Voucher & Omset Toko.',
+        date: nowISO,
+        type: 'briefing',
+        isRead: false
+      })
+      hasChanges = true
+    }
+
+    // 2. Bonus 6 Bulan Kasir
+    if (bonusKasirList.length > 0) {
+      bonusKasirList.forEach(name => {
+        const bonusId = `bonus_${name}_6m_${todayStr.substring(0,7)}`
+        if (!items.some(i => i.id === bonusId)) {
+          items.unshift({
+            id: bonusId,
+            title: `🎉 Bonus 6 Bulan Kasir ${name}`,
+            message: `Kasir ${name} telah mencapai kelipatan 6 bulan kerja! Berikan bonus apresiasi.`,
+            date: nowISO,
+            type: 'bonus',
+            isRead: false
+          })
+          hasChanges = true
+        }
+      })
+    }
+
+    // 3. Late Kasirs (Absen Telat)
+    if (ownerLateKasirs.length > 0) {
+      ownerLateKasirs.forEach(late => {
+        const lateId = `late_${late.name}_${late.date}`
+        if (!items.some(i => i.id === lateId)) {
+          // Buat date object tiruan untuk tanggal + waktu terlambat
+          let notifDate = new Date().toISOString();
+          if (late.date && late.time) {
+            const safeTime = late.time.substring(0, 5).replace(/\./g, ':');
+            const parsed = new Date(`${late.date}T${safeTime}:00`);
+            if (!isNaN(parsed.getTime())) notifDate = parsed.toISOString();
+          }
+          
+          items.unshift({
+            id: lateId,
+            title: `⏰ Kasir Telat: ${late.name}`,
+            message: `${late.name} (Shift ${late.shift}) absen masuk pukul ${late.time} (Telat ${late.lateMins} menit).${late.alasan_telat ? `\n\nAlasan: ${late.alasan_telat}` : ''}`,
+            date: notifDate,
+            type: 'anomaly',
+            isRead: false
+          })
+          hasChanges = true
+        }
+      })
+    }
+
+    if (hasChanges) {
+      // Sort ulang berdasarkan date descending
+      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(items))
+      syncToCloud(items)
+    }
+    setNotifList(items)
+  }, [activeStoreId, bonusKasirList, ownerLateKasirs])
+
+  const handleMarkAllRead = () => {
+    const storeKey = activeStoreId || 'all'
+    const updated = notifList.map(item => ({ ...item, isRead: true }))
+    setNotifList(updated)
+    localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+    syncToCloud(updated)
+    if (showToast) showToast('Semua notifikasi ditandai sudah dibaca')
+  }
+
+  const handleClearHistory = () => {
+    const storeKey = activeStoreId || 'all'
+    if (onConfirm) {
+      onConfirm('Hapus Riwayat', 'Apakah Anda yakin ingin menghapus seluruh riwayat notifikasi?', () => {
+        setNotifList([])
+        localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+        syncToCloud(null)
+        if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
+      })
+    } else {
+      setNotifList([])
+      localStorage.removeItem(`alphaPro_${storeKey}_notification_history`)
+      syncToCloud(null)
+      if (showToast) showToast('Riwayat notifikasi berhasil dibersihkan')
+    }
+  }
+
+  const handleToggleRead = (id: string) => {
+    const storeKey = activeStoreId || 'all'
+    const updated = notifList.map(item => item.id === id ? { ...item, isRead: !item.isRead } : item)
+    setNotifList(updated)
+    localStorage.setItem(`alphaPro_${storeKey}_notification_history`, JSON.stringify(updated))
+    syncToCloud(updated)
+  }
+
+  const filteredItems = useMemo(() => {
+    if (filterType === 'unread') return notifList.filter(i => !i.isRead)
+    if (filterType !== 'all') return notifList.filter(i => i.type === filterType)
+    return notifList
+  }, [notifList, filterType])
+
+  const unreadCount = useMemo(() => notifList.filter(i => !i.isRead).length, [notifList])
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-4">
+      {/* Stat Summary */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">Total Catatan</p>
+          <p className="text-lg font-black text-indigo-900">{notifList.length}</p>
+        </div>
+        <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Belum Dibaca</p>
+          <p className="text-lg font-black text-rose-900">{unreadCount}</p>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Status Sistem</p>
+          <p className="text-lg font-black text-emerald-900">Aktif</p>
+        </div>
+      </div>
+
+      {/* Control Action Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
+          {[
+            { key: 'all', label: 'Semua' },
+            { key: 'unread', label: `Belum Dibaca (${unreadCount})` },
+            { key: 'bonus', label: 'Bonus' },
+            { key: 'anomaly', label: 'Absen/Telat' },
+            { key: 'briefing', label: 'Briefing' },
+            { key: 'audit', label: 'Audit' }
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilterType(f.key)}
+              className={cn(
+                "px-2.5 py-1 rounded-xl text-[10px] font-black whitespace-nowrap transition-all cursor-pointer",
+                filterType === f.key
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-[9px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-check-double text-[8px]"></i> Tandai Dibaca
+            </button>
+          )}
+          {notifList.length > 0 && (
+            <button
+              onClick={handleClearHistory}
+              className="text-[9px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg border border-rose-200 transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-trash text-[8px]"></i> Hapus Riwayat
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Notification Timeline List */}
+      <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
+        {filteredItems.map(item => {
+          const dateObj = new Date(item.date)
+          const formattedDate = isNaN(dateObj.getTime())
+            ? item.date
+            : dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                "p-3.5 rounded-2xl border transition-all relative overflow-hidden flex items-start justify-between gap-3",
+                !item.isRead
+                  ? "bg-indigo-50/50 border-indigo-200 shadow-sm"
+                  : "bg-slate-50/60 border-slate-200/70 opacity-80 hover:opacity-100"
+              )}
+            >
+              {!item.isRead && (
+                <div className="absolute top-0 right-0 w-3 h-3 bg-rose-500 rounded-bl-lg shadow-sm"></div>
+              )}
+
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={cn(
+                  "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-sm",
+                  item.type === 'bonus' ? "bg-emerald-600" :
+                  item.type === 'briefing' ? "bg-indigo-600" :
+                  item.type === 'audit' ? "bg-rose-600" : "bg-amber-500"
+                )}>
+                  <i className={cn("fa-solid",
+                    item.type === 'bonus' ? "fa-gift" :
+                    item.type === 'briefing' ? "fa-square-poll-vertical" :
+                    item.type === 'audit' ? "fa-triangle-exclamation" : "fa-bell"
+                  )}></i>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <p className="text-[11px] font-black text-slate-800 tracking-tight">{item.title}</p>
+                    <span className="text-[8px] font-extrabold text-slate-400 bg-white px-1.5 py-0.5 rounded-md border border-slate-200">
+                      {formattedDate}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-semibold text-slate-600 leading-snug">{item.message}</p>
+
+                  {item.type === 'briefing' && (
+                    <button
+                      onClick={() => {
+                        const fabBtn = document.getElementById('bot-fab-btn')
+                        if (fabBtn) fabBtn.click()
+                      }}
+                      className="mt-2 text-[9px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-robot text-[9px]"></i> Buka Executive Briefing
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleToggleRead(item.id)}
+                title={item.isRead ? "Tandai Belum Dibaca" : "Tandai Sudah Dibaca"}
+                className={cn(
+                  "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs transition-all active:scale-90 cursor-pointer border",
+                  item.isRead
+                    ? "bg-slate-100 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 border-slate-200"
+                    : "bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 border-indigo-600"
+                )}
+              >
+                <i className={cn("fa-solid", item.isRead ? "fa-envelope-open" : "fa-check")}></i>
+              </button>
+            </div>
+          )
+        })}
+
+        {filteredItems.length === 0 && (
+          <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <i className="fa-solid fa-bell-slash text-2xl text-slate-300 mb-2 block"></i>
+            <p className="text-xs font-black text-slate-500">Belum ada riwayat notifikasi tersimpan.</p>
+            <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Semua pesan notifikasi sistem dan audit akan dicatat otomatis di sini.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const DEFAULT_OWNER_MENU = [
+  { id: 'view-owner-monitor', title: 'Kasir', desc: 'Kelola data kasir', icon: 'fa-users', color: 'bg-blue-600' },
+  { id: 'view-owner-profit', title: 'Notifikasi', desc: 'Riwayat notifikasi toko', icon: 'fa-bell', color: 'bg-indigo-600' },
+  { id: 'view-owner-audit', title: 'Audit', desc: 'Audit uang laci', icon: 'fa-file-signature', color: 'bg-purple-600' },
+  { id: 'view-owner-gaji', title: 'Gajih', desc: 'Data gaji kasir', icon: 'fa-dollar-sign', color: 'bg-green-600' },
+  { id: 'view-owner-absen', title: 'Absen', desc: 'Kehadiran kasir', icon: 'fa-fingerprint', color: 'bg-teal-500' },
+  { id: 'view-owner-izin', title: 'Izin', desc: 'Kelola izin', icon: 'fa-calendar-day', color: 'bg-orange-500' },
+  { id: 'view-owner-performa', title: 'Performa', desc: 'Performa kasir', icon: 'fa-chart-line', color: 'bg-purple-600' },
+  { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
+  { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
+  { id: 'view-owner-backup', title: 'Pengaturan', desc: 'Sistem & Backup', icon: 'fa-gear', color: 'bg-slate-600' },
+  { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
+  { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
+];
+
+function calculateTenure(joinDateStr: string) {
+  if (!joinDateStr) return null;
+  const joinDate = new Date(joinDateStr);
+  const today = new Date();
+  
+  if (isNaN(joinDate.getTime())) return null;
+
+  let months = (today.getFullYear() - joinDate.getFullYear()) * 12;
+  months -= joinDate.getMonth();
+  months += today.getMonth();
+
+  let days = today.getDate() - joinDate.getDate();
+  if (days < 0) {
+    months--;
+    const tempDate = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += tempDate.getDate();
+  }
+
+  return { months, days, totalMonths: months };
+}
+
+
+const BerandaView: React.FC<BerandaViewProps> = (props) => {
+  const [posMode, setPosMode] = React.useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
+  const [blueCardIndex, setBlueCardIndex] = useState(0);
+  const [whiteCardIndex, setWhiteCardIndex] = useState(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
+  const financialSettings = useMemo(() => {
+    try {
+      const key = currentTargetStoreId !== 'all' ? `alphaPro_${currentTargetStoreId}_financial` : 'alphaPro_financial';
+      const stored = localStorage.getItem(key);
+      if (stored) return JSON.parse(stored);
+    } catch(e) {}
+    return {};
+  }, [currentTargetStoreId]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // Auto-scroll carousels
+  useEffect(() => {
+    if (!props.active) return;
+    
+    const interval = setInterval(() => {
+      const whiteEl = document.getElementById('white-carousel')
+      if (whiteEl && whiteEl.clientWidth > 0) {
+        let newIndex = Math.round(whiteEl.scrollLeft / whiteEl.clientWidth) + 1;
+        if (newIndex > 2) newIndex = 0;
+        whiteEl.scrollTo({ left: newIndex * whiteEl.clientWidth, behavior: 'smooth' })
+        setWhiteCardIndex(newIndex)
+      }
+      
+      const blueEl = document.getElementById('blue-carousel')
+      if (blueEl && blueEl.clientWidth > 0) {
+        let newIndex = Math.round(blueEl.scrollLeft / blueEl.clientWidth) + 1;
+        if (newIndex > 1) newIndex = 0;
+        blueEl.scrollTo({ left: newIndex * blueEl.clientWidth, behavior: 'smooth' })
+        setBlueCardIndex(newIndex)
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [props.active]);
+
+  const [showRincian, setShowRincian] = useState(false)
+  const [showLainnya, setShowLainnya] = useState(false)
+  const [showKasirNotif, setShowKasirNotif] = useState(false)
+  const [dismissedLatePopup, setDismissedLatePopup] = useState(false)
+  const [dismissedPesanPopup, setDismissedPesanPopup] = useState(() => {
+    return sessionStorage.getItem('alphaPro_pesan_dismissed') === 'true'
+  })
+
+  const activePesanMendadak = useMemo(() => {
+    if (!financialSettings.pesanMendadak) return null;
+    if (financialSettings.pesanDurasi === 'selamanya') return financialSettings.pesanMendadak;
+    if (!financialSettings.pesanStartDate) return financialSettings.pesanMendadak;
+    
+    const todayStr = getLocalDateString();
+    const startStr = financialSettings.pesanStartDate;
+    if (todayStr === startStr) return financialSettings.pesanMendadak;
+    
+    const today = new Date(todayStr);
+    const start = new Date(startStr);
+    const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return financialSettings.pesanMendadak; 
+    const durasi = parseInt(financialSettings.pesanDurasi) || 1;
+    if (diffDays >= durasi) return null; 
+    
+    return financialSettings.pesanMendadak;
+  }, [financialSettings]);
+
+
+  const [dismissedLateNotifs, setDismissedLateNotifs] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`alphaPro_${props.username}_dismissed_lates`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleClearLateNotifs = () => {
+    if (kasirLateHistory.length === 0) return;
+    const dates = kasirLateHistory.map(l => l.tanggal);
+    setDismissedLateNotifs(prev => {
+      const newSet = Array.from(new Set([...prev, ...dates]));
+      localStorage.setItem(`alphaPro_${props.username}_dismissed_lates`, JSON.stringify(newSet));
+      return newSet;
+    });
+  };
+
+  const kasirLateHistory = useMemo(() => {
+    if (props.kasirRole === 'owner') return [];
+    const entries = (props.absensiList || []).filter(a => a.username === props.username);
+    const byDate: Record<string, any> = {};
+    entries.forEach(e => {
+      if (!byDate[e.tanggal] || e.jam_masuk < byDate[e.tanggal].jam_masuk) {
+        byDate[e.tanggal] = e;
+      }
+    });
+
+    const lates: any[] = [];
+    Object.values(byDate).forEach(e => {
+      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      if (info.isLate) {
+        lates.push({
+          tanggal: e.tanggal,
+          jam: e.jam_masuk,
+          lateMins: info.lateMins,
+          shiftName: info.shiftName,
+          alasan_telat: e.alasan_telat
+        });
+      }
+    });
+    return lates.sort((a, b) => b.tanggal.localeCompare(a.tanggal)).filter(l => !dismissedLateNotifs.includes(l.tanggal));
+  }, [props.absensiList, props.username, props.kasirRole, financialSettings, dismissedLateNotifs]);
+
+  const todayLateness = useMemo(() => {
+    const todayStr = getLocalDateString();
+    return kasirLateHistory.find(l => l.tanggal === todayStr) || null;
+  }, [kasirLateHistory]);
+
+  const ownerLateKasirs = useMemo(() => {
+    if (props.kasirRole !== 'owner') return [];
+    
+    // Group attendance by date and cashier
+    const lateEntries: { date: string, name: string, lateMins: number, shift: string, time: string, alasan_telat?: string }[] = [];
+    const entries = props.absensiList || [];
+    
+    // Get unique dates per cashier (first login of the day)
+    const firstLogins: Record<string, any> = {};
+    entries.forEach(e => {
+      const k = `${e.username}_${e.tanggal}`;
+      if (!firstLogins[k] || e.jam_masuk < firstLogins[k].jam_masuk) {
+        firstLogins[k] = e;
+      }
+    });
+
+    Object.values(firstLogins).forEach(e => {
+      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      if (info.isLate) {
+        lateEntries.push({
+          date: e.tanggal,
+          name: props.kasirList?.[e.username]?.name || e.nama || e.username || 'Kasir',
+          lateMins: info.lateMins,
+          shift: info.shiftName,
+          time: e.jam_masuk,
+          alasan_telat: e.alasan_telat
+        });
+      }
+    });
+    
+    return lateEntries.sort((a, b) => b.date.localeCompare(a.date));
+  }, [props.absensiList, props.kasirRole, props.kasirList, financialSettings]);
+
+  const bonusKasirList = useMemo(() => {
+    if (props.kasirRole !== 'owner' || !props.kasirList) return []
+    const list: string[] = []
+    Object.entries(props.kasirList).forEach(([username, kData]) => {
+      if (username === 'owner') return
+      const tenure = kData.tanggalJoin ? calculateTenure(kData.tanggalJoin) : null
+      if (tenure && tenure.totalMonths > 0 && tenure.totalMonths % 6 === 0) {
+        list.push(kData.name)
+      }
+    })
+    return list
+  }, [props.kasirList, props.kasirRole])
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  // Controls for Owner Notification Banners (Minimize '_' & Dismiss 'X')
+  const [isNotificationsHidden, setIsNotificationsHidden] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_notifications_hidden') === 'true'
+  })
+  const [showNotifModal, setShowNotifModal] = useState(false)
+
+  const [isBonusMinimized, setIsBonusMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_bonus_minimized') === 'true'
+  })
+  const [isBonusDismissed, setIsBonusDismissed] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_bonus_dismissed') === 'true'
+  })
+
+  const [isBriefingMinimized, setIsBriefingMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_briefing_minimized') === 'true'
+  })
+  const [isBriefingDismissed, setIsBriefingDismissed] = useState(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    return localStorage.getItem(`alphaPro_owner_briefing_dismissed_${todayStr}`) === 'true'
+  })
+
+  // Rent Reminder State
+  const [rentReminder, setRentReminder] = useState<{ isDueSoon: boolean, amount: number, dueDateStr: string, diffDays: number } | null>(null)
+  const [isRentMinimized, setIsRentMinimized] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_rent_minimized') === 'true'
+  })
+  const [isRentDismissed, setIsRentDismissed] = useState(() => {
+    return localStorage.getItem('alphaPro_owner_rent_dismissed') === 'true'
+  })
+
+  const handleToggleLembur = async (entryId: number | string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'Lembur' ? 'Hadir' : 'Lembur';
+      const { error } = await supabase.from('absensi').update({ status: newStatus }).eq('id', entryId);
+      if (error) throw error;
+      if (props.showToast) props.showToast(`Status berhasil diubah menjadi ${newStatus}`);
+    } catch (e: any) {
+      if (props.showToast) props.showToast("Gagal mengubah status: " + e.message);
+    }
+  };
+
+  useEffect(() => {
+    if (props.kasirRole !== 'owner') return;
+    try {
+      const activeSid = props.activeStoreId === 'all' ? (props.pantauStoreId === 'all' ? null : props.pantauStoreId) : props.activeStoreId
+      if (!activeSid) return;
+      const key = `alphaPro_${activeSid}_financial`
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        const fin = JSON.parse(saved)
+        if (fin.rentDueDate && fin.rentAmount) {
+          const dueDay = parseInt(fin.rentDueDate)
+          const today = new Date()
+          const currentDay = today.getDate()
+          const currentMonth = today.getMonth()
+          const currentYear = today.getFullYear()
+          
+          let targetDate = new Date(currentYear, currentMonth, dueDay)
+          
+          if (fin.startDate && fin.rentPeriod !== 'bulanan') {
+            let monthStep = 1;
+            if (fin.rentPeriod === 'tahunan') monthStep = 12;
+            else if (fin.rentPeriod === 'per6bulan') monthStep = 6;
+            else if (fin.rentPeriod === 'per3bulan') monthStep = 3;
+            else if (fin.rentPeriod === 'per2bulan') monthStep = 2;
+
+            const startD = new Date(fin.startDate)
+            let dueMonth = startD.getMonth()
+            let dueYear = startD.getFullYear()
+            
+            targetDate = new Date(dueYear, dueMonth, dueDay)
+            const todayReset = new Date(currentYear, currentMonth, currentDay).getTime()
+            
+            while (targetDate.getTime() < todayReset) {
+              dueMonth += monthStep;
+              targetDate = new Date(dueYear, dueMonth, dueDay);
+            }
+          } else {
+            if (currentDay > dueDay) {
+              targetDate = new Date(currentYear, currentMonth + 1, dueDay)
+            }
+          }
+
+          const diffTime = targetDate.getTime() - today.getTime()
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          
+          if (diffDays <= 7 && diffDays >= 0) {
+            setRentReminder({
+              isDueSoon: true,
+              amount: parseInt(fin.rentAmount),
+              dueDateStr: targetDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+              diffDays
+            })
+            // Reset dismiss status if it's a new month/year
+            const savedDismissDate = localStorage.getItem('alphaPro_owner_rent_dismissed_date')
+            if (savedDismissDate !== targetDate.toISOString()) {
+              setIsRentDismissed(false)
+              localStorage.setItem('alphaPro_owner_rent_dismissed', 'false')
+              localStorage.setItem('alphaPro_owner_rent_dismissed_date', targetDate.toISOString())
+            }
+          } else {
+            setRentReminder(null)
+          }
+        }
+      }
+    } catch (e) {}
+  }, [props.kasirRole, props.activeStoreId, props.pantauStoreId])
+
+  // Read status tracking for notifications (auto-disappears bell badge on click)
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('alphaPro_owner_read_notif_ids')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  const markNotifAsRead = (id: string) => {
+    setReadNotifIds(prev => {
+      if (prev.includes(id)) return prev
+      const updated = [...prev, id]
+      localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  const markAllNotifsAsRead = () => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const briefingId = `briefing_${todayStr}`
+    const bonusIds = bonusKasirList.map(name => `bonus_${name}_6m_${todayStr.substring(0, 7)}`)
+    const rentId = rentReminder ? `rent_${rentReminder.dueDateStr}` : ''
+    const allIds = Array.from(new Set([...readNotifIds, briefingId, ...bonusIds, rentId].filter(Boolean)))
+    setReadNotifIds(allIds)
+    localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(allIds))
+  }
+
+  const currentTodayStr = new Date().toISOString().split('T')[0]
+  const currentBriefingId = `briefing_${currentTodayStr}`
+  const isBriefingUnread = !isBriefingDismissed && !readNotifIds.includes(currentBriefingId)
+  const unreadBonusKasirList = bonusKasirList.filter(name => {
+    const bonusId = `bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`
+    return !readNotifIds.includes(bonusId)
+  })
+  const currentRentId = `rent_${rentReminder?.dueDateStr}`
+  const isRentUnread = rentReminder && !isRentDismissed && !readNotifIds.includes(currentRentId)
+  const totalUnreadCount = (isBriefingUnread ? 1 : 0) + unreadBonusKasirList.length + (isRentUnread ? 1 : 0)
+
+  // STATE: Owner Menu Reordering
+  const [isEditMenuMode, setIsEditMenuMode] = useState(false)
+  const [menuOrder, setMenuOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('alphaPro_owner_menu_order')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Pastikan semua default items tetap ada walaupun ada update
+          const validSaved = parsed.filter(id => DEFAULT_OWNER_MENU.find(m => m.id === id))
+          const missing = DEFAULT_OWNER_MENU.filter(m => !validSaved.includes(m.id)).map(m => m.id)
+          return [...validSaved, ...missing]
+        }
+      }
+    } catch {}
+    return DEFAULT_OWNER_MENU.map(m => m.id)
+  })
+  const [selectedForSwap, setSelectedForSwap] = useState<string | null>(null)
+
+  const handleMenuClick = (id: string) => {
+    if (isEditMenuMode) {
+      if (!selectedForSwap) {
+        setSelectedForSwap(id)
+      } else if (selectedForSwap === id) {
+        setSelectedForSwap(null) // Batal pilih
+      } else {
+        // Lakukan Swap
+        const newOrder = [...menuOrder]
+        const idx1 = newOrder.indexOf(selectedForSwap)
+        const idx2 = newOrder.indexOf(id)
+        if (idx1 !== -1 && idx2 !== -1) {
+          const temp = newOrder[idx1]
+          newOrder[idx1] = newOrder[idx2]
+          newOrder[idx2] = temp
+          setMenuOrder(newOrder)
+          localStorage.setItem('alphaPro_owner_menu_order', JSON.stringify(newOrder))
+        }
+        setSelectedForSwap(null)
+      }
+    } else {
+      props.setActiveView(id)
+    }
+  }
+
+  // --- AUTO SYNC PERFORMA HARIAN ---
+  useEffect(() => {
+    // Only run this for kasir role when online to sync today's performance snapshot
+    if (!props.userId || props.kasirRole === 'owner' || !isOnline || !props.transactions || props.transactions.length === 0) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        const todayStr = getLocalDateString();
+        // Calculate today's performance for this kasir
+        let omset = 0, laba = 0, pengeluaran = 0, count = 0;
+        
+        props.transactions.forEach(t => {
+          if (t.kasir_id === props.username && t.timestamp.startsWith(todayStr)) {
+            const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]');
+            const isIsi = String(t.kategori).startsWith('Isi');
+            
+            if (!isIsi && !isKhususAtauNonTunai) {
+              count++;
+              laba += Number(t.adminFee) || 0;
+              if (t.kategori === 'Tarik Tunai') {
+                pengeluaran += Number(t.nominal) || 0;
+              } else {
+                omset += Number(t.nominal) || 0;
+              }
+            }
+          }
+        });
+
+        if (count === 0) return; // Nothing to sync
+
+        // Check existing
+        const { data: existing } = await supabase
+          .from('performa_harian')
+          .select('id')
+          .eq('user_id', props.userId)
+          .eq('kasir_id', props.username)
+          .eq('tanggal', todayStr)
+          .single();
+
+        const payload = {
+          user_id: props.userId,
+          store_id: props.activeStoreId === 'all' ? null : props.activeStoreId,
+          kasir_id: props.username,
+          tanggal: todayStr,
+          omset,
+          laba,
+          pengeluaran,
+          total_transaksi: count,
+          timestamp: new Date().toISOString()
+        };
+
+        if (existing) {
+          const { error: updErr } = await supabase.from('performa_harian').update(payload).eq('id', existing.id);
+          if (updErr) console.error('Failed auto-sync update:', updErr);
+        } else {
+          const { error: insErr } = await supabase.from('performa_harian').insert([payload]);
+          if (insErr) console.error('Failed auto-sync insert:', insErr);
+        }
+      } catch (e) {
+        console.error('Auto-sync performa harian failed:', e)
+      }
+    }, 5000); // 5 seconds debounce
+
+    return () => clearTimeout(timeout);
+  }, [props.transactions, props.userId, props.username, isOnline]);
+  // ---------------------------------
+
+  // Kasir Management State (Form inputs remain local)
+  const [kasirFormId, setKasirFormId] = useState('')
+  const [kasirFormName, setKasirFormName] = useState('')
+  const [kasirFormPin, setKasirFormPin] = useState('')
+  const [kasirFormTargetTrx, setKasirFormTargetTrx] = useState('')
+  const [editKasirId, setEditKasirId] = useState<string | null>(null)
+
+  // Izin State
+  const [izinNamaKasir, setIzinNamaKasir] = useState('')
+  const [izinTanggal, setIzinTanggal] = useState(getLocalDateString())
+  const [izinAlasan, setIzinAlasan] = useState('')
+  const [catatanIzin, setCatatanIzin] = useState<any[]>([])
+  const STORAGE_KEY_IZIN = `alphaPro_${currentTargetStoreId}_catatanIzin`
+  const [expandedMonthIzin, setExpandedMonthIzin] = useState<string | null>(null)
+
+  // Pantau State
+
+
+  // Absensi Modal State
+  const [absenTab, setAbsenTab] = useState<'summary' | 'full'>('summary')
+  const [absenLateHistoryId, setAbsenLateHistoryId] = useState<string | null>(null)
+  const [absenLiburHistoryId, setAbsenLiburHistoryId] = useState<string | null>(null)
+  const [absenFilterMonth, setAbsenFilterMonth] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+
+  // Grafik State
+  const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
+  const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
+  const [grafikType, setGrafikType] = useState<'bar'|'line'|'pie'>('bar')
+
+  // Performa State
+  const [performaRange, setPerformaRange] = useState<'harian'|'mingguan'|'bulanan'>('bulanan')
+
+  // Analytics State
+  const [analyticsData, setAnalyticsData] = useState<any[]>([])
+  const [analyticsRawData, setAnalyticsRawData] = useState<any[]>([])
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
+
+  const activeOwnerSubView = props.activeView?.startsWith('view-owner-') ? props.activeView.replace('view-owner-', '') : null
+  const isOwnerSubView = !!activeOwnerSubView
+
+  useEffect(() => {
+    if (activeOwnerSubView === 'performa' || activeOwnerSubView === 'grafik') {
+      const fetchAnalytics = async () => {
+        setIsAnalyticsLoading(true)
+        try {
+          const now = new Date()
+          let days = 30
+          
+          if (activeOwnerSubView === 'performa') {
+            if (performaRange === 'harian') days = 0
+            else if (performaRange === 'mingguan') days = 6
+            else days = 29
+          } else {
+            if (grafikRange === 'harian') days = 7
+            else if (grafikRange === 'mingguan') days = 30
+            else days = 90
+          }
+
+          const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days)
+          const fmt = (d: Date) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+          const startStr = fmt(cutoffDate)
+          const endStr = fmt(now)
+          const storeId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')
+
+          let query = supabase
+            .from('transactions')
+            .select('kasir_id, nominal, admin_fee, timestamp, kategori')
+            .eq('user_id', props.userId)
+            .order('timestamp', { ascending: false })
+            .limit(3000)
+
+          if (storeId !== 'all') {
+            query = query.eq('store_id', storeId)
+          }
+
+          const { data, error } = await query
+
+          if (error) {
+            console.error('Analytics Error:', error.message || error)
+          } else if (data) {
+            // Filter locally to avoid any Supabase Postgres date casting bugs
+            // Filter locally using strict string comparison to bypass ALL timezone bugs
+            const validData = data.filter(r => {
+              if (!r.timestamp || !r.kategori || r.kategori.startsWith('Isi')) return false
+              const txDay = typeof r.timestamp === 'string' ? r.timestamp.substring(0, 10) : ''
+              return txDay >= startStr && txDay <= endStr
+            })
+            
+            // Group data locally exactly like the RPC did
+            const aggregated = validData.reduce((acc, row) => {
+               const day = typeof row.timestamp === 'string' ? row.timestamp.substring(0, 10) : ''
+               if (!day) return acc;
+               
+               const kId = row.kasir_id || 'Unknown'
+               const key = `${day}_${kId}`
+               if (!acc[key]) {
+                 acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0, total_admin: 0 }
+               }
+               acc[key].total_omzet += Number(row.nominal || 0)
+               acc[key].total_transaksi += 1
+               acc[key].total_admin += Number(row.admin_fee || 0)
+               return acc
+            }, {} as Record<string, any>)
+
+            const finalAnalyticsData = Object.values(aggregated)
+            console.log('Analytics Berhasil ditarik & digrup:', finalAnalyticsData.length, 'baris grup dari', validData.length, 'transaksi')
+            setAnalyticsData(finalAnalyticsData)
+            setAnalyticsRawData(validData)
+            
+            // Temporary debug toast
+            if (finalAnalyticsData.length === 0) {
+              props.showToast(`Debug: Supabase=${data.length} txs, ValidDate=${validData.length} txs`)
+            }
+          }
+        } finally {
+          setIsAnalyticsLoading(false)
+        }
+      }
+      fetchAnalytics()
+    }
+  }, [activeOwnerSubView, performaRange, grafikRange, props.activeStoreId, props.pantauStoreId])
+
+  const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
+  const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
+  const [ownerSaldoKategori, setOwnerSaldoKategori] = useState('Isi Saldo Bank')
+
+  const [auditFilterDate, setAuditFilterDate] = useState('')
+
+  const auditHistory = useMemo(() => {
+    if (!props.allTransactions) return []
+    
+    // Kelompokkan berdasarkan tanggal -> kasirId
+    const groups: Record<string, Record<string, Transaction[]>> = {}
+    
+    props.allTransactions.forEach(t => {
+      const dateStr = t.timestamp.split('T')[0]
+      const kasir = t.kasir_id || 'Unknown'
+      if (!groups[dateStr]) groups[dateStr] = {}
+      if (!groups[dateStr][kasir]) groups[dateStr][kasir] = []
+      groups[dateStr][kasir].push(t)
+    })
+
+    const results = []
+    
+    // Sort tanggal dari terbaru ke terlama
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a))
+    
+    for (const dateStr of sortedDates) {
+      for (const kasir of Object.keys(groups[dateStr])) {
+        const txs = groups[dateStr][kasir]
+        
+        // Cari transaksi closing / Isi Saldo Real
+        const saldoRealTxs = txs.filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
+        if (saldoRealTxs.length === 0) continue // Belum closing / tidak ada data
+        
+        // Asumsi saldo real diambil dari total, atau mungkin cuma 1 row saat closing
+        const saldoReal = saldoRealTxs.reduce((s, t) => s + t.nominal, 0)
+        
+        // Hitung saldo sistem
+        const isiBank = txs.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
+        const penjualanDigital = txs.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal, 0)
+        
+        const currentSaldoBank = isiBank - penjualanDigital
+        const selisih = saldoReal - currentSaldoBank
+        
+        const kasirName = props.kasirList[kasir]?.name || kasir
+        
+        // Format tanggal (misal: "22 Agustus 2026")
+        const dateObj = parseLocalISO(dateStr)
+        const tglFormatted = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+        
+        // Tambahkan konteks "Hari Ini" atau "Kemarin"
+        const today = new Date()
+        const todayStr = getLocalDateString()
+        const yesterdayDate = new Date(today)
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+        const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+        
+        let dayContext = ''
+        if (dateStr === todayStr) dayContext = 'Hari Ini'
+        else if (dateStr === yesterdayStr) dayContext = 'Kemarin'
+        else dayContext = dateObj.toLocaleDateString('id-ID', { weekday: 'long' })
+        
+        results.push({
+          tanggal: tglFormatted,
+          tanggalAsli: dateStr,
+          dayContext,
+          kasirId: kasir,
+          kasirName: kasirName,
+          selisih: selisih
+        })
+      }
+    }
+    
+    return results
+  }, [props.allTransactions, props.kasirList])
+
+
+  // Auto-close sub-panels when navigating away to any other view
+  useEffect(() => {
+    setShowRincian(false)
+    setShowLainnya(false)
+  }, [props.activeView])
+
+  useEffect(() => {
+    if (activeOwnerSubView === 'izin') {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_IZIN)
+        if (saved) setCatatanIzin(JSON.parse(saved))
+        else setCatatanIzin([])
+      } catch (e) {
+        console.error('Failed to load izin', e)
+      }
+    }
+  }, [activeOwnerSubView, STORAGE_KEY_IZIN])
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const simpanIzin = () => {
+    if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return props.showToast('Lengkapi semua data!')
+    const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: getLocalISOString() }
+    const updated = [baru, ...catatanIzin]
+    setCatatanIzin(updated)
+    localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+    setIzinNamaKasir(''); setIzinAlasan('')
+  }
+
+  const hapusIzin = (index: number) => {
+    props.onConfirm('HAPUS IZIN', 'Hapus catatan izin ini?', () => {
+      const updated = catatanIzin.filter((_, i) => i !== index)
+      setCatatanIzin(updated)
+      localStorage.setItem(STORAGE_KEY_IZIN, JSON.stringify(updated))
+      props.showToast("Berhasil Dihapus")
+    })
+  }
+
+  const dayName = currentTime.toLocaleDateString('id-ID', { weekday: 'long' })
+  const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  
+  const totalPendapatanBersih = props.totalSaldoKas
+  const penjualanDigital = props.penjualanDigital
+  const kasModal = props.kasModal
+
+
+  // Recalculate Owner Control stats to match RiwayatView behavior
+  const todayISO = getLocalDateString()
+  const ownerDisplayTxs = props.kasirRole === 'owner' 
+    ? (props.filterKasir && props.filterKasir !== 'Semua' ? props.transactions.filter(t => t.kasir_id === props.filterKasir) : props.transactions)
+    : props.transactions.filter(t => t.kasir_id === props.username);
+  
+  const ownerTodayTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && !t.kategori.startsWith('Isi'))
+  
+  const currentMonthISO = todayISO.substring(0, 7);
+  const ownerMonthTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(currentMonthISO) && !t.kategori.startsWith('Isi'));
+  const ownerMonthTotalAdmin = ownerMonthTxs.filter(t => 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.adminFee, 0);
+  const ownerMonthTotalTrx = ownerMonthTxs.length;
+
+  const ownerMonthTotalUangMasuk = ownerMonthTxs
+    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0);
+
+  const ownerTotalUangMasuk = ownerTodayTxs
+    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .reduce((s, t) => s + t.nominal, 0);
+  const ownerTotalAdmin = ownerTodayTxs.filter(t => 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.adminFee, 0)
+  const ownerTotalTrx = ownerTodayTxs.length
+  const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
+
+  // Recalculate other stats for the 'Ringkasan Harian' modal consistency
+  const ownerTotalAksesoris = ownerTodayTxs.filter(t => 
+    t.kategori === 'Aksesoris' && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerTotalTarik = ownerTodayTxs.filter(t => 
+    t.kategori === 'Tarik Tunai' && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerPenjualanDigital = ownerTodayTxs.filter(t => 
+    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    !(t.keterangan || '').includes('[NON_TUNAI]')
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerKasModal = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Modal Tunai Kasir').reduce((s, t) => s + t.nominal, 0)
+  
+  // Kas Lain Nya Calculations (Matching LaporanView logic)
+  const ownerAdminDalam = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[ADMIN_DALAM]')).reduce((s, t) => s + t.adminFee, 0)
+  const ownerNonTunai = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
+  const ownerKhusus = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[KHUSUS]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
+
+  const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin - ownerTotalTarik
+  
+  // ownerSaldoBank calculation (Contribution to bank balance/plafon)
+  const ownerTotalBankOut = ownerTodayTxs.filter(t => 
+    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)
+  ).reduce((s, t) => s + t.nominal, 0)
+  
+  const ownerIsiBank = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
+  const ownerSaldoBank = ownerIsiBank - ownerTotalBankOut
+
+  return (
+    <div className={cn("page-view hide-scrollbar", props.active && "active")}>
+
+      {/* ── POS KASIR OVERLAY ── */}
+      {props.activeView === 'view-pos-kasir' && (() => {
+        return (
+          <div className="absolute inset-0 z-[100] bg-[#F9FBFF] flex flex-col animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#0056B3] to-[#0070c0] pt-5 pb-4 px-4 text-white shadow-lg shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => props.setActiveView('view-beranda')}
+                  className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center hover:bg-white/25 transition-all border border-white/20 active:scale-90"
+                >
+                  <i className="fa-solid fa-arrow-left text-sm"></i>
+                </button>
+                <div className="flex-1">
+                  <h2 className="font-black text-lg leading-none tracking-tight">Form Transaksi</h2>
+                  <p className="text-[10px] text-blue-100 font-bold mt-0.5 uppercase tracking-widest">Kategori Layanan</p>
+                </div>
+                <button
+                  onClick={() => props.setActiveView('view-riwayat')}
+                  className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center hover:bg-white/25 transition-all border border-white/20 active:scale-90"
+                  title="Riwayat Transaksi"
+                >
+                  <i className="fa-solid fa-clock-rotate-left text-sm"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Transaction Form Body — scrollable */}
+            <div className="flex-1 overflow-y-auto hide-scrollbar">
+              <TransactionForm
+                onSave={props.handleSimpanTransaksi}
+                isSaving={props.isSaving}
+                presets={props.presets}
+                onOpenVoucherJualCepat={() => {
+                  props.setActiveView('view-stok-voucher')
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'))
+                  }, 100)
+                }}
+                activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+                adminRules={props.adminRules}
+              />
+            </div>
+          </div>
+        )
+      })()}
+
+
+
+
+      {!(props.isPc && isOwnerSubView) && (
+        <>
+          <GlobalHeader 
+          storePhoto={props.storePhoto}
+          storeName={props.storeName}
+          storeSubtext={props.storeSubtext}
+          kasirName={props.kasirName}
+          kasirRole={props.kasirRole}
+          dayName={dayName}
+          fullDate={fullDate}
+          clockStr={clockStr}
+          onMenuClick={() => props.setIsSidePanelOpen(true)}
+          showNotifBadge={
+            props.kasirRole === 'owner' 
+              ? totalUnreadCount > 0 
+              : (kasirLateHistory.length > 0 || activePesanMendadak)
+          }
+          notifBadgeCount={
+            props.kasirRole === 'owner' 
+              ? totalUnreadCount 
+              : (kasirLateHistory.length + (activePesanMendadak ? 1 : 0))
+          }
+          onNotifClick={() => {
+            if (props.kasirRole === 'owner') {
+              setShowNotifModal(true);
+            } else {
+              setShowKasirNotif(!showKasirNotif);
+            }
+          }}
+          notifPopupContent={
+            showKasirNotif && (
+              <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
+                <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
+                  <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                    <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+                  </h4>
+                  {kasirLateHistory.length > 0 && (
+                    <button 
+                      onClick={handleClearLateNotifs}
+                      className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-600 text-[9px] font-black rounded-lg transition-colors cursor-pointer"
+                    >
+                      Tandai Dibaca & Hapus
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
+                  
+                  {/* Show Pesan Mendadak if exists */}
+                  {activePesanMendadak && (
+                    <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
+                      <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
+                        <i className="fa-solid fa-bullhorn text-[10px]"></i>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Pesan Owner</p>
+                        <p className="text-xs font-bold text-gray-900 whitespace-pre-wrap">{activePesanMendadak}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {kasirLateHistory.length === 0 && !activePesanMendadak ? (
+                    <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
+                  ) : (
+                    kasirLateHistory.map((late, i) => (
+                      <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                            <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
+                            <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
+                          </div>
+                        </div>
+                        {late.alasan_telat && (
+                          <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
+                            <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-0.5">Alasan:</p>
+                            <p className="text-[10px] font-bold text-gray-800 leading-tight">{late.alasan_telat}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          }
+        />
+
+      <div className="mx-1.5 mb-3 mt-[-1.5rem] relative z-[40]">
+        {/* BLUE CARD CAROUSEL */}
+        <div className="bg-[#0070c0] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border border-blue-500 overflow-hidden relative">
+          
+          <div className="absolute top-3 w-full flex justify-center gap-1.5 z-20">
+            <div onClick={() => document.getElementById('blue-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", blueCardIndex === 0 ? "w-3.5 bg-white" : "w-1.5 bg-white/40")}></div>
+            <div onClick={() => document.getElementById('blue-carousel')?.scrollTo({left: 9999, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", blueCardIndex === 1 ? "w-3.5 bg-white" : "w-1.5 bg-white/40")}></div>
+          </div>
+
+          <div id="blue-carousel" onScroll={(e) => { const el = e.currentTarget; setBlueCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full h-full pb-4 pt-6 px-4 gap-4" style={{ scrollBehavior: 'smooth' }}>
+            {/* Slide 1 */}
+            <div className="snap-center min-w-full flex justify-between gap-3">
+              <div className="flex-1 bg-white/10 rounded-2xl p-2.5 border border-white/60 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                   <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0"><i className="fa-solid fa-building-columns text-[9px] text-white"></i></div>
+                   <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest leading-tight">Aset Bank</span>
+                </div>
+                <p className="text-sm font-black text-white">{formatRupiah(props.saldoBank)}</p>
+              </div>
+              <div className="flex-1 bg-white/10 rounded-2xl p-2.5 border border-white/60 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                   <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0"><i className="fa-solid fa-cash-register text-[9px] text-white"></i></div>
+                   <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest leading-tight">Laci Kasir</span>
+                </div>
+                <p className="text-sm font-black text-white">{formatRupiah(ownerTotalLaci)}</p>
+              </div>
+            </div>
+            {/* Slide 2 */}
+            <div className="snap-center min-w-full flex justify-between gap-3">
+              <div className="flex-1 bg-white/10 rounded-2xl p-2.5 border border-white/60 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                   <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0"><i className="fa-solid fa-vault text-[9px] text-white"></i></div>
+                   <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest leading-tight">Total aset likuid</span>
+                </div>
+                <p className="text-sm font-black text-white">{formatRupiah(props.saldoBank + ownerTotalLaci)}</p>
+              </div>
+              <div className="flex-1 bg-white/10 rounded-2xl p-2.5 border border-white/60 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                   <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0"><i className="fa-solid fa-hand-holding-dollar text-[9px] text-white"></i></div>
+                   <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest leading-tight">Total Aset masuk</span>
+                </div>
+                <p className="text-sm font-black text-white">{formatRupiah(ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin)}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="px-4 pb-4 flex flex-col gap-3 relative z-10">
+             <div className="flex gap-3">
+               <button onClick={() => props.setActiveView('view-isi-saldo')} className="flex-1 bg-[#005a9e] text-white rounded-xl py-2 flex items-center justify-center gap-1.5 font-black text-[10px] uppercase shadow-sm active:scale-95 transition">
+                 Kelola Aset <i className="fa-solid fa-arrow-right-long text-[9px]"></i>
+               </button>
+               <button onClick={() => setShowRincian(true)} className="flex-1 bg-[#005a9e] text-white rounded-xl py-2 flex items-center justify-center gap-1.5 font-black text-[10px] uppercase shadow-sm active:scale-95 transition">
+                 Rincian Laci <i className="fa-solid fa-arrow-right-long text-[9px]"></i>
+               </button>
+             </div>
+
+             {/* Moved Dropdowns and Lonceng Button */}
+             {props.kasirRole === 'owner' && (
+               <div className="flex items-center gap-2">
+                 <div className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
+                   {/* Pilihan 1: Pantau Toko */}
+                   <div className="flex-1 flex items-center min-w-0">
+                     <div className="relative flex-1 min-w-0">
+                       <select
+                         value={props.pantauStoreId || 'all'}
+                         onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                         className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                       >
+                         <option value="all" className="text-slate-800">PILIH TOKO</option>
+                         {(props.stores || []).map((store) => (
+                           <option key={store.id} value={store.id} className="text-slate-800">{store.name}</option>
+                         ))}
+                       </select>
+                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                     </div>
+                   </div>
+
+                   {/* Divider Line */}
+                   <div className="w-[1px] h-4 bg-white/30 shrink-0"></div>
+
+                   {/* Pilihan 2: Mode Kasir */}
+                   <div className="flex-1 flex items-center min-w-0">
+                     <div className="relative flex-1 min-w-0">
+                       <select
+                         value={props.filterKasir || 'Semua'}
+                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                         disabled={props.pantauStoreId === 'all'}
+                         className={cn(
+                           "w-full bg-transparent text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans",
+                           props.pantauStoreId === 'all' ? "text-white/50 cursor-not-allowed" : "text-white"
+                         )}
+                       >
+                         <option value="Semua" className="text-slate-800">PILIH KASIR</option>
+                         {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                           <option key={id} value={id} className="text-slate-800">{acc.name}</option>
+                         ))}
+                       </select>
+                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Tampilkan Notifikasi Banner Button */}
+                 {(isBonusDismissed || isBriefingDismissed) && (
+                   <button
+                     onClick={() => {
+                       setIsBonusDismissed(false)
+                       setIsBriefingDismissed(false)
+                       localStorage.removeItem('alphaPro_owner_bonus_dismissed')
+                       const todayStr = new Date().toISOString().split('T')[0]
+                       localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`)
+                     }}
+                     title="Tampilkan Notifikasi Banner"
+                     className="w-9 h-9 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center relative shadow-sm border border-white/20 backdrop-blur-sm transition-all cursor-pointer"
+                   >
+                     <i className="fa-solid fa-rotate-left text-sm"></i>
+                   </button>
+                 )}
+               </div>
+             )}
+          </div>
+        </div>
+        
+        {/* WHITE CAROUSEL BELOW */}
+        <div className="bg-white rounded-b-[2rem] shadow-sm border border-gray-100 pt-5 pb-1 -mt-5 relative z-[-1]">
+          <div className="absolute top-5 right-0 left-0 flex justify-center gap-1.5 z-20">
+            <div onClick={() => document.getElementById('white-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 0 ? "w-3.5 bg-gray-400" : "w-1.5 bg-gray-200")}></div>
+            <div onClick={() => { const el = document.getElementById('white-carousel'); if(el) el.scrollTo({left: el.clientWidth, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 1 ? "w-3.5 bg-gray-400" : "w-1.5 bg-gray-200")}></div>
+            <div onClick={() => document.getElementById('white-carousel')?.scrollTo({left: 9999, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 2 ? "w-3.5 bg-gray-400" : "w-1.5 bg-gray-200")}></div>
+          </div>
+          <div id="white-carousel" onScroll={(e) => { const el = e.currentTarget; setWhiteCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full px-4 gap-4 mt-1 pb-0.5" style={{ scrollBehavior: 'smooth' }}>
+            {/* Slide 1 */}
+            <div className="snap-center min-w-full flex justify-between gap-[2px] bg-gray-50/50 p-2 rounded-xl border border-gray-100/50">
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Transaksi Hari Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><i className="fa-solid fa-receipt text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-gray-800 tabular-nums">{ownerTotalTrx}</span>
+                 </div>
+               </div>
+               <div className="w-px bg-gray-200"></div>
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Total Transaksi Bulan Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><i className="fa-solid fa-chart-line text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-gray-800 tabular-nums">{ownerMonthTotalTrx}</span>
+                 </div>
+               </div>
+            </div>
+            {/* Slide 2 */}
+            <div className="snap-center min-w-full flex justify-between gap-[2px] bg-gray-50/50 p-2 rounded-xl border border-gray-100/50">
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Fee & Laba Hari Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0"><i className="fa-solid fa-money-bill-trend-up text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-emerald-600 tabular-nums">{formatRupiah(ownerTotalAdmin)}</span>
+                 </div>
+               </div>
+               <div className="w-px bg-gray-200"></div>
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Fee & Laba Bulan Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0"><i className="fa-solid fa-sack-dollar text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-emerald-600 tabular-nums">{formatRupiah(ownerMonthTotalAdmin)}</span> 
+                 </div>
+               </div>
+            </div>
+            {/* Slide 3 */}
+            <div className="snap-center min-w-full flex justify-between gap-[2px] bg-gray-50/50 p-2 rounded-xl border border-gray-100/50">
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Uang Masuk Hari Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500 shrink-0"><i className="fa-solid fa-chart-pie text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-indigo-600 tabular-nums">{formatRupiah(ownerTotalUangMasuk)}</span>
+                 </div>
+               </div>
+               <div className="w-px bg-gray-200"></div>
+               <div className="flex-1">
+                 <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest leading-tight mb-1.5">Tarik Tunai Hari Ini</p>
+                 <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 shrink-0"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i></div>
+                   <span className="text-[13px] font-black text-rose-600 tabular-nums">{formatRupiah(ownerTotalTarik)}</span>
+                 </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-1.5 mb-0.5 relative z-50 space-y-2">
+        
+        {/* Pesan Mendadak Popup */}
+        {props.kasirRole !== 'owner' && activePesanMendadak && !dismissedPesanPopup && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-72 max-w-[92vw] bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-gray-100 overflow-hidden z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className="p-3.5 bg-red-50/80 border-b border-red-100/50 flex items-center justify-between">
+              <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+              </h4>
+              <button onClick={() => {
+                setDismissedPesanPopup(true)
+                sessionStorage.setItem('alphaPro_pesan_dismissed', 'true')
+              }} className="w-6 h-6 rounded-full bg-red-100/80 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shadow-sm">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+            <div className="p-2.5 bg-gray-50/50">
+              <div className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 shrink-0 mt-0.5">
+                  <i className="fa-solid fa-bullhorn text-[11px]"></i>
+                </div>
+                <div className="flex-1">
+                  <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Pesan Owner</p>
+                  <p className="text-[12px] font-bold text-gray-900 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lateness Popup */}
+        {props.kasirRole !== 'owner' && todayLateness && !dismissedLatePopup && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 shadow-xl animate-in fade-in">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-600 shrink-0 shadow-inner">
+                  <i className="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-red-700 uppercase tracking-widest">Peringatan Terlambat!</h4>
+                  <p className="text-[9px] text-red-600 font-bold mt-0.5 leading-snug">Absen Anda tercatat jam {todayLateness.jam} (Telat {todayLateness.lateMins} menit) pada sesi {todayLateness.shiftName}.</p>
+                </div>
+              </div>
+              <button onClick={() => setDismissedLatePopup(true)} className="w-6 h-6 rounded-full bg-red-100/50 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shrink-0">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mx-1.5 mb-0.5 relative z-10 space-y-2">
+        {props.kasirRole === 'owner' && (
+          <div className="mb-3 space-y-2">
+            {/* Unified Minimalist Control Bar: [1 Kolom 2 Isi Pilihan (Pantau Toko & Mode Kasir)] + [1 Icon Lonceng Button] */}
+            {/* Dropdowns moved to Blue Card */}
+
+            {/* Notification Banners (Minimal & Sleek) */}
+            {!isNotificationsHidden && (
+              <div className="space-y-2 animate-in fade-in duration-300">
+                {/* 1. Bonus Notification Banner */}
+                {bonusKasirList.length > 0 && !isBonusDismissed && (
+                  <div 
+                    onClick={() => bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))}
+                    className="p-2.5 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs border border-white/30">
+                        <i className="fa-solid fa-gift text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-green-100 uppercase tracking-widest leading-none mb-0.5">🎉 Bonus 6 Bulan</p>
+                        {!isBonusMinimized ? (
+                          <p className="text-[10px] font-bold leading-tight text-white opacity-95">
+                            Kasir <span className="font-black text-yellow-200">{bonusKasirList.join(', ')}</span> mencapai kelipatan 6 bulan kerja! Berikan bonus apresiasi.
+                          </p>
+                        ) : (
+                          <p className="text-[9px] font-bold text-yellow-200 opacity-90 truncate">
+                            Kasir: {bonusKasirList.join(', ')} (Diminimize)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const next = !isBonusMinimized
+                          setIsBonusMinimized(next)
+                          localStorage.setItem('alphaPro_owner_bonus_minimized', String(next))
+                        }}
+                        title={isBonusMinimized ? "Perbesar" : "Minimize"}
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-black/40 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        {isBonusMinimized ? '➕' : '➖'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))
+                          setIsBonusDismissed(true)
+                          localStorage.setItem('alphaPro_owner_bonus_dismissed', 'true')
+                        }}
+                        title="Tutup Notifikasi"
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-rose-600 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Executive Briefing Banner */}
+                {!isBriefingDismissed && (
+                  <div 
+                    onClick={() => markNotifAsRead(currentBriefingId)}
+                    className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 rounded-xl border border-indigo-500/30 shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-indigo-600/50 rounded-lg flex items-center justify-center border border-indigo-400/30 text-indigo-200">
+                        <i className="fa-solid fa-square-poll-vertical text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[9px] font-black text-indigo-300 uppercase tracking-widest leading-none">🌅 Executive Briefing</p>
+                          <span className="bg-emerald-500/20 text-emerald-300 text-[7px] font-black px-1.5 py-0.2 rounded-full border border-emerald-500/30">HARI INI</span>
+                        </div>
+                        {!isBriefingMinimized && (
+                          <p className="text-[10px] font-extrabold text-white mt-0.5 truncate">Rekap Pagi, Forecasting Stok & Omset Toko</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          markNotifAsRead(currentBriefingId)
+                          const fabBtn = document.getElementById('bot-fab-btn')
+                          if (fabBtn) fabBtn.click()
+                        }}
+                        className="bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white text-[8px] font-black px-2.5 py-1 rounded-lg shadow-xs transition-all active:scale-95 uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-robot"></i> Briefing
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const next = !isBriefingMinimized
+                            setIsBriefingMinimized(next)
+                            localStorage.setItem('alphaPro_owner_briefing_minimized', String(next))
+                          }}
+                          title={isBriefingMinimized ? "Perbesar" : "Minimize"}
+                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-white/20 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                        >
+                          {isBriefingMinimized ? '➕' : '➖'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markNotifAsRead(currentBriefingId)
+                            const todayStr = new Date().toISOString().split('T')[0]
+                            setIsBriefingDismissed(true)
+                            localStorage.setItem(`alphaPro_owner_briefing_dismissed_${todayStr}`, 'true')
+                          }}
+                          title="Tutup Notifikasi"
+                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-rose-600 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Rent Warning Banner */}
+                {rentReminder && !isRentDismissed && (
+                  <div 
+                    onClick={() => markNotifAsRead(`rent_${rentReminder.dueDateStr}`)}
+                    className="p-2.5 bg-gradient-to-r from-red-500 to-rose-600 rounded-xl shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 shrink-0 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs border border-white/30">
+                        <i className="fa-solid fa-file-invoice-dollar text-xs"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black text-rose-100 uppercase tracking-widest leading-none mb-0.5">⚠️ Jatuh Tempo Sewa</p>
+                        {!isRentMinimized ? (
+                          <p className="text-[10px] font-bold leading-tight text-white opacity-95">
+                            Sewa Toko senilai <span className="font-black text-yellow-200">Rp {rentReminder.amount.toLocaleString('id-ID')}</span> jatuh tempo {rentReminder.diffDays === 0 ? 'HARI INI' : `dalam ${rentReminder.diffDays} hari`} ({rentReminder.dueDateStr}).
+                          </p>
+                        ) : (
+                          <p className="text-[9px] font-bold text-yellow-200 opacity-90 truncate">
+                            Jatuh tempo: {rentReminder.diffDays === 0 ? 'Hari Ini' : `H-${rentReminder.diffDays}`} (Diminimize)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const next = !isRentMinimized
+                          setIsRentMinimized(next)
+                          localStorage.setItem('alphaPro_owner_rent_minimized', String(next))
+                        }}
+                        title={isRentMinimized ? "Perbesar" : "Minimize"}
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-black/40 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        {isRentMinimized ? '➕' : '➖'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          markNotifAsRead(`rent_${rentReminder.dueDateStr}`)
+                          setIsRentDismissed(true)
+                          localStorage.setItem('alphaPro_owner_rent_dismissed', 'true')
+                        }}
+                        title="Tutup Notifikasi"
+                        className="w-5 h-5 rounded-md bg-black/20 hover:bg-rose-900 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+
+          </div>
+        )}
+
+        {/* QUICK NOTIFICATION MODAL (LONCENG POPUP) */}
+        {showNotifModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">
+                    <i className="fa-solid fa-bell"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Notifikasi Terbaru Owner</h3>
+                    <p className="text-[10px] font-bold text-slate-400">Peringatan & informasi penting toko Anda</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {totalUnreadCount > 0 && (
+                    <button
+                      onClick={markAllNotifsAsRead}
+                      className="text-[9px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <i className="fa-solid fa-check-double mr-1 text-[8px]"></i> Tandai Dibaca
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotifModal(false)}
+                    className="w-7 h-7 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Notification List */}
+              <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+                {bonusKasirList.length > 0 && (
+                  <div 
+                    onClick={() => bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))}
+                    className={cn(
+                      "p-3 rounded-2xl flex items-start gap-3 transition-all cursor-pointer border",
+                      unreadBonusKasirList.length > 0
+                        ? "bg-emerald-50 border-emerald-300 shadow-xs"
+                        : "bg-slate-50 border-slate-200 opacity-75"
+                    )}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-gift text-xs"></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-[11px] font-black text-emerald-900">🎉 Bonus 6 Bulan Kasir</p>
+                        {unreadBonusKasirList.length > 0 ? (
+                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
+                        ) : (
+                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-semibold text-emerald-700 mt-0.5">
+                        Kasir <span className="font-black">{bonusKasirList.join(', ')}</span> mencapai kelipatan 6 bulan kerja!
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div 
+                  onClick={() => markNotifAsRead(currentBriefingId)}
+                  className={cn(
+                    "p-3 rounded-2xl flex items-start justify-between gap-3 transition-all cursor-pointer border",
+                    isBriefingUnread
+                      ? "bg-indigo-50 border-indigo-300 shadow-xs"
+                      : "bg-slate-50 border-slate-200 opacity-75"
+                  )}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-square-poll-vertical text-xs"></i>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-black text-indigo-900">🌅 Executive Briefing Pagi</p>
+                        {isBriefingUnread ? (
+                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
+                        ) : (
+                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-semibold text-indigo-700 mt-0.5">Rekapitulasi pagi, forecasting stok & omset harian.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      markNotifAsRead(currentBriefingId)
+                      setShowNotifModal(false)
+                      const fabBtn = document.getElementById('bot-fab-btn')
+                      if (fabBtn) fabBtn.click()
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black px-2.5 py-1.5 rounded-xl shrink-0 shadow-sm cursor-pointer"
+                  >
+                    Buka
+                  </button>
+                </div>
+              </div>
+
+              {/* Toggle Text Banners Option */}
+              <div className="p-2.5 bg-slate-50 rounded-2xl flex items-center justify-between border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-600">Text Banner Beranda</span>
+                <button
+                  onClick={() => {
+                    const next = !isNotificationsHidden
+                    setIsNotificationsHidden(next)
+                    localStorage.setItem('alphaPro_owner_notifications_hidden', String(next))
+                  }}
+                  className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 bg-white px-2.5 py-1 rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <i className={cn("fa-solid text-[9px]", isNotificationsHidden ? "fa-eye" : "fa-eye-slash")}></i>
+                  {isNotificationsHidden ? "Tampilkan Text" : "Sembunyikan Text"}
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => {
+                    setShowNotifModal(false)
+                    props.setActiveView('view-owner-profit')
+                  }}
+                  className="w-full bg-slate-900 hover:bg-black text-white font-black text-xs py-2.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+                >
+                  <i className="fa-solid fa-clock-rotate-left text-xs"></i>
+                  <span>Lihat Riwayat Lengkap</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+      </div>
+
+      {/* Running Text Column — BELOW Saldo card */}
+      {(props.mainAnnouncement || (props.runningTexts && props.runningTexts.some(t => t.trim() !== ''))) && (
+        <div className="mx-1.5 bg-blue-50/50 rounded-xl py-2 px-4 shadow-sm mb-1.5 mt-1 border border-blue-100/50 flex items-center overflow-hidden relative">
+          <style>{`
+            @keyframes marquee-center {
+              0% { transform: translateX(100%); opacity: 0; }
+              10% { opacity: 1; }
+              40% { transform: translateX(0); }
+              60% { transform: translateX(0); }
+              90% { opacity: 1; }
+              100% { transform: translateX(-100%); opacity: 0; }
+            }
+            .animate-marquee-center {
+              animation: marquee-center 8s linear forwards;
+              width: 100%;
+              text-align: center;
+              white-space: nowrap;
+            }
+          `}</style>
+          <div className="w-full min-w-0 relative overflow-hidden">
+            {(() => {
+              const activeTexts = [
+                props.mainAnnouncement ? { text: props.mainAnnouncement, isMain: true } : null,
+                ...(props.runningTexts || [])
+                  .filter(t => t.trim() !== '')
+                  .map(t => ({ text: t, isMain: false }))
+              ].filter(Boolean) as { text: string, isMain: boolean }[];
+              
+              return <CyclingText texts={activeTexts} />
+            })()}
+          </div>
+        </div>
+      )}      {showRincian && (
+        <div className="absolute inset-0 z-[110] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+          {/* Header Section */}
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-800 pt-6 pb-6 px-6 text-white shadow-lg relative shrink-0">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setShowRincian(false)} 
+                className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all border border-white/10"
+              >
+                <i className="fa-solid fa-arrow-left text-base"></i>
+              </button>
+              <div>
+                <h3 className="font-black text-xl tracking-tight uppercase leading-none">RINCIAN KEUANGAN</h3>
+                <p className="text-[10px] text-blue-100 font-bold uppercase tracking-widest mt-1 opacity-70">Arus Kas Hari Ini</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable Content Section */}
+          <div className="flex-1 overflow-y-auto bg-gray-50/50 pb-28">
+            <div className="p-2.5 space-y-2">
+              
+              {/* SALDO BANK CARD */}
+              <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-blue-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <i className="fa-solid fa-building-columns text-xs"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-[12px] font-black text-blue-900 uppercase leading-none">SALDO BANK</h4>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Aset Digital</p>
+                  </div>
+                </div>
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2.5 rounded-xl border border-blue-400 relative overflow-hidden">
+                  <div className="flex justify-between items-center relative z-10">
+                    <span className="text-[9px] font-black text-blue-50 uppercase tracking-widest">Total Saldo Bank</span>
+                    <span className="text-base font-black text-white tabular-nums">{formatRupiah(props.saldoBank)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <KasSummary 
+                kasModal={kasModal}
+                penjualanDigital={penjualanDigital}
+                penjualanAksesoris={props.totalAksesoris}
+                totalAdminFee={props.totalAdmin}
+                penjualanVoucherTunai={props.penjualanVoucherTunai}
+                tarikTunaiNasabah={props.totalTarik}
+                transaksiKhusus={props.totalKhusus || 0}
+                transaksiNonTunai={props.totalNonTunai || 0}
+              />
+              {/* ACTION BUTTON */}
+              <button 
+                onClick={() => {
+                  setShowRincian(false);
+                  props.setActiveView('view-laporan');
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px] mt-0"
+              >
+                <i className="fa-solid fa-chart-simple text-xs"></i>
+                Laporan Lengkap
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MENU KATEGORI LAYANAN */}
+      <div className="mx-1.5 mb-6 rounded-[24px] overflow-hidden shadow-sm border border-gray-100 bg-white">
+        {/* Header */}
+        <div className="bg-[#007AFF] px-4 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+              <i className="fa-solid fa-wand-magic-sparkles text-white text-lg"></i>
+            </div>
+            <div>
+              <p className="text-white/90 text-[9px] font-bold tracking-widest uppercase mb-0.5">Kategori Layanan</p>
+              <h3 className="text-white font-black text-[13px] leading-tight relative pb-1">
+                Mudah, Cepat & Ringkas
+                <div className="absolute bottom-0 left-0 w-8 h-[2px] bg-green-400 rounded-full"></div>
+              </h3>
+            </div>
+          </div>
+          <div className="bg-white/20 border border-white/30 rounded-full px-2.5 py-1 flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+            <span className="text-white font-bold text-[9px]">8 Menu Kasir</span>
+          </div>
+        </div>
+        
+        {/* Grid Menu */}
+        <div className="p-5 grid grid-cols-4 gap-y-6 gap-x-2 text-center bg-[#F9FBFF]">
+          {[
+            { id: 'view-isi-saldo', label: 'Deposit', icon: 'fa-wallet', color: 'bg-[#007AFF]', shadow: 'shadow-blue-500/40' },
+            { id: 'view-jurnal', label: 'Jurnal', icon: 'fa-book-open', color: 'bg-[#A03EFA]', shadow: 'shadow-purple-500/40', isJurnal: true },
+            { id: 'view-print', label: 'Print', icon: 'fa-print', color: 'bg-[#00C875]', shadow: 'shadow-green-500/40' },
+            { id: 'view-kalender', label: 'Kalender', icon: 'fa-calendar-days', color: 'bg-[#6F42C1]', shadow: 'shadow-purple-700/40' },
+            { id: 'view-kontak', label: 'Kontak', icon: 'fa-user', color: 'bg-[#00B4D8]', shadow: 'shadow-cyan-500/40' },
+            { id: 'view-kasbon', label: 'Kasbon', icon: 'fa-wallet', color: 'bg-[#FD7E14]', shadow: 'shadow-orange-500/40' },
+            { id: 'view-stok-voucher', label: 'Voucher', icon: 'fa-ticket-simple', color: 'bg-[#F50057]', shadow: 'shadow-pink-500/40' },
+            { id: 'view-pos-kasir', label: 'Pos Kasir', icon: 'fa-store', color: 'bg-[#0056B3]', shadow: 'shadow-blue-800/40' },
+          ].map((item) => (
+            <div 
+              key={item.id} 
+              onClick={() => {
+                if ((item as any).isJurnal && props.onJurnalClick) {
+                  props.setActiveView('view-laporan')
+                  props.onJurnalClick()
+                } else {
+                  props.setActiveView(item.id)
+                }
+              }}
+              className="cursor-pointer group flex flex-col items-center"
+            >
+              <div className={cn("w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform mb-2", item.color, item.shadow)}>
+                <i className={cn("fa-solid text-xl", item.icon)}></i>
+              </div>
+              <p className="text-[10px] font-bold text-gray-800 tracking-tight">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {props.kasirRole === 'owner' && (
+        <div className="px-1.5 mb-4">
+          {/* NOTIFIKASI SELISIH AUDIT (HARI INI) */}
+          {(() => {
+            const todayStr = getLocalDateString();
+            const badAudits = auditHistory.filter(h => h.tanggalAsli === todayStr && Math.abs(h.selisih) > 100000);
+            if (badAudits.length === 0) return null;
+            
+            return (
+              <div className="bg-red-50 border-l-4 border-red-500 rounded-r-2xl p-4 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-500 shrink-0">
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[11px] font-black text-red-800 uppercase tracking-widest">Peringatan Audit Laci</h4>
+                    <p className="text-[9px] text-red-600 font-bold mt-0.5">
+                      Hari ini terdapat selisih fisik &gt; Rp100.000:
+                    </p>
+                    <div className="mt-1.5 space-y-1">
+                      {badAudits.map((a, i) => (
+                        <div key={i} className="flex justify-between items-center text-[10px] font-black">
+                          <span className="text-red-700">- {a.kasirName}</span>
+                          <span className={a.selisih < 0 ? "text-red-600" : "text-green-600"}>
+                            {a.selisih < 0 ? "KURANG" : "LEBIH"} {formatRupiah(Math.abs(a.selisih))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {props.kasirRole === 'owner' && !props.isPc && (() => {
+        // Menu Section 1: Pengaturan Owner (HR - berlaku untuk semua toko, dengan filter toko di atas)
+        const OWNER_HR_IDS = ['view-owner-absen', 'view-owner-gaji', 'view-owner-izin', 'view-owner-catatan'];
+        const OWNER_HR_MENU = [
+          { id: 'view-owner-absen',   title: 'Absen',   desc: 'Kehadiran kasir',  icon: 'fa-fingerprint',    color: 'bg-teal-500' },
+          { id: 'view-owner-gaji',    title: 'Gajih',   desc: 'Data gaji kasir',  icon: 'fa-dollar-sign',    color: 'bg-green-600' },
+          { id: 'view-owner-izin',    title: 'Izin',    desc: 'Kelola izin',      icon: 'fa-calendar-day',   color: 'bg-orange-500' },
+          { id: 'view-owner-catatan', title: 'Catatan', desc: 'Catatan & belanja', icon: 'fa-clipboard-list', color: 'bg-amber-500' },
+        ];
+        // Menu Section 2: Pengaturan Toko (semua menu selain HR di atas)
+        const TOKO_MENU_IDS = menuOrder.filter(id => !OWNER_HR_IDS.includes(id));
+
+        return (
+          <div className="px-1.5 mb-8 space-y-4">
+
+            {/* ── SECTION 1: PENGATURAN OWNER ── */}
+            <div>
+              {/* Header Section 1 */}
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 bg-teal-500 rounded-xl flex items-center justify-center">
+                    <i className="fa-solid fa-users text-white text-xs"></i>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest leading-none">Pengaturan Owner</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">SDM & Karyawan</p>
+                  </div>
+                </div>
+                {/* Filter Toko untuk section Owner */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                  <i className="fa-solid fa-store text-teal-500 text-[9px] shrink-0"></i>
+                  <div className="relative">
+                    <select
+                      value={props.pantauStoreId || 'all'}
+                      onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                      className="bg-transparent text-slate-700 text-[9px] font-black outline-none border-none cursor-pointer appearance-none pr-3 font-sans max-w-[90px]"
+                    >
+                      <option value="all">Semua Toko</option>
+                      {(props.stores || []).map((store) => (
+                        <option key={store.id} value={store.id}>{store.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[7px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Menu Pengaturan Owner */}
+              <div className="grid grid-cols-4 gap-y-6 gap-x-2 text-center py-2">
+                {OWNER_HR_MENU.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => props.setActiveView(item.id)}
+                    className="cursor-pointer group flex flex-col items-center"
+                  >
+                    <div className={cn("w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform mb-2", item.color)}>
+                      <i className={`fa-solid ${item.icon} text-xl`}></i>
+                    </div>
+                    <p className="text-[10px] font-bold text-gray-800 tracking-tight">{item.title}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── DIVIDER ── */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-px bg-slate-100"></div>
+              <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Panel Toko</span>
+              <div className="flex-1 h-px bg-slate-100"></div>
+            </div>
+
+            {/* ── SECTION 2: PENGATURAN TOKO ── */}
+            <div>
+              {/* Header Section 2 */}
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 bg-amber-500 rounded-xl flex items-center justify-center">
+                    <i className="fa-solid fa-shield-halved text-white text-xs"></i>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest leading-none">Pengaturan Toko</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Operasional & Data</p>
+                  </div>
+                </div>
+                {/* Tombol Edit Susunan */}
+                <button
+                  onClick={() => {
+                    setIsEditMenuMode(!isEditMenuMode)
+                    setSelectedForSwap(null)
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[9px] font-black transition-all",
+                    isEditMenuMode
+                      ? "bg-amber-500 border-amber-400 text-white"
+                      : "bg-slate-50 border-slate-200 text-slate-600 active:scale-95"
+                  )}
+                >
+                  <i className={cn("fa-solid text-[9px]", isEditMenuMode ? "fa-check" : "fa-pen")}></i>
+                  {isEditMenuMode ? "Selesai" : "Susun"}
+                </button>
+              </div>
+
+              {isEditMenuMode && (
+                <div className="mb-3 bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-center animate-in fade-in slide-in-from-top-2">
+                  <p className="text-[9px] font-black text-amber-800 uppercase">Mode Edit Aktif — Ketuk 2 menu untuk tukar posisi</p>
+                </div>
+              )}
+
+              {/* Grid Menu Pengaturan Toko */}
+              <div className="grid grid-cols-4 gap-y-6 gap-x-2 text-center py-2">
+                {TOKO_MENU_IDS.map((id) => {
+                  const item = DEFAULT_OWNER_MENU.find(m => m.id === id)
+                  if (!item) return null
+                  const isSelected = selectedForSwap === item.id
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => handleMenuClick(item.id)}
+                      className={cn(
+                        "cursor-pointer group flex flex-col items-center relative",
+                        isEditMenuMode ? "animate-pulse-slow" : "",
+                        isSelected ? "scale-105" : ""
+                      )}
+                    >
+                      {isEditMenuMode && (
+                        <div className={cn(
+                          "absolute top-0 right-1 rounded-full w-4 h-4 flex items-center justify-center transition-colors z-10",
+                          isSelected ? "bg-amber-500" : "bg-black/10"
+                        )}>
+                          <i className={cn("fa-solid fa-up-down-left-right text-[7px]", isSelected ? "text-white" : "text-gray-400")}></i>
+                        </div>
+                      )}
+                      <div className={cn(
+                        "w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg transition-transform mb-2",
+                        item.color,
+                        isSelected ? "ring-2 ring-amber-500 ring-offset-2" : "",
+                        isEditMenuMode && !isSelected ? "opacity-80 scale-90" : "active:scale-90 scale-100"
+                      )}>
+                        <i className={`fa-solid ${item.icon} text-xl`}></i>
+                      </div>
+                      <p className="text-[10px] font-bold text-gray-800 tracking-tight truncate">{item.title}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+          </div>
+        )
+      })()}
+        </>
+      )}
+
+      {isOwnerSubView && (() => {
+        const getSubViewDetails = () => {
+          switch(activeOwnerSubView) {
+            case 'monitor': return { title: 'KELOLA KASIR', color: 'from-blue-600 to-blue-800', icon: 'fa-users', desc: 'Pantau aktivitas dan kelola akun kasir Anda.' }
+            case 'laporan': return { title: 'RINGKASAN HARIAN', color: 'from-indigo-600 to-indigo-800', icon: 'fa-file-lines', desc: 'Lihat ringkasan transaksi dan pergerakan saldo.' }
+            case 'grafik': return { title: 'GRAFIK TRANSAKSI', color: 'from-emerald-500 to-emerald-700', icon: 'fa-chart-simple', desc: 'Visualisasi data transaksi harian dan bulanan.' }
+            case 'performa': return { title: 'PERFORMA KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-chart-line', desc: 'Analisis kecepatan dan volume transaksi per kasir.' }
+            case 'absen': return { title: 'ABSENSI KASIR', color: 'from-teal-500 to-teal-700', icon: 'fa-fingerprint', desc: 'Rekapitulasi kehadiran dan jam kerja kasir.' }
+            case 'izin': return { title: 'IZIN KARYAWAN', color: 'from-orange-500 to-orange-700', icon: 'fa-calendar-day', desc: 'Kelola permohonan izin dan cuti karyawan.' }
+            case 'gaji': return { title: 'DATA GAJI KASIR', color: 'from-green-600 to-green-800', icon: 'fa-dollar-sign', desc: 'Perhitungan dan riwayat penggajian kasir.' }
+            case 'saldo': return { title: 'PENGATURAN SALDO', color: 'from-emerald-600 to-emerald-800', icon: 'fa-wallet', desc: 'Alokasi dan penambahan modal harian kasir.' }
+            case 'audit': return { title: 'AUDIT KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-file-signature', desc: 'Pemeriksaan kesesuaian fisik uang di laci.' }
+            case 'catatan': return { title: 'CATATAN OWNER', color: 'from-amber-500 to-orange-600', icon: 'fa-clipboard-list', desc: 'Catat pengingat penting dan daftar belanja.' }
+            case 'profit': return { title: 'RIWAYAT NOTIFIKASI TOKO', color: 'from-indigo-600 to-blue-800', icon: 'fa-bell', desc: 'Riwayat lengkap notifikasi sistem, bonus kasir, dan audit toko.' }
+            default: return { title: 'PENGATURAN', color: 'from-slate-600 to-slate-800', icon: 'fa-gear', desc: 'Pengaturan toko, transfer, dan backup data.' }
+          }
+        };
+        const { title, color, icon, desc } = getSubViewDetails();
+        // Nama toko aktif untuk ditampilkan di header
+        const activePantauStore = (props.stores || []).find(s => s.id === props.pantauStoreId)
+        const storeLabel = activePantauStore?.name || (props.pantauStoreId && props.pantauStoreId !== 'all' ? props.pantauStoreId : null)
+
+        return (
+          <div className={cn(
+            "bg-white flex flex-col animate-in fade-in duration-300",
+            props.isPc ? "h-full rounded-[2rem] overflow-hidden" : "absolute inset-0 z-[100] slide-in-from-right"
+          )}>
+            {/* Header */}
+            <div className={cn(
+              "text-white flex justify-between items-center relative overflow-hidden",
+              props.isPc ? "p-8 shadow-md" : "p-4 shadow-lg",
+              `bg-gradient-to-r ${color}`
+            )}>
+               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+               
+               {props.isPc ? (
+                 <div className="flex items-center gap-5 relative z-10">
+                   <div className="w-14 h-14 rounded-[1.25rem] bg-white/20 flex items-center justify-center backdrop-blur-md border border-white/30 shadow-inner">
+                     <i className={`fa-solid ${icon} text-2xl drop-shadow-md`}></i>
+                   </div>
+                   <div>
+                       <h3 className="font-black text-2xl tracking-tight uppercase leading-none drop-shadow-md">{title}</h3>
+                       <div className="mt-1.5 inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1 rounded-full relative transition-colors cursor-pointer">
+                         <i className="fa-solid fa-store text-[9px] text-white/80"></i>
+                         <select
+                           value={props.pantauStoreId || 'all'}
+                           onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                           className="bg-transparent text-white/95 text-[10px] font-black outline-none border-none cursor-pointer appearance-none pr-4 uppercase tracking-widest font-sans text-center"
+                         >
+                           <option value="all" className="text-black">SEMUA TOKO</option>
+                           {(props.stores || []).map((store) => (
+                             <option key={store.id} value={store.id} className="text-black">{store.name}</option>
+                           ))}
+                         </select>
+                         <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                       </div>
+                    </div>
+                  </div>
+               ) : (
+                 <>
+                   <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90 relative z-10">
+                     <i className="fa-solid fa-arrow-left"></i>
+                   </button>
+                   <div className="text-center relative z-10">
+                      <h3 className="font-black text-sm tracking-widest uppercase leading-none">{title}</h3>
+                      <div className="mt-1 inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm px-2.5 py-0.5 rounded-full relative transition-colors cursor-pointer">
+                        <i className="fa-solid fa-store text-[7px] text-white/80"></i>
+                        <select
+                          value={props.pantauStoreId || 'all'}
+                          onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                          className="bg-transparent text-white/90 text-[8px] font-black outline-none border-none cursor-pointer appearance-none pr-3 uppercase tracking-widest font-sans text-center"
+                        >
+                          <option value="all" className="text-black">SEMUA TOKO</option>
+                          {(props.stores || []).map((store) => (
+                            <option key={store.id} value={store.id} className="text-black">{store.name}</option>
+                          ))}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[6px] text-white/70 pointer-events-none"></i>
+                      </div>
+                    </div>
+                 </>
+               )}
+               
+               <button onClick={() => props.setActiveView('view-beranda')} className={cn(
+                 "rounded-2xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all border border-white/20 active:scale-90 relative z-10",
+                 props.isPc ? "w-12 h-12" : "w-10 h-10"
+               )}>
+                 <i className="fa-solid fa-xmark text-lg"></i>
+               </button>
+            </div>
+
+            {/* Sub-View Content */}
+            <div className={cn("flex-1 overflow-y-auto custom-scrollbar bg-slate-50", props.isPc ? "p-8 flex flex-col items-center" : "p-5 pb-24")}>
+              <div className={cn("w-full", props.isPc && "max-w-4xl")}>
+            {activeOwnerSubView === 'monitor' && (
+              <div className="space-y-4">
+                {(!props.pantauStoreId || props.pantauStoreId === 'all') ? (
+                  <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
+                    <i className="fa-solid fa-store-slash text-amber-500 text-3xl mb-3"></i>
+                    <p className="text-xs font-black text-amber-800 uppercase tracking-widest">PILIH TOKO TERLEBIH DAHULU</p>
+                    <p className="text-[10px] text-amber-600/80 font-bold uppercase mt-1">Silakan pilih salah satu toko dari dropdown di Beranda Utama untuk mengelola kasir.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Shortcut to HR & Payroll */}
+                    <button 
+                      onClick={() => props.setActiveView('view-akun-karyawan')}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-2xl flex items-center justify-between shadow-sm active:scale-95 transition-all mb-6"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                          <i className="fa-solid fa-users-gear text-sm"></i>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Manajemen SDM & Gaji Lengkap</p>
+                          <p className="text-[9px] font-bold text-indigo-200 mt-1">Bonus, Riwayat Pembayaran & Foto Profil</p>
+                        </div>
+                      </div>
+                      <i className="fa-solid fa-chevron-right text-xs"></i>
+                    </button>
+
+                    {/* Add Kasir Form */}
+                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                      <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Tambah / Edit Kasir</h4>
+                      <div className="space-y-2">
+                        <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} disabled={!!editKasirId} className="w-full text-xs p-2 rounded-lg border outline-none font-bold disabled:bg-gray-100 disabled:text-gray-500" />
+                        <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="number" placeholder="Target TRX Harian (Opsional)" value={kasirFormTargetTrx} onChange={e => setKasirFormTargetTrx(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        
+                        {editKasirId && (
+                          <button onClick={() => { setKasirFormId(''); setKasirFormName(''); setKasirFormPin(''); setKasirFormTargetTrx(''); setEditKasirId(null); }} className="text-[10px] text-rose-500 font-bold underline mb-1">Batal Edit</button>
+                        )}
+
+                        <button onClick={() => {
+                          if(!kasirFormId.trim() || !kasirFormName.trim() || !kasirFormPin) return props.showToast('Lengkapi data kasir');
+                          // Validasi: ID kasir tidak boleh sama dengan yang sudah ada, KECUALI jika sedang diedit
+                          const existingIds = Object.keys(props.kasirList || {})
+                          if (!editKasirId && existingIds.includes(kasirFormId.trim())) {
+                            return props.showToast(`ID "${kasirFormId}" sudah digunakan kasir lain!`);
+                          }
+                          if (kasirFormPin.length < 4) return props.showToast('PIN minimal 4 digit!');
+                          const newKasirList = { ...props.kasirList, [kasirFormId.trim()]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName.trim(), targetTrx: parseInt(kasirFormTargetTrx) || 0 } };
+                          const targetStoreId = props.pantauStoreId;
+                          if (targetStoreId && targetStoreId !== 'all') {
+                            localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(newKasirList));
+                            supabase.from('store_settings').upsert({
+                              store_id: targetStoreId,
+                              cashiers: newKasirList,
+                              updated_at: new Date().toISOString()
+                            }).then(({ error }) => {
+                              if (error) console.error("Gagal update cashiers ke DB:", error.message);
+                            });
+                          } else {
+                            saveKasirAccounts(newKasirList);
+                          }
+                          props.refreshKasirList(newKasirList);
+                          setKasirFormId(''); setKasirFormName(''); setKasirFormPin(''); setKasirFormTargetTrx(''); setEditKasirId(null);
+                          props.showToast("Data Kasir Disimpan!");
+                        }} className="w-full bg-blue-600 text-white text-[10px] font-black py-2 rounded-lg uppercase">{editKasirId ? 'Update Kasir' : 'Simpan Kasir'}</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {Object.entries(props.kasirList || {}).filter(([id]) => id !== 'owner').map(([id, account]) => {
+                        return (
+                          <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
+                            <div>
+                              <p className="text-xs font-black text-gray-800">{account.name}</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin} {account.targetTrx ? `| TARGET: ${account.targetTrx} TRX` : ''}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); setKasirFormTargetTrx(account.targetTrx ? account.targetTrx.toString() : ''); setEditKasirId(id); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                <i className="fa-solid fa-pen text-[10px]"></i>
+                              </button>
+                              <button onClick={() => {
+                                props.onConfirm('HAPUS KASIR', `Hapus ${account.name}?`, () => {
+                                  const n = {...props.kasirList}; delete n[id];
+                                  const targetStoreId = props.pantauStoreId;
+                                  if (targetStoreId && targetStoreId !== 'all') {
+                                    localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(n));
+                                    supabase.from('store_settings').upsert({
+                                      store_id: targetStoreId,
+                                      cashiers: n,
+                                      updated_at: new Date().toISOString()
+                                    }).then(({ error }) => {
+                                      if (error) console.error("Gagal update cashiers ke DB:", error.message);
+                                    });
+                                  } else {
+                                    saveKasirAccounts(n);
+                                  }
+                                  props.refreshKasirList(n);
+                                  props.showToast("Berhasil Dihapus");
+                                })
+                              }} className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                                <i className="fa-solid fa-trash text-[10px]"></i>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+              {activeOwnerSubView === 'laporan' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest pl-2">Filter Data Kasir</p>
+                    <div className="relative">
+                      <select
+                        value={props.filterKasir || 'Semua'}
+                        onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                        className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 pl-3 pr-8 rounded-lg outline-none cursor-pointer appearance-none"
+                      >
+                        <option value="Semua">Semua Kasir</option>
+                        {Object.entries(props.kasirList).map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-blue-400 pointer-events-none"></i>
+                    </div>
+                  </div>
+
+                  {/* SALDO BANK */}
+                  <div className="space-y-2.5 mb-4 pb-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px]">
+                        <i className="fa-solid fa-building-columns"></i>
+                      </div>
+                      <h4 className="text-[13px] font-black text-blue-700 uppercase tracking-widest">SALDO BANK</h4>
+                    </div>
+                    <div className="space-y-2 pl-7">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-gray-500">Total Saldo Bank</p>
+                        <span className="text-xs font-black text-blue-700">{formatRupiah(ownerSaldoBank)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <KasSummary 
+                    kasModal={ownerKasModal}
+                    penjualanDigital={ownerPenjualanDigital}
+                    penjualanAksesoris={ownerTotalAksesoris}
+                    totalAdminFee={ownerTotalAdmin}
+                    penjualanVoucherTunai={props.penjualanVoucherTunai}
+                    tarikTunaiNasabah={ownerTotalTarik}
+                    adminDalamNonTunai={ownerAdminDalam}
+                    transaksiKhusus={ownerKhusus}
+                    transaksiNonTunai={ownerNonTunai}
+                  />
+                  <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
+                    <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
+                  </button>
+                </div>
+              )}               {activeOwnerSubView === 'audit' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
+                    <div>
+                      <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Riwayat Audit (Otomatis)</p>
+                      <p className="text-[8px] text-indigo-400 font-bold uppercase">Hasil rekap laporan kasir</p>
+                    </div>
+                    <div className="relative">
+                      <select
+                        value={props.filterKasir || 'Semua'}
+                        onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                        className="bg-white border border-indigo-200 text-indigo-800 text-[10px] font-black py-2 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none shadow-sm"
+                      >
+                        <option value="Semua">Semua Kasir</option>
+                        {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-indigo-400 pointer-events-none"></i>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Ringkasan Performa Seluruh Kasir */}
+                    {(() => {
+                      const perf: Record<string, { name: string, minus: number, plus: number }> = {};
+                      
+                      // Inisialisasi semua kasir
+                      Object.entries(props.kasirList)
+                        .filter(([id]) => id !== 'owner')
+                        .forEach(([id, acc]) => {
+                          perf[id] = { name: acc.name, minus: 0, plus: 0 };
+                        });
+
+                      auditHistory.forEach(h => {
+                        if (!perf[h.kasirId]) perf[h.kasirId] = { name: h.kasirName, minus: 0, plus: 0 };
+                        if (h.selisih < 0) perf[h.kasirId].minus += Math.abs(h.selisih);
+                        else if (h.selisih > 0) perf[h.kasirId].plus += h.selisih;
+                      });
+                      
+                      let perfList = Object.entries(perf).map(([id, p]) => ({ id, ...p }));
+                      if (props.filterKasir !== 'Semua') {
+                        perfList = perfList.filter(p => p.id === props.filterKasir);
+                      }
+                      
+                      if (perfList.length === 0) return null; // Jika belum ada kasir sama sekali
+
+                      return (
+                        <div className="mb-4">
+                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Akumulasi Bulan Ini</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {perfList.map((p, idx) => {
+                              const total = p.plus - p.minus;
+                              const isMinus = total < 0;
+                              return (
+                                <div key={idx} className="bg-white border border-gray-100 p-3 rounded-2xl shadow-sm">
+                                  <div className="flex justify-between items-center border-b border-gray-50 pb-2 mb-2">
+                                    <p className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">{p.name}</p>
+                                    <span className={cn("text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest", isMinus ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600")}>
+                                      {isMinus ? "Minus" : "Plus"}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between gap-2">
+                                    <div className="flex-1 bg-red-50/50 rounded-xl p-2">
+                                      <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-0.5">Total Kurang</p>
+                                      <p className="text-[10px] font-black text-red-600">{formatRupiah(p.minus)}</p>
+                                    </div>
+                                    <div className="flex-1 bg-emerald-50/50 rounded-xl p-2">
+                                      <p className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mb-0.5">Total Lebih</p>
+                                      <p className="text-[10px] font-black text-emerald-600">{formatRupiah(p.plus)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    <div className="flex justify-between items-center px-1">
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">Detail Per Hari</h4>
+                        <div className="w-8 h-px bg-gray-100 flex-grow mx-3 hidden sm:block"></div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                          <button 
+                            onClick={() => {
+                              if (props.handleSyncPast30Days) {
+                                props.handleSyncPast30Days();
+                                props.showToast("Menyinkronkan riwayat 30 hari terakhir...");
+                              }
+                            }}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 active:scale-95 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <i className="fa-solid fa-cloud-arrow-down text-[10px]"></i>
+                            Sinkron Data
+                          </button>
+                          <input 
+                            type="date" 
+                            value={auditFilterDate} 
+                            onChange={(e) => setAuditFilterDate(e.target.value)} 
+                            className="text-[9px] font-black uppercase text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 outline-none focus:border-indigo-300"
+                          />
+                        </div>
+                      </div>
+                    
+                    {(() => {
+                      let filteredHistory = props.filterKasir === 'Semua' 
+                        ? auditHistory 
+                        : auditHistory.filter(h => h.kasirId === props.filterKasir)
+
+                      if (auditFilterDate) {
+                        filteredHistory = filteredHistory.filter(h => h.tanggalAsli === auditFilterDate)
+                      }
+
+                      const totalSelisih = filteredHistory.reduce((acc, curr) => acc + curr.selisih, 0);
+
+                      if (filteredHistory.length === 0) {
+                        return (
+                          <div className="text-center py-12 bg-gray-50 rounded-[2rem] border border-dashed border-gray-200">
+                            <i className="fa-solid fa-clipboard-check text-2xl text-gray-200 mb-2"></i>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                              Belum ada riwayat audit/closing
+                            </p>
+                          </div>
+                        )
+                      }
+
+                      // Grouping for UI rendering
+                      const groupedByDate: Record<string, typeof auditHistory> = {};
+                      filteredHistory.forEach(item => {
+                        if (!groupedByDate[item.tanggal]) groupedByDate[item.tanggal] = [];
+                        groupedByDate[item.tanggal].push(item);
+                      });
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Akumulasi Selisih */}
+                          <div className={cn(
+                            "p-3 rounded-2xl flex justify-between items-center border shadow-sm",
+                            totalSelisih < -50000 ? "bg-red-50 border-red-100" : (totalSelisih > -5000 && totalSelisih < 5000 ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100")
+                          )}>
+                            <div className="flex items-center gap-2">
+                              <i className="fa-solid fa-calculator text-gray-400"></i>
+                              <div>
+                                <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Total Akumulasi</p>
+                                <p className="text-[10px] font-bold text-gray-400">Untuk data yang ditampilkan</p>
+                              </div>
+                            </div>
+                            <span className={cn(
+                              "text-sm font-black",
+                              totalSelisih < 0 ? "text-red-600" : "text-green-600"
+                            )}>
+                              {totalSelisih < 0 ? "KURANG " : "LEBIH "} {formatRupiah(Math.abs(totalSelisih))}
+                            </span>
+                          </div>
+
+                          <div className="space-y-4">
+                            {Object.entries(groupedByDate).map(([tanggal, items]) => (
+                              <div key={tanggal} className="space-y-2">
+                                <div className="flex items-center gap-2 px-1">
+                                  <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">{items[0].dayContext}</span>
+                                  <span className="text-[9px] font-bold text-slate-400">{tanggal}</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {items.map((item, index) => {
+                                    const absSelisih = Math.abs(item.selisih);
+                                    let colorBox = "bg-green-50 text-green-600 border border-green-100";
+                                    let colorText = "text-green-600";
+                                    let icon = "fa-check";
+                                    let statusLabel = "WAJAR";
+
+                                    if (absSelisih > 50000) {
+                                      colorBox = "bg-red-50 text-red-600 border border-red-100";
+                                      colorText = "text-red-600";
+                                      icon = "fa-triangle-exclamation";
+                                      statusLabel = "FATAL";
+                                    } else if (absSelisih > 5000) {
+                                      colorBox = "bg-amber-50 text-amber-600 border border-amber-100";
+                                      colorText = "text-amber-600";
+                                      icon = "fa-exclamation";
+                                      statusLabel = "CEK";
+                                    }
+
+                                    return (
+                                      <div 
+                                        key={index} 
+                                        onClick={() => {
+                                          if (props.setFilterTanggal) props.setFilterTanggal(item.tanggalAsli);
+                                          if (props.setFilterKasir) props.setFilterKasir(item.kasirId);
+                                          // Navigate to LaporanView
+                                          props.setActiveView(props.isPc ? 'view-owner-laporan' : 'view-laporan');
+                                        }}
+                                        className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center group cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all relative overflow-hidden"
+                                        title="Lihat rincian laporan shift ini"
+                                      >
+                                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-indigo-50/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <i className="fa-solid fa-chevron-right text-indigo-400 text-[10px]"></i>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <div className={cn("w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0", colorBox)}>
+                                            <span className="text-[8px] font-black leading-none">{statusLabel}</span>
+                                            <i className={cn("fa-solid text-[10px] mt-0.5", icon)}></i>
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                              <p className="text-[11px] font-black text-gray-800 uppercase leading-none group-hover:text-indigo-600 transition-colors">
+                                                {item.kasirName}
+                                              </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className={cn("text-[9px] font-black uppercase", colorText)}>
+                                                {item.selisih === 0 ? 'Klop' : item.selisih < 0 ? 'Kurang' : 'Lebih'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="pr-4 sm:pr-6">
+                                          <span className={cn("text-xs font-black", colorText)}>
+                                            {formatRupiah(Math.abs(item.selisih))}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {activeOwnerSubView === 'absen' && (
+                <div className="relative">
+                  {/* FILTER BULAN DAN TABS - STICKY MINIMALIS */}
+                  <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pt-1 pb-3 -mx-4 px-4 flex items-end justify-between gap-2 border-b border-gray-100/50 mb-4">
+                    <div className="flex-1">
+                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block mb-0.5 ml-0.5">Periode Kehadiran</label>
+                      <input 
+                        type="month"
+                        value={absenFilterMonth}
+                        onChange={(e) => setAbsenFilterMonth(e.target.value)}
+                        className="w-full max-w-[130px] text-[10px] py-1.5 px-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-gray-50 focus:border-teal-400 focus:bg-white transition-all shadow-inner"
+                      />
+                    </div>
+                    <div className="flex bg-gray-100 p-0.5 rounded-[10px]">
+                      <button 
+                        onClick={() => setAbsenTab('summary')} 
+                        className={cn(
+                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                          absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                        )}
+                      >
+                        Ringkasan
+                      </button>
+                      <button 
+                        onClick={() => setAbsenTab('full')} 
+                        className={cn(
+                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                          absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                        )}
+                      >
+                        Riwayat
+                      </button>
+                    </div>
+                  </div>
+
+                  {absenTab === 'summary' ? (() => {
+                    const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
+                    const today = new Date()
+                    
+                    // Filter untuk bulan yang dipilih
+                    const [yyyy, mm] = absenFilterMonth.split('-').map(Number);
+                    const selectedMonthDate = new Date(yyyy, mm - 1);
+                    const isCurrentMonth = today.getFullYear() === yyyy && (today.getMonth() + 1) === mm;
+                    
+                    let daysPassed = 0;
+                    if (isCurrentMonth) {
+                      daysPassed = today.getDate();
+                    } else if (selectedMonthDate < today) {
+                      daysPassed = new Date(yyyy, mm, 0).getDate(); // Total hari dalam bulan tersebut
+                    }
+                    
+                    return (
+                      <div className="space-y-6">
+                        {/* REKAPITULASI BULAN INI */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between px-1">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                              Rekap {selectedMonthDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                            </p>
+                            <span className="text-[8px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              {isCurrentMonth ? `s/d Tgl ${today.getDate()}` : 'Sebulan Penuh'}
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-col gap-3">
+                            {cashiers.map(([id, acc]) => {
+                              // Data absensi bulan ini untuk kasir ini
+                              const monthData = (props.absensiList || []).filter(a => 
+                                (a.username === id || a.nama_kasir === acc.name) && a.tanggal && a.tanggal.startsWith(absenFilterMonth)
+                              )
+                              
+                              // Hadir berdasarkan tanggal unik
+                              const uniqueAttendedDates = new Set(monthData.map(a => a.tanggal))
+                              const totalHadir = uniqueAttendedDates.size
+
+                              // Evaluasi hari berlalu efektif (jika hari ini belum absen, hari ini tidak dihitung sebagai libur)
+                              const todayStr = getLocalDateString()
+                              const hasAttendedToday = uniqueAttendedDates.has(todayStr)
+                              let effectiveDaysPassed = daysPassed
+                              if (isCurrentMonth && !hasAttendedToday) {
+                                effectiveDaysPassed = Math.max(0, today.getDate() - 1)
+                              }
+                              
+                              const totalLibur = Math.max(0, effectiveDaysPassed - totalHadir)
+                              
+                              let pagi = 0
+                              let siang = 0
+                              const latePagiDates: {tanggal: string, jam: string, alasan_telat?: string}[] = []
+                              
+                              // Hitung shift pagi vs siang dari setiap tanggal unik (ambil entri pertama tiap hari)
+                              const dailyFirstEntries = new Map<string, any>()
+                              monthData.forEach(entry => {
+                                if (!dailyFirstEntries.has(entry.tanggal)) {
+                                  dailyFirstEntries.set(entry.tanggal, entry)
+                                }
+                              })
+
+                              dailyFirstEntries.forEach(entry => {
+                                const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                if (info.isPagi) {
+                                  pagi++
+                                  if (info.isLate) {
+                                    latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`, alasan_telat: entry.alasan_telat})
+                                  }
+                                }
+                                else siang++
+                              })
+                              
+                              // Urutkan riwayat telat dari yang terbaru
+                              latePagiDates.sort((a, b) => b.tanggal.localeCompare(a.tanggal))
+                              
+                              const liburDates: string[] = []
+                              for (let i = 1; i <= effectiveDaysPassed; i++) {
+                                const dStr = `${absenFilterMonth}-${String(i).padStart(2, '0')}`
+                                if (!uniqueAttendedDates.has(dStr)) {
+                                  liburDates.push(dStr)
+                                }
+                              }
+                              liburDates.sort((a,b) => b.localeCompare(a))
+                              
+                              return (
+                                <div key={`rekap-${id}`} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
+                                  <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                  <h4 className="text-[11px] font-black text-gray-800 uppercase tracking-widest mb-3 pl-1">
+                                    {acc.name}
+                                  </h4>
+                                  
+                                  <div className="grid grid-cols-4 gap-2 text-center">
+                                    <div className="bg-teal-50/50 rounded-xl p-2 border border-teal-50">
+                                      <p className="text-[8px] font-bold text-teal-600 uppercase mb-1">Hadir</p>
+                                      <p className="text-[12px] font-black text-teal-700">{totalHadir}</p>
+                                    </div>
+                                    <div 
+                                      className={cn("bg-orange-50/50 rounded-xl p-2 border transition-all", latePagiDates.length > 0 ? "border-orange-300 cursor-pointer active:scale-95 shadow-sm" : "border-orange-50")}
+                                      onClick={() => latePagiDates.length > 0 ? setAbsenLateHistoryId(absenLateHistoryId === id ? null : id) : undefined}
+                                    >
+                                      <div className="flex items-center justify-center gap-1 mb-1">
+                                        <p className="text-[8px] font-bold text-orange-600 uppercase">Pagi</p>
+                                        {latePagiDates.length > 0 && <i className="fa-solid fa-circle-exclamation text-[8px] text-red-500 animate-pulse" title="Ada riwayat telat"></i>}
+                                      </div>
+                                      <p className="text-[12px] font-black text-orange-700">{pagi}</p>
+                                    </div>
+                                    <div className="bg-indigo-50/50 rounded-xl p-2 border border-indigo-50">
+                                      <p className="text-[8px] font-bold text-indigo-600 uppercase mb-1">Siang</p>
+                                      <p className="text-[12px] font-black text-indigo-700">{siang}</p>
+                                    </div>
+                                    <div 
+                                      className={cn("bg-rose-50/50 rounded-xl p-2 border transition-all", liburDates.length > 0 ? "border-rose-300 cursor-pointer active:scale-95 shadow-sm" : "border-rose-50")}
+                                      onClick={() => liburDates.length > 0 ? setAbsenLiburHistoryId(absenLiburHistoryId === id ? null : id) : undefined}
+                                    >
+                                      <div className="flex items-center justify-center gap-1 mb-1">
+                                        <p className="text-[8px] font-bold text-rose-600 uppercase">Libur</p>
+                                        {liburDates.length > 0 && <i className="fa-solid fa-calendar-xmark text-[8px] text-rose-500"></i>}
+                                      </div>
+                                      <p className="text-[12px] font-black text-rose-700">{totalLibur}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  {(() => {
+                                    const totalLembur = monthData.filter(e => e.status === 'Lembur').length;
+                                    if (totalLembur > 0) {
+                                      return (
+                                        <div className="mt-2 text-center bg-emerald-50/70 border border-emerald-100 rounded-lg p-1.5">
+                                          <p className="text-[10px] font-black text-emerald-600 tracking-wide uppercase">
+                                            <i className="fa-solid fa-medal text-emerald-500 mr-1"></i> {totalLembur} Hari Lembur Sah
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                  
+                                  {absenLateHistoryId === id && latePagiDates.length > 0 && (
+                                    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+                                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl relative animate-in slide-in-from-top-4">
+                                        <button onClick={() => setAbsenLateHistoryId(null)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-500 transition-colors">
+                                          <i className="fa-solid fa-xmark"></i>
+                                        </button>
+                                        <h3 className="text-[14px] font-black text-gray-800 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                          <i className="fa-solid fa-clock-rotate-left text-red-500"></i> Riwayat Telat
+                                        </h3>
+                                        <p className="text-[10px] text-gray-500 font-bold mb-4">Kasir: <span className="text-gray-800">{acc.name}</span></p>
+                                        <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                                          {latePagiDates.map((late, idx) => {
+                                            const [y, m, d] = late.tanggal.split('-');
+                                            const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                            const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                            return (
+                                              <div key={idx} className="flex flex-col gap-1 text-[11px] bg-red-50/50 px-3 py-2.5 rounded-xl border border-red-100 shadow-sm">
+                                                <div className="flex justify-between items-center">
+                                                  <span className="font-bold text-gray-700">{dateStr}</span>
+                                                  <span className="font-black text-red-600 bg-white px-2 py-1 rounded shadow-sm border border-red-100">{late.jam}</span>
+                                                </div>
+                                                {late.alasan_telat ? (
+                                                  <p className="text-[9px] text-gray-600 font-medium bg-white/50 p-1.5 rounded border border-red-50 mt-0.5">
+                                                    <span className="font-bold text-gray-800">Alasan:</span> {late.alasan_telat}
+                                                  </p>
+                                                ) : (
+                                                  <p className="text-[9px] text-gray-400 font-medium bg-white/50 p-1.5 rounded border border-red-50 mt-0.5 italic">
+                                                    Tidak ada keterangan
+                                                  </p>
+                                                )}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {absenLiburHistoryId === id && liburDates.length > 0 && (
+                                    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+                                      <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl relative animate-in slide-in-from-top-4">
+                                        <button onClick={() => setAbsenLiburHistoryId(null)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-rose-100 hover:text-rose-500 transition-colors">
+                                          <i className="fa-solid fa-xmark"></i>
+                                        </button>
+                                        <h3 className="text-[14px] font-black text-gray-800 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                          <i className="fa-solid fa-calendar-xmark text-rose-500"></i> Riwayat Libur
+                                        </h3>
+                                        <p className="text-[10px] text-gray-500 font-bold mb-4">Kasir: <span className="text-gray-800">{acc.name}</span></p>
+                                        <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                                          {liburDates.map((ldate, idx) => {
+                                            const [y, m, d] = ldate.split('-');
+                                            const dateObj = new Date(Number(y), Number(m)-1, Number(d));
+                                            const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                            return (
+                                              <div key={idx} className="flex justify-between items-center text-[11px] bg-rose-50/50 px-3 py-2.5 rounded-xl border border-rose-100 shadow-sm">
+                                                <span className="font-bold text-gray-700">{dateStr}</span>
+                                                <span className="font-black text-rose-600 bg-white px-2 py-1 rounded shadow-sm border border-rose-100">LIBUR</span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* KEHADIRAN HARI INI */}
+                        {isCurrentMonth && (
+                        <div className="space-y-3">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">
+                            Kehadiran Hari Ini ({today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })})
+                          </p>
+                          
+                          <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                            {/* Header Summary */}
+                            <div className="bg-teal-50/50 px-4 py-2.5 border-b border-gray-50 flex justify-between items-center">
+                              <h4 className="text-[11px] font-black text-teal-900 uppercase tracking-widest">
+                                Status Shift
+                              </h4>
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
+                                <span className="text-[8px] font-black text-teal-600 uppercase tracking-tighter">Live Monitor</span>
+                              </span>
+                            </div>
+                            
+                            <div className="divide-y divide-gray-50">
+                              {cashiers.map(([id, acc]) => {
+                                const todayStr = today.toLocaleDateString('en-CA')
+                                const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
+                                
+                                let shiftLabel = 'BELUM ABSEN'
+                                let shiftColor = 'text-gray-400 bg-gray-50'
+                                
+                                if (entry) {
+                                  const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                  shiftLabel = info.shiftName;
+                                  if (info.isPagi) shiftColor = 'text-orange-600 bg-orange-50';
+                                  else shiftColor = 'text-purple-600 bg-purple-50';
+                                  
+                                  if (info.isLate) {
+                                     shiftLabel += ` (TELAT ${info.lateMins}M)`;
+                                     shiftColor = 'text-red-600 bg-red-50';
+                                  }
+                                }
+
+                                return (
+                                  <div key={`today-${id}`} className="px-4 py-3.5 flex justify-between items-center bg-white hover:bg-gray-50/50 transition-colors">
+                                    <div className="w-1/3">
+                                      <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                    </div>
+                                    
+                                    <div className="flex-1 text-center">
+                                      <span className={cn("px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                        {shiftLabel}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="w-1/4 text-right">
+                                      <p className="text-[7px] font-black text-gray-400 uppercase leading-none mb-1">JAM MASUK</p>
+                                      <p className={cn(
+                                        "text-[11px] font-black tabular-nums leading-none",
+                                        entry ? "text-teal-600" : "text-gray-300"
+                                      )}>
+                                        {entry ? entry.jam_masuk : '--:--'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+                    )
+                  })() : (() => {
+                    const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
+                    
+                    const [yyyy, mm] = absenFilterMonth.split('-').map(Number);
+                    const daysInMonth = new Date(yyyy, mm, 0).getDate();
+                    const daysInSelectedMonth = Array.from({length: daysInMonth}, (_, i) => {
+                      const d = new Date(yyyy, mm - 1, daysInMonth - i) // descending order
+                      return d
+                    })
+
+                    return (
+                      <div className="space-y-4">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Riwayat Bulan {new Date(yyyy, mm - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
+                        
+                        {daysInSelectedMonth.map(date => {
+                          const dateStr = date.toLocaleDateString('en-CA')
+                          const dayAttendance = props.absensiList?.filter(a => a.tanggal === dateStr) || []
+                          
+                          // Only show if there's at least one attendance or if it's within a few days
+                          if (dayAttendance.length === 0 && date > new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) {
+                             // Keep showing last 3 days even if empty as per user request to see "Belum Absen"
+                          } else if (dayAttendance.length === 0) {
+                            return null; // Don't show empty old dates
+                          }
+
+                          return (
+                            <div key={dateStr} className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                              {/* Date Header */}
+                              <div className="bg-blue-50/50 px-4 py-2.5 border-b border-gray-50">
+                                <h4 className="text-[11px] font-black text-blue-900">
+                                  {date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </h4>
+                              </div>
+                              
+                              <div className="divide-y divide-gray-50">
+                                {cashiers.map(([id, acc]) => {
+                                  const entry = dayAttendance.find(a => a.username === id)
+                                  
+                                  // Determine Shift/Color based on time (matching photo aesthetics)
+                                  let shiftLabel = 'BELUM ABSEN'
+                                  let shiftColor = 'text-gray-300'
+                                  
+                                  if (entry) {
+                                    const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                    shiftLabel = info.shiftName;
+                                    if (info.isPagi) shiftColor = 'text-orange-500';
+                                    else shiftColor = 'text-purple-600';
+                                    
+                                    if (info.isLate) {
+                                       shiftLabel += ` (TELAT ${info.lateMins}M)`;
+                                       shiftColor = 'text-red-500';
+                                    }
+
+                                    if (entry.status === 'Lembur') {
+                                       shiftLabel = 'LEMBUR SAH';
+                                       shiftColor = 'text-emerald-500';
+                                    }
+                                  }
+
+                                  return (
+                                    <div key={id} className="px-4 py-3 flex justify-between items-center bg-white border-b border-gray-50/50">
+                                      <div className="w-1/3">
+                                        <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                      </div>
+                                      
+                                      <div className="flex-1 text-center">
+                                        <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                          {shiftLabel}
+                                        </p>
+                                        {entry?.alasan_telat && (
+                                          <p className="text-[7.5px] text-red-500 font-bold mt-1 max-w-[120px] mx-auto leading-tight line-clamp-2" title={entry.alasan_telat}>
+                                            "{entry.alasan_telat}"
+                                          </p>
+                                        )}
+                                        {entry && props.kasirRole === 'owner' && (
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); if(entry.id) handleToggleLembur(entry.id, entry.status); }}
+                                            className={cn("mt-1.5 px-2 py-0.5 rounded text-[7px] font-black uppercase active:scale-95 transition-all shadow-sm border", entry.status === 'Lembur' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100")}
+                                          >
+                                            {entry.status === 'Lembur' ? 'Batalkan Lembur' : 'Jadikan Lembur'}
+                                          </button>
+                                        )}
+                                      </div>
+                                      
+                                      <div className="w-1/4 text-right">
+                                        <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
+                                        <p className={cn(
+                                          "text-[10px] font-black tabular-nums leading-none",
+                                          entry ? "text-blue-600" : "text-gray-200"
+                                        )}>
+                                          {entry ? entry.jam_masuk : '--:--'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {activeOwnerSubView === 'gaji' && (
+                <GajiPanel 
+                  kasirList={props.kasirList} 
+                  absensiList={props.absensiList} 
+                  storeName={props.storeName} 
+                  showToast={props.showToast}
+                  activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
+                  transactions={props.transactions}
+                  gajiBonusList={props.gajiBonusList}
+                  fetchGajiBonus={props.fetchGajiBonus}
+                />
+              )}
+
+              {activeOwnerSubView === 'backup' && (
+                <div className="animate-in fade-in zoom-in-95 duration-300">
+                  <PengaturanPanel 
+                    transactions={props.transactions} 
+                    absensiList={props.absensiList} 
+                    storeName={props.storeName} 
+                    showToast={props.showToast}
+                    onConfirm={props.onConfirm}
+                    activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
+                    onSaveCashierSelf={props.onSaveCashierSelf}
+                    kasirList={props.kasirList}
+                  />
+                </div>
+              )}
+
+              {activeOwnerSubView === 'izin' && (
+                <div className="space-y-4">
+                  {/* Form Input Izin */}
+                  <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
+                    <h4 className="text-[10px] font-black text-orange-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <i className="fa-solid fa-pen-to-square"></i> Catat Izin Baru
+                    </h4>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NAMA KASIR</label>
+                        <div className="relative">
+                          <input 
+                            list="kasir-list-izin"
+                            value={izinNamaKasir} 
+                            onChange={e => setIzinNamaKasir(e.target.value)}
+                            placeholder="Pilih atau ketik nama kasir"
+                            className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400"
+                          />
+                          <datalist id="kasir-list-izin">
+                            {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                              <option key={id} value={acc.name} />
+                            ))}
+                          </datalist>
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-orange-400 pointer-events-none"></i>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL IZIN</label>
+                        <input 
+                          type="date" 
+                          value={izinTanggal} 
+                          onChange={e => setIzinTanggal(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-orange-400" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">ALASAN</label>
+                        <textarea 
+                          value={izinAlasan} 
+                          onChange={e => setIzinAlasan(e.target.value)}
+                          placeholder="Tulis alasan izin..." 
+                          rows={2}
+                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white resize-none focus:border-orange-400"
+                        ></textarea>
+                      </div>
+                      <button 
+                        onClick={simpanIzin}
+                        className="w-full bg-orange-600 text-white text-[10px] font-black py-2.5 rounded-lg uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-save"></i> Simpan Catatan
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Daftar Catatan Izin */}
+                  {catatanIzin.length === 0 ? (
+                    <div className="text-center py-8 space-y-2">
+                      <i className="fa-solid fa-clipboard-list text-2xl text-gray-300"></i>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada catatan izin</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Riwayat Izin ({catatanIzin.length})</p>
+                      {(() => {
+                        const izinWithIndex = catatanIzin.map((item, originalIndex) => ({ ...item, originalIndex }));
+                        const groupedIzin: Record<string, typeof izinWithIndex> = {};
+                        izinWithIndex.forEach(item => {
+                          const dateObj = parseLocalISO(item.tanggal);
+                          const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                          if (!groupedIzin[monthKey]) groupedIzin[monthKey] = [];
+                          groupedIzin[monthKey].push(item);
+                        });
+                        
+                        const sortedMonths = Object.keys(groupedIzin).sort((a,b) => b.localeCompare(a));
+                        
+                        return sortedMonths.map(monthKey => {
+                          const [y, m] = monthKey.split('-');
+                          const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+                          const monthName = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                          const isExpanded = expandedMonthIzin === monthKey;
+                          const items = groupedIzin[monthKey];
+                          
+                          return (
+                            <div key={monthKey} className="border border-gray-100 rounded-2xl bg-white overflow-hidden shadow-sm">
+                              <div 
+                                onClick={() => setExpandedMonthIzin(isExpanded ? null : monthKey)}
+                                className="p-3 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <i className={`fa-solid ${isExpanded ? 'fa-folder-open text-orange-500' : 'fa-folder text-orange-400'} text-lg`}></i>
+                                  <div>
+                                    <p className="text-xs font-black text-gray-800">{monthName}</p>
+                                    <p className="text-[9px] text-gray-500 font-bold">{items.length} catatan</p>
+                                  </div>
+                                </div>
+                                <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 text-[10px]`}></i>
+                              </div>
+                              
+                              {isExpanded && (
+                                <div className="p-2 space-y-2 bg-white/50 border-t border-gray-100">
+                                  {items.map((item: any) => (
+                                    <div key={item.originalIndex} className="p-3 border border-gray-100 rounded-xl bg-white flex justify-between items-start gap-2 shadow-sm">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-black text-gray-800">{item.nama}</p>
+                                        <p className="text-[9px] text-orange-600 font-bold mt-0.5">
+                                          <i className="fa-regular fa-calendar-alt mr-1"></i>
+                                          {parseLocalISO(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </p>
+                                        <p className="text-[10px] text-gray-600 mt-1 leading-snug">{item.alasan}</p>
+                                      </div>
+                                      <button 
+                                        onClick={() => hapusIzin(item.originalIndex)} 
+                                        className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 hover:bg-red-200 transition-all"
+                                      >
+                                        <i className="fa-solid fa-trash text-[10px]"></i>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeOwnerSubView === 'grafik' && (() => {
+                if (isAnalyticsLoading) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                       <i className="fa-solid fa-spinner fa-spin text-4xl text-purple-200 mb-3"></i>
+                       <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Memuat Grafik...</p>
+                    </div>
+                  )
+                }
+
+                const now = new Date()
+                now.setHours(0,0,0,0)
+                
+                // Helper to format Date string to 'YYYY-MM-DD' safely
+                const formatLocalISO = (d: Date | string) => {
+                  if (!d) return '';
+                  if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    return d.substring(0, 10);
+                  }
+                  try {
+                    const dateObj = typeof d === 'string' ? new Date(d) : d;
+                    if (isNaN(dateObj.getTime())) return '';
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  } catch (e) {
+                    return '';
+                  }
+                }
+
+                // Filter analytics by selected Kasir
+                let filteredAnalytics = analyticsData;
+                let filterKasirName = grafikFilterKasir;
+                
+                if (grafikFilterKasir !== 'Semua') {
+                  filterKasirName = props.kasirList[grafikFilterKasir]?.name || grafikFilterKasir;
+                  // DB stores kasir_id as login username (grafikFilterKasir), so match against that
+                  filteredAnalytics = filteredAnalytics.filter(r => 
+                    (r.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase()
+                  );
+                }
+
+                // Function to group by date string prefix
+                const sumByPrefix = (prefix: string) => 
+                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                   .reduce((s, r) => s + Number(r.total_omzet), 0)
+
+                let trendData: { label: string, value: number }[] = []
+                
+                if (grafikRange === 'harian') {
+                  trendData = Array.from({length: 7}, (_, i) => {
+                    const d = new Date(now)
+                    d.setDate(d.getDate() - (6 - i))
+                    const prefix = formatLocalISO(d)
+                    return { label: d.toLocaleDateString('id-ID', { weekday: 'short' }), value: sumByPrefix(prefix) }
+                  })
+                } else if (grafikRange === 'mingguan') {
+                  trendData = Array.from({length: 4}, (_, i) => {
+                    const d = new Date(now)
+                    d.setDate(d.getDate() - (21 - i * 7)) 
+                    let weekSum = 0
+                    for(let j=0; j<7; j++) {
+                      const wd = new Date(d)
+                      wd.setDate(wd.getDate() + j)
+                      const prefix = formatLocalISO(wd)
+                      weekSum += sumByPrefix(prefix)
+                    }
+                    return { label: `M${i+1}`, value: weekSum }
+                  })
+                } else {
+                  trendData = Array.from({length: 6}, (_, i) => {
+                    const d = new Date(now)
+                    d.setMonth(d.getMonth() - (5 - i))
+                    const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                    return { label: d.toLocaleDateString('id-ID', { month: 'short' }), value: sumByPrefix(yearMonth) }
+                  })
+                }
+
+                const maxTrendVal = Math.max(...trendData.map(d => d.value), 1)
+
+                // KPI Metriks from Analytics Data
+                const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet), 0)
+                const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi), 0)
+                const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0
+                const totalAdminLaba = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_admin || 0), 0)
+
+                // Use analyticsRawData (which contains up to 6 months of raw txs) for Category and Time analysis
+                const recentValidTxs = analyticsRawData.filter(t => t && t.kategori && !t.kategori.startsWith('Isi'))
+                let filteredRecentTxs = recentValidTxs
+                if (grafikFilterKasir !== 'Semua') {
+                  filteredRecentTxs = filteredRecentTxs.filter(t => (t.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase())
+                }
+
+                // Kategori Terlaris (Tren Terbaru)
+                const kategoriMap = new Map<string, number>()
+                filteredRecentTxs.forEach(t => {
+                  const cat = t.kategori || 'Lainnya'
+                  kategoriMap.set(cat, (kategoriMap.get(cat) || 0) + (t.nominal || 0))
+                })
+                const categoryData = Array.from(kategoriMap.entries()).map(([k, v]) => ({ label: k, value: v })).sort((a,b) => b.value - a.value)
+
+                // Jam Sibuk (Time Blocks Tren Terbaru)
+                const hourMap = new Array(24).fill(0)
+                filteredRecentTxs.forEach(t => {
+                  if (!t.timestamp) return;
+                  try {
+                    let h = 0;
+                    if (typeof t.timestamp === 'string' && t.timestamp.includes('T')) {
+                      h = parseInt(t.timestamp.split('T')[1].substring(0, 2), 10);
+                    } else {
+                      const d = new Date(t.timestamp);
+                      if (!isNaN(d.getTime())) h = d.getHours();
+                    }
+                    if (!isNaN(h) && h >= 0 && h < 24) hourMap[h]++;
+                  } catch(e) {}
+                })
+                const timeBlocks = [
+                  { label: 'Pagi', sub: '06-12', value: hourMap.slice(6, 12).reduce((a,b)=>a+b,0) },
+                  { label: 'Siang', sub: '12-15', value: hourMap.slice(12, 15).reduce((a,b)=>a+b,0) },
+                  { label: 'Sore', sub: '15-18', value: hourMap.slice(15, 18).reduce((a,b)=>a+b,0) },
+                  { label: 'Malam', sub: '18-24', value: hourMap.slice(18, 24).reduce((a,b)=>a+b,0) + hourMap.slice(0, 6).reduce((a,b)=>a+b,0) }
+                ]
+                const maxTimeVal = Math.max(...timeBlocks.map(d => d.value), 1)
+
+                return (
+                  <div className="space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {/* Controls */}
+                    <div className="bg-white p-2 rounded-[1.25rem] border border-gray-100 shadow-sm flex items-center justify-between gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value={grafikFilterKasir}
+                          onChange={(e) => setGrafikFilterKasir(e.target.value)}
+                          className="w-full bg-gray-50 border border-gray-100 text-gray-800 text-[10px] font-black py-2.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none transition-all hover:bg-gray-100"
+                        >
+                          <option value="Semua">Semua Kasir</option>
+                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                            <option key={id} value={id}>{acc.name}</option>
+                          ))}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                      </div>
+
+                      <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
+                        {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
+                          <button 
+                            key={range}
+                            onClick={() => setGrafikRange(range)}
+                            className={cn(
+                              "text-[9px] font-black uppercase px-2.5 py-2 rounded-lg transition-all",
+                              grafikRange === range ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                            )}
+                          >
+                            {range === 'harian' ? 'HARI' : range === 'mingguan' ? 'MINGGU' : 'BULAN'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* KPI Cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-emerald-200 relative overflow-hidden group">
+                        <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-emerald-100 uppercase tracking-widest relative z-10 mb-1">TOTAL OMZET</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {totalVolume.toLocaleString('id-ID')}</h2>
+                      </div>
+                      
+                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-blue-200 relative overflow-hidden group">
+                        <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-blue-100 uppercase tracking-widest relative z-10 mb-1">TRANSAKSI</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">{totalItems.toLocaleString('id-ID')} <span className="text-[9px]">item</span></h2>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-purple-200 relative overflow-hidden group">
+                        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <p className="text-[8px] font-black text-purple-100 uppercase tracking-widest relative z-10 mb-1">RATA-RATA</p>
+                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {avgTransaction.toLocaleString('id-ID')}</h2>
+                      </div>
+                    </div>
+
+                    {/* KPI Card: Total Laba/Admin */}
+                    <div className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 p-4 rounded-[1.5rem] text-white shadow-lg shadow-orange-200 relative overflow-hidden group">
+                      <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                      <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+                      <div className="relative z-10 flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-black text-amber-100 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                            <i className="fa-solid fa-sack-dollar"></i> TOTAL LABA / ADMIN FEE
+                          </p>
+                          <h2 className="text-xl font-black text-white tabular-nums">Rp {totalAdminLaba.toLocaleString('id-ID')}</h2>
+                          <p className="text-[9px] text-amber-100 mt-0.5 font-bold">
+                            {totalItems > 0 ? `Rata-rata Rp ${Math.round(totalAdminLaba / totalItems).toLocaleString('id-ID')} / transaksi` : 'Belum ada transaksi'}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-coins text-2xl text-white/80"></i>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Chart 1: Tren Pendapatan */}
+                    <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+                        <div>
+                          <h4 className="text-[13px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                            <i className="fa-solid fa-chart-line text-blue-500"></i> Tren Pendapatan
+                          </h4>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                            {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
+                          </p>
+                        </div>
+                        
+                        {/* Toggle Bar vs Line */}
+                        <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100">
+                          <button
+                            onClick={() => setGrafikType('bar')}
+                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'bar' ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                          >
+                            <i className="fa-solid fa-chart-column"></i> Bar
+                          </button>
+                          <button
+                            onClick={() => setGrafikType('line')}
+                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'line' ? "bg-white text-amber-500 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                          >
+                            <i className="fa-solid fa-bolt"></i> Petir
+                          </button>
+                        </div>
+                      </div>
+
+                      <style>{`
+                        @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+                        .animate-grow { animation: growUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
+                        @keyframes dashLine { to { stroke-dashoffset: 0; } }
+                      `}</style>
+
+                      {grafikType === 'bar' ? (
+                        <div className="h-44 flex items-end justify-between gap-1.5 relative mt-6">
+                          {/* Background lines */}
+                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7">
+                             {[...Array(4)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                          </div>
+
+                          {trendData.map((d, i) => {
+                            const heightPct = Math.max((d.value / maxTrendVal) * 100, 2);
+                            return (
+                              <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-7 z-10">
+                                <div className="absolute -top-8 bg-gray-800 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/bar:opacity-100 group-active/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 shadow-lg transform -translate-y-2 group-hover/bar:-translate-y-4">
+                                  Rp {d.value.toLocaleString('id-ID')}
+                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                                </div>
+                                <div 
+                                  className="w-full max-w-[32px] bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t-xl shadow-sm animate-grow transition-all group-hover/bar:brightness-110 group-active/bar:brightness-110 cursor-pointer relative overflow-hidden"
+                                  style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
+                                >
+                                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity"></div>
+                                </div>
+                                <span className="absolute bottom-0 text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate w-full text-center">
+                                  {d.label}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="h-44 relative mt-6 pt-4">
+                          {/* Background Grid Lines */}
+                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7 pt-4">
+                             {[...Array(4)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                          </div>
+                          
+                          {/* SVG Line / Petir */}
+                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                              <defs>
+                                <linearGradient id="petirGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+                                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+                                </linearGradient>
+                                <filter id="glowPetir">
+                                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                  <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                  </feMerge>
+                                </filter>
+                              </defs>
+                              
+                              {(() => {
+                                const pts = trendData.map((d, i) => {
+                                  const x = (i / Math.max(trendData.length - 1, 1)) * 100;
+                                  const y = 100 - (d.value / maxTrendVal) * 100;
+                                  return `${x},${y}`;
+                                }).join(' ');
+                                
+                                const areaPts = `0,100 ${pts} 100,100`;
+                                
+                                return (
+                                  <>
+                                    <polygon points={areaPts} fill="url(#petirGrad)" className="animate-in fade-in duration-1000" />
+                                    <polyline 
+                                      points={pts} 
+                                      fill="none" 
+                                      stroke="#f59e0b" 
+                                      strokeWidth="3" 
+                                      vectorEffect="non-scaling-stroke"
+                                      strokeLinejoin="round" 
+                                      strokeLinecap="round" 
+                                      filter="url(#glowPetir)"
+                                      className="animate-[dashLine_1.5s_ease-out_forwards]"
+                                      strokeDasharray="1000"
+                                      strokeDashoffset="1000"
+                                    />
+                                  </>
+                                )
+                              })()}
+                            </svg>
+                          </div>
+                          
+                          {/* Nodes & Tooltips */}
+                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
+                            {trendData.map((d, i) => {
+                              const leftPct = (i / Math.max(trendData.length - 1, 1)) * 100;
+                              const bottomPct = (d.value / maxTrendVal) * 100;
+                              return (
+                                <div key={i} className="absolute group/node cursor-pointer z-10 w-6 h-6 -translate-x-1/2 translate-y-1/2" style={{ left: `${leftPct}%`, bottom: `calc(${bottomPct}% + 28px)` }}>
+                                  <div className="absolute bottom-full mb-2 bg-amber-600 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/node:opacity-100 transition-opacity whitespace-nowrap z-20 shadow-lg transform -translate-x-1/2 left-1/2 pointer-events-none">
+                                    Rp {d.value.toLocaleString('id-ID')}
+                                    <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-600 rotate-45"></div>
+                                  </div>
+                                  <div className="w-3 h-3 rounded-full border-[3px] border-white bg-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-md transform transition-transform group-hover/node:scale-150"></div>
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          {/* Labels */}
+                          <div className="absolute bottom-0 left-0 w-full flex justify-between px-1">
+                            {trendData.map((d, i) => (
+                              <div key={i} className="flex-1 flex justify-center">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate text-center">
+                                  {d.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      {/* Chart 2: Kategori Terlaris (Donut) */}
+                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
+                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
+                          <i className="fa-solid fa-chart-pie text-orange-500"></i> Kategori
+                        </h4>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Omzet per jenis</p>
+                        
+                        {(() => {
+                          const total = categoryData.reduce((s, d) => s + d.value, 0) || 1;
+                          let currentOffset = 0;
+                          const colors = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
+                          return (
+                            <div className="flex-1 flex flex-col">
+                              <div className="h-28 flex items-center justify-center relative mb-4">
+                                <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible transform -rotate-90">
+                                  {categoryData.map((d, i) => {
+                                    if (d.value === 0) return null;
+                                    const radius = 40;
+                                    const circumference = 2 * Math.PI * radius;
+                                    const percentage = d.value / total;
+                                    const strokeLength = percentage * circumference;
+                                    const dasharray = `${strokeLength} ${circumference}`;
+                                    const dashoffset = -currentOffset;
+                                    currentOffset += strokeLength;
+                                    return (
+                                      <circle
+                                        key={i}
+                                        cx="50"
+                                        cy="50"
+                                        r={radius}
+                                        fill="transparent"
+                                        stroke={colors[i % colors.length]}
+                                        strokeWidth="16"
+                                        strokeDasharray={dasharray}
+                                        strokeDashoffset={dashoffset}
+                                        strokeLinecap={percentage > 0.99 ? "round" : "butt"}
+                                        className="animate-in zoom-in duration-1000 hover:stroke-[20] transition-all cursor-pointer"
+                                        style={{ animationDelay: `${i * 100}ms` }}
+                                      >
+                                        <title>{d.label}: Rp {d.value.toLocaleString('id-ID')}</title>
+                                      </circle>
+                                    )
+                                  })}
+                                </svg>
+                                {/* Center Label */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-4px]">
+                                  <span className="text-[10px] font-black text-gray-800">{categoryData.length > 0 ? categoryData[0].label : '-'}</span>
+                                  <span className="text-[7px] text-gray-400 font-bold uppercase tracking-widest">Terlaris</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1.5 mt-auto">
+                                {categoryData.slice(0, 3).map((d, i) => (
+                                  <div key={i} className="flex justify-between items-center">
+                                    <div className="flex items-center gap-1.5 overflow-hidden">
+                                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[i % colors.length] }}></div>
+                                      <span className="text-[9px] font-black text-gray-600 truncate">{d.label}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-gray-900 ml-2">{(d.value/total*100).toFixed(0)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+
+                      {/* Chart 3: Jam Sibuk */}
+                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
+                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
+                          <i className="fa-solid fa-clock text-indigo-500"></i> Jam Sibuk
+                        </h4>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Transaksi</p>
+                        
+                        <div className="flex-1 flex items-end justify-between gap-1 relative mt-2">
+                           <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-4">
+                             {[...Array(3)].map((_, i) => (
+                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
+                             ))}
+                           </div>
+                           
+                           {timeBlocks.map((d, i) => {
+                             const heightPct = Math.max((d.value / maxTimeVal) * 100, 5);
+                             return (
+                               <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-4 z-10">
+                                 <div className="absolute -top-6 bg-gray-800 text-white text-[8px] font-black px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-20">
+                                   {d.value} trx
+                                 </div>
+                                 <div 
+                                   className="w-full max-w-[24px] bg-indigo-100 rounded-t-lg animate-grow transition-all group-hover/bar:bg-indigo-400 relative overflow-hidden"
+                                   style={{ height: `${heightPct}%`, animationDelay: `${i * 100 + 200}ms` }}
+                                 >
+                                   <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-500"></div>
+                                 </div>
+                                 <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
+                                   {d.label}
+                                 </span>
+                               </div>
+                             )
+                           })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {activeOwnerSubView === 'performa' && (
+                <div className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-[2.5rem] border border-purple-100 animate-in fade-in zoom-in duration-500 shadow-xl shadow-purple-500/5">
+                  
+                  {/* Segmented Control Filter */}
+                  <div className="bg-white/60 p-1.5 rounded-2xl mb-6 flex backdrop-blur-md border border-white">
+                    {['harian', 'mingguan', 'bulanan'].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setPerformaRange(r as any)}
+                        className={cn(
+                          "flex-1 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all duration-300",
+                          performaRange === r 
+                            ? "bg-purple-600 text-white shadow-md shadow-purple-200" 
+                            : "text-purple-400 hover:text-purple-600 hover:bg-white/50"
+                        )}
+                      >
+                        {r === 'harian' ? 'HARI INI' : r === 'mingguan' ? 'MINGGU INI' : 'BULAN INI'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {(() => {
+                    if (isAnalyticsLoading) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                           <i className="fa-solid fa-spinner fa-spin text-4xl text-purple-200 mb-3"></i>
+                           <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Menghitung Data...</p>
+                        </div>
+                      )
+                    }
+
+                    // Calculate totals from RPC data
+                    const totalGlobalOmzet = analyticsData.reduce((s, row) => s + Number(row.total_omzet), 0)
+                    const totalGlobalTxs = analyticsData.reduce((s, row) => s + Number(row.total_transaksi), 0)
+
+                    const performaData = Object.keys(props.kasirList)
+                      .filter(id => id !== 'owner')
+                      .map(kId => {
+                        const kasirName = props.kasirList[kId]?.name || kId;
+                        // DB stores kasir_id as the login username (kId), NOT the display name
+                        const rows = analyticsData.filter(r => 
+                          (r.kasir_id || '').trim().toLowerCase() === kId.trim().toLowerCase()
+                        )
+                        const vol = rows.reduce((s, r) => s + Number(r.total_omzet), 0)
+                        const count = rows.reduce((s, r) => s + Number(r.total_transaksi), 0)
+                        const avg = count > 0 ? Math.round(vol / count) : 0
+                        const contribution = totalGlobalOmzet > 0 ? ((vol / totalGlobalOmzet) * 100) : 0
+
+                        return {
+                          id: kId,
+                          name: props.kasirList[kId]?.name || kId,
+                          vol,
+                          count,
+                          avg,
+                          contribution
+                        }
+                      }).sort((a, b) => b.vol - a.vol)
+
+                    if (performaData.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
+                           <i className="fa-solid fa-ghost text-4xl text-purple-200 mb-3"></i>
+                           <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Data kasir tidak ditemukan</p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-4 animate-in fade-in zoom-in duration-500">
+                        {/* Summary KPI Global */}
+                        <div className="grid grid-cols-2 gap-3 mb-2">
+                          <div className="bg-white/60 backdrop-blur rounded-2xl p-3 border border-white">
+                            <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Total Transaksi</p>
+                            <p className="text-sm font-black text-purple-900">{totalGlobalTxs} <span className="text-[9px] text-purple-500 font-bold">Item</span></p>
+                          </div>
+                          <div className="bg-white/60 backdrop-blur rounded-2xl p-3 border border-white">
+                            <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Total Omzet</p>
+                            <p className="text-sm font-black text-purple-900 truncate">Rp {totalGlobalOmzet.toLocaleString('id-ID')}</p>
+                          </div>
+                        </div>
+
+                        {/* Top 1 Highlight */}
+                        {performaData.length > 0 && performaData[0].vol > 0 && (
+                          <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[2rem] p-5 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden group mb-4">
+                            <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3 relative z-10">
+                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-500 shadow-inner text-xl">
+                                  <i className="fa-solid fa-crown"></i>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black text-orange-100 uppercase tracking-widest leading-none mb-1">KASIR TERBAIK</p>
+                                  <h3 className="text-lg font-black text-white leading-none">{performaData[0].name}</h3>
+                                </div>
+                              </div>
+                              <div className="text-right relative z-10">
+                                <p className="text-[2rem] font-black text-white leading-none drop-shadow-md">#1</p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3 relative z-10">
+                              <div className="bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
+                                <p className="text-[8px] font-black text-orange-100 uppercase tracking-widest opacity-80 mb-0.5">Omzet Terkumpul</p>
+                                <p className="text-sm font-black text-white">Rp {performaData[0].vol.toLocaleString('id-ID')}</p>
+                              </div>
+                              <div className="bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10">
+                                <p className="text-[8px] font-black text-orange-100 uppercase tracking-widest opacity-80 mb-0.5">Jumlah Layan</p>
+                                <p className="text-sm font-black text-white">{performaData[0].count} <span className="text-[9px]">Item</span></p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Other Ranks List */}
+                        <div className="space-y-3">
+                          <p className="text-[10px] font-black text-purple-900 uppercase tracking-widest pl-1 mb-1">Rincian Performa Individu</p>
+                          {performaData.map((p, idx) => {
+                            if (idx === 0 && p.vol > 0) return null; // Skip top 1 if already highlighted
+                            
+                            const isZero = p.vol === 0;
+                            return (
+                              <div key={p.id} className={cn(
+                                "p-4 bg-white rounded-2xl border shadow-sm transition-all group",
+                                isZero ? "border-gray-100 opacity-60 grayscale" : "border-purple-100 hover:border-purple-300"
+                              )}>
+                                <div className="flex justify-between items-center mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-inner",
+                                      isZero ? "bg-gray-100 text-gray-400" :
+                                      idx === 0 ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white" :
+                                      idx === 1 ? "bg-gradient-to-br from-gray-300 to-slate-400 text-white" :
+                                      idx === 2 ? "bg-gradient-to-br from-amber-700 to-yellow-800 text-white" :
+                                      "bg-purple-100 text-purple-700"
+                                    )}>
+                                      {idx + 1}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-black text-gray-800 leading-none mb-1">{p.name}</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{p.count} Trx</span>
+                                        {!isZero && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Avg: Rp {(p.avg/1000).toFixed(0)}K</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className={cn("text-sm font-black", isZero ? "text-gray-400" : "text-purple-700")}>
+                                      Rp {p.vol.toLocaleString('id-ID')}
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                {/* Progress Bar Contribution */}
+                                {!isZero && (
+                                  <div className="relative pt-1">
+                                    <div className="flex mb-1 items-center justify-between">
+                                      <span className="text-[8px] font-bold text-purple-400 uppercase tracking-widest">Kontribusi Omzet Toko</span>
+                                      <span className="text-[9px] font-black text-purple-600">{p.contribution.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="overflow-hidden h-1.5 flex rounded-full bg-purple-50">
+                                      <div 
+                                        style={{ width: `${p.contribution}%` }} 
+                                        className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 rounded-full"
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {activeOwnerSubView === 'saldo' && (
+                <div className="space-y-6">
+                  {/* Form Tambah Modal */}
+                  <div className="bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 shadow-sm">
+                    <h4 className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <i className="fa-solid fa-plus-circle"></i> Tambah Saldo Kasir
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Kategori Saldo</label>
+                        <div className="relative">
+                          <select 
+                            value={ownerSaldoKategori}
+                            onChange={e => setOwnerSaldoKategori(e.target.value)}
+                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 pr-10 text-xs font-black text-gray-900 outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="Isi Saldo Bank">🏦 Saldo Bank (Plafon)</option>
+                            <option value="Isi Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 pointer-events-none"></i>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Pilih Kasir</label>
+                        <div className="relative">
+                          <select 
+                            value={ownerSaldoKasirId}
+                            onChange={e => setOwnerSaldoKasirId(e.target.value)}
+                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 pr-10 text-xs font-black text-gray-900 outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">-- Pilih Kasir --</option>
+                            {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                              <option key={id} value={id}>{acc.name} ({id})</option>
+                            ))}
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 pointer-events-none"></i>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-emerald-600 uppercase mb-1 ml-1 block">Nominal Saldo</label>
+                        <input 
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Contoh: 500.000"
+                          value={ownerSaldoNominal}
+                          onChange={e => setOwnerSaldoNominal(formatInputRupiah(e.target.value))}
+                          className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 text-xs font-black text-gray-900 outline-none"
+                        />
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          const nominal = (ownerSaldoNominal.replace(/\./g, ''));
+                          if (!ownerSaldoKasirId || !nominal || parseInt(nominal) <= 0) return props.showToast('Pilih kasir dan masukkan nominal yang valid');
+                          props.onConfirm("TAMBAH SALDO", `Tambah ${ownerSaldoKategori} ${formatRupiah(parseInt(nominal))} ke kasir ${ownerSaldoKasirId}?`, () => {
+                            props.handleOwnerTambahModal?.(ownerSaldoKasirId, parseInt(nominal), ownerSaldoKategori);
+                            setOwnerSaldoNominal('');
+                            setOwnerSaldoKasirId('');
+                            props.showToast("Saldo berhasil ditambahkan");
+                          });
+                        }}
+                        className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 transition-all"
+                      >
+                        Tambah Saldo Sekarang
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ringkasan Modal Hari Ini */}
+                  <div className="space-y-3 mt-8">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Riwayat Penambahan Saldo Hari Ini</h4>
+                    {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => {
+                      const today = getLocalDateString();
+                      const modalHariIni = props.transactions
+                        .filter(t => t.kasir_id === id && t.kategori.startsWith('Isi ') && t.timestamp.startsWith(today))
+                        .reduce((sum, t) => sum + t.nominal, 0);
+
+                      return (
+                        <div key={id} className="bg-white border border-gray-100 p-4 rounded-2xl flex justify-between items-center shadow-sm">
+                          <div>
+                            <p className="text-xs font-black text-gray-800">{acc.name}</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">ID: {id}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[13px] font-black text-emerald-600">{formatRupiah(modalHariIni)}</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter">Total Saldo Ditambahkan</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {activeOwnerSubView === 'catatan' && (
+                <CatatanPanel showToast={props.showToast} onConfirm={props.onConfirm} />
+              )}
+              {activeOwnerSubView === 'profit' && (
+                <NotificationLogPanel
+                  activeStoreId={currentTargetStoreId}
+                  showToast={props.showToast}
+                  onConfirm={props.onConfirm}
+                  bonusKasirList={bonusKasirList}
+                  ownerLateKasirs={ownerLateKasirs}
+                />
+              )}
+            </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {props.kasirRole !== 'owner' && (
+        <div className="px-0 mb-4">
+          <TransactionForm 
+            onSave={props.handleSimpanTransaksi}
+            isSaving={props.isSaving}
+            presets={props.presets}
+            onOpenVoucherJualCepat={() => {
+              props.setActiveView('view-stok-voucher');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
+              }, 100);
+            }}
+            activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+            adminRules={props.adminRules}
+          />
+          {props.kasirRole === 'owner' && (
+            <PengaturanPanel 
+              transactions={props.transactions} 
+              absensiList={props.absensiList} 
+              storeName={props.storeName} 
+              showToast={props.showToast}
+              onConfirm={props.onConfirm}
+              activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
+              onSaveCashierSelf={props.onSaveCashierSelf}
+              kasirList={props.kasirList}
+            />
+          )}
+        </div>
+      )}
+      {props.kasirRole === 'owner' && !isOwnerSubView && (
+        <div className="px-1.5 mb-6">
+          <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-700 to-blue-900 rounded-3xl p-4 shadow-lg shadow-blue-900/20 group">
+            {/* Background Ornaments */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+            
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20 shadow-inner group-hover:scale-105 transition-transform duration-500">
+                    <i className="fa-solid fa-crown text-lg text-amber-400 drop-shadow-md"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white tracking-tight leading-none">Owner Control</h3>
+                    <p className="text-[8px] text-blue-100/70 font-black uppercase tracking-widest mt-1">{props.storeName}</p>
+                  </div>
+                </div>
+
+                {/* Filter Kasir Selector - Conditional */}
+                {localStorage.getItem('alphaPro_showKasirFilter') !== 'false' && (
+                  <div className="relative z-50">
+                    <select 
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      className="appearance-none bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black py-1.5 pl-2.5 pr-6 rounded-lg outline-none cursor-pointer hover:bg-white/20 transition-all uppercase tracking-widest relative z-50 max-w-[80px]"
+                    >
+                      <option value="Semua" className="text-gray-900">Semua</option>
+                      {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                        <option key={id} value={id} className="text-gray-900">{acc.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-white/50 text-[7px] z-10">
+                      <i className="fa-solid fa-chevron-down"></i>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-2.5 rounded-xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[7px] font-black text-blue-200/80 uppercase tracking-widest mb-0.5">Volume</p>
+                  <p className="text-[11px] font-black text-white tabular-nums leading-tight">{formatRupiah(ownerTotalVolume)}</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-2.5 rounded-xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[7px] font-black text-emerald-300 uppercase tracking-widest mb-0.5">Profit</p>
+                  <p className="text-[11px] font-black text-emerald-400 tabular-nums leading-tight">{formatRupiah(ownerTotalAdmin)}</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 p-2.5 rounded-xl hover:bg-white/15 transition-all cursor-default">
+                  <p className="text-[7px] font-black text-amber-300 uppercase tracking-widest mb-0.5">Items</p>
+                  <p className="text-[11px] font-black text-amber-400 tabular-nums leading-tight">{ownerTotalTrx}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-[8px] font-black text-blue-100/60 uppercase tracking-widest">Sistem Online</span>
+                </div>
+                <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">v1.1.0 Premium</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="px-1.5 mb-3">
+        <div className="bg-white border border-gray-300 rounded-xl p-2 shadow-sm mb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white">
+              <i className="fa-solid fa-bolt text-[10px]"></i>
+            </div>
+            <div>
+              <p className="text-[10px] text-black font-black uppercase tracking-tighter">TERAKHIR</p>
+              <p className="text-[12px] font-black text-black leading-none mt-0.5">
+                {props.lastTx ? `${props.lastTx.kategori} • ${formatRupiah(props.lastTx.nominal)}` : 'Belum ada'}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex justify-between items-center mb-1.5 px-0.5">
+          <h3 className="font-black text-black text-[12px] uppercase tracking-tighter">RINGKASAN HARI INI</h3>
+          <button onClick={() => props.setActiveView('view-transaksi')} className="text-[11px] text-blue-700 font-black uppercase tracking-tighter border-b border-blue-700 leading-none">LIHAT SEMUA</button>
+        </div>
+
+        {/* PROGRESS BAR TARGET TRX UNTUK KASIR */}
+        {props.kasirRole !== 'owner' && (() => {
+          const target = props.kasirList[props.username]?.targetTrx || financialSettings?.defaultTargetTrx || 0;
+          if (target > 0) {
+            const pct = Math.min(Math.round((ownerTotalTrx / target) * 100), 100);
+            const isCompleted = pct >= 100;
+            return (
+              <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm mb-3">
+                <div className="flex justify-between items-center mb-1.5">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <i className="fa-solid fa-bullseye text-blue-500"></i> Target Hari Ini
+                  </p>
+                  {isCompleted ? (
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <i className="fa-solid fa-check-circle"></i> Tercapai!
+                    </span>
+                  ) : (
+                    <p className="text-[10px] font-black text-slate-800 tabular-nums">{ownerTotalTrx} / {target} TRX</p>
+                  )}
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full rounded-full transition-all duration-1000",
+                      isCompleted ? "bg-emerald-500" : pct >= 70 ? "bg-amber-400" : "bg-blue-500"
+                    )}
+                    style={{ width: `${pct}%` }}
+                  ></div>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+        
+        <SummaryCards 
+          totalTransactions={ownerTotalTrx}
+          totalVolume={ownerTotalVolume}
+          totalAdmin={ownerTotalAdmin}
+        />
+      </div>
+    </div>
+  )
+}
+
+export default BerandaView
