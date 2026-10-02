@@ -32,7 +32,7 @@ const SidebarPC: React.FC<SidebarPCProps> = ({
   const menuItems = [
     { id: 'view-beranda', label: 'Transaksi', icon: 'fa-house' },
     { id: 'view-transaksi', label: 'Riwayat', icon: 'fa-clock' },
-    { id: 'view-isi-saldo', label: 'Isi Saldo', icon: 'fa-wallet' },
+    { id: 'view-isi-saldo', label: 'Transaksi', icon: 'fa-wallet' },
     { id: 'view-laporan', label: 'Laporan', icon: 'fa-chart-simple' },
     { id: 'view-akun', label: 'Akun & Owner', icon: 'fa-user-tie' },
     { id: 'view-otomatis', label: 'Otomatis', icon: 'fa-wand-magic-sparkles' }

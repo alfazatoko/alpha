@@ -2428,7 +2428,7 @@ const MainApp: React.FC<MainAppProps> = ({
                     'view-transaksi': 'Riwayat',
                     'view-laporan': 'Laporan',
                     'view-akun': 'Akun',
-                    'view-isi-saldo': 'Isi Saldo',
+                    'view-isi-saldo': 'Transaksi',
                     'view-kasbon': 'Kasbon',
                     'view-kontak': 'Kontak',
                     'view-stok-voucher': 'Voucher',

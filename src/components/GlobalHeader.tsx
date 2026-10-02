@@ -16,12 +16,14 @@ export interface GlobalHeaderProps {
   notifBadgeCount?: number;
   onNotifClick?: () => void;
   notifPopupContent?: React.ReactNode;
+  onShowBannerClick?: () => void;
 }
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   storePhoto, storeName, storeSubtext, kasirName, kasirRole, 
   dayName: propDayName, fullDate: propFullDate, clockStr: propClockStr,
-  onMenuClick, showNotifBadge, notifBadgeCount, onNotifClick, notifPopupContent
+  onMenuClick, showNotifBadge, notifBadgeCount, onNotifClick, notifPopupContent,
+  onShowBannerClick
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -66,6 +68,15 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         {/* BUTTONS */}
         <div className="flex flex-col items-end justify-center gap-1">
           <div className="flex items-center justify-end gap-1.5">
+            {onShowBannerClick && (
+              <button 
+                onClick={onShowBannerClick} 
+                title="Tampilkan Notifikasi Banner"
+                className="w-8 h-8 rounded-[10px] bg-indigo-500/90 backdrop-blur-md flex items-center justify-center text-white border border-indigo-400/50 shadow-lg active:scale-90 hover:bg-indigo-600/90 transition-all"
+              >
+                <i className="fa-solid fa-bullhorn text-[11px]"></i>
+              </button>
+            )}
             <button 
               onClick={() => window.location.reload()} 
               className="w-8 h-8 rounded-[10px] bg-emerald-500/90 backdrop-blur-md flex items-center justify-center text-white border border-emerald-400/50 shadow-lg active:scale-90 hover:bg-emerald-600/90 transition-all"

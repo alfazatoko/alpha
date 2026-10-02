@@ -2022,20 +2022,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         setWhiteCardIndex(newIndex)
       }
     }, 5000);
-
-    const blueInterval = setInterval(() => {
-      const blueEl = document.getElementById('blue-carousel')
-      if (blueEl && blueEl.clientWidth > 0) {
-        let newIndex = Math.round(blueEl.scrollLeft / blueEl.clientWidth) + 1;
-        if (newIndex > 1) newIndex = 0;
-        blueEl.scrollTo({ left: newIndex * blueEl.clientWidth, behavior: 'smooth' })
-        setBlueCardIndex(newIndex)
-      }
-    }, 10000);
     
     return () => {
       clearInterval(transInterval);
-      clearInterval(blueInterval);
     };
   }, [props.active]);
 
@@ -2686,15 +2675,20 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   
   const currentMonthISO = todayISO.substring(0, 7);
   const ownerMonthTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(currentMonthISO) && !t.kategori.startsWith('Isi'));
-  const ownerMonthTotalAdmin = ownerMonthTxs.filter(t => 
-    !(t.keterangan || '').includes('[KHUSUS]') && 
-    !(t.keterangan || '').includes('[NON_TUNAI]')
-  ).reduce((s, t) => s + t.adminFee, 0);
-  const ownerMonthTotalTrx = ownerMonthTxs.length;
+  
+  const ownerMonthSalesTxs = ownerDisplayTxs.filter(t => {
+    if (!t.timestamp.startsWith(currentMonthISO)) return false;
+    const c = (t.kategori || '').toLowerCase();
+    const k = (t.keterangan || '').toUpperCase();
+    if (k.includes('[KHUSUS]') || k.includes('[NON_TUNAI]') || k.includes('[ADMIN_DALAM]')) return false;
+    if (c.includes('isi saldo bank') || c.includes('isi modal') || c.includes('setor modal') || c.includes('tambah saldo') || c.includes('topup saldo') || c.includes('tarik tunai')) return false;
+    return true;
+  });
 
-  const ownerMonthTotalUangMasuk = ownerMonthTxs
-    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
-    .reduce((s, t) => s + t.nominal, 0);
+  const ownerMonthTotalAdmin = ownerMonthSalesTxs.reduce((s, t) => s + t.adminFee, 0);
+  const ownerMonthTotalTrx = ownerMonthSalesTxs.length;
+
+  const ownerMonthTotalUangMasuk = ownerMonthSalesTxs.reduce((s, t) => s + t.nominal, 0);
 
   const ownerTotalUangMasuk = ownerTodayTxs
     .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
@@ -2703,6 +2697,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     !(t.keterangan || '').includes('[KHUSUS]') && 
     !(t.keterangan || '').includes('[NON_TUNAI]')
   ).reduce((s, t) => s + t.adminFee, 0)
+  
   const ownerTotalTrx = ownerTodayTxs.length
   const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
 
@@ -2760,6 +2755,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               fullDate={fullDate}
               clockStr={clockStr}
               onMenuClick={() => props.setIsSidePanelOpen(true)}
+              onShowBannerClick={
+                props.kasirRole === 'owner' && (isBonusDismissed || isBriefingDismissed)
+                  ? () => {
+                      setIsBonusDismissed(false);
+                      setIsBriefingDismissed(false);
+                      localStorage.removeItem('alphaPro_owner_bonus_dismissed');
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`);
+                    }
+                  : undefined
+              }
               showNotifBadge={
                 props.kasirRole === 'owner' 
                   ? totalUnreadCount > 0 
@@ -2853,7 +2859,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 }}
                 activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
                 adminRules={props.adminRules}
-                hideHeader={true}
               />
             </div>
           </div>
@@ -2875,6 +2880,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           fullDate={fullDate}
           clockStr={clockStr}
           onMenuClick={() => props.setIsSidePanelOpen(true)}
+          onShowBannerClick={
+            props.kasirRole === 'owner' && (isBonusDismissed || isBriefingDismissed)
+              ? () => {
+                  setIsBonusDismissed(false);
+                  setIsBriefingDismissed(false);
+                  localStorage.removeItem('alphaPro_owner_bonus_dismissed');
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`);
+                }
+              : undefined
+          }
           showNotifBadge={
             props.kasirRole === 'owner' 
               ? totalUnreadCount > 0 
@@ -3016,13 +3032,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
              <div className="absolute -top-3 right-4 left-4 flex justify-center gap-1.5 z-20">
                 <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 0 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
                 <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 1 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-                <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left: 9999, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 2 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
              </div>
              <div id="trans-carousel" onScroll={(e) => { const el = e.currentTarget; setWhiteCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full gap-4 pt-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
                 {/* Slide 1 */}
                 <div className="snap-center min-w-full flex justify-between gap-[2px]">
                    <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Transaksi Hari Ini</p>
+                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Trx Hari Ini</p>
                      <div className="flex items-center gap-2">
                        <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-simple text-[10px]"></i></div>
                        <span className="text-xs font-black text-white tabular-nums truncate">{ownerTotalTrx}</span>
@@ -3030,35 +3045,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                    </div>
                    <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
                    <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Trx Bulan Ini</p>
+                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Fee (Tunai & Non Tunai)</p>
                      <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-regular fa-calendar text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{ownerMonthTotalTrx}</span>
+                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-trend-up text-[10px]"></i></div>
+                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalAdmin)}</span>
                      </div>
                    </div>
                 </div>
                 {/* Slide 2 */}
                 <div className="snap-center min-w-full flex justify-between gap-[2px]">
                    <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Fee & Laba Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-trend-up text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalAdmin)}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Fee & Laba Bulan Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-sack-dollar text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerMonthTotalAdmin)}</span> 
-                     </div>
-                   </div>
-                </div>
-                {/* Slide 3 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Uang Masuk Hari Ini</p>
+                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Uang Masuk</p>
                      <div className="flex items-center gap-2">
                        <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-pie text-[10px]"></i></div>
                        <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalUangMasuk)}</span>
@@ -3088,70 +3085,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                </button>
              </div>
 
-             {/* Moved Dropdowns and Lonceng Button */}
-             {props.kasirRole === 'owner' && (
-               <div className="flex items-center gap-2">
-                 <div className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
-                   {/* Pilihan 1: Pantau Toko */}
-                   <div className="flex-1 flex items-center min-w-0">
-                     <div className="relative flex-1 min-w-0">
-                       <select
-                         value={props.pantauStoreId || 'all'}
-                         onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
-                         className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
-                       >
-                         <option value="all" className="text-slate-800">PILIH TOKO</option>
-                         {(props.stores || []).map((store) => (
-                           <option key={store.id} value={store.id} className="text-slate-800">{store.name}</option>
-                         ))}
-                       </select>
-                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                     </div>
-                   </div>
 
-                   {/* Divider Line */}
-                   <div className="w-[1px] h-4 bg-white/30 shrink-0"></div>
-
-                   {/* Pilihan 2: Mode Kasir */}
-                   <div className="flex-1 flex items-center min-w-0">
-                     <div className="relative flex-1 min-w-0">
-                       <select
-                         value={props.filterKasir || 'Semua'}
-                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                         disabled={props.pantauStoreId === 'all'}
-                         className={cn(
-                           "w-full bg-transparent text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans",
-                           props.pantauStoreId === 'all' ? "text-white/50 cursor-not-allowed" : "text-white"
-                         )}
-                       >
-                         <option value="Semua" className="text-slate-800">PILIH KASIR</option>
-                         {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                           <option key={id} value={id} className="text-slate-800">{acc.name}</option>
-                         ))}
-                       </select>
-                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                     </div>
-                   </div>
-                 </div>
-
-                 {/* Tampilkan Notifikasi Banner Button */}
-                 {(isBonusDismissed || isBriefingDismissed) && (
-                   <button
-                     onClick={() => {
-                       setIsBonusDismissed(false)
-                       setIsBriefingDismissed(false)
-                       localStorage.removeItem('alphaPro_owner_bonus_dismissed')
-                       const todayStr = new Date().toISOString().split('T')[0]
-                       localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`)
-                     }}
-                     title="Tampilkan Notifikasi Banner"
-                     className="w-9 h-9 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center relative shadow-sm border border-white/20 backdrop-blur-sm transition-all cursor-pointer"
-                   >
-                     <i className="fa-solid fa-rotate-left text-sm"></i>
-                   </button>
-                 )}
-               </div>
-             )}
           </div>
         </div>
         
@@ -3209,7 +3143,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         )}
       </div>
 
-      <div className="mx-1.5 mb-0.5 relative z-10 space-y-2">
+      <div className="mx-1.5 mb-0.5 relative z-[60] space-y-2">
         {props.kasirRole === 'owner' && (
           <div className="mb-3 space-y-2">
             {/* Unified Minimalist Control Bar: [1 Kolom 2 Isi Pilihan (Pantau Toko & Mode Kasir)] + [1 Icon Lonceng Button] */}
@@ -3617,23 +3551,61 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       {/* MENU KATEGORI LAYANAN */}
       <div className="mx-1.5 mb-6 rounded-[24px] overflow-hidden shadow-sm border border-gray-100 bg-white">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#0047A5] to-[#00A1FF] px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
-              <i className="fa-solid fa-wand-magic-sparkles text-white text-sm"></i>
+        <div className="bg-gradient-to-r from-[#0047A5] to-[#00A1FF] px-2.5 py-1.5 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+              <i className="fa-solid fa-wand-magic-sparkles text-white text-[11px]"></i>
             </div>
-            <div>
-              <p className="text-white/90 text-[8px] font-bold tracking-widest uppercase mb-0.5">Kategori Layanan</p>
-              <h3 className="text-white font-black text-xs leading-tight relative pb-1">
+            <div className="flex flex-col">
+              <p className="text-white/90 text-[7px] font-bold tracking-widest uppercase leading-none mb-0.5">Kategori Layanan</p>
+              <h3 className="text-white font-black text-[9px] leading-none relative pb-1">
                 Mudah, Cepat & Ringkas
-                <div className="absolute bottom-0 left-0 w-6 h-[2px] bg-green-400 rounded-full"></div>
+                <div className="absolute bottom-0 left-0 w-6 h-[1.5px] bg-green-400 rounded-full"></div>
               </h3>
             </div>
           </div>
-          <div className="bg-white/20 border border-white/30 rounded-full px-2 py-0.5 flex items-center gap-1">
-            <div className="w-1 h-1 rounded-full bg-green-400 animate-pulse"></div>
-            <span className="text-white font-bold text-[8px]">8 Menu Kasir</span>
-          </div>
+
+          {props.kasirRole === 'owner' && (
+            <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+              {/* Owner Selectors (Clearer & Larger) */}
+              <div className="flex items-center bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg px-2 py-1 shadow-sm gap-2 w-full max-w-[220px] transition-colors">
+                
+                <div className="flex-1 min-w-0 relative">
+                  <select
+                    value={props.pantauStoreId || 'all'}
+                    onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                    className="w-full bg-transparent text-white text-[9px] sm:text-[10px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans py-0.5"
+                  >
+                    <option value="all" className="text-slate-800">SEMUA TOKO</option>
+                    {(props.stores || []).map((store) => (
+                      <option key={store.id} value={store.id} className="text-slate-800">{store.name}</option>
+                    ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                </div>
+
+                <div className="w-[1px] h-4 bg-white/30 shrink-0"></div>
+
+                <div className="flex-1 min-w-0 relative">
+                  <select
+                    value={props.filterKasir || 'Semua'}
+                    onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                    disabled={props.pantauStoreId === 'all'}
+                    className={cn(
+                      "w-full bg-transparent text-[9px] sm:text-[10px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans py-0.5",
+                      props.pantauStoreId === 'all' ? "text-white/50 cursor-not-allowed" : "text-white"
+                    )}
+                  >
+                    <option value="Semua" className="text-slate-800">SEMUA KASIR</option>
+                    {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                      <option key={id} value={id} className="text-slate-800">{acc.name}</option>
+                    ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         {/* Grid Menu */}

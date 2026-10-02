@@ -1911,50 +1911,51 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       />
 
       <div className="mx-1.5 mb-4 mt-[-1.5rem] relative z-[40]">
-        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
-          <div className="flex items-center justify-between gap-3 relative">
-             <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                   <i className="fa-solid fa-chart-line text-lg text-white"></i>
-                 </div>
-                 <div className="flex-1 min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate uppercase tracking-widest">Arus kas & laba</p>
-                   <h2 className="text-base font-black text-white leading-none truncate">Rekapitulasi</h2>
-                 </div>
+        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative flex flex-col gap-3.5">
+          
+          {/* TOP ROW */}
+          <div className="flex items-center justify-between gap-2 relative">
+             <div className="flex-1 min-w-0">
+               <h2 className="text-[17px] font-black text-white leading-none truncate mb-1.5">Rekapitulasi</h2>
+               <p className="text-[11px] text-white/90 truncate">Arus kas & laba</p>
              </div>
-          </div>
+             
+             <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => setShowAuditModal(true)}
+                  className={cn(
+                    "border border-white/30 bg-white/10 text-white rounded-full py-1.5 px-2.5 flex items-center justify-center gap-1.5 font-bold text-[9px] shadow-sm active:scale-95 transition",
+                    auditDiscrepancies.length > 0 ? "bg-rose-500 border-rose-500 animate-pulse" : ""
+                  )}
+                >
+                  <i className="fa-solid fa-clipboard-check text-[10px] text-white/90"></i>
+                  <span>AUDIT SHIFT</span>
+                  {auditDiscrepancies.length > 0 && (
+                    <span className="w-3.5 h-3.5 rounded-full bg-white text-rose-600 text-[8px] font-black flex items-center justify-center ml-0.5">
+                      {auditDiscrepancies.length}
+                    </span>
+                  )}
+                </button>
 
-          <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center gap-2">
-            <button
-              onClick={() => setShowAuditModal(true)}
-              className={cn(
-                "flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition",
-                auditDiscrepancies.length > 0 ? "bg-rose-500 border-rose-500 animate-pulse" : ""
-              )}
-            >
-              <i className="fa-solid fa-clipboard-check text-[11px] text-white/80"></i>
-              <span>Audit Shift</span>
-              {auditDiscrepancies.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-white text-rose-600 text-[9px] font-black flex items-center justify-center ml-0.5">
-                  {auditDiscrepancies.length}
-                </span>
-              )}
-            </button>
+                <button 
+                  id="laporan-share-action"
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  disabled={isSharing}
+                  className="border border-white/30 bg-white/10 text-white rounded-full py-1.5 px-2.5 flex items-center justify-center gap-1.5 font-bold text-[9px] shadow-sm active:scale-95 transition"
+                >
+                  <span>BAGIKAN</span>
+                  {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-white/90 text-[10px]"></i> : <i className="fa-solid fa-share-nodes text-white/90 text-[10px]"></i>}
+                </button>
 
-            <button 
-              id="laporan-share-action"
-              onClick={() => setShowShareMenu(!showShareMenu)}
-              disabled={isSharing}
-              className="flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition"
-            >
-              <span className="text-[10px] font-bold text-white uppercase tracking-wider">Bagikan</span>
-              {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-white/80 text-[11px]"></i> : <i className="fa-solid fa-share-nodes text-white/80 text-[11px]"></i>}
-            </button>
+                <div className="w-7 h-7 rounded-full border border-white/30 bg-white/10 flex items-center justify-center shrink-0 shadow-sm">
+                  <i className="fa-solid fa-chart-line text-[11px] text-white/90"></i>
+                </div>
+             </div>
           </div>
 
           {/* Share Menu Dropdown */}
           {showShareMenu && (
-            <div className="absolute right-2 top-10 w-[180px] bg-white rounded-2xl shadow-xl border border-emerald-100/50 overflow-hidden z-50">
+            <div className="absolute right-2 top-12 w-[180px] bg-white rounded-2xl shadow-xl border border-emerald-100/50 overflow-hidden z-50">
               <button onClick={() => handleShare('download-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 hover:bg-emerald-50 flex items-center gap-3 border-b border-gray-50 transition-colors">
                 <i className="fa-solid fa-download text-emerald-500 w-4 text-center text-sm"></i> Download PDF
               </button>
@@ -1969,63 +1970,81 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </button>
             </div>
           )}
+
+          {/* DATE SELECTOR ROW */}
+          <div className="bg-white/10 p-1.5 rounded-[1.25rem] border border-white/20 flex items-center justify-between gap-2 pl-3">
+            <span className="text-[10px] font-bold text-white uppercase tracking-wider flex-shrink-0 flex items-center gap-1.5">
+              <i className="fa-solid fa-calendar-day text-[11px]"></i> TANGGAL LAPORAN:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button 
+                onClick={() => {
+                  if (!props.filterTanggal) return;
+                  const d = new Date(props.filterTanggal);
+                  if (!isNaN(d.getTime())) {
+                    d.setDate(d.getDate() - 1);
+                    props.setFilterTanggal(d.toISOString().split('T')[0]);
+                  }
+                }}
+                className="w-7 h-7 shrink-0 rounded-full bg-white/20 border border-white/10 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-left text-[9px]"></i>
+              </button>
+
+              <div className="relative">
+                <div className="bg-white text-[#0069BA] text-[11px] font-black rounded-full pl-3 pr-7 py-1.5 shadow-sm flex items-center justify-center min-w-[85px]">
+                  {(() => {
+                    if (!props.filterTanggal) return '';
+                    const parts = props.filterTanggal.split('-');
+                    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    return props.filterTanggal;
+                  })()}
+                </div>
+                <input 
+                  type="date"
+                  value={props.filterTanggal}
+                  onChange={(e) => props.setFilterTanggal(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-[#0069BA] pointer-events-none"></i>
+              </div>
+
+              <button 
+                onClick={() => {
+                  if (!props.filterTanggal) return;
+                  const d = new Date(props.filterTanggal);
+                  if (!isNaN(d.getTime())) {
+                    d.setDate(d.getDate() + 1);
+                    props.setFilterTanggal(d.toISOString().split('T')[0]);
+                  }
+                }}
+                className="w-7 h-7 shrink-0 rounded-full bg-white/20 border border-white/10 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+              >
+                <i className="fa-solid fa-chevron-right text-[9px]"></i>
+              </button>
+            </div>
+          </div>
+          
         </div>
+
         {props.kasirRole === 'owner' && props.setFilterKasir && (
-          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-white uppercase tracking-wider"><i className="fa-solid fa-user-tie mr-1"></i> Mode Pantau Kasir:</span>
+          <div className="mt-2.5 bg-white shadow-sm p-2.5 rounded-[1.25rem] border border-blue-100 flex items-center justify-between mx-0.5">
+            <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider flex items-center"><div className="w-5 h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center mr-2"><i className="fa-solid fa-user-tie text-[9px]"></i></div> Mode Pantau Kasir:</span>
             <div className="relative">
               <select 
                 value={props.filterKasir || 'Semua'}
                 onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                className="bg-white bg-none text-emerald-700 text-[10px] font-black rounded-lg pl-2 pr-6 py-1 outline-none border-none appearance-none cursor-pointer"
+                className="bg-gray-50 text-blue-700 text-[10px] font-black rounded-lg pl-3 pr-7 py-1.5 outline-none border border-gray-100 appearance-none cursor-pointer shadow-sm"
               >
                 <option value="Semua">Semua Kasir</option>
                 {Object.entries(props.kasirList).map(([id, acc]) => (
                   <option key={id} value={id}>{acc.name}</option>
                 ))}
               </select>
-              <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-emerald-400 pointer-events-none"></i>
+              <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
             </div>
           </div>
         )}
-
-        <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold text-white uppercase tracking-wider flex-shrink-0"><i className="fa-solid fa-calendar-day mr-1"></i> Tanggal Laporan:</span>
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => {
-                if (!props.filterTanggal) return;
-                const d = new Date(props.filterTanggal);
-                if (!isNaN(d.getTime())) {
-                  d.setDate(d.getDate() - 1);
-                  props.setFilterTanggal(d.toISOString().split('T')[0]);
-                }
-              }}
-              className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
-            >
-              <i className="fa-solid fa-chevron-left text-[9px]"></i>
-            </button>
-            <input 
-              type="date"
-              value={props.filterTanggal}
-              onChange={(e) => props.setFilterTanggal(e.target.value)}
-              className="bg-white text-emerald-700 text-[10px] font-black rounded-lg px-1 py-1 outline-none border-none w-[90px] text-center"
-            />
-            <button 
-              onClick={() => {
-                if (!props.filterTanggal) return;
-                const d = new Date(props.filterTanggal);
-                if (!isNaN(d.getTime())) {
-                  d.setDate(d.getDate() + 1);
-                  props.setFilterTanggal(d.toISOString().split('T')[0]);
-                }
-              }}
-              className="w-7 h-7 shrink-0 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
-            >
-              <i className="fa-solid fa-chevron-right text-[9px]"></i>
-            </button>
-          </div>
-        </div>
       </div>
 
       <div className="px-1.5 pb-5 space-y-2.5">
