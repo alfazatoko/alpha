@@ -1982,14 +1982,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-6" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
-        <div className="px-2 flex justify-between items-center">
-          <div>
-            <h2 className="font-bold text-sm tracking-wide">Pengaturan Akun</h2>
-            <p className="text-blue-100 text-[10px] opacity-90">Kelola profil dan keamanan</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <i className="fa-solid fa-user-gear text-white text-xs"></i>
+      <div className="mx-1.5 mb-5 mt-[-1.5rem] relative z-[40]">
+        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+               <i className="fa-solid fa-user-gear text-lg text-white"></i>
+             </div>
+             <div className="flex-1 min-w-0">
+               <p className="text-[10px] font-bold text-white mb-0.5 truncate">Kelola profil dan keamanan</p>
+               <h2 className="text-base font-black text-white leading-none truncate">Pengaturan Akun</h2>
+             </div>
           </div>
         </div>
       </div>

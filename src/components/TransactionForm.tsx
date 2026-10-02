@@ -11,10 +11,11 @@ interface TransactionFormProps {
   initialMode?: 'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'
   onModeChange?: (mode: string) => void
   hideModeTabs?: boolean
+  hideHeader?: boolean
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader
 }) => {
   const [kategori, setKategori] = useState('')
   const [nominal, setNominal] = useState('')
@@ -530,13 +531,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10" style={{background: '#ffffff'}}>
       </div>
       
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-3 px-3">
-        <div className="flex flex-col">
-          <h2 className="text-[22px] font-black text-[#1a1a1a] leading-none tracking-tight">Form Transaksi</h2>
-          <p className="text-[12px] font-bold text-[#666666] leading-tight mt-0.5">Kategori Layanan</p>
-        </div>
-
+      {/* HEADER ACTION BUTTONS */}
+      <div className={cn("flex items-center mb-3 px-3", hideHeader ? "justify-end" : "justify-between")}>
+        {!hideHeader && (
+          <div className="flex flex-col">
+            <h2 className="text-[22px] font-black text-[#1a1a1a] leading-none tracking-tight">Form Transaksi</h2>
+            <p className="text-[12px] font-bold text-[#666666] leading-tight mt-0.5">Kategori Layanan</p>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 p-1 bg-white border border-gray-200 rounded-full shadow-sm">
           <button
             onClick={() => { setShowCalc(v => !v); setIsThemeMenuOpen(false); }}

@@ -1910,24 +1910,29 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20 mb-4" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
-        <div className="flex justify-between items-center px-2 relative">
-          <div>
-            <h2 className="font-bold text-sm tracking-wide">Rekapitulasi</h2>
-            <p className="text-emerald-100 text-[10px] opacity-90">Arus kas & laba</p>
+      <div className="mx-1.5 mb-4 mt-[-1.5rem] relative z-[40]">
+        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
+          <div className="flex items-center justify-between gap-3 relative">
+             <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                   <i className="fa-solid fa-chart-line text-lg text-white"></i>
+                 </div>
+                 <div className="flex-1 min-w-0">
+                   <p className="text-[10px] font-bold text-white mb-0.5 truncate uppercase tracking-widest">Arus kas & laba</p>
+                   <h2 className="text-base font-black text-white leading-none truncate">Rekapitulasi</h2>
+                 </div>
+             </div>
           </div>
-          
-          <div className="flex items-center gap-2">
+
+          <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center gap-2">
             <button
               onClick={() => setShowAuditModal(true)}
               className={cn(
-                "px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 text-[10px] font-bold uppercase tracking-wider",
-                auditDiscrepancies.length > 0
-                  ? "bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/50"
-                  : "bg-white/20 text-white hover:bg-white/30"
+                "flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition",
+                auditDiscrepancies.length > 0 ? "bg-rose-500 border-rose-500 animate-pulse" : ""
               )}
             >
-              <i className="fa-solid fa-clipboard-check text-[10px]"></i>
+              <i className="fa-solid fa-clipboard-check text-[11px] text-white/80"></i>
               <span>Audit Shift</span>
               {auditDiscrepancies.length > 0 && (
                 <span className="w-4 h-4 rounded-full bg-white text-rose-600 text-[9px] font-black flex items-center justify-center ml-0.5">
@@ -1940,14 +1945,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               id="laporan-share-action"
               onClick={() => setShowShareMenu(!showShareMenu)}
               disabled={isSharing}
-              className="px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-md flex items-center gap-1.5 hover:bg-white/30 transition-all active:scale-95"
+              className="flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition"
             >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white">Bagikan</span>
-              {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-white text-[10px]"></i> : <i className="fa-solid fa-share-nodes text-white text-[10px]"></i>}
+              <span className="text-[10px] font-bold text-white uppercase tracking-wider">Bagikan</span>
+              {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-white/80 text-[11px]"></i> : <i className="fa-solid fa-share-nodes text-white/80 text-[11px]"></i>}
             </button>
-            <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
-              <i className="fa-solid fa-chart-line text-white text-xs"></i>
-            </div>
           </div>
 
           {/* Share Menu Dropdown */}

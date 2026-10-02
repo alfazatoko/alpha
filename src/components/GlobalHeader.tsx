@@ -49,7 +49,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   return (
     <div className="relative theme-header pb-8 pt-10">
       {/* TOP ROW: Logo/Text on left, Buttons on right */}
-      <div className="px-4 flex items-center justify-between gap-3 mb-4">
+      <div className="px-4 flex items-center justify-between gap-3 mb-[2px]">
         {/* LOGO + TEXT */}
         <div className="flex items-center gap-3">
           {storePhoto ? (
@@ -115,14 +115,14 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
       {/* BOTTOM ROW: White Bar */}
       <div className="px-1.5">
-        <div className="bg-white w-full flex items-center justify-between px-3 py-1.5 rounded-xl shadow-sm border border-white/50">
-          <div className="flex items-center gap-1.5">
-            <span className="bg-blue-50/50 text-blue-800 text-[8.5px] sm:text-[9px] font-black px-2 py-1 rounded-full flex items-center gap-1.5">
+        <div className="bg-white w-full flex items-center justify-between px-2 py-1 rounded-full shadow-sm border border-white/50">
+          <div className="flex items-center gap-1">
+            <span className="bg-blue-50/50 text-blue-800 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">
               <i className="fa-solid fa-user-circle text-[11px] text-blue-600"></i>
               {kasirRole === 'owner' ? 'Owner : ' : 'Kasir : '}{kasirName}
             </span>
             <span className={cn(
-              "text-[8px] sm:text-[8.5px] px-2 py-1 rounded-full font-black flex items-center gap-1 border",
+              "text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded-full font-black flex items-center gap-1 border",
               isOnline 
                 ? "text-emerald-600 border-emerald-100 bg-emerald-50/50" 
                 : "text-red-500 border-red-100 bg-red-50/50"
@@ -132,10 +132,10 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </span>
           </div>
           
-          <div className="text-[8px] sm:text-[8.5px] font-black text-gray-700 flex items-center gap-1.5">
+          <div className="text-[8px] sm:text-[8.5px] font-black text-gray-700 flex items-center gap-1">
             <i className="fa-regular fa-calendar text-blue-500"></i>
             <span>{dayName}, {fullDate.split(' ').slice(0, 3).join(' ')}</span>
-            <span className="text-[8.5px] sm:text-[9px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 rounded-md tabular-nums border border-blue-100/50 ml-0.5">
+            <span className="text-[8.5px] sm:text-[9px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 rounded-md tabular-nums border border-blue-100/50">
               {clockStr}
             </span>
           </div>

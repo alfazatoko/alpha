@@ -70,74 +70,32 @@ interface BerandaViewProps {
   isPc?: boolean
   userId: string
   onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>
-  onJurnalClick?: () => void
 }
 
-const BannerCarousel: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
-  const [index, setIndex] = useState(0);
-
+const CyclingText: React.FC<{ texts: { text: string, isMain: boolean }[] }> = ({ texts }) => {
+  const [index, setIndex] = useState(0)
+  const [animKey, setAnimKey] = useState(0)
+  
   useEffect(() => {
-    if (texts.length <= 1) return;
+    if (texts.length <= 1) return
     const interval = setInterval(() => {
-      const el = document.getElementById('promo-carousel');
-      if (el) {
-        if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 10) {
-          el.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          el.scrollBy({ left: el.clientWidth, behavior: 'smooth' });
-        }
-      }
-    }, 4000); 
-    return () => clearInterval(interval);
-  }, [texts.length]);
+      setIndex(prev => (prev + 1) % texts.length)
+      setAnimKey(k => k + 1)
+    }, 8000) 
+    return () => clearInterval(interval)
+  }, [texts.length])
 
-  const gradients = [
-    "from-[#004A8B] to-[#0069BA]", 
-    "from-purple-700 to-fuchsia-600",
-    "from-rose-700 to-pink-600",
-    "from-emerald-700 to-teal-600",
-    "from-orange-700 to-amber-600",
-    "from-cyan-700 to-cyan-600",
-    "from-indigo-700 to-blue-700",
-    "from-red-700 to-rose-600",
-    "from-slate-700 to-slate-600",
-    "from-green-700 to-emerald-600"
-  ];
-
-  if (texts.length === 0) return null;
+  const current = texts[index]
+  if (!current) return null
 
   return (
-    <div className="relative mx-1.5 mb-1.5 mt-1 overflow-hidden shadow-sm border border-white/20 rounded-[1.25rem]">
-      {/* Dots Indicator */}
-      {texts.length > 1 && (
-        <div className="absolute top-2 right-3 flex gap-1 z-20">
-          {texts.map((_, i) => (
-            <div 
-              key={i} 
-              className={cn("h-1 rounded-full transition-all", index === i ? "w-3 bg-white" : "w-1.5 bg-white/40")}
-            />
-          ))}
-        </div>
-      )}
-      
-      {/* Carousel Container */}
-      <div 
-        id="promo-carousel" 
-        onScroll={(e) => { 
-          const el = e.currentTarget; 
-          setIndex(Math.round(el.scrollLeft / el.clientWidth)); 
-        }} 
-        className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full"
-        style={{ scrollBehavior: 'smooth' }}
-      >
-        {texts.map((t, i) => (
-          <div key={i} className={cn("snap-center min-w-full px-5 pt-5 pb-3 flex items-center justify-center bg-gradient-to-r", gradients[i % gradients.length])}>
-            <p className="text-white text-center font-bold text-[11px] leading-relaxed drop-shadow-md whitespace-pre-wrap">{t.text}</p>
-          </div>
-        ))}
-      </div>
+    <div key={animKey} className={cn(
+      "animate-marquee-center font-black uppercase tracking-widest transition-all",
+      current.isMain ? "text-red-600 text-[11px]" : "text-blue-900 text-[10px]"
+    )}>
+      {current.text}
     </div>
-  );
+  )
 }
 
 const GajiPanel: React.FC<{
@@ -1982,9 +1940,6 @@ function calculateTenure(joinDateStr: string) {
 
 
 const BerandaView: React.FC<BerandaViewProps> = (props) => {
-  const [posMode, setPosMode] = React.useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER'>('DIGITAL')
-  const [blueCardIndex, setBlueCardIndex] = useState(0);
-  const [whiteCardIndex, setWhiteCardIndex] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
   const financialSettings = useMemo(() => {
@@ -2008,36 +1963,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       window.removeEventListener('offline', handleOffline)
     }
   }, [])
-
-  // Auto-scroll carousels
-  useEffect(() => {
-    if (!props.active) return;
-    
-    const transInterval = setInterval(() => {
-      const whiteEl = document.getElementById('trans-carousel')
-      if (whiteEl && whiteEl.clientWidth > 0) {
-        let newIndex = Math.round(whiteEl.scrollLeft / whiteEl.clientWidth) + 1;
-        if (newIndex > 2) newIndex = 0;
-        whiteEl.scrollTo({ left: newIndex * whiteEl.clientWidth, behavior: 'smooth' })
-        setWhiteCardIndex(newIndex)
-      }
-    }, 5000);
-
-    const blueInterval = setInterval(() => {
-      const blueEl = document.getElementById('blue-carousel')
-      if (blueEl && blueEl.clientWidth > 0) {
-        let newIndex = Math.round(blueEl.scrollLeft / blueEl.clientWidth) + 1;
-        if (newIndex > 1) newIndex = 0;
-        blueEl.scrollTo({ left: newIndex * blueEl.clientWidth, behavior: 'smooth' })
-        setBlueCardIndex(newIndex)
-      }
-    }, 10000);
-    
-    return () => {
-      clearInterval(transInterval);
-      clearInterval(blueInterval);
-    };
-  }, [props.active]);
 
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
@@ -2648,7 +2573,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     return () => clearInterval(timer)
   }, [])
 
-
   const simpanIzin = () => {
     if (!izinNamaKasir || !izinTanggal || !izinAlasan.trim()) return props.showToast('Lengkapi semua data!')
     const baru = { nama: izinNamaKasir, tanggal: izinTanggal, alasan: izinAlasan.trim(), dicatatPada: getLocalISOString() }
@@ -2684,27 +2608,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   
   const ownerTodayTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && !t.kategori.startsWith('Isi'))
   
-  const currentMonthISO = todayISO.substring(0, 7);
-  const ownerMonthTxs = ownerDisplayTxs.filter(t => t.timestamp.startsWith(currentMonthISO) && !t.kategori.startsWith('Isi'));
-  const ownerMonthTotalAdmin = ownerMonthTxs.filter(t => 
-    !(t.keterangan || '').includes('[KHUSUS]') && 
-    !(t.keterangan || '').includes('[NON_TUNAI]')
-  ).reduce((s, t) => s + t.adminFee, 0);
-  const ownerMonthTotalTrx = ownerMonthTxs.length;
-
-  const ownerMonthTotalUangMasuk = ownerMonthTxs
-    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
-    .reduce((s, t) => s + t.nominal, 0);
-
-  const ownerTotalUangMasuk = ownerTodayTxs
-    .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
-    .reduce((s, t) => s + t.nominal, 0);
+  const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
   const ownerTotalAdmin = ownerTodayTxs.filter(t => 
+    !(t.keterangan || '').includes('[ADMIN_DALAM]') && 
     !(t.keterangan || '').includes('[KHUSUS]') && 
     !(t.keterangan || '').includes('[NON_TUNAI]')
   ).reduce((s, t) => s + t.adminFee, 0)
   const ownerTotalTrx = ownerTodayTxs.length
-  const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
 
   // Recalculate other stats for the 'Ringkasan Harian' modal consistency
   const ownerTotalAksesoris = ownerTodayTxs.filter(t => 
@@ -2744,125 +2654,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
-
-      {/* ── POS KASIR OVERLAY ── */}
-      {props.activeView === 'view-pos-kasir' && (() => {
-        return (
-          <div className="absolute inset-0 z-[100] bg-[#F9FBFF] flex flex-col animate-in slide-in-from-right duration-300">
-            {/* Header Toko Identik */}
-            <GlobalHeader 
-              storePhoto={props.storePhoto}
-              storeName={props.storeName}
-              storeSubtext={props.storeSubtext}
-              kasirName={props.kasirName}
-              kasirRole={props.kasirRole}
-              dayName={dayName}
-              fullDate={fullDate}
-              clockStr={clockStr}
-              onMenuClick={() => props.setIsSidePanelOpen(true)}
-              showNotifBadge={
-                props.kasirRole === 'owner' 
-                  ? totalUnreadCount > 0 
-                  : (kasirLateHistory.length > 0 || activePesanMendadak !== null)
-              }
-              notifBadgeCount={
-                props.kasirRole === 'owner' 
-                  ? totalUnreadCount 
-                  : (kasirLateHistory.length + (activePesanMendadak ? 1 : 0))
-              }
-              onNotifClick={() => {
-                if (props.kasirRole === 'owner') {
-                  setShowNotifModal(true);
-                } else {
-                  setShowKasirNotif(!showKasirNotif);
-                }
-              }}
-              notifPopupContent={
-                showKasirNotif && (
-                  <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
-                    <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
-                      <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
-                        <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
-                      </h4>
-                      {kasirLateHistory.length > 0 && (
-                        <button 
-                          onClick={handleClearLateNotifs}
-                          className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-600 text-[9px] font-black rounded-lg transition-colors cursor-pointer"
-                        >
-                          Tandai Dibaca & Hapus
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
-                      {activePesanMendadak && (
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
-                          <i className="fa-solid fa-triangle-exclamation text-rose-500 mt-0.5"></i>
-                          <div>
-                            <p className="text-[11px] font-bold text-gray-800 leading-snug">{activePesanMendadak.text}</p>
-                            <p className="text-[9px] text-gray-500 mt-1 font-medium">{activePesanMendadak.timestamp}</p>
-                          </div>
-                        </div>
-                      )}
-                      {kasirLateHistory.map((k, i) => (
-                        <div key={i} className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
-                          <p className="text-[11px] text-gray-700 font-bold leading-snug">{k.message}</p>
-                          <p className="text-[9px] text-gray-400 mt-1">{k.timestamp}</p>
-                        </div>
-                      ))}
-                      {kasirLateHistory.length === 0 && !activePesanMendadak && (
-                        <div className="text-center py-4 text-gray-400">
-                          <i className="fa-solid fa-check-circle text-2xl mb-1 text-emerald-400"></i>
-                          <p className="text-[10px] font-black">Tidak ada pemberitahuan baru</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              }
-            />
-
-            {/* Blue Card Header */}
-            <div className="mx-1.5 mb-5 mt-[-1.5rem] relative z-[40] shrink-0">
-              <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
-                <div className="flex items-center gap-3">
-                   <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
-                     <i className="fa-solid fa-arrow-left text-lg"></i>
-                   </button>
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-white mb-0.5 truncate uppercase tracking-widest">Kategori Layanan</p>
-                     <h2 className="text-base font-black text-white leading-none truncate">Form Transaksi</h2>
-                   </div>
-                   <button onClick={() => props.setActiveView('view-riwayat')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
-                     <i className="fa-solid fa-clock-rotate-left text-lg"></i>
-                   </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction Form Body — scrollable */}
-            <div className="flex-1 overflow-y-auto hide-scrollbar">
-              <TransactionForm
-                onSave={props.handleSimpanTransaksi}
-                isSaving={props.isSaving}
-                presets={props.presets}
-                onOpenVoucherJualCepat={() => {
-                  props.setActiveView('view-stok-voucher')
-                  setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'))
-                  }, 100)
-                }}
-                activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
-                adminRules={props.adminRules}
-                hideHeader={true}
-              />
-            </div>
-          </div>
-        )
-      })()}
-
-
-
-
       {!(props.isPc && isOwnerSubView) && (
         <>
           <GlobalHeader 
@@ -2875,23 +2666,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           fullDate={fullDate}
           clockStr={clockStr}
           onMenuClick={() => props.setIsSidePanelOpen(true)}
-          showNotifBadge={
-            props.kasirRole === 'owner' 
-              ? totalUnreadCount > 0 
-              : (kasirLateHistory.length > 0 || activePesanMendadak)
-          }
-          notifBadgeCount={
-            props.kasirRole === 'owner' 
-              ? totalUnreadCount 
-              : (kasirLateHistory.length + (activePesanMendadak ? 1 : 0))
-          }
-          onNotifClick={() => {
-            if (props.kasirRole === 'owner') {
-              setShowNotifModal(true);
-            } else {
-              setShowKasirNotif(!showKasirNotif);
-            }
-          }}
+          showNotifBadge={(kasirLateHistory.length > 0 || activePesanMendadak)}
+          notifBadgeCount={kasirLateHistory.length + (activePesanMendadak ? 1 : 0)}
+          onNotifClick={() => setShowKasirNotif(!showKasirNotif)}
           notifPopupContent={
             showKasirNotif && (
               <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
@@ -2953,212 +2730,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           }
         />
 
-      <div className="mx-1.5 mb-3 mt-[-1.5rem] relative z-[40]">
-        {/* BLUE CARD CAROUSEL */}
-        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white overflow-hidden relative">
-          
-          <div className="absolute top-3 w-full flex justify-center gap-1.5 z-20">
-            <div onClick={() => document.getElementById('blue-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", blueCardIndex === 0 ? "w-3.5 bg-white" : "w-1.5 bg-white/40")}></div>
-            <div onClick={() => document.getElementById('blue-carousel')?.scrollTo({left: 9999, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", blueCardIndex === 1 ? "w-3.5 bg-white" : "w-1.5 bg-white/40")}></div>
-          </div>
-
-          <div id="blue-carousel" onScroll={(e) => { const el = e.currentTarget; setBlueCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full h-full pb-4 pt-6 px-4 gap-4" style={{ scrollBehavior: 'smooth' }}>
-            {/* Slide 1: Aset Bank & Laci Kasir */}
-            <div className="snap-center min-w-full flex justify-between gap-3">
-              <div className="flex-1 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-building-columns text-lg text-white"></i>
-                </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Aset Bank</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(props.saldoBank)}</p>
-                </div>
-              </div>
-              <div className="w-[2px] h-10 bg-white/20 shrink-0 rounded-full"></div>
-              <div className="flex-1 flex items-center gap-3 pl-1">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-cash-register text-lg text-white"></i>
-                </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Laci Kasir</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(ownerTotalLaci)}</p>
-                </div>
-              </div>
-            </div>
-            {/* Slide 2: Total Aset Likuid & Total Aset Masuk */}
-            <div className="snap-center min-w-full flex justify-between gap-3">
-              <div className="flex-1 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-vault text-lg text-white"></i>
-                </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Total Aset Likuid</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(props.saldoBank + ownerTotalLaci)}</p>
-                </div>
-              </div>
-              <div className="w-[2px] h-10 bg-white/20 shrink-0 rounded-full"></div>
-              <div className="flex-1 flex items-center gap-3 pl-1">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-hand-holding-dollar text-lg text-white"></i>
-                </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Total Aset Masuk</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="mx-4 mb-4 h-[1px] bg-white/10 rounded-full"></div>
-          
-          {/* TRANSACTIONS SLIDER (Moved inside blue card) */}
-          <div className="px-4 mb-2 relative z-20">
-             <div className="absolute -top-3 right-4 left-4 flex justify-center gap-1.5 z-20">
-                <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 0 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-                <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 1 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-                <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left: 9999, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 2 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-             </div>
-             <div id="trans-carousel" onScroll={(e) => { const el = e.currentTarget; setWhiteCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full gap-4 pt-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
-                {/* Slide 1 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Transaksi Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-simple text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{ownerTotalTrx}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Trx Bulan Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-regular fa-calendar text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{ownerMonthTotalTrx}</span>
-                     </div>
-                   </div>
-                </div>
-                {/* Slide 2 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Fee & Laba Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-trend-up text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalAdmin)}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Fee & Laba Bulan Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-sack-dollar text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerMonthTotalAdmin)}</span> 
-                     </div>
-                   </div>
-                </div>
-                {/* Slide 3 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Uang Masuk Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-pie text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalUangMasuk)}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Tarik Tunai Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalTarik)}</span>
-                     </div>
-                   </div>
-                </div>
-             </div>
-          </div>
-          
-          <div className="px-4 pb-4 flex flex-col gap-3 relative z-10">
-             <div className="flex gap-3">
-               <button onClick={() => props.setActiveView('view-isi-saldo')} className="flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-between gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition">
-                 <div className="flex items-center gap-2"><i className="fa-solid fa-coins text-[11px] text-white/80"></i> Kelola Aset</div>
-                 <i className="fa-solid fa-arrow-right text-[9px] text-white/80"></i>
-               </button>
-               <button onClick={() => setShowRincian(true)} className="flex-1 border border-white/30 bg-white/10 text-white rounded-xl py-2 px-3 flex items-center justify-between gap-1.5 font-bold text-[10px] shadow-sm active:scale-95 transition">
-                 <div className="flex items-center gap-2"><i className="fa-solid fa-box-archive text-[11px] text-white/80"></i> Rincian Laci</div>
-                 <i className="fa-solid fa-arrow-right text-[9px] text-white/80"></i>
-               </button>
-             </div>
-
-             {/* Moved Dropdowns and Lonceng Button */}
-             {props.kasirRole === 'owner' && (
-               <div className="flex items-center gap-2">
-                 <div className="flex-1 bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
-                   {/* Pilihan 1: Pantau Toko */}
-                   <div className="flex-1 flex items-center min-w-0">
-                     <div className="relative flex-1 min-w-0">
-                       <select
-                         value={props.pantauStoreId || 'all'}
-                         onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
-                         className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
-                       >
-                         <option value="all" className="text-slate-800">PILIH TOKO</option>
-                         {(props.stores || []).map((store) => (
-                           <option key={store.id} value={store.id} className="text-slate-800">{store.name}</option>
-                         ))}
-                       </select>
-                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                     </div>
-                   </div>
-
-                   {/* Divider Line */}
-                   <div className="w-[1px] h-4 bg-white/30 shrink-0"></div>
-
-                   {/* Pilihan 2: Mode Kasir */}
-                   <div className="flex-1 flex items-center min-w-0">
-                     <div className="relative flex-1 min-w-0">
-                       <select
-                         value={props.filterKasir || 'Semua'}
-                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                         disabled={props.pantauStoreId === 'all'}
-                         className={cn(
-                           "w-full bg-transparent text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans",
-                           props.pantauStoreId === 'all' ? "text-white/50 cursor-not-allowed" : "text-white"
-                         )}
-                       >
-                         <option value="Semua" className="text-slate-800">PILIH KASIR</option>
-                         {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                           <option key={id} value={id} className="text-slate-800">{acc.name}</option>
-                         ))}
-                       </select>
-                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                     </div>
-                   </div>
-                 </div>
-
-                 {/* Tampilkan Notifikasi Banner Button */}
-                 {(isBonusDismissed || isBriefingDismissed) && (
-                   <button
-                     onClick={() => {
-                       setIsBonusDismissed(false)
-                       setIsBriefingDismissed(false)
-                       localStorage.removeItem('alphaPro_owner_bonus_dismissed')
-                       const todayStr = new Date().toISOString().split('T')[0]
-                       localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`)
-                     }}
-                     title="Tampilkan Notifikasi Banner"
-                     className="w-9 h-9 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center relative shadow-sm border border-white/20 backdrop-blur-sm transition-all cursor-pointer"
-                   >
-                     <i className="fa-solid fa-rotate-left text-sm"></i>
-                   </button>
-                 )}
-               </div>
-             )}
-          </div>
-        </div>
-        
-        {/* WHITE CAROUSEL HAS BEEN MOVED INTO BLUE CARD */}
-      </div>
-
-      <div className="mx-1.5 mb-0.5 relative z-50 space-y-2">
+      <div className="mx-1.5 mb-3 relative z-50 space-y-3" style={{ marginTop: '-2.5rem' }}>
         
         {/* Pesan Mendadak Popup */}
         {props.kasirRole !== 'owner' && activePesanMendadak && !dismissedPesanPopup && (
@@ -3209,11 +2781,86 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         )}
       </div>
 
-      <div className="mx-1.5 mb-0.5 relative z-10 space-y-2">
+      <div className="mx-1.5 bg-white rounded-2xl p-4 shadow-xl mb-3 relative z-10" style={{ marginTop: '-2.5rem' }}>
         {props.kasirRole === 'owner' && (
           <div className="mb-3 space-y-2">
             {/* Unified Minimalist Control Bar: [1 Kolom 2 Isi Pilihan (Pantau Toko & Mode Kasir)] + [1 Icon Lonceng Button] */}
-            {/* Dropdowns moved to Blue Card */}
+            <div className="flex items-center gap-2">
+              {/* 1 Kolom 2 Isi Pilihan Dropdown Container */}
+              <div className="flex-1 bg-slate-50/90 hover:bg-slate-100/80 border border-slate-200/80 rounded-2xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
+                {/* Pilihan 1: Pantau Toko */}
+                <div className="flex-1 flex items-center min-w-0">
+                  <div className="relative flex-1 min-w-0">
+                    <select
+                      value={props.pantauStoreId || 'all'}
+                      onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                      className="w-full bg-transparent text-slate-800 text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                    >
+                      <option value="all">PILIH TOKO</option>
+                      {(props.stores || []).map((store) => (
+                        <option key={store.id} value={store.id}>{store.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
+
+                {/* Divider Line */}
+                <div className="w-[1px] h-4 bg-slate-200 shrink-0"></div>
+
+                {/* Pilihan 2: Mode Kasir */}
+                <div className="flex-1 flex items-center min-w-0">
+                  <div className="relative flex-1 min-w-0">
+                    <select
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      disabled={props.pantauStoreId === 'all'}
+                      className={cn(
+                        "w-full bg-transparent text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans",
+                        props.pantauStoreId === 'all' ? "text-slate-400 cursor-not-allowed" : "text-slate-800"
+                      )}
+                    >
+                      <option value="Semua">PILIH KASIR</option>
+                      {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                        <option key={id} value={id}>{acc.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tampilkan Notifikasi Banner Button */}
+              {(isBonusDismissed || isBriefingDismissed) && (
+                <button
+                  onClick={() => {
+                    setIsBonusDismissed(false)
+                    setIsBriefingDismissed(false)
+                    localStorage.removeItem('alphaPro_owner_bonus_dismissed')
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`)
+                  }}
+                  title="Tampilkan Notifikasi Banner"
+                  className="w-10 h-10 shrink-0 rounded-2xl bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-600 flex items-center justify-center relative shadow-sm border border-indigo-200 transition-all cursor-pointer"
+                >
+                  <i className="fa-solid fa-rotate-left text-sm"></i>
+                </button>
+              )}
+
+              {/* Sleek Minimal 1 Icon Lonceng Button (No Dark Grid Box) */}
+              <button
+                onClick={() => setShowNotifModal(true)}
+                title="Notifikasi Owner"
+                className="w-10 h-10 shrink-0 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white flex items-center justify-center relative shadow-md shadow-amber-500/20 border border-amber-400/40 transition-all cursor-pointer"
+              >
+                <i className="fa-solid fa-bell text-sm"></i>
+                {totalUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-600 text-white text-[8px] font-black flex items-center justify-center border-2 border-white shadow-xs animate-in zoom-in duration-200">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
 
             {/* Notification Banners (Minimal & Sleek) */}
             {!isNotificationsHidden && (
@@ -3531,24 +3178,101 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </div>
         )}
 
+        <div className="grid grid-cols-2 divide-x divide-slate-200 mb-2">
+          {/* Left Column (SALDO BANK) */}
+          <div className="flex items-center justify-between pr-3">
+            <div className="min-w-0 pr-2">
+              <p className="text-[11px] text-gray-600 font-black uppercase tracking-widest truncate">SALDO BANK</p>
+              <h2 className="text-base font-black tracking-tight text-blue-800 truncate" title={formatRupiah(props.saldoBank)}>{formatRupiah(props.saldoBank)}</h2>
+            </div>
+            <button 
+              onClick={() => props.setActiveView('view-isi-saldo')} 
+              className="w-8 h-8 bg-blue-600 text-white hover:bg-blue-700 rounded-full flex items-center justify-center shadow-sm border border-blue-700 transition-colors cursor-pointer shrink-0"
+            >
+              <i className="fa-solid fa-plus text-xs"></i>
+            </button>
+          </div>
 
+          {/* Right Column (SALDO LACI KASIR) */}
+          <div className="flex items-center justify-between pl-3">
+            <div className="min-w-0 pr-2 text-left">
+              <p className="text-[11px] text-gray-600 font-black uppercase tracking-widest truncate">LACI KASIR</p>
+              <h2 className="text-base font-black tracking-tight text-emerald-600 truncate" title={formatRupiah(totalPendapatanBersih)}>{formatRupiah(totalPendapatanBersih)}</h2>
+            </div>
+            <button 
+              onClick={() => setShowRincian(true)} 
+              className="w-8 h-8 bg-blue-600 text-white hover:bg-blue-700 rounded-full flex items-center justify-center shadow-sm border border-blue-700 transition-colors cursor-pointer shrink-0"
+            >
+              <i className="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 RINGKASAN HARIAN (ADDED) */}
+        <div className="mt-3 pt-2 border-t border-slate-100 grid grid-cols-4 divide-x divide-slate-100">
+          {/* 1. TRX HARI INI */}
+          <div className="flex flex-col justify-start items-center text-center px-0.5 pb-1">
+            <span className="text-[7px] font-black uppercase tracking-tight text-blue-600 mt-1 leading-tight whitespace-nowrap">TRX HARI INI</span>
+            <span className="text-[11px] font-black text-slate-800 my-1 leading-none">{props.transactions?.filter(t => !t.kategori.startsWith('Isi')).length || 0}</span>
+            <span className="text-[6.5px] font-medium text-slate-400 leading-tight">Jml Trx</span>
+          </div>
+
+          {/* 2. ADMIN / LABA */}
+          <div className="flex flex-col justify-start items-center text-center px-0.5 pb-1 w-full overflow-hidden">
+            <span className="text-[7px] font-black uppercase tracking-tight text-emerald-600 mt-1 leading-tight whitespace-nowrap">ADMIN / LABA</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-emerald-600 my-1 leading-none w-full text-center tracking-tighter" title={formatRupiah(props.totalAdmin || 0)} style={{ wordBreak: 'break-word', hyphens: 'auto' }}>{formatRupiah(props.totalAdmin || 0)}</span>
+            <span className="text-[6.5px] font-medium text-slate-400 leading-tight">Fee & Laba</span>
+          </div>
+
+          {/* 3. TRX DIGITAL */}
+          <div className="flex flex-col justify-start items-center text-center px-0.5 pb-1 w-full overflow-hidden">
+            <span className="text-[7px] font-black uppercase tracking-tight text-indigo-600 mt-1 leading-tight whitespace-nowrap">TRX DIGITAL</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-indigo-600 my-1 leading-none w-full text-center tracking-tighter" title={formatRupiah(props.penjualanDigital || 0)} style={{ wordBreak: 'break-word', hyphens: 'auto' }}>{formatRupiah(props.penjualanDigital || 0)}</span>
+            <span className="text-[6.5px] font-medium text-slate-400 leading-tight">Penjualan</span>
+          </div>
+
+          {/* 4. TARIK TUNAI */}
+          <div className="flex flex-col justify-start items-center text-center px-0.5 pb-1 w-full overflow-hidden">
+            <span className="text-[7px] font-black uppercase tracking-tight text-rose-600 mt-1 leading-tight whitespace-nowrap">TARIK TUNAI</span>
+            <span className="text-[10px] sm:text-[11px] font-black text-rose-600 my-1 leading-none w-full text-center tracking-tighter" title={formatRupiah(props.totalTarik || 0)} style={{ wordBreak: 'break-word', hyphens: 'auto' }}>{formatRupiah(props.totalTarik || 0)}</span>
+            <span className="text-[6.5px] font-medium text-slate-400 leading-tight">Tarik Tunai</span>
+          </div>
+        </div>
       </div>
 
-      {/* Banner Carousel Column */}
+      {/* Running Text Column — BELOW Saldo card */}
       {(props.mainAnnouncement || (props.runningTexts && props.runningTexts.some(t => t.trim() !== ''))) && (
-        (() => {
-          const activeTexts = [
-            props.mainAnnouncement ? { text: props.mainAnnouncement, isMain: true } : null,
-            ...(props.runningTexts || [])
-              .filter(t => t.trim() !== '')
-              .map(t => ({ text: t, isMain: false }))
-          ].filter(Boolean) as { text: string, isMain: boolean }[];
-          
-          return <BannerCarousel texts={activeTexts} />;
-        })()
-      )}
-      
-      {showRincian && (
+        <div className="mx-1.5 bg-blue-50/50 rounded-xl py-2.5 px-4 shadow-sm mb-4 border border-blue-100/50 flex items-center overflow-hidden relative">
+          <style>{`
+            @keyframes marquee-center {
+              0% { transform: translateX(100%); opacity: 0; }
+              10% { opacity: 1; }
+              40% { transform: translateX(0); }
+              60% { transform: translateX(0); }
+              90% { opacity: 1; }
+              100% { transform: translateX(-100%); opacity: 0; }
+            }
+            .animate-marquee-center {
+              animation: marquee-center 8s linear forwards;
+              width: 100%;
+              text-align: center;
+              white-space: nowrap;
+            }
+          `}</style>
+          <div className="w-full min-w-0 relative overflow-hidden">
+            {(() => {
+              const activeTexts = [
+                props.mainAnnouncement ? { text: props.mainAnnouncement, isMain: true } : null,
+                ...(props.runningTexts || [])
+                  .filter(t => t.trim() !== '')
+                  .map(t => ({ text: t, isMain: false }))
+              ].filter(Boolean) as { text: string, isMain: boolean }[];
+              
+              return <CyclingText texts={activeTexts} />
+            })()}
+          </div>
+        </div>
+      )}      {showRincian && (
         <div className="absolute inset-0 z-[110] bg-white flex flex-col animate-in slide-in-from-right duration-300">
           {/* Header Section */}
           <div className="bg-gradient-to-r from-blue-700 to-indigo-800 pt-6 pb-6 px-6 text-white shadow-lg relative shrink-0">
@@ -3614,60 +3338,64 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           </div>
         </div>
       )}
-      {/* MENU KATEGORI LAYANAN */}
-      <div className="mx-1.5 mb-6 rounded-[24px] overflow-hidden shadow-sm border border-gray-100 bg-white">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#0047A5] to-[#00A1FF] px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
-              <i className="fa-solid fa-wand-magic-sparkles text-white text-sm"></i>
+
+      <div className="px-1.5 mb-2 grid grid-cols-5 gap-2 text-center">
+        {[
+          { id: 'view-kasbon', label: 'KASBON', icon: 'fa-file-invoice', color: 'bg-blue-500' },
+          { id: 'view-kontak', label: 'KONTAK', icon: 'fa-address-book', color: 'bg-emerald-500' },
+          { id: 'view-stok-voucher', label: 'VOUCHER', icon: 'fa-ticket', color: 'bg-orange-500' },
+          { id: 'view-kalender', label: 'KALENDER', icon: 'fa-calendar-days', color: 'bg-red-500' },
+          { 
+            id: showLainnya ? 'tutup-lainnya' : 'buka-lainnya', 
+            label: showLainnya ? 'TUTUP' : 'LAINNYA', 
+            icon: showLainnya ? 'fa-chevron-up' : 'fa-ellipsis', 
+            color: showLainnya ? 'bg-gray-400' : 'bg-purple-600' 
+          },
+        ].map((item) => (
+          <div 
+            key={item.id} 
+            onClick={() => {
+              if (item.id === 'buka-lainnya') setShowLainnya(true);
+              else if (item.id === 'tutup-lainnya') setShowLainnya(false);
+              else props.setActiveView(item.id);
+            }} 
+            className="cursor-pointer group"
+          >
+            <div className={cn("w-11 h-11 mx-auto rounded-2xl flex items-center justify-center text-white shadow-md active:scale-90 transition-transform", item.color)}>
+              <i className={cn("fa-solid text-lg", item.icon)}></i>
             </div>
-            <div>
-              <p className="text-white/90 text-[8px] font-bold tracking-widest uppercase mb-0.5">Kategori Layanan</p>
-              <h3 className="text-white font-black text-xs leading-tight relative pb-1">
-                Mudah, Cepat & Ringkas
-                <div className="absolute bottom-0 left-0 w-6 h-[2px] bg-green-400 rounded-full"></div>
-              </h3>
-            </div>
+            <p className="text-[9px] font-black text-black mt-1.5 tracking-tighter uppercase">{item.label}</p>
           </div>
-          <div className="bg-white/20 border border-white/30 rounded-full px-2 py-0.5 flex items-center gap-1">
-            <div className="w-1 h-1 rounded-full bg-green-400 animate-pulse"></div>
-            <span className="text-white font-bold text-[8px]">8 Menu Kasir</span>
-          </div>
-        </div>
-        
-        {/* Grid Menu */}
-        <div className="p-5 grid grid-cols-4 gap-y-6 gap-x-2 text-center bg-[#F9FBFF]">
-          {[
-            { id: 'view-isi-saldo', label: 'Deposit', icon: 'fa-wallet', color: 'bg-[#007AFF]', shadow: 'shadow-blue-500/40' },
-            { id: 'view-jurnal', label: 'Jurnal', icon: 'fa-book-open', color: 'bg-[#A03EFA]', shadow: 'shadow-purple-500/40', isJurnal: true },
-            { id: 'view-nota', label: 'Print', icon: 'fa-print', color: 'bg-[#00C875]', shadow: 'shadow-green-500/40' },
-            { id: 'view-kalender', label: 'Kalender', icon: 'fa-calendar-days', color: 'bg-[#6F42C1]', shadow: 'shadow-purple-700/40' },
-            { id: 'view-kontak', label: 'Kontak', icon: 'fa-user', color: 'bg-[#00B4D8]', shadow: 'shadow-cyan-500/40' },
-            { id: 'view-kasbon', label: 'Kasbon', icon: 'fa-wallet', color: 'bg-[#FD7E14]', shadow: 'shadow-orange-500/40' },
-            { id: 'view-stok-voucher', label: 'Voucher', icon: 'fa-ticket-simple', color: 'bg-[#F50057]', shadow: 'shadow-pink-500/40' },
-            { id: 'view-pos-kasir', label: 'Pos Kasir', icon: 'fa-store', color: 'bg-[#0056B3]', shadow: 'shadow-blue-800/40' },
-          ].map((item) => (
-            <div 
-              key={item.id} 
-              onClick={() => {
-                if ((item as any).isJurnal && props.onJurnalClick) {
-                  props.setActiveView('view-laporan')
-                  props.onJurnalClick()
-                } else {
-                  props.setActiveView(item.id)
-                }
-              }}
-              className="cursor-pointer group flex flex-col items-center"
-            >
-              <div className={cn("w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform mb-2", item.color, item.shadow)}>
-                <i className={cn("fa-solid text-xl", item.icon)}></i>
-              </div>
-              <p className="text-[10px] font-bold text-gray-800 tracking-tight">{item.label}</p>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
+
+      {/* Expanded Menu - Flexible Wrap */}
+      {showLainnya && (
+        <div className="px-4 py-3 mb-6 bg-gray-50/50 rounded-3xl mx-1.5 border border-dashed border-gray-200 animate-in slide-in-from-top-2 duration-300">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'text-purple-600', bg: 'bg-purple-50' },
+              { id: 'view-laporan', label: 'CLOSING', icon: 'fa-door-closed', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+              { id: 'view-transaksi', label: 'NON TUNAI', icon: 'fa-credit-card', color: 'text-teal-600', bg: 'bg-teal-50' },
+              { id: 'tutup-lainnya', label: 'TUTUP', icon: 'fa-chevron-up', color: 'text-gray-600', bg: 'bg-gray-100' },
+            ].map((item) => (
+              <div 
+                key={item.id} 
+                onClick={() => {
+                  if (item.id === 'tutup-lainnya') setShowLainnya(false);
+                  else props.setActiveView(item.id);
+                }}
+                className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+              >
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm", item.bg, item.color)}>
+                  <i className={cn("fa-solid text-lg", item.icon)}></i>
+                </div>
+                <p className="text-[8px] font-black text-black uppercase tracking-widest">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {props.kasirRole === 'owner' && (
         <div className="px-1.5 mb-4">
@@ -3754,18 +3482,21 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               </div>
 
               {/* Grid Menu Pengaturan Owner */}
-              <div className="grid grid-cols-4 gap-y-6 gap-x-2 text-center py-2">
+              <div className="grid grid-cols-4 gap-2">
                 {OWNER_HR_MENU.map((item) => (
-                  <div
+                  <button
                     key={item.id}
                     onClick={() => props.setActiveView(item.id)}
-                    className="cursor-pointer group flex flex-col items-center"
+                    className="bg-white border border-gray-100 rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1.5 shadow-sm active:scale-95 hover:border-teal-200 transition-all"
                   >
-                    <div className={cn("w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform mb-2", item.color)}>
-                      <i className={`fa-solid ${item.icon} text-xl`}></i>
+                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md", item.color)}>
+                      <i className={`fa-solid ${item.icon} text-sm`}></i>
                     </div>
-                    <p className="text-[10px] font-bold text-gray-800 tracking-tight">{item.title}</p>
-                  </div>
+                    <div className="text-center w-full px-0.5">
+                      <p className="text-[9px] font-black text-black leading-tight">{item.title}</p>
+                      <p className="text-[7px] font-bold text-gray-400 leading-tight mt-0.5 truncate">{item.desc}</p>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -3815,39 +3546,41 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {/* Grid Menu Pengaturan Toko */}
-              <div className="grid grid-cols-4 gap-y-6 gap-x-2 text-center py-2">
+              <div className="grid grid-cols-4 gap-2">
                 {TOKO_MENU_IDS.map((id) => {
                   const item = DEFAULT_OWNER_MENU.find(m => m.id === id)
                   if (!item) return null
                   const isSelected = selectedForSwap === item.id
                   return (
-                    <div
+                    <button
                       key={item.id}
                       onClick={() => handleMenuClick(item.id)}
                       className={cn(
-                        "cursor-pointer group flex flex-col items-center relative",
-                        isEditMenuMode ? "animate-pulse-slow" : "",
-                        isSelected ? "scale-105" : ""
+                        "bg-white border rounded-2xl p-2.5 flex flex-col items-center justify-center gap-1.5 shadow-sm transition-all relative overflow-hidden",
+                        isEditMenuMode ? "animate-pulse-slow cursor-pointer" : "active:scale-95 hover:border-amber-200 border-gray-100",
+                        isEditMenuMode && !isSelected ? "border-dashed border-amber-300 bg-amber-50/10" : "",
+                        isSelected ? "border-solid border-amber-500 bg-amber-50 ring-2 ring-amber-500 ring-offset-1 scale-105" : ""
                       )}
                     >
                       {isEditMenuMode && (
                         <div className={cn(
-                          "absolute top-0 right-1 rounded-full w-4 h-4 flex items-center justify-center transition-colors z-10",
-                          isSelected ? "bg-amber-500" : "bg-black/10"
+                          "absolute top-1.5 right-1.5 rounded-full w-4 h-4 flex items-center justify-center transition-colors",
+                          isSelected ? "bg-amber-500" : "bg-black/5"
                         )}>
                           <i className={cn("fa-solid fa-up-down-left-right text-[7px]", isSelected ? "text-white" : "text-gray-400")}></i>
                         </div>
                       )}
                       <div className={cn(
-                        "w-[50px] h-[50px] rounded-[18px] flex items-center justify-center text-white shadow-lg transition-transform mb-2",
+                        "w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md transition-transform",
                         item.color,
-                        isSelected ? "ring-2 ring-amber-500 ring-offset-2" : "",
-                        isEditMenuMode && !isSelected ? "opacity-80 scale-90" : "active:scale-90 scale-100"
+                        isEditMenuMode && !isSelected ? "opacity-80 scale-90" : "scale-100"
                       )}>
-                        <i className={`fa-solid ${item.icon} text-xl`}></i>
+                        <i className={`fa-solid ${item.icon} text-sm`}></i>
                       </div>
-                      <p className="text-[10px] font-bold text-gray-800 tracking-tight truncate">{item.title}</p>
-                    </div>
+                      <div className="text-center w-full px-0.5">
+                        <p className="text-[9px] font-black text-black leading-tight truncate">{item.title}</p>
+                      </div>
+                    </button>
                   )
                 })}
               </div>

@@ -783,38 +783,41 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="px-1.5 pt-6 pb-5 bg-gradient-to-r from-indigo-700 to-blue-600 text-white rounded-b-[2rem] shadow-lg shadow-blue-500/20" style={{ marginTop: '-2.5rem', position: 'relative', zIndex: 10 }}>
-        <div className="px-2 flex justify-between items-center">
-          <div>
-            <h2 className="font-bold text-sm tracking-wide">Data Transaksi</h2>
-            <p className="text-blue-100 text-[10px] opacity-90">Arus kas keluar masuk</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <i className="fa-solid fa-clock text-white text-xs"></i>
-          </div>
-        </div>
-
-        {/* OWNER ONLY: FILTER KASIR DI DALAM HEADER */}
-        {props.kasirRole === 'owner' && props.kasirList && (
-          <div className="mt-3 bg-white/10 p-2 rounded-xl border border-white/20 flex items-center justify-between">
-             <span className="text-[12px] font-bold text-white uppercase tracking-wider">
-               <i className="fa-solid fa-user-gear mr-1"></i> Mode Pantau Kasir:
-             </span>
-             <div className="relative">
-                <select 
-                  value={props.filterKasir || 'Semua'}
-                  onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                  className="bg-white bg-none text-violet-700 text-[12px] font-black rounded-lg pl-2 pr-6 py-1 outline-none border-none appearance-none cursor-pointer"
-                >
-                  <option value="Semua">Semua Kasir</option>
-                  {Object.entries(props.kasirList).map(([id, acc]) => (
-                    <option key={id} value={id}>{acc.name}</option>
-                  ))}
-                </select>
-                <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[7px] text-violet-400 pointer-events-none"></i>
+      <div className="mx-1.5 mb-4 mt-[-1.5rem] relative z-[40]">
+        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+               <i className="fa-solid fa-clock text-lg text-white"></i>
+             </div>
+             <div className="flex-1 min-w-0">
+               <p className="text-[10px] font-bold text-white mb-0.5 truncate">Arus kas keluar masuk</p>
+               <h2 className="text-base font-black text-white leading-none truncate">Data Transaksi</h2>
              </div>
           </div>
-        )}
+
+          {/* OWNER ONLY: FILTER KASIR DI DALAM HEADER */}
+          {props.kasirRole === 'owner' && props.kasirList && (
+             <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center gap-2">
+                 <div className="flex-1 bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
+                   <div className="flex-1 flex items-center min-w-0">
+                     <div className="relative flex-1 min-w-0">
+                       <select 
+                         value={props.filterKasir || 'Semua'}
+                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                         className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                       >
+                         <option value="Semua" className="text-slate-800">Semua Kasir</option>
+                         {Object.entries(props.kasirList).map(([id, acc]) => (
+                           <option key={id} value={id} className="text-slate-800">{acc.name}</option>
+                         ))}
+                       </select>
+                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                     </div>
+                   </div>
+                 </div>
+             </div>
+          )}
+        </div>
       </div>
 
       <div className="px-1.5 pb-20 pt-3">
