@@ -33,6 +33,12 @@ interface PosTransaction {
   kasir: string;
 }
 
+interface PrintSettings {
+  namaToko: string;
+  alamat: string;
+  ucapan: string;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const generateId = () => Math.random().toString(36).slice(2, 10).toUpperCase();
 const formatRp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
@@ -123,7 +129,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat' | 'setting'>('kasir');
   const [isLoading, setIsLoading] = useState(true);
 
-  const [printSettings, setPrintSettings] = useState(() => {
+  const [printSettings, setPrintSettings] = useState<PrintSettings>(() => {
     const saved = localStorage.getItem(`pos_settings_${storeId}`);
     return saved ? JSON.parse(saved) : {
       namaToko: storeName,
