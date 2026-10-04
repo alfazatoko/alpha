@@ -2981,46 +2981,50 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           <div id="blue-carousel" onScroll={(e) => { const el = e.currentTarget; setBlueCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full h-full pb-4 pt-6 px-4 gap-4" style={{ scrollBehavior: 'smooth' }}>
             {/* Slide 1: Aset Bank & Laci Kasir */}
             <div className="snap-center min-w-full flex justify-between gap-3">
-              <div className="flex-1 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-building-columns text-lg text-white"></i>
+              <div className="flex-1 flex flex-col justify-center gap-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-building-columns text-[12px] text-white"></i>
+                  </div>
+                  <p className="text-[11px] font-bold text-white truncate">Aset Bank</p>
                 </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Aset Bank</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(props.saldoBank)}</p>
-                </div>
+                <p className="text-lg font-black text-white leading-none truncate">{formatRupiah(props.saldoBank)}</p>
               </div>
-              <div className="w-[2px] h-10 bg-white/20 shrink-0 rounded-full"></div>
-              <div className="flex-1 flex items-center gap-3 pl-1">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-cash-register text-lg text-white"></i>
+              
+              <div className="w-[1px] h-12 bg-white/20 shrink-0 rounded-full"></div>
+              
+              <div className="flex-1 flex flex-col justify-center gap-1.5 pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-cash-register text-[12px] text-white"></i>
+                  </div>
+                  <p className="text-[11px] font-bold text-white truncate">Laci Kasir</p>
                 </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Laci Kasir</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(ownerTotalLaci)}</p>
-                </div>
+                <p className="text-lg font-black text-white leading-none truncate">{formatRupiah(ownerTotalLaci)}</p>
               </div>
             </div>
             {/* Slide 2: Total Aset Likuid & Total Aset Masuk */}
             <div className="snap-center min-w-full flex justify-between gap-3">
-              <div className="flex-1 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-vault text-lg text-white"></i>
+              <div className="flex-1 flex flex-col justify-center gap-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-vault text-[12px] text-white"></i>
+                  </div>
+                  <p className="text-[11px] font-bold text-white truncate">Total Aset Likuid</p>
                 </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Total Aset Likuid</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(props.saldoBank + ownerTotalLaci)}</p>
-                </div>
+                <p className="text-lg font-black text-white leading-none truncate">{formatRupiah(props.saldoBank + ownerTotalLaci)}</p>
               </div>
-              <div className="w-[2px] h-10 bg-white/20 shrink-0 rounded-full"></div>
-              <div className="flex-1 flex items-center gap-3 pl-1">
-                <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-hand-holding-dollar text-lg text-white"></i>
+              
+              <div className="w-[1px] h-12 bg-white/20 shrink-0 rounded-full"></div>
+              
+              <div className="flex-1 flex flex-col justify-center gap-1.5 pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-hand-holding-dollar text-[12px] text-white"></i>
+                  </div>
+                  <p className="text-[11px] font-bold text-white truncate">Total Aset Masuk</p>
                 </div>
-                <div className="min-w-0">
-                   <p className="text-[10px] font-bold text-white mb-0.5 truncate">Total Aset Masuk</p>
-                   <p className="text-base font-black text-white leading-none truncate">{formatRupiah(ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin)}</p>
-                </div>
+                <p className="text-lg font-black text-white leading-none truncate">{formatRupiah(ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin)}</p>
               </div>
             </div>
           </div>
