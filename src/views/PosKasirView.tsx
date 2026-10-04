@@ -795,7 +795,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* MODAL FORM PRODUK */}
       {showProductForm && (
-        <ProductFormModal product={editingProduct} onSave={saveProduct} onClose={() => { setShowProductForm(false); setEditingProduct(null); }} />
+        <ProductFormModal enableStok={printSettings.enableStok} product={editingProduct} onSave={saveProduct} onClose={() => { setShowProductForm(false); setEditingProduct(null); }} />
       )}
 
       {/* MODAL DELETE CONFIRM */}
@@ -839,9 +839,10 @@ interface ProductFormProps {
   product: Product | null;
   onSave: (p: Product) => void;
   onClose: () => void;
+  enableStok?: boolean;
 }
 
-const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose }) => {
+const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose, enableStok = true }) => {
   const [showScanner, setShowScanner] = useState(false);
   const [form, setForm] = useState<Product>(product || {
     id: generateId(),
@@ -940,7 +941,7 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
               />
             </div>
-            {printSettings.enableStok && (
+            {enableStok && (
               <div>
                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Stok Awal</label>
                 <input 
