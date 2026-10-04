@@ -440,12 +440,10 @@ const GajiPanel: React.FC<{
               if(parts.length < 2) return '';
               const lbl = parts[0];
               const val = parts.slice(1).join(': ');
-              return \`
-              <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
-                <span style="color:#d1fae5; font-weight:bold; text-transform:uppercase;">\${lbl}</span>
-                <span style="font-weight:900; text-align:right; white-space:pre-wrap; max-width:60%;">\${val}</span>
-              </div>
-              \`;
+              return '<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">' +
+                '<span style="color:#d1fae5; font-weight:bold; text-transform:uppercase;">' + lbl + '</span>' +
+                '<span style="font-weight:900; text-align:right; white-space:pre-wrap; max-width:60%;">' + val + '</span>' +
+              '</div>';
             }).join('')}
           </div>
           <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:flex-end;">
