@@ -814,7 +814,7 @@ const GajiPanel: React.FC<{
           onClick={handleShareJPG}
           className="flex-[1_1_45%] bg-[#0066FF] text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
-          <i className="fa-solid fa-image text-[10px]"></i> BAGIKAN JPG
+          <i className="fa-solid fa-download text-[10px]"></i> UNDUH JPG
         </button>
         <button
           onClick={handleShareText}
@@ -881,10 +881,10 @@ const GajiPanel: React.FC<{
                      })}
                      <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200">
                         <button onClick={() => shareHistoryData(tx, 'jpg')} className="flex-1 py-2 bg-[#0066FF] text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1">
-                          <i className="fa-solid fa-image"></i> JPG
+                          <i className="fa-solid fa-download"></i> UNDUH JPG
                         </button>
                         <button onClick={() => shareHistoryData(tx, 'pdf')} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-1">
-                          <i className="fa-solid fa-file-pdf"></i> PDF
+                          <i className="fa-solid fa-file-pdf"></i> UNDUH PDF
                         </button>
                      </div>
                    </div>
