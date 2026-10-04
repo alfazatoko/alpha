@@ -389,18 +389,18 @@ const GajiPanel: React.FC<{
           url: result.uri
         });
       } else {
-        canvas.toBlob(async (blob) => {
+        canvas.toBlob((blob) => {
           if (!blob) return;
           const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
+          const a = document.createElement('a');
           a.href = url;
           a.download = filename;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          showToast("Gambar berhasil diunduh.");
-        }, "image/jpeg", 0.9);
+          showToast('Gambar berhasil diunduh.');
+        }, 'image/jpeg', 0.9);
       }
     } catch (e: any) {
       showToast("Gagal share JPG: " + (e?.message || "Error unknown"));
@@ -476,18 +476,18 @@ const GajiPanel: React.FC<{
           const result = await Filesystem.writeFile({ path: filename, data: base64Data, directory: Directory.Cache });
           await Share.share({ title: \`Slip Gaji \${kasirName}\`, url: result.uri });
         } else {
-          canvas.toBlob(async (blob) => {
+          canvas.toBlob((blob) => {
             if (!blob) return;
             const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
+            const a = document.createElement('a');
             a.href = url;
             a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast("Gambar berhasil diunduh.");
-          }, "image/jpeg", 0.9);
+            showToast('Gambar berhasil diunduh.');
+          }, 'image/jpeg', 0.9);
         }
       } else {
         const imgData = canvas.toDataURL("image/png");
