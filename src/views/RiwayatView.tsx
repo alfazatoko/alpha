@@ -822,19 +822,38 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
       <div className="px-1.5 pb-20 pt-3">
         {/* FILTER BARU (Filter Transaksi) - COMPACT MOBILE */}
-        <div className="mb-3">
-          <div className="w-full bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-xl px-2 py-2 flex justify-between items-center shadow-sm transition-all">
+        <div className="mb-3 sticky top-[4rem] z-[45] -mx-1.5 px-1.5 py-1 bg-white/80 backdrop-blur-md rounded-b-xl shadow-sm">
+          <div className="w-full bg-blue-50 border border-blue-200/60 rounded-lg px-2 py-1 flex justify-between items-center transition-all">
             <div 
-              className="flex items-center gap-2.5 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
+              className="flex items-center gap-1.5 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
               onClick={() => setIsFilterOpen(true)}
             >
-              <i className="fa-solid fa-sliders text-[12px] text-blue-600 shrink-0"></i>
-              <div className="min-w-0 flex-1 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-blue-900 uppercase tracking-wider shrink-0 leading-tight">Filter Riwayat</span>
-                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter truncate mt-0.5">
-                  {props.filterKategori.includes('Semua') ? 'Semua' : props.filterKategori.join(', ')}
-                  {props.filterPencarian ? ` • "${props.filterPencarian}"` : ''}
-                  {` • ${props.filterTanggalMulai === props.filterTanggalAkhir ? props.filterTanggalMulai : `${props.filterTanggalMulai} - ${props.filterTanggalAkhir}`}`}
+              <i className="fa-solid fa-sliders text-[10px] text-blue-600 shrink-0"></i>
+              <div className="min-w-0 flex-1 flex items-center">
+                <span className="text-[9px] sm:text-[9.5px] font-black text-blue-900 uppercase tracking-wider truncate">
+                  {(() => {
+                    const cat = props.filterKategori.includes('Semua') ? 'Riwayat' : props.filterKategori.join(', ');
+                    const search = props.filterPencarian ? ` "${props.filterPencarian}"` : '';
+                    let dateText = '';
+                    if (props.filterTanggalMulai === props.filterTanggalAkhir) {
+                      const d = new Date(props.filterTanggalMulai);
+                      if (!isNaN(d.getTime())) {
+                        const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+                        const dayName = days[d.getDay()];
+                        const parts = props.filterTanggalMulai.split('-');
+                        if(parts.length === 3) {
+                          dateText = `${dayName} ${parts[2]}-${parts[1]}-${parts[0]}`;
+                        } else {
+                          dateText = props.filterTanggalMulai;
+                        }
+                      } else {
+                        dateText = props.filterTanggalMulai;
+                      }
+                    } else {
+                      dateText = `${props.filterTanggalMulai} s/d ${props.filterTanggalAkhir}`;
+                    }
+                    return `${cat}${search} • ${dateText}`;
+                  })()}
                 </span>
               </div>
             </div>
@@ -853,7 +872,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     setCurrentPage(1);
                   }
                 }}
-                className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
+                className="w-7 h-7 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
               >
                 <i className="fa-solid fa-chevron-left text-[11px]"></i>
               </button>
@@ -871,7 +890,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                     setCurrentPage(1);
                   }
                 }}
-                className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
+                className="w-7 h-7 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
               >
                 <i className="fa-solid fa-chevron-right text-[11px]"></i>
               </button>
@@ -881,7 +900,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                   e.stopPropagation();
                   setIsFilterOpen(true);
                 }}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-all active:scale-95"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-all active:scale-95"
               >
                 <i className="fa-solid fa-chevron-down text-[12px]"></i>
               </button>
@@ -926,7 +945,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               <div className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Tarik Tunai</div>
             </div>
             <div className="text-sm font-black text-rose-700 leading-tight mt-1 truncate">
-              {todayTarikTunai > 0 ? formatRupiah(todayTarikTunai).replace(',00', '') : <span className="text-rose-300">—</span>}
+              {formatRupiah(todayTarikTunai).replace(',00', '')}
             </div>
             <div className="text-[8px] font-bold text-rose-400 mt-0.5">Laci → Pembeli</div>
           </div>

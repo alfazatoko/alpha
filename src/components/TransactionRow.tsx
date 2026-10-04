@@ -37,6 +37,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   const formatK = (num: number) => (num % 1000 === 0) ? `${num / 1000}K` : formatRp(num);
 
   let formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
+  let displayKategori = t.kategori;
+
+  if (formattedKeterangan.includes('\n')) {
+    const parts = formattedKeterangan.split('\n');
+    displayKategori = parts[0];
+    formattedKeterangan = parts.slice(1).join(' ');
+  }
   let detailTable: React.ReactNode = null;
 
   if (t.kategori === 'Tarik Tunai' && t.keterangan?.startsWith('TARIK_TUNAI|')) {
@@ -166,49 +173,106 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
         </div>
       </div>
 
-      {/* DETAIL DRAWER */}
+      {/* DETAIL POPUP MODAL */}
       {isOpen && (
-        <div className="bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
-           <div className="flex flex-col gap-0.5 w-full">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Rincian Transaksi:</span>
-                {t.isEdited && <span className="text-[7px] bg-amber-100 text-amber-700 px-1 py-[2px] rounded font-black leading-none">EDITED</span>}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}>
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-3 px-4">
+              <h3 className="font-black text-slate-700 text-sm tracking-tight uppercase">Rincian Transaksi</h3>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 transition-colors"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-4 flex flex-col gap-3">
+              {/* Waktu & Transaksi */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Waktu:</span>
+                  <span className="text-slate-800 font-bold">{dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} {jam}</span>
+                </div>
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Transaksi:</span>
+                  <span className="text-blue-600 font-black">{displayKategori}</span>
+                </div>
               </div>
-              
-              {detailTable}
-              
-              <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-200/50">
-                 <div className="flex flex-col gap-0.5">
-                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Tanggal:</span>
-                   <span className="text-[10px] font-bold text-slate-700 leading-tight">
-                     {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
-                   </span>
-                 </div>
-                 
-                 <div className="flex gap-1.5 shrink-0">
-                    {canEdit ? (
-                      <button 
-                        onClick={handleEditClick}
-                        className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-[9px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm h-[26px]"
-                      >
-                        <i className="fa-solid fa-pen text-[7px]"></i> EDIT
-                      </button>
-                    ) : (
-                      <span className="text-[8px] text-slate-400 font-bold italic py-1 px-2 bg-slate-100/50 rounded-lg h-[24px] flex items-center">
-                        LOCKED
-                      </span>
-                    )}
-                    {canDelete && (
-                      <button 
-                        onClick={handleDeleteClick}
-                        className="bg-rose-50 text-rose-600 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100 shadow-sm"
-                      >
-                        <i className="fa-solid fa-trash-can text-[9px]"></i>
-                      </button>
-                    )}
-                 </div>
+
+              {/* Keterangan */}
+              <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2.5 px-3 text-[12px] border border-slate-100">
+                <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
+                <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{formattedKeterangan}</span>
               </div>
-           </div>
+
+              {/* Sumber Uang (Keluar/Masuk) */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center bg-rose-50/50 rounded-lg p-2.5 px-3 text-[12px] border border-rose-100">
+                  <span className="text-rose-600 font-black flex items-center gap-1.5">
+                    <i className="fa-solid fa-arrow-up-right text-[10px]"></i> Sumber Uang Keluar:
+                  </span>
+                  <span className="text-rose-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? 'Laci Kasir' : t.kategori}</span>
+                </div>
+                <div className="flex justify-between items-center bg-emerald-50/50 rounded-lg p-2.5 px-3 text-[12px] border border-emerald-100">
+                  <span className="text-emerald-600 font-black flex items-center gap-1.5">
+                    <i className="fa-solid fa-arrow-down-left text-[10px]"></i> Sumber Uang Masuk:
+                  </span>
+                  <span className="text-emerald-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? (t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').trim() || 'EDC / Bank') : 'Laci Kasir'}</span>
+                </div>
+              </div>
+
+              {/* Nominal & Admin */}
+              <div className="flex flex-col gap-1.5 mt-1">
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Nominal:</span>
+                  <span className="text-slate-800 font-black">Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
+                </div>
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Biaya Admin:</span>
+                  <span className="text-slate-800 font-black">Rp {formatRp(t.adminFee)}</span>
+                </div>
+              </div>
+
+              {/* Total (Dashed Border) */}
+              <div className="flex justify-between items-center pt-3 border-t border-dashed border-slate-300 mt-1">
+                <span className="text-slate-800 font-black text-[13px]">Total:</span>
+                <span className="text-blue-600 font-black text-[14px]">Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
+              </div>
+
+              {/* Edit / Delete Actions */}
+              <div className="flex justify-between items-center mt-2 pt-3 border-t border-slate-100">
+                {t.isEdited && <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-black tracking-widest">EDITED</span>}
+                {!t.isEdited && <div></div>}
+                <div className="flex gap-2">
+                  {canEdit ? (
+                    <button 
+                      onClick={(e) => { setIsOpen(false); handleEditClick(e); }}
+                      className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-1.5 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm"
+                    >
+                      <i className="fa-solid fa-pen text-[9px]"></i> EDIT
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-bold italic py-2 px-3 bg-slate-100 rounded-xl">LOCKED</span>
+                  )}
+                  {canDelete && (
+                    <button 
+                      onClick={(e) => { setIsOpen(false); handleDeleteClick(e); }}
+                      className="bg-rose-50 text-rose-600 w-9 h-9 rounded-xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all border border-rose-100 shadow-sm"
+                    >
+                      <i className="fa-solid fa-trash-can text-[11px]"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
         </div>
       )}
     </div>

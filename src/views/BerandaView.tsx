@@ -2743,7 +2743,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
       {/* ── POS KASIR OVERLAY ── */}
       {props.activeView === 'view-pos-kasir' && (() => {
         return (
-          <div className="absolute inset-0 z-[100] bg-[#F9FBFF] flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="absolute inset-0 z-[100] bg-[#F9FBFF] flex flex-col animate-in slide-in-from-right duration-300 overflow-y-auto hide-scrollbar">
             {/* Header Toko Identik */}
             <GlobalHeader 
               storePhoto={props.storePhoto}
@@ -2828,7 +2828,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             />
 
             {/* Blue Card Header */}
-            <div className="mx-1.5 mb-5 mt-[-1.5rem] relative z-[40] shrink-0">
+            <div className="mx-1.5 mb-5 mt-2 relative z-[40] shrink-0">
               <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
                 <div className="flex items-center gap-3">
                    <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
@@ -2846,7 +2846,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             </div>
 
             {/* Transaction Form Body — scrollable */}
-            <div className="flex-1 overflow-y-auto hide-scrollbar">
+            <div className="flex-1">
               <TransactionForm
                 onSave={props.handleSimpanTransaksi}
                 isSaving={props.isSaving}
@@ -2861,6 +2861,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 adminRules={props.adminRules}
               />
             </div>
+            <div className="h-[130px] shrink-0 w-full pointer-events-none"></div>
           </div>
         )
       })()}
@@ -2970,8 +2971,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         />
 
       <div className="mx-1.5 mb-3 mt-[-1.5rem] relative z-[40]">
-        {/* BLUE CARD CAROUSEL */}
-        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white overflow-hidden relative">
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white overflow-hidden relative">
           
           <div className="absolute top-3 w-full flex justify-center gap-1.5 z-20">
             <div onClick={() => document.getElementById('blue-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", blueCardIndex === 0 ? "w-3.5 bg-white" : "w-1.5 bg-white/40")}></div>

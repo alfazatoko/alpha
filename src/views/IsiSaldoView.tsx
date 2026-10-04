@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+﻿import React, { useRef, useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatInputRupiah, cn, formatRupiah } from '../lib/utils'
 import type { OperkanSaldo } from '../types'
@@ -117,14 +117,14 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
     setConfirmStep(null)
   }
 
-  // ── Popup Konfirmasi Operan Saldo (2 Tahap) ──
+  // â”€â”€ Popup Konfirmasi Operan Saldo (2 Tahap) â”€â”€
   const renderOperkanModal = () => {
     if (!showOperkanModal || !operkan) return null
     const tanggalKirim = new Date(operkan.tanggal_kirim)
     const tglStr = tanggalKirim.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
     const jamStr = tanggalKirim.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 
-    // ── TAHAP 2: Konfirmasi Final ──
+    // â”€â”€ TAHAP 2: Konfirmasi Final â”€â”€
     if (confirmStep) {
       const isTerima = confirmStep === 'terima'
       return (
@@ -222,7 +222,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
       )
     }
 
-    // ── TAHAP 1: Tampilan Rincian + Pilihan Aksi ──
+    // â”€â”€ TAHAP 1: Tampilan Rincian + Pilihan Aksi â”€â”€
     return (
       <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
@@ -305,7 +305,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
               </div>
             )}
 
-            {/* Pilihan Aksi — Tahap 1 */}
+            {/* Pilihan Aksi â€” Tahap 1 */}
             <div className="pt-1 space-y-2">
               {isPenerima && (
                 <button
@@ -336,7 +336,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
     )
   }
 
-  // ── Tombol Banner SALDO OPERAN ──
+  // â”€â”€ Tombol Banner SALDO OPERAN â”€â”€
   const renderOperkanBanner = () => {
     if (!hasOperkan) return null
 
@@ -367,11 +367,11 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
         <div className="flex-1 text-left">
           <p className="text-[11px] font-black uppercase tracking-widest leading-none">
-            {isPenerima ? "🔔 ADA SALDO OPERAN UNTUKMU!" : "🕐 SALDO OPERAN MENUNGGU"}
+            {isPenerima ? "ðŸ”” ADA SALDO OPERAN UNTUKMU!" : "ðŸ• SALDO OPERAN MENUNGGU"}
           </p>
           <p className="text-[10px] opacity-85 font-semibold mt-0.5">
             {isPenerima
-              ? `dari ${operkan?.pengirim_name} — ${formatRupiah(operkan?.nominal_total || 0)}`
+              ? `dari ${operkan?.pengirim_name} â€” ${formatRupiah(operkan?.nominal_total || 0)}`
               : `Menunggu ${operkan?.penerima_name} konfirmasi`
             }
           </p>
@@ -414,17 +414,17 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
                 
                 <div className="space-y-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">🏦 Saldo Bank (Plafon)</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ¦ Saldo Bank (Plafon)</p>
                     <p className="text-[11px] leading-relaxed">Uang digital yang mengendap di rekening bank terdaftar (misal: BRI, Mandiri, BCA) sebagai plafon transaksi Brilink.</p>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">📱 Saldo Real Aplikasi (HP)</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ“± Saldo Real Aplikasi (HP)</p>
                     <p className="text-[11px] leading-relaxed">Saldo modal di dalam aplikasi keagenan HP (misal: Brilink Mobile, Kioser, dll) yang langsung berkurang saat melakukan transfer.</p>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">💵 Modal Tunai Kasir</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ’µ Modal Tunai Kasir</p>
                     <p className="text-[11px] leading-relaxed">Uang tunai cash di laci kasir (fisik) yang disiapkan sebagai modal kembalian atau penarikan tunai.</p>
                   </div>
                 </div>
@@ -553,7 +553,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         </div>
       </div>
 
-      <div className="px-1.5 pb-8 space-y-5">
+      <div className="px-1.5 pb-[120px] space-y-5">
         {/* Banner Operan Saldo (Mobile) */}
         {hasOperkan && (
           <div className="mx-0.5">

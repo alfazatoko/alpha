@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { cn, formatInputRupiah, parseNominal } from '../lib/utils'
 import type { PresetOtomatis } from '../types'

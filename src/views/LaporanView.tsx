@@ -1,4 +1,4 @@
-import { KasSummary } from '../components/KasSummary';
+﻿import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, formatInputRupiah, cn } from '../lib/utils'
@@ -875,7 +875,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         if (selisih === 0) {
           statusText = 'STATUS: KLOP';
           statusDesc = 'Sisa saldo di HP cocok dengan catatan buku';
-          statusVal = 'âœ“ MATCH';
+          statusVal = 'Ã¢Å“â€œ MATCH';
           r = 16; g = 185; b = 129; // Emerald green
         } else if (selisih > 0) {
           statusText = 'STATUS: SURPLUS';
@@ -960,19 +960,19 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           `*${(props.storeName || 'ALFAZA CELL').toUpperCase()}*`,
           `_${props.storeSubtext || 'Pembukuan Agen brilink & Konter'}_`,
           `==================================`,
-          `ðŸ“… *Tanggal:* ${props.filterTanggal}`,
-          `ðŸ‘¤ *Kasir:* ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`,
-          props.filterKasir && props.filterKasir !== 'Semua' ? `ðŸ‘ï¸ *Mode Pantau:* ${props.kasirList[props.filterKasir]?.name || props.filterKasir}` : '',
+          `Ã°Å¸â€œâ€¦ *Tanggal:* ${props.filterTanggal}`,
+          `Ã°Å¸â€˜Â¤ *Kasir:* ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`,
+          props.filterKasir && props.filterKasir !== 'Semua' ? `Ã°Å¸â€˜ÂÃ¯Â¸Â *Mode Pantau:* ${props.kasirList[props.filterKasir]?.name || props.filterKasir}` : '',
           `==================================`,
-          `ðŸ’µ *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
-          `ðŸ¦ *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
+          `Ã°Å¸â€™Âµ *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
+          `Ã°Å¸ÂÂ¦ *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
           `==================================`,
-          `ðŸŽŸï¸ *REKAP PENJUALAN VOUCHER*`,
-          `â€¢ Laku: ${totalQtyLaku} pcs`,
-          `â€¢ Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`,
-          `â€¢ QRIS: ${formatRupiah(totalUangQris)}`,
+          `Ã°Å¸Å½Å¸Ã¯Â¸Â *REKAP PENJUALAN VOUCHER*`,
+          `Ã¢â‚¬Â¢ Laku: ${totalQtyLaku} pcs`,
+          `Ã¢â‚¬Â¢ Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`,
+          `Ã¢â‚¬Â¢ QRIS: ${formatRupiah(totalUangQris)}`,
           `==================================`,
-          `ðŸ“Š *REKAP PER KATEGORI*`
+          `Ã°Å¸â€œÅ  *REKAP PER KATEGORI*`
         ].filter(Boolean);
 
         const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
@@ -990,45 +990,45 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             const qty = filtered.length;
             const nom = filtered.reduce((s,t) => s + t.nominal, 0);
             const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
-            lines.push(`â€¢ *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
+            lines.push(`Ã¢â‚¬Â¢ *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
           }
         });
 
         lines.push(`==================================`);
-        lines.push(`ðŸ“¥ *KAS MASUK*`);
-        lines.push(`â€¢ Modal Tunai Kasir: ${formatRupiah(props.kasModal)}`);
-        lines.push(`â€¢ Penjualan Digital: ${formatRupiah(currentPenjualanDigital)}`);
-        lines.push(`â€¢ Penjualan Aksesoris: ${formatRupiah(currentTotalAksesoris)}`);
-        lines.push(`â€¢ Total Admin Fee: ${formatRupiah(currentTotalAdmin)}`);
+        lines.push(`Ã°Å¸â€œÂ¥ *KAS MASUK*`);
+        lines.push(`Ã¢â‚¬Â¢ Modal Tunai Kasir: ${formatRupiah(props.kasModal)}`);
+        lines.push(`Ã¢â‚¬Â¢ Penjualan Digital: ${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`Ã¢â‚¬Â¢ Penjualan Aksesoris: ${formatRupiah(currentTotalAksesoris)}`);
+        lines.push(`Ã¢â‚¬Â¢ Total Admin Fee: ${formatRupiah(currentTotalAdmin)}`);
         
         lines.push(`==================================`);
-        lines.push(`ðŸ“¤ *KAS KELUAR*`);
-        lines.push(`â€¢ Tarik Tunai Nasabah: -${formatRupiah(currentTotalTarik)}`);
+        lines.push(`Ã°Å¸â€œÂ¤ *KAS KELUAR*`);
+        lines.push(`Ã¢â‚¬Â¢ Tarik Tunai Nasabah: -${formatRupiah(currentTotalTarik)}`);
         
         lines.push(`==================================`);
-        lines.push(`ðŸ’¼ *KAS LAINNYA*`);
-        lines.push(`â€¢ Admin Dalam: ${formatRupiah(totalAdminDalam)}`);
-        lines.push(`â€¢ Transaksi Non Tunai: ${formatRupiah(totalNonTunai)}`);
-        lines.push(`â€¢ Transaksi Khusus: ${formatRupiah(totalKhusus)}`);
+        lines.push(`Ã°Å¸â€™Â¼ *KAS LAINNYA*`);
+        lines.push(`Ã¢â‚¬Â¢ Admin Dalam: ${formatRupiah(totalAdminDalam)}`);
+        lines.push(`Ã¢â‚¬Â¢ Transaksi Non Tunai: ${formatRupiah(totalNonTunai)}`);
+        lines.push(`Ã¢â‚¬Â¢ Transaksi Khusus: ${formatRupiah(totalKhusus)}`);
         lines.push(`*Total Kas Lainnya:* ${formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}`);
         
         lines.push(`==================================`);
-        lines.push(`âš–ï¸ *JURNAL PENYESUAIAN SALDO*`);
-        lines.push(`â€¢ 1. Modal Saldo Bank (Isi): ${formatRupiah(currentIsiBank)}`);
-        lines.push(`â€¢ 2. Penjualan Digital: -${formatRupiah(currentPenjualanDigital)}`);
-        lines.push(`â€¢ 3. Sisa Saldo (Buku): ${formatRupiah(currentSaldoBank)}`);
-        lines.push(`â€¢ 4. Saldo Real HP: ${formatRupiah(props.saldoReal)}`);
+        lines.push(`Ã¢Å¡â€“Ã¯Â¸Â *JURNAL PENYESUAIAN SALDO*`);
+        lines.push(`Ã¢â‚¬Â¢ 1. Modal Saldo Bank (Isi): ${formatRupiah(currentIsiBank)}`);
+        lines.push(`Ã¢â‚¬Â¢ 2. Penjualan Digital: -${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`Ã¢â‚¬Â¢ 3. Sisa Saldo (Buku): ${formatRupiah(currentSaldoBank)}`);
+        lines.push(`Ã¢â‚¬Â¢ 4. Saldo Real HP: ${formatRupiah(props.saldoReal)}`);
         
         const selisih = props.saldoReal - currentSaldoBank;
         let statusStr = '';
-        if (selisih === 0) statusStr = 'âœ… KLOP (âœ“ MATCH)';
-        else if (selisih > 0) statusStr = `ðŸ”µ SURPLUS (+${formatRupiah(selisih)})`;
-        else statusStr = `ðŸ”´ SELISIH (${formatRupiah(selisih)})`;
+        if (selisih === 0) statusStr = 'Ã¢Å“â€¦ KLOP (Ã¢Å“â€œ MATCH)';
+        else if (selisih > 0) statusStr = `Ã°Å¸â€Âµ SURPLUS (+${formatRupiah(selisih)})`;
+        else statusStr = `Ã°Å¸â€Â´ SELISIH (${formatRupiah(selisih)})`;
         
-        lines.push(`ðŸ‘‰ *STATUS:* *${statusStr}*`);
+        lines.push(`Ã°Å¸â€˜â€° *STATUS:* *${statusStr}*`);
         if (catatanKasir.trim()) {
           lines.push(`==================================`);
-          lines.push(`ðŸ“ *CATATAN KASIR:*`);
+          lines.push(`Ã°Å¸â€œÂ *CATATAN KASIR:*`);
           lines.push(`"${catatanKasir}"`);
         }
         lines.push(`==================================`);
@@ -1282,7 +1282,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
               </span>
               <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentUangMasuk)}>{formatRupiah(currentUangMasuk)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Penjualan â†’ Laci</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Penjualan Ã¢â€ â€™ Laci</span>
               {renderDelta(currentUangMasuk, yesterdayStats?.uangMasuk, true)}
             </div>
 
@@ -1292,7 +1292,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
               </span>
               <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentTotalTarik)}>{formatRupiah(currentTotalTarik)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Laci â†’ Pembeli</span>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Laci Ã¢â€ â€™ Pembeli</span>
               {renderDelta(currentTotalTarik, yesterdayStats?.tarik, true)}
             </div>
           </div>
@@ -1483,7 +1483,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-sm block">{selisih === 0 ? 'âœ“ MATCH' : formatRupiah(selisih)}</span>
+                      <span className="font-black text-sm block">{selisih === 0 ? 'Ã¢Å“â€œ MATCH' : formatRupiah(selisih)}</span>
                       {selisih !== 0 && <span className="text-[8px] font-black opacity-80 uppercase tracking-widest">Cek Kembali</span>}
                     </div>
                   </div>
@@ -2211,7 +2211,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </button>
           </div>
 
-          {/* 3 Kolom â€” hanya judul + nominal */}
+          {/* 3 Kolom Ã¢â‚¬â€ hanya judul + nominal */}
           <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-700/60 p-3">
             {/* Kas Masuk */}
             <div 
@@ -2798,7 +2798,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
             
             <p className="text-white text-xs font-black uppercase tracking-widest leading-relaxed">
-              âš ï¸ SILAHKAN PERIKSA KEMBALI PEMBUKUAN KAMU
+              Ã¢Å¡Â Ã¯Â¸Â SILAHKAN PERIKSA KEMBALI PEMBUKUAN KAMU
             </p>
             
             <button 
@@ -2824,7 +2824,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-wider text-white">Timeline Audit Serah Terima Shift</h3>
-                  <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A âž” Saldo Awal Kasir B</p>
+                  <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A Ã¢Å¾â€ Saldo Awal Kasir B</p>
                 </div>
               </div>
               <button 
@@ -2860,7 +2860,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                            <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} â€¢ {pair.timeStr}
+                            <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} Ã¢â‚¬Â¢ {pair.timeStr}
                           </span>
                           {pair.isOperan && (
                             <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">

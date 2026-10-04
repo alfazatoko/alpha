@@ -1,6 +1,50 @@
 import React, { useRef, useState } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
 
+const SUMBER_APLIKASI_BANK = [
+  { id: 'BANK', label: 'Bank UOB', sub: 'Bank', icon: 'fa-building-columns' },
+  { id: 'DANA', label: 'DANA', sub: 'E-Wallet', icon: 'fa-wallet' },
+  { id: 'ORDER KUOTA', label: 'Order Kuota', sub: 'PPOB', icon: 'fa-bolt' },
+  { id: 'FLIP', label: 'Flip', sub: 'Transfer', icon: 'fa-arrow-right-arrow-left' },
+];
+
+const SUBCATEGORIES = [
+  { id: 'TRANSFER_BANK', label: 'TRANSFER\nBANK', icon: 'fa-building-columns', color: 'bg-blue-100 text-blue-600', active: 'bg-[#0066ff] text-white', glow: 'shadow-[0_0_15px_rgba(0,102,255,0.4)]' },
+  { id: 'TOPUP_EWALLET', label: 'TOPUP\nEWALLET', icon: 'fa-wallet', color: 'bg-emerald-100 text-emerald-600', active: 'bg-emerald-500 text-white', glow: 'shadow-[0_0_15px_rgba(16,185,129,0.4)]' },
+  { id: 'PPOB', label: 'PPOB', icon: 'fa-bolt', color: 'bg-amber-100 text-amber-600', active: 'bg-amber-500 text-white', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.4)]' },
+];
+
+const ITEMS: Record<string, { id: string, name: string, icon: string, color: string }[]> = {
+  'TRANSFER_BANK': [
+    { id: 'BANK BRI', name: 'BRI', icon: 'fa-building-columns', color: 'text-blue-600' },
+    { id: 'BANK BNI', name: 'BNI', icon: 'fa-building-columns', color: 'text-orange-600' },
+    { id: 'BANK BCA', name: 'BCA', icon: 'fa-building-columns', color: 'text-blue-800' },
+    { id: 'BANK MANDIRI', name: 'MANDIRI', icon: 'fa-building-columns', color: 'text-yellow-600' },
+    { id: 'BANK LAINNYA', name: 'LAINNYA', icon: 'fa-building-columns', color: 'text-slate-600' }
+  ],
+  'TOPUP_EWALLET': [
+    { id: 'DANA', name: 'DANA', icon: 'fa-wallet', color: 'text-blue-500' },
+    { id: 'GOPAY', name: 'GOPAY', icon: 'fa-wallet', color: 'text-green-500' },
+    { id: 'OVO', name: 'OVO', icon: 'fa-wallet', color: 'text-purple-500' },
+    { id: 'SHOPEEPAY', name: 'SHOPEEPAY', icon: 'fa-wallet', color: 'text-orange-500' },
+    { id: 'LINKAJA', name: 'LINKAJA', icon: 'fa-wallet', color: 'text-red-500' }
+  ],
+  'PPOB': [
+    { id: 'MAXIM', name: 'MAXIM', icon: 'fa-car', color: 'text-yellow-500' },
+    { id: 'PULSA', name: 'PULSA', icon: 'fa-mobile-screen', color: 'text-amber-500' },
+    { id: 'TOKEN LISTRIK', name: 'TOKEN LISTRIK', icon: 'fa-bolt', color: 'text-amber-500' },
+    { id: 'PDAM', name: 'PDAM', icon: 'fa-faucet-drip', color: 'text-blue-400' },
+    { id: 'TAGIHAN LAIN', name: 'TAGIHAN LAIN', icon: 'fa-file-invoice', color: 'text-slate-500' }
+  ],
+  'TARIK_TUNAI': [
+    { id: 'EDC / ATM', name: 'EDC/ATM', icon: 'fa-credit-card', color: 'text-slate-600' },
+    { id: 'QRIS', name: 'QRIS', icon: 'fa-qrcode', color: 'text-[#0066ff]' },
+    { id: 'TRANSFER BANK', name: 'TRANSFER', icon: 'fa-building-columns', color: 'text-blue-600' },
+    { id: 'DANA', name: 'DANA', icon: 'fa-wallet', color: 'text-blue-500' },
+    { id: 'GOPAY', name: 'GOPAY', icon: 'fa-wallet', color: 'text-green-500' }
+  ]
+};
+
 interface TransactionFormProps {
   onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }) => void
   isSaving?: boolean
@@ -34,14 +78,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [selectedBank, setSelectedBank] = useState('BRI')
   const [selectedSumber, setSelectedSumber] = useState('QRIS')
-  const [sumberAplikasi, setSumberAplikasi] = useState('BANK')
+  const [sumberAplikasi, setSumberAplikasi] = useState('')
+  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|null>(null)
+  const [selectedTujuan, setSelectedTujuan] = useState('')
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
+  const [activeSubCategory, setActiveSubCategory] = useState<string>('')
   const [nominalCashSplit, setNominalCashSplit] = useState('')
   const [nominalNonTunaiSplit, setNominalNonTunaiSplit] = useState('')
   const [isSumberModalOpen, setIsSumberModalOpen] = useState(false)
   const [isTujuanModalOpen, setIsTujuanModalOpen] = useState(false)
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
-  const [activeTheme, setActiveTheme] = useState('TEMA_2')
+  const [activeTheme, setActiveTheme] = useState(() => {
+    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+    const saved = localStorage.getItem(`app_active_theme_${username}`);
+    return saved ? saved : 'TEMA_2';
+  });
+
+  React.useEffect(() => {
+    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+    localStorage.setItem(`app_active_theme_${username}`, activeTheme);
+  }, [activeTheme]);
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
   const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
@@ -157,19 +213,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const autoTextPrefix = React.useMemo(() => {
     if (!isKetAuto) return '';
     let autoText = '';
+    
     if (activeMode === 'DIGITAL') {
-      if (sumberAplikasi === 'BANK') autoText = `Transfer Bank`;
-      else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`;
-      else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
-      else autoText = `Transfer ${sumberAplikasi}`;
+      if (activeTheme === 'TEMA_1') {
+        if (sumberAplikasi === 'BANK') autoText = `Transfer > Bank ${selectedBank}`;
+        else if (sumberAplikasi === 'FLIP') autoText = `Flip > ${selectedTujuan.replace('BANK ', 'Bank ')}`;
+        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota > ${selectedTujuan}`;
+        else if (sumberAplikasi === 'DANA') autoText = `Dana > Aplikasi Dana`;
+        else autoText = `Topup > ${sumberAplikasi}`;
+      } else {
+        if (sumberAplikasi === 'BANK') autoText = `Transfer Bank : ${selectedBank}`;
+        else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`;
+        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
+        else autoText = `Topup : ${sumberAplikasi}`;
+      }
     } else if (activeMode === 'TARIK') {
-      autoText = `TARIK_TUNAI|${selectedSumber}`;
+      autoText = `Tarik Tunai : ${selectedSumber}`;
     } else {
       autoText = `${kategori}`;
       if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += ` ${nominal}`;
     }
-    return autoText.toUpperCase();
-  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi]);
+    
+    return activeTheme === 'TEMA_1' ? autoText : autoText.toUpperCase();
+  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, selectedTujuan, activeTheme]);
   
   // Split Payment Logic
   const handleNominalCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -450,7 +516,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     
     // Combine manual keterangan with auto prefix if needed
     const finalKeteranganBase = (isKetAuto && autoTextPrefix) 
-      ? (keterangan.trim() ? `${autoTextPrefix} ${keterangan.trim()}` : autoTextPrefix)
+      ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
       : keterangan;
 
     if (activeMode === 'AKSESORIS') {
@@ -641,9 +707,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               onClick={() => {
                 if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return }
                 setActiveMode(mode.id as any); setIsAdminManuallyEdited(false)
-                if (mode.id === 'TARIK') setKategori('Tarik Tunai')
-                else if (mode.id === 'AKSESORIS') setKategori('Aksesoris')
-                else setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank')
+                if (mode.id === 'TARIK') {
+                  setKategori('Tarik Tunai')
+                } else if (mode.id === 'AKSESORIS') {
+                  setKategori('Aksesoris')
+                } else {
+                  setKategori('')
+                  setSumberAplikasi('')
+                  setActiveSubCategory('')
+                }
               }}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
               className={cn(
@@ -663,141 +735,249 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       </div>
 
       <div className="space-y-1">
-        {/* Sumber Aplikasi + Tujuan Masuk */}
-        <div className="grid grid-cols-2 gap-2">
-          {/* Sumber Aplikasi */}
-          {activeMode === 'DIGITAL' ? (
-            <div>
-              <div className="flex items-center gap-1 mb-1 px-1">
-                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sumber Aplikasi</p>
-                <span className="ml-auto text-[8px] font-black bg-blue-100 text-blue-600 px-1 rounded">A</span>
+        {/* === WIZARD TRANSFER (DIGITAL) === */}
+        {activeMode === 'DIGITAL' && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm mb-2 animate-in fade-in slide-in-from-top-2">
+            {/* KOLOM 1: SUMBER UANG KELUAR */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
+                  <div className="w-1.5 h-3.5 bg-[#0066ff] rounded-full"></div>
+                  PILIH SUMBER APLIKASI BANK
+                </h3>
+                <span className="text-[8px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Sumber Uang Keluar</span>
               </div>
-              <div className="relative">
-                <button
-                  ref={sumberRef as any}
-                  onClick={() => setIsSumberModalOpen(true)}
-                  className="w-full bg-white text-[12px] font-black text-gray-800 px-3 py-2 rounded-xl border-2 border-gray-200 outline-none text-left pr-8 hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all flex items-center justify-between"
-                >
-                  <span>{sumberAplikasi}</span>
-                  <i className="fa-solid fa-chevron-down text-[8px] text-gray-400"></i>
-                </button>
+              <div className="grid grid-cols-4 gap-1.5">
+                {SUMBER_APLIKASI_BANK.map(src => {
+                  const isSel = sumberAplikasi === src.id;
+                  return (
+                    <button
+                      key={src.id}
+                      onClick={() => {
+                         setSumberAplikasi(src.id);
+                         setActiveSubCategory('');
+                         if (activeTheme === 'TEMA_1') {
+                            if (src.id === 'BANK') setClassicPopupMode('BANK');
+                            else if (src.id === 'DANA') {
+                               setIsKetAuto(true);
+                               setKeterangan('');
+                               setClassicPopupMode(null);
+                               setTimeout(() => keteranganRef.current?.focus(), 100);
+                            }
+                            else if (src.id === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
+                            else if (src.id === 'FLIP') setClassicPopupMode('FLIP');
+                         }
+                      }}
+                      className={cn(
+                        "relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300",
+                        isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
+                      )}
+                    >
+                      {isSel && (
+                         <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-sm">
+                           <i className="fa-solid fa-check text-[7px]"></i>
+                         </div>
+                      )}
+                      <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center mb-1", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
+                        <i className={cn("fa-solid text-sm", src.icon)}></i>
+                      </div>
+                      <span className={cn("text-[9px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
+                      <span className="text-[7px] font-bold text-gray-400">{src.sub}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
-          ) : (
-            <div>
-              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1">Metode Tarik</p>
-              <div className="bg-gray-50 rounded-xl border-2 border-gray-200 px-3 py-2.5">
-                <p className="text-[12px] font-black text-gray-700">{activeMode === 'TARIK' ? 'Tarik Tunai' : activeMode === 'AKSESORIS' ? 'Aksesoris' : 'Voucher'}</p>
+
+            {/* SUMMARY (KELUAR & MASUK) */}
+            {sumberAplikasi && (
+              <div className={cn("flex items-center gap-4 bg-gray-50/80 rounded-xl p-2 border border-gray-100 justify-between animate-in fade-in", activeTheme === 'TEMA_1' ? "mb-0" : "mb-4")}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold text-gray-500">Keluar:</span>
+                  <span className="text-[10px] font-black text-blue-600 uppercase">{sumberAplikasi}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold text-gray-500">Masuk:</span>
+                  <button 
+                    onClick={() => setIsTujuanModalOpen(true)}
+                    className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full border border-emerald-100"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                    <span className="text-[9px] font-black uppercase">{tujuanMasuk}</span>
+                    <i className="fa-solid fa-chevron-down text-[7px] ml-1"></i>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* KOLOM 2: SUBCATEGORIES */}
+            {sumberAplikasi && activeTheme !== 'TEMA_1' && (
+              <div className="grid grid-cols-5 gap-1.5 mb-4 animate-in fade-in slide-in-from-top-2">
+                {SUBCATEGORIES.map((cat) => {
+                const isActive = activeSubCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveSubCategory(cat.id)}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl transition-all duration-300 relative border",
+                      isActive ? `${cat.active} ${cat.glow} scale-[1.05] border-transparent font-black z-10` : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                    )}
+                  >
+                    <div className={cn("w-7 h-7 rounded-full flex items-center justify-center", isActive ? "bg-white/20" : cat.color)}>
+                      <i className={cn("fa-solid text-[10px]", cat.icon, isActive ? "text-white" : "")}></i>
+                    </div>
+                    <span className={cn("text-[7px] leading-tight whitespace-pre text-center uppercase tracking-wider font-bold", isActive ? "text-white" : "")}>{cat.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            )}
+
+            {/* KOLOM 3: ITEMS */}
+            {sumberAplikasi && activeSubCategory && activeTheme !== 'TEMA_1' && (
+            <div className="animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
+                  <div className="w-2 h-2 bg-[#0066ff] rounded-full"></div>
+                  PILIHAN BANK
+                  <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full ml-1">{ITEMS[activeSubCategory]?.length || 0} Pilihan</span>
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[8px] font-bold text-gray-400">Klik untuk input transaksi</span>
+                  <button className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-1 rounded-full border border-blue-100">
+                    <i className="fa-solid fa-pen text-[7px]"></i>
+                    <span className="text-[8px] font-black uppercase">Edit</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex overflow-x-auto gap-1.5 pb-2 no-scrollbar">
+                {ITEMS[activeSubCategory]?.map((item) => {
+                  const isSelected = activeSubCategory === 'TRANSFER_BANK' 
+                                     ? (selectedBank === item.name)
+                                     : (keterangan.toUpperCase().includes(item.name));
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setIsKetAuto(true);
+                        if (activeSubCategory === 'TRANSFER_BANK') {
+                          setSelectedBank(item.name);
+                        } else {
+                          setKeterangan(`${sumberAplikasi} - ${item.name}`);
+                        }
+                        setTimeout(() => keteranganRef.current?.focus(), 100);
+                      }}
+                      className={cn(
+                        "flex-shrink-0 flex flex-col items-center justify-center gap-1 w-[52px] py-2 rounded-[14px] border transition-all duration-300 relative bg-white",
+                        isSelected ? "border-[#0066ff] shadow-[0_4px_12px_-4px_rgba(0,102,255,0.3)] scale-[1.02]" : "border-gray-100 hover:border-blue-200"
+                      )}
+                    >
+                      <i className={cn("fa-solid text-[14px] mb-0.5", item.icon, isSelected ? "text-[#0066ff]" : "text-blue-500")}></i>
+                      <span className={cn(
+                        "text-[8px] font-black uppercase text-center leading-tight whitespace-pre-wrap px-1",
+                        isSelected ? "text-[#0c1f44]" : "text-gray-600"
+                      )}>{item.name}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
-          {/* Tujuan Masuk */}
-          <div>
-            <div className="flex items-center gap-1 mb-1 px-1">
-              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Tujuan Masuk</p>
-              <span className="ml-auto text-[8px] font-black bg-blue-100 text-blue-600 px-1 rounded">S</span>
-            </div>
-            <div className="relative">
-                <button
-                  ref={optTunaiRef as any}
-                  onClick={() => setIsTujuanModalOpen(true)}
-                  className="w-full bg-white text-[12px] font-black text-gray-800 px-3 py-2 rounded-xl border-2 border-gray-200 outline-none text-left pr-8 hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all flex items-center justify-between"
-                >
-                  <span>{tujuanMasuk}</span>
-                  <i className="fa-solid fa-chevron-down text-[8px] text-gray-400"></i>
-                </button>
-            </div>
-          </div>
         </div>
-
-        {/* Quick Picker - Bank (Transfer + BANK) */}
-        {activeMode === 'DIGITAL' && sumberAplikasi === 'BANK' && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gray-50/80 rounded-2xl border border-gray-100 p-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-building-columns text-blue-500"></i> Pilih Bank Transfer:</p>
-              <p className="text-[9px] font-black text-blue-600">Pilih Cepat Klik (1-5)</p>
-            </div>
-            <div className="grid grid-cols-5 gap-1">
-              {['BRI','BNI','BCA','MANDIRI','LAINNYA'].map((bank, idx) => (
-                <button
-                  key={bank}
-                  onClick={() => { setSelectedBank(bank); setIsKetAuto(true) }}
-                  className={cn(
-                    'flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-200 outline-none',
-                    selectedBank === bank
-                      ? 'bg-gradient-to-br from-blue-500 to-blue-700 border-transparent text-white shadow-[0_4px_12px_-4px_rgba(59,130,246,0.6)] scale-[1.03]'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'
-                  )}
-                >
-                  <span className={cn('text-[8px] font-black leading-none mb-0.5', selectedBank === bank ? 'text-white/70' : 'text-gray-400')}>{idx+1}</span>
-                  <span className="text-[9px] font-black leading-none">{bank}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      )}
 
         {/* Quick Picker - Sumber (Tarik Tunai) */}
         {activeMode === 'TARIK' && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gray-50/80 rounded-2xl border border-gray-100 p-2">
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Tujuan:</p>
-              <p className="text-[9px] font-black text-emerald-600">Pilih Cepat Klik (1-5)</p>
+              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Masuk:</p>
             </div>
-            <div className="grid grid-cols-5 gap-1">
-              {['BANK','GoPay','QRIS','DANA','ATM/EDC'].map((src, idx) => (
-                <button
-                  key={src}
-                  onClick={() => { setSelectedSumber(src); setIsKetAuto(true) }}
-                  className={cn(
-                    'flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-200 outline-none',
-                    selectedSumber === src
-                      ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 border-transparent text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)] scale-[1.03]'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-emerald-300 hover:bg-emerald-50'
-                  )}
-                >
-                  <span className={cn('text-[8px] font-black leading-none mb-0.5', selectedSumber === src ? 'text-white/70' : 'text-gray-400')}>{idx+1}</span>
-                  <span className="text-[9px] font-black leading-none">{src}</span>
-                </button>
-              ))}
+            <div className="grid grid-cols-5 gap-1.5">
+              {ITEMS['TARIK_TUNAI'].map((item) => {
+                const isSelected = selectedSumber === (item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { 
+                      const val = item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name;
+                      setSelectedSumber(val); 
+                      setIsKetAuto(true);
+                      setSumberAplikasi('TUNAI LACI KASIR');
+                      setTujuanMasuk(val);
+                      setTimeout(() => keteranganRef.current?.focus(), 100);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-1 p-2 rounded-xl border-2 transition-all duration-300 relative bg-white overflow-hidden",
+                      isSelected ? "border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.4)] scale-[1.03]" : "border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/50"
+                    )}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rotate-45 translate-x-4 -translate-y-4">
+                        <i className="fa-solid fa-check text-white text-[8px] absolute bottom-1 left-3.5 -rotate-45"></i>
+                      </div>
+                    )}
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center transition-all",
+                      isSelected ? "bg-emerald-500 text-white" : "bg-gray-50 text-gray-400"
+                    )}>
+                      <i className={cn("fa-solid text-[11px]", item.icon, isSelected ? "text-white" : item.color)}></i>
+                    </div>
+                    <span className={cn(
+                      "text-[8px] font-black uppercase text-center leading-tight",
+                      isSelected ? "text-[#0c1f44]" : "text-gray-500"
+                    )}>{item.name}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        <div className="relative group px-2">
-          <div className="flex justify-between items-center mb-1 px-1">
-            <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
-              <i className="fa-solid fa-align-left text-gray-400"></i> Keterangan
-            </label>
-            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
-              <input type="checkbox" checked={isKetAuto} onChange={(e) => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
-              <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
-            </label>
-          </div>
-          <div className="relative">
-            <textarea 
-              ref={keteranganRef}
-              onFocus={handleInputFocus}
-              rows={1} 
-              placeholder="Tulis keterangan..." 
-              value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
-              onChange={(e) => {
-                const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
-                if (activeMode === 'TARIK') {
-                  setKeterangan(`TARIK_TUNAI|${val}`);
-                  setIsKetAuto(false);
-                } else {
-                  setKeterangan(val);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  setTimeout(() => nominalRef.current?.focus(), 10);
-                }
-              }}
-              className="w-full resize-none text-[11px] font-black py-1.5 min-h-[32px] px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
-            ></textarea>
+        <div className="relative group px-2 mb-2">
+          <div className="bg-[#f4f7ff] rounded-xl border border-blue-100 p-2">
+            <div className="flex justify-between items-center mb-1.5 px-1">
+              <label className="text-[11px] font-black text-slate-800 flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full bg-[#0066ff] flex items-center justify-center shadow-sm">
+                  <i className="fa-solid fa-file-lines text-white text-[10px]"></i>
+                </div>
+                Keterangan Transaksi
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={isKetAuto} onChange={(e) => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-[#0066ff] rounded-sm cursor-pointer" />
+                <span className="text-[10px] font-black text-[#0066ff] uppercase tracking-widest">OTOMATIS</span>
+              </label>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-100 p-2 focus-within:ring-2 focus-within:ring-blue-100 transition-all flex flex-col">
+              {isKetAuto && autoTextPrefix && (
+                <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
+                  {autoTextPrefix}
+                </div>
+              )}
+              <textarea 
+                ref={keteranganRef}
+                onFocus={handleInputFocus}
+                rows={isKetAuto ? 1 : 2} 
+                placeholder="Ketik keterangan tambahan disini" 
+                value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
+                onChange={(e) => {
+                  const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
+                  if (activeMode === 'TARIK' && !isKetAuto) {
+                    setKeterangan(`TARIK_TUNAI|${val}`);
+                  } else {
+                    setKeterangan(val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setTimeout(() => nominalRef.current?.focus(), 10);
+                  }
+                }}
+                className="w-full resize-none text-[11px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[24px]"
+              ></textarea>
+            </div>
           </div>
 
           {/* Autocomplete Suggestions */}
@@ -822,7 +1002,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <button
                       key={p.id}
                       onClick={() => {
-                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                        if (activeTheme === 'TEMA_1') {
+                           setKeterangan(p.keterangan.toUpperCase());
+                        } else {
+                           setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                           setIsKetAuto(false);
+                        }
+                        
                         if (pCat === 'Order Kuota') {
                           setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
                           setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
@@ -830,7 +1016,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         } else {
                           nominalRef.current?.focus();
                         }
-                        setIsKetAuto(false);
                       }}
                       className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left"
                     >
@@ -1133,22 +1318,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           })}
         </div>
 
-        {/* KATEGORI ROW */}
-        <div className="mx-4 flex items-center justify-between mb-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all" onClick={() => setIsTujuanModalOpen(true)}>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0066ff] text-white flex items-center justify-center shrink-0">
-              <i className="fa-solid fa-border-all text-[14px]"></i>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-semibold text-[#64748b] leading-none mb-0.5">KATEGORI PEMBAYARAN</span>
-              <span className="text-[13px] font-black text-[#0c1f44] uppercase leading-tight">{tujuanMasuk}</span>
-            </div>
-          </div>
-          <div className="w-7 h-7 rounded-full bg-[#deeef9] flex items-center justify-center shrink-0">
-            <i className="fa-solid fa-chevron-down text-[10px] text-[#0066ff]"></i>
-          </div>
-        </div>
-
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="grid grid-cols-4 gap-1.5 mb-2 px-3">
@@ -1189,6 +1358,53 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
+        {/* SUMBER KELUAR & MASUK ROW */}
+        {activeMode !== 'AKSESORIS' && (
+          <div className="mx-4 grid grid-cols-2 gap-2 mb-2">
+            {/* KOLOM 1: UANG KELUAR */}
+            <div 
+              className="flex flex-col justify-between bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:shadow-md transition-all"
+              onClick={() => setIsSumberModalOpen(true)}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Aplikasi Uang Keluar</span>
+                <div className="w-4 h-4 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-chevron-down text-[8px] text-red-500"></i>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </div>
+                <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+                  {sumberAplikasi || selectedSumber || 'Pilih Keluar'}
+                </span>
+              </div>
+            </div>
+
+            {/* KOLOM 2: UANG MASUK */}
+            <div 
+              className="flex flex-col justify-between bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:shadow-md transition-all"
+              onClick={() => setIsTujuanModalOpen(true)}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Uang Masuk</span>
+                <div className="w-4 h-4 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-chevron-down text-[8px] text-emerald-500"></i>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-arrow-down-left-from-square text-[10px]"></i>
+                </div>
+                <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+                  {tujuanMasuk || 'Pilih Masuk'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* KETERANGAN */}
         <div className="mb-1 px-5">
           <div className="flex justify-between items-center mb-1.5">
@@ -1198,11 +1414,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
-          <div className="relative">
+          <div className="bg-white rounded-xl border border-gray-200 p-2.5 focus-within:ring-2 focus-within:ring-[#0066ff] transition-all flex flex-col shadow-sm">
+            {isKetAuto && (
+              <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
+                {activeMode === 'TARIK' ? `Tarik Tunai : ${selectedSumber}` : 
+                 activeMode === 'DIGITAL' && sumberAplikasi ? (sumberAplikasi === 'BANK' ? 'Transfer Bank' : sumberAplikasi) :
+                 kategori}
+              </div>
+            )}
             <textarea 
               ref={keteranganRef}
               onFocus={handleInputFocus}
-              rows={1}
+              rows={isKetAuto ? 1 : 2}
               placeholder="Masukkan keterangan transaksi..."
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
@@ -1220,7 +1443,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[12px] font-bold py-2.5 pl-3 min-h-[40px] pr-3 rounded-xl bg-gray-50/50 border border-gray-200 shadow-sm placeholder:text-gray-400 placeholder:font-normal outline-none appearance-none transition-all text-gray-900 focus:bg-white focus:border-[#0066ff] focus:shadow-[0_0_0_3px_rgba(0,102,255,0.1)]"
+              className="w-full resize-none text-[12px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[24px]"
             ></textarea>
           </div>
 
@@ -1486,6 +1709,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             setIsTema3SheetOpen(true); 
             setActiveMode('');
             setSumberAplikasi('');
+            setActiveSubCategory('');
             setSelectedSumber('');
             setKategori('');
             setKeterangan('');
@@ -1515,21 +1739,50 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </button>
         </div>
 
-        {/* KATEGORI PEMBAYARAN ROW - TEMA 3 */}
+        {/* SUMBER KELUAR & MASUK ROW - TEMA 3 */}
         {activeMode !== 'AKSESORIS' && (
           <div className="mb-4 px-5 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:ring-4 hover:ring-blue-50 transition-all" onClick={() => setIsTujuanModalOpen(true)}>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-[10px] bg-[#0066ff] text-white flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-border-all text-[12px]"></i>
+            <div className="grid grid-cols-2 gap-2">
+              {/* KOLOM 1: UANG KELUAR */}
+              <div 
+                className="flex flex-col justify-between bg-white rounded-xl px-3 py-2.5 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:ring-2 hover:ring-blue-50 transition-all"
+                onClick={() => setIsSumberModalOpen(true)}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Aplikasi Uang Keluar</span>
+                  <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-chevron-down text-[8px] text-red-500"></i>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-semibold text-[#64748b] leading-none mb-0.5">KATEGORI PEMBAYARAN</span>
-                  <span className="text-[13px] font-black text-[#0c1f44] uppercase leading-tight">{tujuanMasuk}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-[8px] bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                  </div>
+                  <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+                    {sumberAplikasi || selectedSumber || 'Pilih Keluar'}
+                  </span>
                 </div>
               </div>
-              <div className="w-6 h-6 rounded-full bg-[#deeef9] flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-chevron-down text-[10px] text-[#0066ff]"></i>
+
+              {/* KOLOM 2: UANG MASUK */}
+              <div 
+                className="flex flex-col justify-between bg-white rounded-xl px-3 py-2.5 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:ring-2 hover:ring-blue-50 transition-all"
+                onClick={() => setIsTujuanModalOpen(true)}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Uang Masuk</span>
+                  <div className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-chevron-down text-[8px] text-emerald-500"></i>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-[8px] bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-arrow-down-left-from-square text-[10px]"></i>
+                  </div>
+                  <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+                    {tujuanMasuk || 'Pilih Masuk'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1546,11 +1799,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
-          <div className="relative">
+          <div className="bg-white rounded-lg border border-gray-200 p-2 focus-within:ring-2 focus-within:ring-blue-100 transition-all flex flex-col shadow-sm">
+            {isKetAuto && (
+              <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
+                {kategori}
+              </div>
+            )}
             <textarea 
               ref={keteranganRef}
               onFocus={handleInputFocus}
-              rows={1}
+              rows={isKetAuto ? 1 : 2}
+              placeholder="Ketik keterangan tambahan disini" 
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
@@ -1567,7 +1826,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[11px] font-black py-1.5 min-h-[32px] px-3 rounded-lg border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none transition-all shadow-sm"
+              className="w-full resize-none text-[11px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[24px]"
             ></textarea>
           </div>
           {/* Autocomplete Suggestions */}
@@ -2047,6 +2306,59 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               </div>
 
 
+            </div>
+          </div>
+        </div>
+      )}
+      {/* POPUP MELAYANG (CLASSIC THEME) */}
+      {classicPopupMode && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[24px] p-5 w-full max-w-sm shadow-2xl animate-in zoom-in-95 border border-white">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-[13px] font-black text-[#0c1f44] uppercase tracking-widest flex items-center gap-2">
+                  <div className="w-2 h-4 bg-[#0066ff] rounded-full"></div>
+                  Pilih Tujuan Transaksi
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">
+                  {classicPopupMode === 'BANK' && "Silakan pilih nama Bank tujuan"}
+                  {classicPopupMode === 'ORDER_KUOTA' && "Pilih PPOB atau E-Wallet"}
+                  {classicPopupMode === 'FLIP' && "Pilih tujuan transfer via Flip"}
+                </p>
+              </div>
+              <button onClick={() => setClassicPopupMode(null)} className="w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar pb-2 pt-1">
+              {(() => {
+                let list: any[] = [];
+                if (classicPopupMode === 'BANK') list = ITEMS['TRANSFER_BANK'];
+                else if (classicPopupMode === 'ORDER_KUOTA') list = [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']];
+                else if (classicPopupMode === 'FLIP') list = [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']];
+
+                return list.map(item => (
+                  <button 
+                    key={item.id} 
+                    onClick={() => {
+                      setIsKetAuto(true);
+                      if (classicPopupMode === 'BANK') {
+                         setSelectedBank(item.name);
+                      } else {
+                         setSelectedTujuan(item.name);
+                      }
+                      setKeterangan(''); // Keterangan manual dibiarkan kosong
+                      setClassicPopupMode(null);
+                      setTimeout(() => keteranganRef.current?.focus(), 100);
+                    }} 
+                    className="flex flex-col items-center justify-center p-2 border border-slate-100 rounded-[14px] hover:border-blue-300 hover:bg-blue-50 transition-all group shadow-sm bg-white"
+                  >
+                    <i className={cn("fa-solid text-[18px] mb-1.5 transition-transform group-hover:scale-110", item.color, item.icon)}></i>
+                    <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide">{item.name}</span>
+                  </button>
+                ))
+              })()}
             </div>
           </div>
         </div>
