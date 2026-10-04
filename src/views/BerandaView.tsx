@@ -2749,6 +2749,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             kasirRole={props.kasirRole}
             storeName={props.storeName}
             storeSubtext={props.storeSubtext}
+            storePhoto={props.storePhoto}
+            dayName={dayName}
             storeId={props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : 'default'}
             clockStr={clockStr}
             fullDate={fullDate}

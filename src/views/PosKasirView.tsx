@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { GlobalHeader } from '../components/GlobalHeader';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Product {
@@ -104,13 +105,15 @@ interface PosKasirViewProps {
   kasirRole?: string;
   storeName?: string;
   storeSubtext?: string;
+  storePhoto?: string;
+  dayName?: string;
   storeId?: string;
   onBack?: () => void;
   clockStr?: string;
   fullDate?: string;
 }
 
-const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirRole, storeName = 'ALFA TOKO', storeSubtext, storeId = 'default', onBack, clockStr = '', fullDate = '' }) => {
+const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirRole, storeName = 'ALFA TOKO', storeSubtext, storePhoto, dayName, storeId = 'default', onBack, clockStr = '', fullDate = '' }) => {
   const [products, setProducts] = useState<Product[]>(getCachedProducts);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
@@ -293,29 +296,38 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     <div className="flex flex-col h-screen bg-[#F7F7F7] font-sans overflow-hidden">
 
       {/* HEADER */}
-      <header className="bg-white border-b border-gray-200 shadow-sm px-4 py-2.5 shrink-0 z-30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
-              <i className="fa-solid fa-arrow-left text-sm"></i>
-            </button>
-            <div>
-              <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none">{storeName}</p>
-              <h1 className="text-sm font-black text-gray-900 leading-tight">POS Kasir</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-gray-400"><i className="fa-solid fa-user text-[9px] mr-1"></i>{kasirName}</p>
-              <p className="text-[12px] font-black text-gray-900 tabular-nums">{clockStr}</p>
-            </div>
-            <div className="w-[1px] h-8 bg-gray-200 shrink-0"></div>
-            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[9px] font-black text-emerald-600">LIVE</span>
+      <div className="shrink-0 z-30 bg-[#F9FBFF]">
+        {/* Header Toko Identik */}
+        <GlobalHeader 
+          storePhoto={storePhoto}
+          storeName={storeName}
+          storeSubtext={storeSubtext}
+          kasirName={kasirName}
+          kasirRole={kasirRole}
+          dayName={dayName}
+          fullDate={fullDate}
+          clockStr={clockStr}
+          onMenuClick={onBack}
+        />
+        
+        {/* Blue Card Header (POS Kasir) */}
+        <div className="mx-1.5 mb-2 mt-2 relative z-[40]">
+          <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
+            <div className="flex items-center gap-3">
+               <button onClick={onBack} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
+                 <i className="fa-solid fa-arrow-left text-lg"></i>
+               </button>
+               <div className="flex-1 min-w-0">
+                 <p className="text-[10px] font-bold text-white mb-0.5 truncate uppercase tracking-widest">Aplikasi Kasir</p>
+                 <h2 className="text-base font-black text-white leading-none truncate">POS Kasir</h2>
+               </div>
+               <button onClick={() => setActiveTab('riwayat')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
+                 <i className="fa-solid fa-clock-rotate-left text-lg"></i>
+               </button>
             </div>
           </div>
         </div>
+      </div>
 
         {/* TABS */}
         <div className="flex gap-1 mt-2.5 border-b border-gray-100 -mx-4 px-4">
