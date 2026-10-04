@@ -723,6 +723,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={mode.ref as any}
               onClick={() => {
                 if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return }
+                if (activeMode === mode.id) {
+                  setActiveMode('');
+                  return;
+                }
                 setActiveMode(mode.id as any); setIsAdminManuallyEdited(false)
                 if (mode.id === 'TARIK') {
                   setKategori('Tarik Tunai')
@@ -1310,6 +1314,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 key={mode.id}
                 onClick={() => {
                   if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
+                  if (activeMode === mode.id) {
+                    setActiveMode('');
+                    return;
+                  }
                   setActiveMode(mode.id as any);
                   setIsAdminManuallyEdited(false);
                   if (mode.id === 'TARIK') setKategori('Tarik Tunai');

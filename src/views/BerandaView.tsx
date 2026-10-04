@@ -5618,8 +5618,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             onChange={e => setOwnerSaldoKategori(e.target.value)}
                             className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-3 pr-10 text-xs font-black text-gray-900 outline-none appearance-none cursor-pointer"
                           >
-                            <option value="Isi Saldo Bank">🏦 Saldo Bank (Plafon)</option>
-                            <option value="Isi Modal Tunai Kasir">💵 Modal Tunai Kasir</option>
+                            <option value="Isi Saldo Bank">Saldo Bank (Plafon)</option>
+                            <option value="Isi Modal Tunai Kasir">Modal Tunai Kasir</option>
                           </select>
                           <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 pointer-events-none"></i>
                         </div>

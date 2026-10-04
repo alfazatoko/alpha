@@ -11,6 +11,7 @@ import Navigation from './components/Navigation'
 import AssistantBot from './components/AssistantBot'
 import SidePanel from './components/SidePanel'
 import SidebarPC from './components/SidebarPC'
+import { GlobalHeader } from './components/GlobalHeader'
 import TransactionForm from './components/TransactionForm'
 import SummaryCards from './components/SummaryCards'
 import LoginScreen, { type KasirAccount } from './components/LoginScreen'
@@ -478,7 +479,8 @@ const MainApp: React.FC<MainAppProps> = ({
       'view-owner-izin': 'owner-izin',
       'view-owner-gaji': 'owner-gaji',
       'view-owner-backup': 'owner-backup',
-      'view-owner-saldo': 'owner-saldo'
+      'view-owner-saldo': 'owner-saldo',
+      'view-input-transaksi': 'input-transaksi'
     }
     const hashToView: Record<string, string> = Object.fromEntries(
       Object.entries(viewToHash).map(([v, h]) => [h, v])
@@ -519,7 +521,8 @@ const MainApp: React.FC<MainAppProps> = ({
       'view-owner-izin': 'owner-izin',
       'view-owner-gaji': 'owner-gaji',
       'view-owner-backup': 'owner-backup',
-      'view-owner-saldo': 'owner-saldo'
+      'view-owner-saldo': 'owner-saldo',
+      'view-input-transaksi': 'input-transaksi'
     }
     const hash = viewToHash[activeView] || activeView.replace('view-', '')
     if (window.location.hash !== `#/${hash}`) {
@@ -2444,7 +2447,8 @@ const MainApp: React.FC<MainAppProps> = ({
                     'view-owner-gaji': 'Penggajian',
                     'view-owner-backup': 'Backup & Restore',
                     'view-owner-saldo': 'Manajemen Saldo',
-                    'view-owner-profit': 'Profit Keuntungan'
+                    'view-owner-profit': 'Profit Keuntungan',
+                    'view-input-transaksi': 'Input Transaksi'
                   };
                   return titles[activeView] || 'Dashboard';
                 })()}</h2>
@@ -3021,6 +3025,34 @@ const MainApp: React.FC<MainAppProps> = ({
             googleUid={googleUid}
             targetStoreId={targetStoreId}
           />
+
+          {activeView === 'view-input-transaksi' && (
+            <div className="absolute inset-0 overflow-y-auto bg-slate-50 dark:bg-slate-900 pb-48 flex flex-col animate-in fade-in duration-300">
+              <GlobalHeader 
+                storePhoto={storePhoto}
+                storeName={storeName}
+                storeSubtext={storeSubtext}
+                kasirName={account.name}
+                kasirRole={activeRole}
+                onMenuClick={() => setIsSidePanelOpen(true)}
+              />
+              <div className="px-2 mt-0 pb-24 relative z-10 flex-1">
+                <TransactionForm 
+                  onSave={handleSimpanTransaksi as any} 
+                  isSaving={isSaving} 
+                presets={presets} 
+                activeStoreId={activeStoreId} 
+                adminRules={adminRules}
+                onOpenVoucherJualCepat={() => {
+                  setActiveView('view-stok-voucher');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
+                  }, 100);
+                }}
+              />
+            </div>
+          </div>
+          )}
 
           {activeView !== 'view-stok-voucher' && (
             <Navigation activeView={activeView} setActiveView={setActiveView} />
