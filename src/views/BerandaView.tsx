@@ -391,18 +391,15 @@ const GajiPanel: React.FC<{
       } else {
         canvas.toBlob(async (blob) => {
           if (!blob) return;
-          const file = new File([blob], filename, { type: "image/jpeg" });
-          
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {});
-          } else {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast("Gambar berhasil diunduh.");
         }, "image/jpeg", 0.9);
       }
     } catch (e: any) {
@@ -483,13 +480,15 @@ const GajiPanel: React.FC<{
         } else {
           canvas.toBlob(async (blob) => {
             if (!blob) return;
-            const file = new File([blob], filename, { type: "image/jpeg" });
-            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({ title: \`Slip Gaji \${kasirName}\`, files: [file] }).catch(() => {});
-            } else {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
-            }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("Gambar berhasil diunduh.");
           }, "image/jpeg", 0.9);
         }
       } else {
