@@ -943,7 +943,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-produk"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
               <Package className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -958,7 +958,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-atur-stok"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-sky-500 shadow-lg shadow-sky-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-sky-500 shadow-lg shadow-sky-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
               <SlidersHorizontal className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -973,7 +973,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-laporan-main"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-blue-500 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
               <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -988,7 +988,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-riwayat"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-amber-500 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white group-hover:scale-105 transition-all">
               <History className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -1006,7 +1006,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-jual"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-orange-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-orange-500/30">
               <ShoppingCart className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -1021,7 +1021,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-pencarian"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-fuchsia-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-fuchsia-500/30">
               <Search className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -1036,7 +1036,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-notifikasi"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-indigo-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-indigo-500/30">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-indigo-500 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-indigo-500/30">
               <Bell className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -1051,7 +1051,7 @@ export default function DashboardTab({
             className="group relative flex flex-col items-center justify-center transition-all duration-200 cursor-pointer"
             id="btn-quick-profil"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-[20px] bg-slate-600 flex items-center justify-center text-white group-hover:scale-105 transition-all shadow-lg shadow-slate-600/30">
               <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <span className={`text-[9px] sm:text-[10px] font-black mt-2 leading-tight text-center uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
