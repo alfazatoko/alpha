@@ -419,7 +419,6 @@ const GajiPanel: React.FC<{
       const el = document.createElement('div');
       el.style.width = "400px";
       el.style.background = "linear-gradient(to bottom right, #15803d, #10b981)";
-      el.style.borderRadius = "2rem";
       el.style.padding = "24px";
       el.style.color = "white";
       el.style.fontFamily = "system-ui, -apple-system, sans-serif";
@@ -748,7 +747,7 @@ const GajiPanel: React.FC<{
         </div>
       </div>
 
-      <div ref={slipRef} className="bg-gradient-to-br from-green-700 to-emerald-500 rounded-[2rem] p-6 text-white shadow-lg relative overflow-hidden">
+      <div ref={slipRef} className="bg-gradient-to-br from-green-700 to-emerald-500 p-6 text-white shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full blur-xl -ml-5 -mb-5 pointer-events-none"></div>
 
