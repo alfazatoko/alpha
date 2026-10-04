@@ -102,6 +102,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
   const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
 
+  const [popupLists, setPopupLists] = useState<Record<string, any[]>>(() => {
+    const saved = localStorage.getItem('alphaPro_popup_lists');
+    if (saved) return JSON.parse(saved);
+    return {
+      BANK: ITEMS['TRANSFER_BANK'],
+      ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
+      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']]
+    };
+  });
+  const [isEditingPopup, setIsEditingPopup] = useState(false);
+
+  const handleUpdatePopupList = (mode: string, newList: any[]) => {
+    const updated = { ...popupLists, [mode]: newList };
+    setPopupLists(updated);
+    localStorage.setItem('alphaPro_popup_lists', JSON.stringify(updated));
+  };
+
   // Sync initialMode when it changes externally
   React.useEffect(() => {
     if (initialMode) {
@@ -2326,38 +2343,72 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   {classicPopupMode === 'FLIP' && "Pilih tujuan transfer via Flip"}
                 </p>
               </div>
-              <button onClick={() => setClassicPopupMode(null)} className="w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-xmark text-sm"></i>
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setIsEditingPopup(!isEditingPopup)} className={cn("w-8 h-8 rounded-full transition-all flex items-center justify-center shrink-0", isEditingPopup ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500 hover:bg-slate-200")}>
+                  <i className="fa-solid fa-pen text-[10px]"></i>
+                </button>
+                <button onClick={() => { setClassicPopupMode(null); setIsEditingPopup(false); }} className="w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
+              </div>
             </div>
             
             <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar pb-2 pt-1">
               {(() => {
-                let list: any[] = [];
-                if (classicPopupMode === 'BANK') list = ITEMS['TRANSFER_BANK'];
-                else if (classicPopupMode === 'ORDER_KUOTA') list = [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']];
-                else if (classicPopupMode === 'FLIP') list = [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']];
+                const list = popupLists[classicPopupMode] || [];
 
-                return list.map(item => (
-                  <button 
-                    key={item.id} 
-                    onClick={() => {
-                      setIsKetAuto(true);
-                      if (classicPopupMode === 'BANK') {
-                         setSelectedBank(item.name);
-                      } else {
-                         setSelectedTujuan(item.name);
-                      }
-                      setKeterangan(''); // Keterangan manual dibiarkan kosong
-                      setClassicPopupMode(null);
-                      setTimeout(() => keteranganRef.current?.focus(), 100);
-                    }} 
-                    className="flex flex-col items-center justify-center p-2 border border-slate-100 rounded-[14px] hover:border-blue-300 hover:bg-blue-50 transition-all group shadow-sm bg-white"
-                  >
-                    <i className={cn("fa-solid text-[18px] mb-1.5 transition-transform group-hover:scale-110", item.color, item.icon)}></i>
-                    <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide">{item.name}</span>
-                  </button>
-                ))
+                return (
+                  <>
+                    {list.map(item => (
+                      <div key={item.id} className="relative">
+                        <button 
+                          onClick={() => {
+                            if (isEditingPopup) return;
+                            setIsKetAuto(true);
+                            if (classicPopupMode === 'BANK') {
+                               setSelectedBank(item.name);
+                            } else {
+                               setSelectedTujuan(item.name);
+                            }
+                            setKeterangan(''); // Keterangan manual dibiarkan kosong
+                            setClassicPopupMode(null);
+                            setTimeout(() => keteranganRef.current?.focus(), 100);
+                          }} 
+                          className={cn("w-full flex flex-col items-center justify-center p-2 border border-slate-100 rounded-[14px] transition-all group shadow-sm bg-white", !isEditingPopup && "hover:border-blue-300 hover:bg-blue-50")}
+                        >
+                          <i className={cn("fa-solid text-[18px] mb-1.5 transition-transform group-hover:scale-110", item.color, item.icon)}></i>
+                          <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide">{item.name}</span>
+                        </button>
+                        {isEditingPopup && (
+                          <button 
+                            onClick={() => {
+                              const newList = list.filter(x => x.id !== item.id);
+                              handleUpdatePopupList(classicPopupMode, newList);
+                            }}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md border-2 border-white hover:scale-110 transition-transform"
+                          >
+                            <i className="fa-solid fa-xmark text-[9px]"></i>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {isEditingPopup && (
+                      <button 
+                        onClick={() => {
+                          const name = window.prompt("Masukkan nama pilihan baru:");
+                          if (name && name.trim()) {
+                             const newItem = { id: name.toUpperCase(), name: name.toUpperCase(), icon: 'fa-star', color: 'text-amber-500' };
+                             handleUpdatePopupList(classicPopupMode, [...list, newItem]);
+                          }
+                        }}
+                        className="flex flex-col items-center justify-center p-2 border border-dashed border-slate-300 rounded-[14px] hover:border-blue-400 hover:bg-blue-50 transition-all text-slate-400 hover:text-blue-500"
+                      >
+                        <i className="fa-solid fa-plus text-[18px] mb-1.5"></i>
+                        <span className="text-[8px] font-black text-center leading-tight uppercase tracking-wide">Tambah</span>
+                      </button>
+                    )}
+                  </>
+                )
               })()}
             </div>
           </div>

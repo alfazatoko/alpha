@@ -5,6 +5,7 @@ import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateStr
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
+import PosKasirView from './PosKasirView'
 import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 interface BerandaViewProps {
@@ -2741,132 +2742,20 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
 
       {/* ── POS KASIR OVERLAY ── */}
-      {props.activeView === 'view-pos-kasir' && (() => {
-        return (
-          <div className="absolute inset-0 z-[100] bg-[#F9FBFF] flex flex-col animate-in slide-in-from-right duration-300 overflow-y-auto hide-scrollbar">
-            {/* Header Toko Identik */}
-            <GlobalHeader 
-              storePhoto={props.storePhoto}
-              storeName={props.storeName}
-              storeSubtext={props.storeSubtext}
-              kasirName={props.kasirName}
-              kasirRole={props.kasirRole}
-              dayName={dayName}
-              fullDate={fullDate}
-              clockStr={clockStr}
-              onMenuClick={() => props.setIsSidePanelOpen(true)}
-              onShowBannerClick={
-                props.kasirRole === 'owner' && (isBonusDismissed || isBriefingDismissed)
-                  ? () => {
-                      setIsBonusDismissed(false);
-                      setIsBriefingDismissed(false);
-                      localStorage.removeItem('alphaPro_owner_bonus_dismissed');
-                      const todayStr = new Date().toISOString().split('T')[0];
-                      localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`);
-                    }
-                  : undefined
-              }
-              showNotifBadge={
-                props.kasirRole === 'owner' 
-                  ? totalUnreadCount > 0 
-                  : (kasirLateHistory.length > 0 || activePesanMendadak !== null)
-              }
-              notifBadgeCount={
-                props.kasirRole === 'owner' 
-                  ? totalUnreadCount 
-                  : (kasirLateHistory.length + (activePesanMendadak ? 1 : 0))
-              }
-              onNotifClick={() => {
-                if (props.kasirRole === 'owner') {
-                  setShowNotifModal(true);
-                } else {
-                  setShowKasirNotif(!showKasirNotif);
-                }
-              }}
-              notifPopupContent={
-                showKasirNotif && (
-                  <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
-                    <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
-                      <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
-                        <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
-                      </h4>
-                      {kasirLateHistory.length > 0 && (
-                        <button 
-                          onClick={handleClearLateNotifs}
-                          className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-600 text-[9px] font-black rounded-lg transition-colors cursor-pointer"
-                        >
-                          Tandai Dibaca & Hapus
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
-                      {activePesanMendadak && (
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
-                          <i className="fa-solid fa-triangle-exclamation text-rose-500 mt-0.5"></i>
-                          <div>
-                            <p className="text-[11px] font-bold text-gray-800 leading-snug">{activePesanMendadak.text}</p>
-                            <p className="text-[9px] text-gray-500 mt-1 font-medium">{activePesanMendadak.timestamp}</p>
-                          </div>
-                        </div>
-                      )}
-                      {kasirLateHistory.map((k, i) => (
-                        <div key={i} className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
-                          <p className="text-[11px] text-gray-700 font-bold leading-snug">{k.message}</p>
-                          <p className="text-[9px] text-gray-400 mt-1">{k.timestamp}</p>
-                        </div>
-                      ))}
-                      {kasirLateHistory.length === 0 && !activePesanMendadak && (
-                        <div className="text-center py-4 text-gray-400">
-                          <i className="fa-solid fa-check-circle text-2xl mb-1 text-emerald-400"></i>
-                          <p className="text-[10px] font-black">Tidak ada pemberitahuan baru</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              }
-            />
-
-            {/* Blue Card Header */}
-            <div className="mx-1.5 mb-5 mt-2 relative z-[40] shrink-0">
-              <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
-                <div className="flex items-center gap-3">
-                   <button onClick={() => props.setActiveView('view-beranda')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
-                     <i className="fa-solid fa-arrow-left text-lg"></i>
-                   </button>
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-white mb-0.5 truncate uppercase tracking-widest">Kategori Layanan</p>
-                     <h2 className="text-base font-black text-white leading-none truncate">Form Transaksi</h2>
-                   </div>
-                   <button onClick={() => props.setActiveView('view-riwayat')} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">
-                     <i className="fa-solid fa-clock-rotate-left text-lg"></i>
-                   </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction Form Body — scrollable */}
-            <div className="flex-1">
-              <TransactionForm
-                onSave={props.handleSimpanTransaksi}
-                isSaving={props.isSaving}
-                presets={props.presets}
-                onOpenVoucherJualCepat={() => {
-                  props.setActiveView('view-stok-voucher')
-                  setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'))
-                  }, 100)
-                }}
-                activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
-                adminRules={props.adminRules}
-              />
-            </div>
-            <div className="h-[130px] shrink-0 w-full pointer-events-none"></div>
-          </div>
-        )
-      })()}
-
-
+      {props.activeView === 'view-pos-kasir' && (
+        <div className="absolute inset-0 z-[100] flex flex-col animate-in slide-in-from-right duration-300">
+          <PosKasirView
+            kasirName={props.kasirName}
+            kasirRole={props.kasirRole}
+            storeName={props.storeName}
+            storeSubtext={props.storeSubtext}
+            storeId={props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : 'default'}
+            clockStr={clockStr}
+            fullDate={fullDate}
+            onBack={() => props.setActiveView('view-beranda')}
+          />
+        </div>
+      )}
 
 
       {!(props.isPc && isOwnerSubView) && (
