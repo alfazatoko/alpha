@@ -474,7 +474,7 @@ const GajiPanel: React.FC<{
           const { Share } = await import('@capacitor/share');
           const base64Data = canvas.toDataURL("image/jpeg", 0.9).split(',')[1];
           const result = await Filesystem.writeFile({ path: filename, data: base64Data, directory: Directory.Cache });
-          await Share.share({ title: \`Slip Gaji \${kasirName}\`, url: result.uri });
+          await Share.share({ title: `Slip Gaji ${kasirName}`, url: result.uri });
         } else {
           canvas.toBlob((blob) => {
             if (!blob) return;
@@ -503,12 +503,12 @@ const GajiPanel: React.FC<{
           const { Share } = await import('@capacitor/share');
           const pdfBase64 = pdf.output("datauristring").split(',')[1];
           const result = await Filesystem.writeFile({ path: filename, data: pdfBase64, directory: Directory.Cache });
-          await Share.share({ title: \`Slip Gaji \${kasirName}\`, url: result.uri });
+          await Share.share({ title: `Slip Gaji ${kasirName}`, url: result.uri });
         } else {
           const blob = pdf.output("blob");
           const file = new File([blob], filename, { type: "application/pdf" });
           if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ title: \`Slip Gaji \${kasirName}\`, files: [file] }).catch(() => {});
+            await navigator.share({ title: `Slip Gaji ${kasirName}`, files: [file] }).catch(() => {});
           } else {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
@@ -516,7 +516,7 @@ const GajiPanel: React.FC<{
         }
       }
     } catch (e: any) {
-      showToast(\`Gagal share \${format.toUpperCase()}: \` + (e?.message || "Error unknown"));
+      showToast(`Gagal share ${format.toUpperCase()}: ` + (e?.message || "Error unknown"));
       console.error(e);
     }
   }
