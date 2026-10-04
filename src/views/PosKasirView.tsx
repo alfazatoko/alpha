@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { GlobalHeader } from '../components/GlobalHeader';
+import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Product {
@@ -117,9 +118,19 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [products, setProducts] = useState<Product[]>(getCachedProducts);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat'>('kasir');
+  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat' | 'setting'>('kasir');
   const [isLoading, setIsLoading] = useState(true);
+
+  const [printSettings, setPrintSettings] = useState(() => {
+    const saved = localStorage.getItem(`pos_settings_${storeId}`);
+    return saved ? JSON.parse(saved) : {
+      namaToko: storeName,
+      alamat: storeSubtext || '',
+      ucapan: 'Terima kasih atas kunjungan Anda'
+    };
+  });
 
   const [showBayarModal, setShowBayarModal] = useState(false);
   const [showStruk, setShowStruk] = useState<PosTransaction | null>(null);
@@ -327,14 +338,14 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
             </div>
           </div>
         </div>
-      </div>
 
         {/* TABS */}
-        <div className="flex gap-1 mt-2.5 border-b border-gray-100 -mx-4 px-4">
+        <div className="flex gap-1 mt-2.5 border-b border-gray-100 px-4">
           {([
             { id: 'kasir', label: 'Kasir', icon: 'fa-cash-register' },
             { id: 'produk', label: 'Produk', icon: 'fa-box' },
             { id: 'riwayat', label: 'Riwayat', icon: 'fa-clock-rotate-left' },
+            { id: 'setting', label: 'Setting', icon: 'fa-gear' },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -349,7 +360,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {/* TAB KASIR */}
       {activeTab === 'kasir' && (
@@ -368,7 +379,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                 className="flex-1 bg-transparent text-[12px] font-bold text-gray-800 outline-none placeholder-gray-400"
               />
               {search && <button onClick={() => { setSearch(''); setShowDropdown(false); }} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark text-xs"></i></button>}
-              <button onClick={() => { const bc = window.prompt('Masukkan kode barcode:'); if (!bc) return; const found = products.find(p => p.barcode === bc.trim()); if (found) addToCart(found); else alert('Produk tidak ditemukan'); }} className="w-7 h-7 rounded-lg bg-gray-200 flex items-center justify-center text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-all shrink-0">
+              <button onClick={() => setShowScanner(true)} className="w-7 h-7 rounded-lg bg-gray-200 flex items-center justify-center text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-all shrink-0">
                 <i className="fa-solid fa-barcode text-sm"></i>
               </button>
             </div>
@@ -428,7 +439,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           </div>
 
           {cart.length > 0 && (
-            <div className="bg-white border-t border-gray-200 px-4 py-3 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+            <div className="bg-white border-t border-gray-200 px-4 pt-3 pb-[90px] shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{cart.reduce((s, i) => s + i.qty, 0)} item • TOTAL BAYAR</p>
@@ -460,7 +471,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
               <i className="fa-solid fa-plus"></i>Tambah
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 py-2">
+          <div className="flex-1 overflow-y-auto px-3 pt-2 pb-[90px]">
             {products.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
                 <i className="fa-solid fa-box-open text-5xl"></i>
@@ -500,7 +511,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* TAB RIWAYAT */}
       {activeTab === 'riwayat' && (
-        <div className="flex-1 overflow-y-auto px-3 py-3">
+        <div className="flex-1 overflow-y-auto px-3 pt-3 pb-[90px]">
           {transactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
               <i className="fa-solid fa-clock-rotate-left text-5xl"></i>
@@ -533,10 +544,64 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         </div>
       )}
 
+      {/* TAB SETTING */}
+      {activeTab === 'setting' && (
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[90px] bg-white">
+          <div className="max-w-md mx-auto space-y-5">
+            <div>
+              <h2 className="text-sm font-black text-gray-900 mb-1"><i className="fa-solid fa-print mr-2 text-[#0066FF]"></i>Pengaturan Struk</h2>
+              <p className="text-[11px] text-gray-500 font-bold mb-4">Sesuaikan nama toko, alamat, dan ucapan pada struk printer bluetooth.</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Nama Toko (Header)</label>
+                <input
+                  type="text"
+                  value={printSettings.namaToko}
+                  onChange={e => setPrintSettings(s => ({ ...s, namaToko: e.target.value }))}
+                  placeholder="Contoh: ALFAZA CELL"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Alamat / Keterangan Toko</label>
+                <textarea
+                  value={printSettings.alamat}
+                  onChange={e => setPrintSettings(s => ({ ...s, alamat: e.target.value }))}
+                  placeholder="Contoh: Jl. Kemerdekaan No.123"
+                  rows={2}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Teks Ucapan (Footer)</label>
+                <textarea
+                  value={printSettings.ucapan}
+                  onChange={e => setPrintSettings(s => ({ ...s, ucapan: e.target.value }))}
+                  placeholder="Contoh: Terima kasih atas kunjungan Anda"
+                  rows={2}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  localStorage.setItem(`pos_settings_${storeId}`, JSON.stringify(printSettings));
+                  alert('Pengaturan struk berhasil disimpan!');
+                }}
+                className="w-full py-3 bg-[#0066FF] text-white font-black text-[13px] rounded-xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-95 transition-all mt-2"
+              >
+                <i className="fa-solid fa-save mr-2"></i>Simpan Pengaturan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL BAYAR */}
       {showBayarModal && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-t-3xl p-5 animate-in slide-in-from-bottom-4 shadow-2xl">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl p-5 animate-in zoom-in-95 shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-[15px] font-black text-gray-900">Pembayaran</h2>
               <button onClick={() => setShowBayarModal(false)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
@@ -597,8 +662,8 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           <div className="bg-white rounded-3xl w-full max-w-xs shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div id="struk-print" className="p-4 font-mono text-[11px]">
               <div className="text-center mb-3">
-                <p className="font-bold text-[13px]">{storeName}</p>
-                {storeSubtext && <p className="text-gray-500">{storeSubtext}</p>}
+                <p className="font-bold text-[13px] whitespace-pre-wrap">{printSettings.namaToko}</p>
+                {printSettings.alamat && <p className="text-gray-500 whitespace-pre-wrap">{printSettings.alamat}</p>}
                 <div className="border-t border-dashed border-gray-300 mt-2 pt-2 text-gray-400 text-[9px]">
                   <p>Kasir: {showStruk.kasir} • {new Date(showStruk.timestamp).toLocaleDateString('id-ID')} {new Date(showStruk.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</p>
                   <p>No: {showStruk.id}</p>
@@ -629,7 +694,9 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                   </div>
                 )}
               </div>
-              <p className="text-center text-gray-400 text-[9px] mt-3 border-t border-dashed border-gray-300 pt-2">Terima kasih atas kunjungan Anda</p>
+              {printSettings.ucapan && (
+                <p className="text-center text-gray-400 text-[9px] mt-3 border-t border-dashed border-gray-300 pt-2 whitespace-pre-wrap">{printSettings.ucapan}</p>
+              )}
             </div>
             <div className="flex gap-2 px-4 pb-4">
               <button onClick={handlePrint} className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-black text-[12px] flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors">
@@ -662,6 +729,22 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           </div>
         </div>
       )}
+
+      {/* SCANNER MODAL */}
+      {showScanner && (
+        <BarcodeScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(text) => {
+            setShowScanner(false);
+            const found = products.find(p => p.barcode === text.trim());
+            if (found) {
+              addToCart(found);
+            } else {
+              alert(`Produk dengan barcode ${text} tidak ditemukan.`);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -674,6 +757,7 @@ interface ProductFormProps {
 }
 
 const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose }) => {
+  const [showScanner, setShowScanner] = useState(false);
   const [form, setForm] = useState<Product>(product || {
     id: generateId(),
     barcode: '',
@@ -693,8 +777,8 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
   const set = (k: keyof Product, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white w-full max-w-md rounded-t-3xl p-5 animate-in slide-in-from-bottom-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+      <div className="bg-white w-full max-w-md rounded-3xl p-5 animate-in zoom-in-95 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-[15px] font-black text-gray-900">{product ? 'Edit Produk' : 'Tambah Produk'}</h2>
           <button onClick={onClose} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
@@ -705,29 +789,84 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
           {[
             { label: 'Nama Produk *', key: 'nama', type: 'text', placeholder: 'contoh: Aqua 600ml' },
             { label: 'Barcode', key: 'barcode', type: 'text', placeholder: 'Opsional' },
-            { label: 'Kategori', key: 'kategori', type: 'text', placeholder: 'contoh: Minuman, Snack' },
-            { label: 'Satuan', key: 'satuan', type: 'text', placeholder: 'pcs, kg, liter...' },
           ].map(({ label, key, type, placeholder }) => (
             <div key={key}>
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">{label}</label>
-              <input
-                type={type}
-                required={key === 'nama'}
-                placeholder={placeholder}
-                value={String(form[key as keyof Product])}
-                onChange={e => set(key as keyof Product, e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
-              />
+              <div className="relative flex items-center">
+                <input
+                  type={type}
+                  required={key === 'nama'}
+                  placeholder={placeholder}
+                  value={String(form[key as keyof Product])}
+                  onChange={e => set(key as keyof Product, e.target.value)}
+                  className={`w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all ${key === 'barcode' ? 'pr-12' : ''}`}
+                />
+                {key === 'barcode' && (
+                  <button type="button" onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#0066FF]/10 text-[#0066FF] hover:bg-[#0066FF]/20 flex items-center justify-center transition-colors">
+                    <i className="fa-solid fa-barcode text-sm"></i>
+                  </button>
+                )}
+              </div>
             </div>
           ))}
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Kategori</label>
+              <input
+                type="text"
+                placeholder="contoh: Minuman"
+                value={form.kategori || ''}
+                onChange={e => set('kategori', e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Satuan</label>
+              <select
+                value={form.satuan || 'pcs'}
+                onChange={e => set('satuan', e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all appearance-none"
+              >
+                <option value="pcs">Pcs (Satuan)</option>
+                <option value="kg">Kg (Kiloan)</option>
+                <option value="liter">Liter</option>
+                <option value="gram">Gram</option>
+                <option value="lusin">Lusin</option>
+                <option value="karton">Karton / Dus</option>
+                <option value="box">Box</option>
+                <option value="pack">Pack</option>
+                <option value="renceng">Renceng</option>
+                <option value="porsi">Porsi</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Harga Jual *</label>
-              <input type="number" required min={0} placeholder="0" value={form.harga || ''} onChange={e => set('harga', parseInt(e.target.value || '0', 10))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" />
+              <input 
+                type="text" 
+                required 
+                placeholder="Rp 0" 
+                value={form.harga ? `Rp ${form.harga.toLocaleString('id-ID')}` : ''} 
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  set('harga', parseInt(val || '0', 10));
+                }} 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
+              />
             </div>
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Stok Awal</label>
-              <input type="number" min={0} placeholder="0" value={form.stok || ''} onChange={e => set('stok', parseInt(e.target.value || '0', 10))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" />
+              <input 
+                type="text" 
+                placeholder="0" 
+                value={form.stok ? form.stok.toLocaleString('id-ID') : ''} 
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  set('stok', parseInt(val || '0', 10));
+                }} 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
+              />
             </div>
           </div>
           <button type="submit" className="w-full py-3.5 bg-[#0066FF] text-white font-black text-[14px] rounded-2xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-[0.98] transition-all mt-2">
@@ -736,6 +875,16 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
           </button>
         </form>
       </div>
+
+      {showScanner && (
+        <BarcodeScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(text) => {
+            setShowScanner(false);
+            set('barcode', text);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -24,6 +24,7 @@
     "cordova-plugin-android-permissions": "^1.1.5",
     "cordova-plugin-bluetooth-serial": "^0.4.7",
     "html2canvas": "^1.4.1",
+    "html5-qrcode": "^2.3.8",
     "htmlparser2": "^10.1.0",
     "jspdf": "^4.2.1",
     "lines-and-columns": "^2.0.4",
