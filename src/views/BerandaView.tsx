@@ -361,6 +361,169 @@ const GajiPanel: React.FC<{
     }
   }
 
+  const handleShareJPG = async () => {
+    try {
+      if (!slipRef.current) return;
+      showToast("Memproses gambar...");
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default;
+      const canvas = await html2canvas(slipRef.current, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      
+      const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.jpg`;
+      const { Capacitor } = await import('@capacitor/core');
+      
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+        
+        const base64Data = canvas.toDataURL("image/jpeg", 0.9).split(',')[1];
+        
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+        
+        await Share.share({
+          title: `Slip Gaji ${selectedName}`,
+          url: result.uri
+        });
+      } else {
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          const file = new File([blob], filename, { type: "image/jpeg" });
+          
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: `Slip Gaji ${selectedName}`, files: [file] }).catch(() => {});
+          } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        }, "image/jpeg", 0.9);
+      }
+    } catch (e: any) {
+      showToast("Gagal share JPG: " + (e?.message || "Error unknown"));
+      console.error(e);
+    }
+  }
+
+  const shareHistoryData = async (tx: any, format: 'jpg' | 'pdf') => {
+    try {
+      showToast(`Memproses ${format.toUpperCase()}...`);
+      const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir';
+      const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      
+      const details = tx.keterangan.replace('[GAJI] ', '').split(', ');
+      
+      const el = document.createElement('div');
+      el.style.width = "400px";
+      el.style.background = "linear-gradient(to bottom right, #15803d, #10b981)";
+      el.style.borderRadius = "2rem";
+      el.style.padding = "24px";
+      el.style.color = "white";
+      el.style.fontFamily = "system-ui, -apple-system, sans-serif";
+      el.style.position = "absolute";
+      el.style.left = "-9999px"; // hide offscreen
+      
+      el.innerHTML = `
+        <div style="position:relative; z-index:10;">
+          <h2 style="text-align:center; font-weight:900; font-size:18px; margin:0 0 2px 0; letter-spacing:2px;">SLIP GAJI</h2>
+          <p style="text-align:center; color:#d1fae5; font-size:10px; font-weight:700; letter-spacing:2px; margin:0 0 16px 0;">TANGGAL ${dateStr}</p>
+          <div style="background:rgba(0,0,0,0.1); padding:16px; border-radius:16px; border:1px solid rgba(255,255,255,0.1);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+              <span style="font-size:10px; font-weight:bold; color:#d1fae5;">NAMA</span>
+              <span style="font-size:14px; font-weight:900; text-transform:uppercase;">${kasirName}</span>
+            </div>
+            ${details.map((item: string) => {
+              const parts = item.split(': ');
+              if(parts.length < 2) return '';
+              const lbl = parts[0];
+              const val = parts.slice(1).join(': ');
+              return \`
+              <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                <span style="color:#d1fae5; font-weight:bold; text-transform:uppercase;">\${lbl}</span>
+                <span style="font-weight:900; text-align:right; white-space:pre-wrap; max-width:60%;">\${val}</span>
+              </div>
+              \`;
+            }).join('')}
+          </div>
+          <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div>
+               <p style="font-size:9px; font-weight:bold; color:#a7f3d0; margin:0 0 2px 0;">TOTAL DITERIMA</p>
+               <span style="font-weight:900; font-size:24px; margin:0;">Rp ${tx.nominal.toLocaleString('id-ID')}</span>
+            </div>
+            <div style="text-align:right;">
+               <p style="font-size:7px; font-weight:bold; color:#a7f3d0; margin:0;">${storeName || 'ALFAZA CELL'}</p>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(el);
+      
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default;
+      const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      document.body.removeChild(el);
+
+      const filename = `riwayat-gaji-${kasirName.replace(/\s+/g, '-')}-${tx.id}.${format}`;
+      const { Capacitor } = await import('@capacitor/core');
+      
+      if (format === 'jpg') {
+        if (Capacitor.isNativePlatform()) {
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          const { Share } = await import('@capacitor/share');
+          const base64Data = canvas.toDataURL("image/jpeg", 0.9).split(',')[1];
+          const result = await Filesystem.writeFile({ path: filename, data: base64Data, directory: Directory.Cache });
+          await Share.share({ title: \`Slip Gaji \${kasirName}\`, url: result.uri });
+        } else {
+          canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            const file = new File([blob], filename, { type: "image/jpeg" });
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ title: \`Slip Gaji \${kasirName}\`, files: [file] }).catch(() => {});
+            } else {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+            }
+          }, "image/jpeg", 0.9);
+        }
+      } else {
+        const imgData = canvas.toDataURL("image/png");
+        const { default: jsPDF } = await import("jspdf");
+        const pdf = new jsPDF("p", "mm", "a5");
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const imgWidth = pdfWidth - 20;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        pdf.addImage(imgData, "PNG", 10, 15, imgWidth, imgHeight);
+        
+        if (Capacitor.isNativePlatform()) {
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          const { Share } = await import('@capacitor/share');
+          const pdfBase64 = pdf.output("datauristring").split(',')[1];
+          const result = await Filesystem.writeFile({ path: filename, data: pdfBase64, directory: Directory.Cache });
+          await Share.share({ title: \`Slip Gaji \${kasirName}\`, url: result.uri });
+        } else {
+          const blob = pdf.output("blob");
+          const file = new File([blob], filename, { type: "application/pdf" });
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: \`Slip Gaji \${kasirName}\`, files: [file] }).catch(() => {});
+          } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+          }
+        }
+      }
+    } catch (e: any) {
+      showToast(\`Gagal share \${format.toUpperCase()}: \` + (e?.message || "Error unknown"));
+      console.error(e);
+    }
+  }
+
   const handleSimpanBonus = async () => {
     try {
       if (!bonusKasir || !bonusPeriode || !bonusNominal) {
@@ -624,9 +787,9 @@ const GajiPanel: React.FC<{
               </div>
             )}
             {catatan && (
-              <div className="flex justify-between text-[10px] pt-1 border-t border-white/10 mt-1">
-                <span className="text-green-100 font-bold uppercase w-1/3">Catatan</span>
-                <span className="font-black text-right opacity-90">{catatan}</span>
+              <div className="flex flex-col text-[10px] pt-2 border-t border-white/10 mt-2">
+                <span className="text-green-100 font-bold uppercase mb-1">Catatan Tambahan</span>
+                <span className="font-bold opacity-90 whitespace-pre-wrap">{catatan}</span>
               </div>
             )}
           </div>
@@ -643,24 +806,30 @@ const GajiPanel: React.FC<{
         </div>
       </div>
 
-      <div className="flex gap-2 mt-4">
+      <div className="flex gap-2 mt-4 flex-wrap">
         <button
           onClick={handleSimpanGaji}
-          className="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+          className="flex-[1_1_45%] bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
           <i className="fa-solid fa-cloud-arrow-up text-[10px]"></i> SIMPAN GAJIH
         </button>
         <button
+          onClick={handleShareJPG}
+          className="flex-[1_1_45%] bg-[#0066FF] text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-image text-[10px]"></i> BAGIKAN JPG
+        </button>
+        <button
           onClick={handleShareText}
-          className="flex-1 bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+          className="flex-[1_1_45%] bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
           <i className="fa-solid fa-copy text-[10px]"></i> SALIN TEKS
         </button>
         <button
           onClick={handleSharePDF}
-          className="flex-1 bg-green-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+          className="flex-[1_1_45%] bg-green-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
         >
-          <i className="fa-solid fa-share-nodes text-[10px]"></i> PDF
+          <i className="fa-solid fa-file-pdf text-[10px]"></i> PDF
         </button>
       </div>
       </div>
@@ -713,6 +882,14 @@ const GajiPanel: React.FC<{
                          </div>
                        )
                      })}
+                     <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200">
+                        <button onClick={() => shareHistoryData(tx, 'jpg')} className="flex-1 py-2 bg-[#0066FF] text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1">
+                          <i className="fa-solid fa-image"></i> JPG
+                        </button>
+                        <button onClick={() => shareHistoryData(tx, 'pdf')} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-1">
+                          <i className="fa-solid fa-file-pdf"></i> PDF
+                        </button>
+                     </div>
                    </div>
                  )}
               </div>

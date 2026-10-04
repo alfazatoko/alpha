@@ -37,6 +37,7 @@ interface PrintSettings {
   namaToko: string;
   alamat: string;
   ucapan: string;
+  enableStok?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -131,11 +132,13 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
   const [printSettings, setPrintSettings] = useState<PrintSettings>(() => {
     const saved = localStorage.getItem(`pos_settings_${storeId}`);
-    return saved ? JSON.parse(saved) : {
+    const defaultSettings = {
       namaToko: storeName,
       alamat: storeSubtext || '',
-      ucapan: 'Terima kasih atas kunjungan Anda'
+      ucapan: 'Terima kasih atas kunjungan Anda',
+      enableStok: true
     };
+    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
   });
 
   const [showBayarModal, setShowBayarModal] = useState(false);
@@ -143,6 +146,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
 
   const [metodeBayar, setMetodeBayar] = useState<'TUNAI' | 'QRIS'>('TUNAI');
   const [uangDiterima, setUangDiterima] = useState('');
@@ -188,12 +192,12 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   );
 
   const addToCart = useCallback((product: Product) => {
-    if (product.stok <= 0) return;
+    if (printSettings.enableStok && product.stok <= 0) return;
     setCart(prev => {
       const idx = prev.findIndex(i => i.product.id === product.id);
       if (idx >= 0) {
         const cur = prev[idx];
-        if (cur.qty >= product.stok) return prev;
+        if (printSettings.enableStok && cur.qty >= product.stok) return prev;
         const updated = [...prev];
         updated[idx] = { ...cur, qty: cur.qty + 1 };
         return updated;
@@ -203,14 +207,14 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     setSearch('');
     setShowDropdown(false);
     searchRef.current?.focus();
-  }, []);
+  }, [printSettings.enableStok]);
 
   const updateQty = (id: string, delta: number) => {
     setCart(prev => prev.flatMap(i => {
       if (i.product.id !== id) return [i];
       const newQty = i.qty + delta;
       if (newQty <= 0) return [];
-      if (newQty > i.product.stok) return [i];
+      if (printSettings.enableStok && newQty > i.product.stok) return [i];
       return [{ ...i, qty: newQty }];
     }));
   };
@@ -243,19 +247,21 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     if (metodeBayar === 'TUNAI' && uangNum < grandTotal) return;
     if (cart.length === 0) return;
 
-    // Kurangi stok lokal dulu (optimistic)
-    const updatedProducts = products.map(p => {
-      const item = cart.find(i => i.product.id === p.id);
-      if (item) return { ...p, stok: p.stok - item.qty };
-      return p;
-    });
-    setProducts(updatedProducts);
-    cacheProducts(updatedProducts);
+    // Kurangi stok lokal dulu (optimistic) jika sistem stok aktif
+    if (printSettings.enableStok) {
+      const updatedProducts = products.map(p => {
+        const item = cart.find(i => i.product.id === p.id);
+        if (item) return { ...p, stok: p.stok - item.qty };
+        return p;
+      });
+      setProducts(updatedProducts);
+      cacheProducts(updatedProducts);
 
-    // Update stok di Supabase untuk setiap produk yang terjual
-    await Promise.all(
-      cart.map(item => upsertProduct(storeId, updatedProducts.find(p => p.id === item.product.id)!))
-    );
+      // Update stok di Supabase untuk setiap produk yang terjual
+      await Promise.all(
+        cart.map(item => upsertProduct(storeId, updatedProducts.find(p => p.id === item.product.id)!))
+      );
+    }
 
     const trx: PosTransaction = {
       id: generateId(),
@@ -395,7 +401,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                   <button key={p.id} onClick={() => addToCart(p)} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 text-left">
                     <div>
                       <p className="text-[12px] font-black text-gray-800">{p.nama}</p>
-                      <p className="text-[10px] text-gray-400 font-bold">{p.kategori} • Stok: {p.stok} {p.satuan}</p>
+                      <p className="text-[10px] text-gray-400 font-bold">{p.kategori}{printSettings.enableStok ? ` • Stok: ${p.stok} ${p.satuan}` : ''}</p>
                     </div>
                     <span className="text-[12px] font-black text-[#0066FF] shrink-0 ml-2">{formatRp(p.harga)}</span>
                   </button>
@@ -485,28 +491,81 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                 <button onClick={() => { setEditingProduct(null); setShowProductForm(true); }} className="px-4 py-2 bg-[#0066FF] text-white text-[11px] font-black rounded-xl">Tambah Produk Pertama</button>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredProducts.map(p => (
-                  <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-black text-gray-900">{p.nama}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[9px] font-black text-gray-400 uppercase bg-gray-100 px-1.5 py-0.5 rounded-full">{p.kategori}</span>
-                        {p.barcode && <span className="text-[9px] font-bold text-gray-400"><i className="fa-solid fa-barcode mr-1"></i>{p.barcode}</span>}
+              <div className="space-y-4">
+                {Object.entries(
+                  filteredProducts.reduce((acc, p) => {
+                    const cat = p.kategori?.trim() || 'Umum';
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(p);
+                    return acc;
+                  }, {} as Record<string, Product[]>)
+                ).sort((a, b) => a[0] === 'Umum' ? 1 : b[0] === 'Umum' ? -1 : a[0].localeCompare(b[0]))
+                .map(([cat, prods]) => (
+                  <div key={cat} className="space-y-2">
+                    <div 
+                      className="flex justify-between items-center px-2 py-1.5 bg-gray-50 rounded-xl cursor-pointer select-none"
+                      onClick={() => setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                    >
+                      <h3 className="font-black text-gray-800 text-[12px] uppercase tracking-wider flex items-center">
+                        <i className={`fa-solid fa-chevron-${expandedCats[cat] ? 'down' : 'right'} text-[10px] text-gray-400 mr-2 w-3 text-center transition-transform`}></i>
+                        {cat} <span className="text-[#0066FF] text-[10px] ml-1.5 bg-blue-50 px-1.5 rounded-full">{prods.length}</span>
+                      </h3>
+                      {cat !== 'Umum' && (
+                        <div className="flex gap-2">
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            const newName = window.prompt(`Ubah nama kategori "${cat}" menjadi:`, cat);
+                            if (!newName || newName.trim() === '' || newName === cat) return;
+                            const trimmed = newName.trim();
+                            const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: trimmed } : p);
+                            setProducts(updatedProducts);
+                            localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
+                            updatedProducts.filter(p => p.kategori === trimmed).forEach(p => {
+                              supabase.from('pos_products').update({ kategori: trimmed }).eq('id', p.id).then();
+                            });
+                          }} className="text-[#0066FF] hover:text-blue-800 text-[11px] font-bold">Edit</button>
+                          
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Hapus kategori "${cat}"? Produk di dalamnya akan dipindah ke kategori "Umum".`)) return;
+                            const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: 'Umum' } : p);
+                            setProducts(updatedProducts);
+                            localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
+                            updatedProducts.filter(p => p.kategori === 'Umum').forEach(p => {
+                              supabase.from('pos_products').update({ kategori: 'Umum' }).eq('id', p.id).then();
+                            });
+                          }} className="text-red-500 hover:text-red-700 text-[11px] font-bold">Hapus</button>
+                        </div>
+                      )}
+                    </div>
+                    {expandedCats[cat] && (
+                      <div className="space-y-2 pl-2">
+                        {prods.map(p => (
+                          <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-black text-gray-900">{p.nama}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {p.barcode && <span className="text-[9px] font-bold text-gray-400"><i className="fa-solid fa-barcode mr-1"></i>{p.barcode}</span>}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-[13px] font-black text-[#0066FF] tabular-nums">{`Rp ${p.harga.toLocaleString('id-ID')}`}</p>
+                              {printSettings.enableStok && (
+                                <p className={`text-[10px] font-black ${p.stok <= 5 ? 'text-rose-500' : 'text-emerald-500'}`}>Stok: {p.stok} {p.satuan}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1.5 shrink-0 ml-1">
+                              <button onClick={() => { setEditingProduct(p); setShowProductForm(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600 transition-colors">
+                                <i className="fa-solid fa-pen text-[10px]"></i>
+                              </button>
+                              <button onClick={() => setShowDeleteConfirm(p.id)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
+                                <i className="fa-solid fa-trash text-[10px]"></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[13px] font-black text-[#0066FF] tabular-nums">{formatRp(p.harga)}</p>
-                      <p className={`text-[10px] font-black ${p.stok <= 5 ? 'text-rose-500' : 'text-emerald-500'}`}>Stok: {p.stok} {p.satuan}</p>
-                    </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button onClick={() => { setEditingProduct(p); setShowProductForm(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600 transition-colors">
-                        <i className="fa-solid fa-pen text-[10px]"></i>
-                      </button>
-                      <button onClick={() => setShowDeleteConfirm(p.id)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
-                        <i className="fa-solid fa-trash text-[10px]"></i>
-                      </button>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -553,53 +612,73 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
       {/* TAB SETTING */}
       {activeTab === 'setting' && (
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[90px] bg-white">
-          <div className="max-w-md mx-auto space-y-5">
+          <div className="max-w-md mx-auto space-y-4">
             <div>
-              <h2 className="text-sm font-black text-gray-900 mb-1"><i className="fa-solid fa-print mr-2 text-[#0066FF]"></i>Pengaturan Struk</h2>
-              <p className="text-[11px] text-gray-500 font-bold mb-4">Sesuaikan nama toko, alamat, dan ucapan pada struk printer bluetooth.</p>
+              <h2 className="text-sm font-black text-gray-900 mb-1"><i className="fa-solid fa-gear mr-2 text-[#0066FF]"></i>Pengaturan Kasir</h2>
+              <p className="text-[11px] text-gray-500 font-bold mb-2">Sesuaikan preferensi aplikasi dan struk printer.</p>
             </div>
             
-            <div className="space-y-4">
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 shadow-sm">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-3 border-b border-gray-200 pb-2">Sistem Aplikasi</label>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="enableStok"
+                  checked={printSettings.enableStok}
+                  onChange={e => setPrintSettings(s => ({ ...s, enableStok: e.target.checked }))}
+                  className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#0066FF] focus:ring-[#0066FF]"
+                />
+                <label htmlFor="enableStok" className="text-[12px] font-bold text-gray-800 cursor-pointer flex-1">
+                  Gunakan Sistem Stok Barang
+                  <span className="block text-[10px] text-gray-500 font-normal mt-1 leading-relaxed">Jika dimatikan, produk bisa dijual bebas tanpa memotong stok, dan form stok akan disembunyikan.</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 shadow-sm space-y-4">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1 border-b border-gray-200 pb-2">Pengaturan Struk</label>
+              
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Nama Toko (Header)</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Nama Toko (Header)</label>
                 <input
                   type="text"
                   value={printSettings.namaToko}
                   onChange={e => setPrintSettings(s => ({ ...s, namaToko: e.target.value }))}
                   placeholder="Contoh: ALFAZA CELL"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all shadow-sm"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Alamat / Keterangan Toko</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Alamat / Keterangan</label>
                 <textarea
                   value={printSettings.alamat}
                   onChange={e => setPrintSettings(s => ({ ...s, alamat: e.target.value }))}
                   placeholder="Contoh: Jl. Kemerdekaan No.123"
                   rows={2}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none shadow-sm"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Teks Ucapan (Footer)</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Teks Ucapan (Footer)</label>
                 <textarea
                   value={printSettings.ucapan}
                   onChange={e => setPrintSettings(s => ({ ...s, ucapan: e.target.value }))}
                   placeholder="Contoh: Terima kasih atas kunjungan Anda"
                   rows={2}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none shadow-sm"
                 />
               </div>
-              <button
-                onClick={() => {
-                  localStorage.setItem(`pos_settings_${storeId}`, JSON.stringify(printSettings));
-                  alert('Pengaturan struk berhasil disimpan!');
-                }}
-                className="w-full py-3 bg-[#0066FF] text-white font-black text-[13px] rounded-xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-95 transition-all mt-2"
-              >
-                <i className="fa-solid fa-save mr-2"></i>Simpan Pengaturan
-              </button>
             </div>
+
+            <button
+              onClick={() => {
+                localStorage.setItem(`pos_settings_${storeId}`, JSON.stringify(printSettings));
+                alert('Pengaturan berhasil disimpan!');
+              }}
+              className="w-full py-3 bg-[#0066FF] text-white font-black text-[13px] rounded-xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-95 transition-all mt-4"
+            >
+              <i className="fa-solid fa-save mr-2"></i>Simpan Pengaturan
+            </button>
           </div>
         </div>
       )}
@@ -861,19 +940,21 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
               />
             </div>
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Stok Awal</label>
-              <input 
-                type="text" 
-                placeholder="0" 
-                value={form.stok ? form.stok.toLocaleString('id-ID') : ''} 
-                onChange={e => {
-                  const val = e.target.value.replace(/[^0-9]/g, '');
-                  set('stok', parseInt(val || '0', 10));
-                }} 
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
-              />
-            </div>
+            {printSettings.enableStok && (
+              <div>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Stok Awal</label>
+                <input 
+                  type="text" 
+                  placeholder="0" 
+                  value={form.stok ? form.stok.toLocaleString('id-ID') : ''} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    set('stok', parseInt(val || '0', 10));
+                  }} 
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
+                />
+              </div>
+            )}
           </div>
           <button type="submit" className="w-full py-3.5 bg-[#0066FF] text-white font-black text-[14px] rounded-2xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-[0.98] transition-all mt-2">
             <i className="fa-solid fa-floppy-disk mr-2"></i>

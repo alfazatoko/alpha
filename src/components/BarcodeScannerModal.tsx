@@ -25,6 +25,9 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({ onScan
       },
       fps: 10,
       aspectRatio: 1.0,
+      videoConstraints: {
+        facingMode: 'environment'
+      },
       supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13,
