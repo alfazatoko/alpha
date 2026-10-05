@@ -83,22 +83,28 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
 
         {/* Theme Settings */}
         <div className="p-6 border-b border-gray-300">
-          <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em]">Tema Aplikasi</h4>
-          <div className="flex items-center gap-4">
+          <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em] flex items-center gap-2">
+            <i className="fa-solid fa-palette text-blue-500"></i> Tema Aplikasi
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'light', color: 'bg-white', ring: 'border-gray-200' },
-              { id: 'blue', color: 'bg-gradient-to-br from-gray-500 to-gray-800', ring: 'border-gray-500' },
-              { id: 'neon', color: 'bg-gradient-to-br from-green-300 to-green-500', ring: 'border-green-600' }
+              { id: 'light', label: 'Putih', color: 'bg-white text-gray-700 border-gray-200' },
+              { id: 'blue', label: 'Gelap', color: 'bg-slate-800 text-white border-slate-900' },
+              { id: 'neon', label: 'Hijau', color: 'bg-emerald-500 text-white border-emerald-600' }
             ].map(t => (
               <button 
                 key={t.id}
                 onClick={() => setTheme(t.id)} 
-                className={cn("w-12 h-12 rounded-2xl border-2 shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-90", 
+                className={cn(
+                  "relative flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all shadow-sm active:scale-95",
                   t.color,
-                  theme === t.id ? "border-blue-500 ring-4 ring-blue-500/10" : "border-gray-300 bg-gray-200"
+                  theme === t.id ? "ring-2 ring-blue-500 ring-offset-1 border-transparent scale-105 z-10" : "opacity-80 hover:opacity-100"
                 )}
               >
-                <div className={cn("w-6 h-6 rounded-lg shadow-inner", theme === t.id ? "bg-blue-500" : "bg-white/50")}></div>
+                <div className={cn("w-6 h-6 rounded-full border border-black/10 flex items-center justify-center mb-2 shadow-inner", theme === t.id ? "bg-blue-500 text-white" : "bg-white/20")}>
+                   {theme === t.id && <i className="fa-solid fa-check text-[10px]"></i>}
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">{t.label}</span>
               </button>
             ))}
           </div>
@@ -106,29 +112,34 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
 
         {/* Layout Settings */}
         <div className="p-6 pb-12">
-          <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em]">Mode Tampilan</h4>
-          <div className="grid grid-cols-3 gap-2">
+          <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em] flex items-center gap-2">
+            <i className="fa-solid fa-expand text-blue-500"></i> Mode Tampilan
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'hp', label: 'Smartphone', icon: 'fa-mobile-screen' },
+              { id: 'hp', label: 'Ponsel', icon: 'fa-mobile-screen' },
               { id: 'tablet', label: 'Tablet', icon: 'fa-tablet-screen-button' },
-              { id: 'pc', label: 'Mode PC', icon: 'fa-desktop' }
+              { id: 'pc', label: 'Layar PC', icon: 'fa-desktop' }
             ].map(size => (
               <button 
                 key={size.id}
                 onClick={() => setScreenSize(size.id)}
                 className={cn(
-                  "flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-1.5",
-                  screenSize === size.id ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" : "bg-white border-gray-200 text-gray-600 hover:border-blue-200 hover:text-blue-400"
+                  "flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all gap-2 active:scale-95",
+                  screenSize === size.id ? "bg-[#0066ff] border-[#0066ff] text-white shadow-lg shadow-blue-500/30 scale-105 z-10" : "bg-white border-gray-200 text-gray-500 hover:border-blue-200 hover:text-blue-500 hover:bg-blue-50"
                 )}
               >
-                <i className={cn("fa-solid text-base", size.icon)}></i>
-                <span className="text-[8px] font-black uppercase tracking-tighter text-center leading-tight">{size.label}</span>
+                <i className={cn("fa-solid text-lg", size.icon)}></i>
+                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">{size.label}</span>
               </button>
             ))}
           </div>
-          <div className="mt-6 p-4 bg-blue-50 rounded-2xl border border-blue-100">
-             <p className="text-[9px] text-blue-600 font-bold uppercase leading-relaxed text-center">
-               <i className="fa-solid fa-circle-info mr-1"></i> Mode Otomatis direkomendasikan untuk pengalaman terbaik.
+          <div className="mt-6 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-3">
+             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+               <i className="fa-solid fa-wand-magic-sparkles text-[12px]"></i>
+             </div>
+             <p className="text-[9px] text-blue-800 font-bold leading-relaxed">
+               Mode tampilan merekomendasikan resolusi yang optimal sesuai layar perangkat Anda.
              </p>
           </div>
         </div>

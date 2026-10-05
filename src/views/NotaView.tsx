@@ -10,12 +10,20 @@ interface NotaItem {
 
 const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void; isPc?: boolean }> = ({ active, setActiveView, isPc }) => {
   
-  const [shopName, setShopName] = useState("ALPHA - Agen BRILink");
-  const [address, setAddress] = useState("Jl. Merdeka No. 123, Indonesia");
+  const [shopName, setShopName] = useState(() => localStorage.getItem('nota_shopName') || "ALPHA - Agen BRILink");
+  const [address, setAddress] = useState(() => localStorage.getItem('nota_address') || "Jl. Merdeka No. 123, Indonesia");
+  const [footerText, setFooterText] = useState(() => localStorage.getItem('nota_footer') || "TERIMA KASIH");
+
+  React.useEffect(() => {
+    localStorage.setItem('nota_shopName', shopName);
+    localStorage.setItem('nota_address', address);
+    localStorage.setItem('nota_footer', footerText);
+  }, [shopName, address, footerText]);
   const [items, setItems] = useState<NotaItem[]>([]);
   const [currentItem, setCurrentItem] = useState<NotaItem>({ nama: "", harga: "", jumlah: "" });
   const [tanggal, setTanggal] = useState(getLocalISOString().split('T')[0]);
   const [ukuranKertas, setUkuranKertas] = useState<'58mm'|'80mm'>('58mm');
+  const [openSettingToko, setOpenSettingToko] = useState(false);
 
   const [isPreview, setIsPreview] = useState(false);
   
@@ -88,7 +96,7 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
       receiptText += divider + '\n';
       receiptText += rightAlignTwo('TOTAL:', formatRupiah(calculateTotal())) + '\n';
       receiptText += divider + '\n';
-      receiptText += centerText('TERIMA KASIH') + '\n';
+      receiptText += centerText(footerText) + '\n';
       receiptText += '\n\n\n';
       
       const btMacAddress = localStorage.getItem('bluetooth_printer_mac');
@@ -165,7 +173,7 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
         <span className="text-[12px]">{formatRupiah(calculateTotal())}</span>
       </div>
       <div className="text-center mt-6 text-[10px]">
-        <p className="font-bold">TERIMA KASIH</p>
+        <p className="font-bold whitespace-pre-wrap">{footerText}</p>
       </div>
     </div>
   );
@@ -205,27 +213,46 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
           
           <div className="w-[420px] shrink-0 h-full flex flex-col gap-6 overflow-y-auto pr-2 scrollbar-thin">
             
-            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
-              <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest pb-2 border-b border-slate-100 dark:border-slate-700">Pengaturan Toko</h4>
-              
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nama Toko/Instansi</label>
-                  <input 
-                    value={shopName} 
-                    onChange={e => setShopName(e.target.value)} 
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Alamat Toko</label>
-                  <input 
-                    value={address} 
-                    onChange={e => setAddress(e.target.value)} 
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
-                  />
-                </div>
+            <div className="bg-white dark:bg-slate-800 rounded-3xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm">
+              <div 
+                className="px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                onClick={() => setOpenSettingToko(!openSettingToko)}
+              >
+                <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fa-solid fa-store text-blue-600"></i> Pengaturan Toko
+                </h4>
+                <i className={cn("fa-solid fa-chevron-right text-slate-400 transition-transform duration-300 text-[10px]", openSettingToko && "rotate-90")}></i>
               </div>
+              
+              {openSettingToko && (
+                <div className="px-6 pb-6 pt-2 space-y-3 border-t border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-2 fade-in duration-200">
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nama Toko/Instansi</label>
+                    <input 
+                      value={shopName} 
+                      onChange={e => setShopName(e.target.value)} 
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Alamat Toko</label>
+                    <input 
+                      value={address} 
+                      onChange={e => setAddress(e.target.value)} 
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Teks Ucapan (Bawah)</label>
+                    <textarea 
+                      value={footerText} 
+                      onChange={e => setFooterText(e.target.value)} 
+                      rows={2}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none resize-none" 
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
@@ -424,7 +451,52 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
         </button>
       </div>
 
-      <div className="p-5">
+      <div className="p-5 space-y-4">
+        
+        {/* PENGATURAN TOKO */}
+        <div className="shadow-sm border border-gray-200 rounded-xl bg-white overflow-hidden">
+          <div 
+            className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+            onClick={() => setOpenSettingToko(!openSettingToko)}
+          >
+            <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
+              <i className="fa-solid fa-store text-blue-700"></i> PENGATURAN TOKO
+            </h3>
+            <i className={cn("fa-solid fa-chevron-right text-gray-400 transition-transform duration-300 text-[11px]", openSettingToko && "rotate-90")}></i>
+          </div>
+          
+          {openSettingToko && (
+            <div className="p-4 pt-2 space-y-3 border-t border-gray-100 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA TOKO</label>
+                <input 
+                  value={shopName} 
+                  onChange={e => setShopName(e.target.value)} 
+                  className="form-input-modern w-full" 
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">ALAMAT TOKO</label>
+                <input 
+                  value={address} 
+                  onChange={e => setAddress(e.target.value)} 
+                  className="form-input-modern w-full" 
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">TEKS UCAPAN (BAWAH)</label>
+                <textarea 
+                  value={footerText} 
+                  onChange={e => setFooterText(e.target.value)} 
+                  rows={2}
+                  className="form-input-modern w-full resize-none py-2" 
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* INPUT DATA NOTA */}
         <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
           <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
             <i className="fa-solid fa-file-invoice text-blue-700"></i> INPUT DATA NOTA

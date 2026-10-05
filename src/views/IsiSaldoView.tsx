@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatInputRupiah, cn, formatRupiah } from '../lib/utils'
 import type { OperkanSaldo } from '../types'
@@ -562,10 +562,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         )}
 
         <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
-          <div className="mb-4">
-            <h2 className="text-[22px] font-black text-[#1a1a1a] leading-none tracking-tight">Form Transaksi</h2>
-            <p className="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-widest">Kategori Layanan</p>
-          </div>
+
           <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
             <i className="fa-solid fa-vault text-blue-700"></i> MANAJEMEN SALDO
           </h3>

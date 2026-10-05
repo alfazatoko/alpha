@@ -81,6 +81,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [sumberAplikasi, setSumberAplikasi] = useState('')
   const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|null>(null)
   const [selectedTujuan, setSelectedTujuan] = useState('')
+  const [selectedTujuanFee, setSelectedTujuanFee] = useState(0)
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
   const [activeSubCategory, setActiveSubCategory] = useState<string>('')
   const [nominalCashSplit, setNominalCashSplit] = useState('')
@@ -103,20 +104,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
 
   const [popupLists, setPopupLists] = useState<Record<string, any[]>>(() => {
-    const saved = localStorage.getItem('alphaPro_popup_lists');
-    if (saved) return JSON.parse(saved);
-    return {
+    const defaultLists = {
       BANK: ITEMS['TRANSFER_BANK'],
       ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
       FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']]
     };
+    try {
+      const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
+      if (popupPreset && popupPreset.data) return popupPreset.data;
+    } catch(e) {}
+    
+    const saved = localStorage.getItem('alphaPro_popup_lists');
+    if (saved) return JSON.parse(saved);
+    return defaultLists;
   });
+
+  React.useEffect(() => {
+    const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
+    if (popupPreset && popupPreset.data) {
+      setPopupLists(popupPreset.data);
+    }
+  }, [presets]);
+  
   const [isEditingPopup, setIsEditingPopup] = useState(false);
 
   const handleUpdatePopupList = (mode: string, newList: any[]) => {
     const updated = { ...popupLists, [mode]: newList };
     setPopupLists(updated);
     localStorage.setItem('alphaPro_popup_lists', JSON.stringify(updated));
+    
+    // Dispatch to App.tsx so it syncs online
+    window.dispatchEvent(new CustomEvent('alphaUpdatePopupLists', { detail: updated }));
   };
 
   // Sync initialMode when it changes externally
@@ -131,6 +149,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   React.useEffect(() => {
     const handleUpdate = () => {
       try {
+        const transferPreset = presets?.find((p: any) => p.id === '_TRANSFER_METHODS_');
+        if (transferPreset && transferPreset.data) {
+          setActiveTransferMethods(transferPreset.data)
+          setSumberAplikasi(prev => transferPreset.data.includes(prev) ? prev : (transferPreset.data[0] || 'BANK'))
+          return
+        }
         const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`)
         if (saved) {
           const methods = JSON.parse(saved)
@@ -146,7 +170,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     handleUpdate()
     window.addEventListener('alphaSyncUpdate', handleUpdate)
     return () => window.removeEventListener('alphaSyncUpdate', handleUpdate)
-  }, [activeStoreId])
+  }, [activeStoreId, presets])
   // --- KALKULATOR STATE ---
   const [showCalc, setShowCalc] = useState(false)
   const [calcDisplay, setCalcDisplay] = useState('0')
@@ -532,9 +556,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     setErrorMsg(null)
     
     // Combine manual keterangan with auto prefix if needed
-    const finalKeteranganBase = (isKetAuto && autoTextPrefix) 
+    let finalKeteranganBase = (isKetAuto && autoTextPrefix) 
       ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
       : keterangan;
+
+    if ((kategori === 'Order Kuota' || kategori === 'FLIP') && selectedTujuanFee > 0) {
+      finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
+    }
 
     if (activeMode === 'AKSESORIS') {
       const cleanNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
@@ -769,7 +797,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <span className="text-[8px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Sumber Uang Keluar</span>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
-                {SUMBER_APLIKASI_BANK.map(src => {
+                {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
                   const isSel = sumberAplikasi === src.id;
                   return (
                     <button
@@ -1384,7 +1412,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         )}
 
         {/* SUMBER KELUAR & MASUK ROW */}
-        {activeMode !== 'AKSESORIS' && (
+        {activeMode === 'DIGITAL' && (
           <div className="mx-4 grid grid-cols-2 gap-2 mb-2">
             {/* KOLOM 1: UANG KELUAR */}
             <div 
@@ -1765,7 +1793,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
 
         {/* SUMBER KELUAR & MASUK ROW - TEMA 3 */}
-        {activeMode !== 'AKSESORIS' && (
+        {activeMode === 'DIGITAL' && (
           <div className="mb-4 px-5 animate-in fade-in slide-in-from-top-2">
             <div className="grid grid-cols-2 gap-2">
               {/* KOLOM 1: UANG KELUAR */}
@@ -2371,12 +2399,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <div key={item.id} className="relative">
                         <button 
                           onClick={() => {
-                            if (isEditingPopup) return;
+                            if (isEditingPopup) {
+                               if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP') {
+                                 const currentFee = item.fee || 0;
+                                 const newFeeStr = window.prompt(`Atur Fee Aplikasi untuk ${item.name}:\n(Kosongkan atau isi 0 jika tidak ada fee)`, currentFee.toString());
+                                 if (newFeeStr !== null) {
+                                   const newFee = parseInt(newFeeStr.replace(/\D/g, ''), 10) || 0;
+                                   const list = popupLists[classicPopupMode] || [];
+                                   const newList = list.map((x: any) => x.id === item.id ? { ...x, fee: newFee } : x);
+                                   handleUpdatePopupList(classicPopupMode, newList);
+                                 }
+                               }
+                               return;
+                            }
                             setIsKetAuto(true);
                             if (classicPopupMode === 'BANK') {
                                setSelectedBank(item.name);
                             } else {
                                setSelectedTujuan(item.name);
+                               if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP') && item.fee) {
+                                  setSelectedTujuanFee(item.fee);
+                               } else {
+                                  setSelectedTujuanFee(0);
+                               }
                             }
                             setKeterangan(''); // Keterangan manual dibiarkan kosong
                             setClassicPopupMode(null);
@@ -2386,6 +2431,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         >
                           <i className={cn("fa-solid text-[18px] mb-1.5 transition-transform group-hover:scale-110", item.color, item.icon)}></i>
                           <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide">{item.name}</span>
+                          {item.fee > 0 && (
+                            <span className="absolute top-1 left-1 bg-amber-100 text-amber-700 text-[7px] font-black px-1.5 py-0.5 rounded shadow-sm">
+                              +{item.fee}
+                            </span>
+                          )}
                         </button>
                         {isEditingPopup && (
                           <button 

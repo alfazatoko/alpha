@@ -638,7 +638,12 @@ const MainApp: React.FC<MainAppProps> = ({
 
     const isPin = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`) !== 'false'
 
-    const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: adminRules }]
+    const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+    const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
+    const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+    if (popupPreset) combinedPresets.push(popupPreset)
+    const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+    if (transferPreset) combinedPresets.push(transferPreset)
 
     const { error } = await supabase.from('store_settings').upsert({
       store_id: targetStoreId,
@@ -713,7 +718,12 @@ const MainApp: React.FC<MainAppProps> = ({
 
     // Sync directly to cloud
     const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
-    const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: adminRules }]
+    const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+    const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
+    const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+    if (popupPreset) combinedPresets.push(popupPreset)
+    const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+    if (transferPreset) combinedPresets.push(transferPreset)
     const { error } = await supabase.from('store_settings').upsert({
       store_id: effectiveStoreId,
       cashiers: updatedList,
@@ -968,7 +978,83 @@ const MainApp: React.FC<MainAppProps> = ({
       
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const combinedPresets = [...newPresets, { id: '_ADMIN_RULES_', data: adminRules }]
+        const basePresets = newPresets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
+        const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+        if (popupPreset) combinedPresets.push(popupPreset)
+        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+        if (transferPreset) combinedPresets.push(transferPreset)
+        await supabase.from('store_settings').upsert({
+          store_id: targetId,
+          cashiers: kasirList,
+          presets: combinedPresets,
+          running_texts: runningTexts,
+          main_announcement: mainAnnouncement,
+          is_pin_enabled: isPin,
+          updated_at: new Date().toISOString()
+        })
+      }
+    }
+  }
+
+  useEffect(() => {
+    const handleUpdatePopupLists = (e: any) => {
+      if (e.detail) {
+        savePopupLists(e.detail)
+      }
+    }
+    const handleUpdateTransferMethods = (e: any) => {
+      if (e.detail) {
+        saveTransferMethods(e.detail)
+      }
+    }
+    window.addEventListener('alphaUpdatePopupLists', handleUpdatePopupLists)
+    window.addEventListener('alphaUpdateTransferMethods', handleUpdateTransferMethods)
+    return () => {
+      window.removeEventListener('alphaUpdatePopupLists', handleUpdatePopupLists)
+      window.removeEventListener('alphaUpdateTransferMethods', handleUpdateTransferMethods)
+    }
+  }, [presets, adminRules, activeStoreId, targetStoreId, kasirList, runningTexts, mainAnnouncement])
+
+  const saveTransferMethods = async (methods: string[]) => {
+    const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+    if (googleUid) {
+      if (targetId && targetId !== 'all') {
+        const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
+        const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+        if (popupPreset) combinedPresets.push(popupPreset)
+        combinedPresets.push({ id: '_TRANSFER_METHODS_', data: methods })
+        
+        setPresets(combinedPresets)
+        localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
+        
+        await supabase.from('store_settings').upsert({
+          store_id: targetId,
+          cashiers: kasirList,
+          presets: combinedPresets,
+          running_texts: runningTexts,
+          main_announcement: mainAnnouncement,
+          is_pin_enabled: isPin,
+          updated_at: new Date().toISOString()
+        })
+      }
+    }
+  }
+
+  const savePopupLists = async (newLists: Record<string, any[]>) => {
+    const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
+    if (googleUid) {
+      if (targetId && targetId !== 'all') {
+        const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }, { id: '_POPUP_LISTS_', data: newLists }]
+        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+        if (transferPreset) combinedPresets.push(transferPreset)
+        setPresets(combinedPresets)
+        localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
+        
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
@@ -991,7 +1077,12 @@ const MainApp: React.FC<MainAppProps> = ({
       
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const combinedPresets = [...presets, { id: '_ADMIN_RULES_', data: newRules }]
+        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: newRules }]
+        const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+        if (popupPreset) combinedPresets.push(popupPreset)
+        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+        if (transferPreset) combinedPresets.push(transferPreset)
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,

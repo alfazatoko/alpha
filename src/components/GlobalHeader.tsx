@@ -99,7 +99,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 )}
               </button>
             ) : (
-              <div className="relative z-50">
+              <div className="relative z-[70]">
                 <button 
                   onClick={onNotifClick}
                   className="relative w-8 h-8 rounded-[10px] bg-rose-500/90 backdrop-blur-md flex items-center justify-center text-white border border-rose-400/50 shadow-lg active:scale-90 hover:bg-rose-600/90 transition-all"

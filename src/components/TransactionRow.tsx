@@ -44,89 +44,44 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
     displayKategori = parts[0];
     formattedKeterangan = parts.slice(1).join(' ');
   }
-  let detailTable: React.ReactNode = null;
+  let listKeterangan = formattedKeterangan;
+  let modalKeterangan = formattedKeterangan;
+  let modalTransaksiLabel = displayKategori;
+  let adminFeeLabel = "Biaya Admin:";
+
+  let appFee = 0;
+  if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && t.keterangan?.includes('[FEE_APP:')) {
+    const match = t.keterangan.match(/\[FEE_APP:(\d+)\]/);
+    if (match) {
+      appFee = parseInt(match[1], 10);
+      listKeterangan = listKeterangan.replace(/\[fee_app:\d+\]/ig, '').trim();
+      modalKeterangan = modalKeterangan.replace(/\[fee_app:\d+\]/ig, '').trim();
+    }
+  }
+  const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
 
   if (t.kategori === 'Tarik Tunai' && t.keterangan?.startsWith('TARIK_TUNAI|')) {
     const parts = t.keterangan.split('|');
-    const metode = parts[1]?.replace(' [ADMIN_DALAM]', '')?.replace(' [NON_TUNAI]', '') || 'Unknown';
-    
+    let metodeRaw = parts[1]?.replace(' [ADMIN_DALAM]', '')?.replace(' [NON_TUNAI]', '')?.trim() || 'Unknown';
+    if (metodeRaw.toUpperCase() === 'QRIS') metodeRaw = 'QRIS';
+    else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC';
+    else if (metodeRaw.toUpperCase() === 'ATM') metodeRaw = 'ATM';
+    else metodeRaw = metodeRaw.charAt(0).toUpperCase() + metodeRaw.slice(1).toLowerCase();
+
     const adm = t.adminFee;
     const nom = t.nominal;
     const adminPotong = t.keterangan.includes('[ADMIN_DALAM]');
+
+    modalTransaksiLabel = `TARIK TUNAI > ${metodeRaw.toUpperCase()}`;
+
+    const tarikNom = adminPotong ? (nom - adm) : nom;
     
+    listKeterangan = `${metodeRaw} | Tarik ${formatK(tarikNom)} | Adm ${formatK(adm)}`;
+    modalKeterangan = `Tarik ${formatK(tarikNom)} | Adm ${formatK(adm)}`;
+
     if (adminPotong) {
-      // Checkbox DALAM = DICEKLIS (Admin Potong Saldo)
-      formattedKeterangan = `${metode} | Tarik ${formatK(nom - adm)} | (Admin Dalam) ${formatK(adm)} Potong saldo`;
-      
-      detailTable = (
-        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
-           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
-              <span className="text-slate-500">Metode</span>
-              <span className="text-slate-800 text-right flex-1 ml-2">{metode} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded ml-1">ADMIN DALAM</span></span>
-           </div>
-           <div className="flex justify-between border-b border-slate-200 p-1.5">
-              <span className="text-slate-500">Nominal Tarik</span>
-              <span className="text-slate-800 text-right flex-1">Rp {formatRp(nom)}</span>
-           </div>
-           <div className="flex justify-between border-b border-slate-200 p-1.5">
-              <span className="text-slate-500">Admin (Potong Saldo)</span>
-              <span className="text-rose-600 font-black text-right flex-1">- Rp {formatRp(adm)}</span>
-           </div>
-           <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
-              <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
-              <span className="text-blue-700 text-[12px] font-black text-right flex-1">
-                 Rp {formatRp(nom - adm)}
-              </span>
-           </div>
-        </div>
-      );
-    } else {
-      // Checkbox DALAM = TIDAK DICEKLIS (Admin Tunai)
-      formattedKeterangan = `${metode} | Tarik ${formatK(nom)} | Admin Tunai ${formatK(adm)}`;
-      
-      detailTable = (
-        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
-           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
-              <span className="text-slate-500">Metode</span>
-              <span className="text-slate-800 text-right flex-1 ml-2">{metode} <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1">ADMIN TUNAI</span></span>
-           </div>
-           <div className="flex justify-between border-b border-slate-200 p-1.5">
-              <span className="text-slate-500">Nominal Tarik</span>
-              <span className="text-slate-800 text-right flex-1">Rp {formatRp(nom)}</span>
-           </div>
-           <div className="flex justify-between border-b border-slate-200 p-1.5">
-              <span className="text-slate-500">Admin (Tunai)</span>
-              <span className="text-emerald-600 font-black text-right flex-1">+ Rp {formatRp(adm)}</span>
-           </div>
-           <div className="flex justify-between p-1.5 bg-blue-50/50 items-center">
-              <span className="text-slate-700 font-black text-[9px]">UANG DISERAHKAN</span>
-              <span className="text-blue-700 text-[12px] font-black text-right flex-1">
-                 Rp {formatRp(nom)}
-              </span>
-           </div>
-        </div>
-      );
+      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
     }
-  } else {
-     // Generic table format for other transactions
-      detailTable = (
-        <div className="flex flex-col border border-slate-300 rounded-md overflow-hidden bg-white text-[10px] font-bold text-slate-600 mt-1 w-full">
-           <div className="flex justify-between border-b border-slate-200 p-1.5 bg-slate-50">
-              <span className="text-slate-500 min-w-[60px]">Keterangan</span>
-              <span className="text-slate-800 text-right flex-1 ml-4 leading-tight break-words">{formattedKeterangan}</span>
-           </div>
-           <div className="flex justify-between border-b border-slate-200 p-1.5">
-              <span className="text-slate-500">Total Nominal</span>
-              <span className="text-slate-800 font-black text-right flex-1">Rp {formatRp(t.nominal)}</span>
-           </div>
-           {t.adminFee > 0 && (
-           <div className="flex justify-between p-1.5 bg-rose-50/30">
-              <span className="text-slate-500">Admin Fee</span>
-              <span className="text-rose-600 font-black text-right flex-1">Rp {formatRp(t.adminFee)}</span>
-           </div>
-           )}
-        </div>
-      );
   }
 
   return (
@@ -148,7 +103,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
                {t.kategori}
             </div>
             <div className="text-[9px] text-blue-900 dark:text-blue-300 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
-               {formattedKeterangan}
+               {listKeterangan}
             </div>
             <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tracking-tight leading-none">
                {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
@@ -168,7 +123,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
             "text-[11px] font-extrabold uppercase", 
             isKhusus ? "text-orange-400" : (isNonTunai || (t.keterangan || '').includes('[ADMIN_DALAM]')) ? "text-[#0066AE]" : "text-emerald-600"
           )}>
-            Admin: {t.adminFee.toLocaleString('id-ID')}
+            Admin: {displayAdminFee.toLocaleString('id-ID')}
           </div>
         </div>
       </div>
@@ -201,14 +156,14 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
                 </div>
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Transaksi:</span>
-                  <span className="text-blue-600 font-black">{displayKategori}</span>
+                  <span className="text-blue-600 font-black">{modalTransaksiLabel}</span>
                 </div>
               </div>
 
               {/* Keterangan */}
               <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2.5 px-3 text-[12px] border border-slate-100">
                 <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
-                <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{formattedKeterangan}</span>
+                <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{modalKeterangan}</span>
               </div>
 
               {/* Sumber Uang (Keluar/Masuk) */}
@@ -229,14 +184,37 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
               {/* Nominal & Admin */}
               <div className="flex flex-col gap-1.5 mt-1">
-                <div className="flex justify-between items-center text-[12px]">
-                  <span className="text-slate-500 font-bold">Nominal:</span>
-                  <span className="text-slate-800 font-black">Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
-                </div>
-                <div className="flex justify-between items-center text-[12px]">
-                  <span className="text-slate-500 font-bold">Biaya Admin:</span>
-                  <span className="text-slate-800 font-black">Rp {formatRp(t.adminFee)}</span>
-                </div>
+                {appFee > 0 ? (
+                  <>
+                    <div className="flex justify-between items-center text-[12px]">
+                      <span className="text-slate-500 font-bold">Harga Modal:</span>
+                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[12px]">
+                      <span className="text-slate-500 font-bold">Fee Aplikasi:</span>
+                      <span className="text-rose-600 font-black">Rp {formatRp(appFee)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[12px] pt-1.5 mt-0.5 border-t border-slate-100">
+                      <span className="text-slate-600 font-black">Total Modal:</span>
+                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal + appFee)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[12px]">
+                      <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
+                      <span className="text-emerald-600 font-black">Rp {formatRp(displayAdminFee)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center text-[12px]">
+                      <span className="text-slate-500 font-bold">Nominal:</span>
+                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[12px]">
+                      <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
+                      <span className="text-slate-800 font-black">Rp {formatRp(t.adminFee)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Total (Dashed Border) */}

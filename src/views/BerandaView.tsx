@@ -2975,54 +2975,61 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           }}
           notifPopupContent={
             showKasirNotif && (
-              <div className="absolute right-0 top-11 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in slide-in-from-top-2">
-                <div className="p-3 bg-red-50 border-b border-red-100 flex items-center justify-between">
-                  <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
-                    <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+              <div className="absolute right-0 top-11 w-72 bg-white rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden z-50 animate-in slide-in-from-top-2 origin-top-right">
+                <div className="px-4 py-3 bg-gradient-to-r from-rose-50 to-red-50 border-b border-rose-100 flex items-center justify-between">
+                  <h4 className="text-[11px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-rose-200/50 flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-bell text-[10px]"></i>
+                    </div>
+                    PEMBERITAHUAN
                   </h4>
                   {kasirLateHistory.length > 0 && (
                     <button 
                       onClick={handleClearLateNotifs}
-                      className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-600 text-[9px] font-black rounded-lg transition-colors cursor-pointer"
+                      className="px-3 py-1.5 bg-white hover:bg-rose-100 text-rose-600 text-[9px] font-black rounded-full shadow-sm border border-rose-200 transition-all cursor-pointer active:scale-95"
                     >
-                      Tandai Dibaca & Hapus
+                      HAPUS
                     </button>
                   )}
                 </div>
-                <div className="max-h-60 overflow-y-auto p-2 space-y-2 bg-gray-50/50">
+                <div className="max-h-72 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
                   
                   {/* Show Pesan Mendadak if exists */}
                   {activePesanMendadak && (
-                    <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-sm flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
-                        <i className="fa-solid fa-bullhorn text-[10px]"></i>
+                    <div className="bg-white p-3.5 rounded-2xl border border-rose-200 shadow-sm flex items-start gap-3 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                      <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
+                        <i className="fa-solid fa-bullhorn text-[11px]"></i>
                       </div>
                       <div className="flex-1">
-                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Pesan Owner</p>
-                        <p className="text-xs font-bold text-gray-900 whitespace-pre-wrap">{activePesanMendadak}</p>
+                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1">Pesan Owner</p>
+                        <p className="text-[11px] font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
                       </div>
                     </div>
                   )}
 
                   {kasirLateHistory.length === 0 && !activePesanMendadak ? (
-                    <p className="text-[10px] text-gray-400 text-center py-4 font-bold">Belum ada pemberitahuan</p>
+                    <div className="py-8 flex flex-col items-center justify-center opacity-50">
+                      <i className="fa-regular fa-bell-slash text-2xl text-slate-300 mb-2"></i>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Belum ada notifikasi</p>
+                    </div>
                   ) : (
                     kasirLateHistory.map((late, i) => (
-                      <div key={i} className="bg-white p-2.5 rounded-xl border border-red-100 shadow-sm flex flex-col gap-2">
+                      <div key={i} className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex flex-col gap-2.5">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
-                            <span className="text-xs font-black text-gray-900">{late.jam}</span>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                            <span className="text-sm font-black text-slate-800">{late.jam}</span>
                           </div>
                           <div className="text-right">
-                            <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Telat {late.lateMins}m</span>
-                            <p className="text-[8px] font-bold text-gray-400 mt-1">{late.shiftName}</p>
+                            <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">Telat {late.lateMins}m</span>
+                            <p className="text-[8px] font-bold text-slate-400 mt-1.5 uppercase">{late.shiftName}</p>
                           </div>
                         </div>
                         {late.alasan_telat && (
-                          <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
-                            <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-0.5">Alasan:</p>
-                            <p className="text-[10px] font-bold text-gray-800 leading-tight">{late.alasan_telat}</p>
+                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 mt-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">ALASAN:</p>
+                            <p className="text-[10px] font-bold text-slate-700 leading-relaxed">{late.alasan_telat}</p>
                           </div>
                         )}
                       </div>

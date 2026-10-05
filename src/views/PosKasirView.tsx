@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { GlobalHeader } from '../components/GlobalHeader';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
-
+import { cn } from '../lib/utils';
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Product {
   id: string;
@@ -147,6 +147,8 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
+  const [openSettingAplikasi, setOpenSettingAplikasi] = useState(false);
+  const [openSettingStruk, setOpenSettingStruk] = useState(false);
 
   const [metodeBayar, setMetodeBayar] = useState<'TUNAI' | 'QRIS'>('TUNAI');
   const [uangDiterima, setUangDiterima] = useState('');
@@ -609,65 +611,89 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         </div>
       )}
 
-      {/* TAB SETTING */}
       {activeTab === 'setting' && (
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[90px] bg-white">
-          <div className="max-w-md mx-auto space-y-4">
-            <div>
-              <h2 className="text-sm font-black text-gray-900 mb-1"><i className="fa-solid fa-gear mr-2 text-[#0066FF]"></i>Pengaturan Kasir</h2>
-              <p className="text-[11px] text-gray-500 font-bold mb-2">Sesuaikan preferensi aplikasi dan struk printer.</p>
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="mb-4">
+              <h2 className="text-sm font-black text-gray-900 mb-0.5"><i className="fa-solid fa-gear mr-2 text-[#0066FF]"></i>Pengaturan Kasir</h2>
+              <p className="text-[10px] text-gray-500 font-bold">Sesuaikan preferensi aplikasi dan struk printer.</p>
             </div>
             
-            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 shadow-sm">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-3 border-b border-gray-200 pb-2">Sistem Aplikasi</label>
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="enableStok"
-                  checked={printSettings.enableStok}
-                  onChange={e => setPrintSettings(s => ({ ...s, enableStok: e.target.checked }))}
-                  className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#0066FF] focus:ring-[#0066FF]"
-                />
-                <label htmlFor="enableStok" className="text-[12px] font-bold text-gray-800 cursor-pointer flex-1">
-                  Gunakan Sistem Stok Barang
-                  <span className="block text-[10px] text-gray-500 font-normal mt-1 leading-relaxed">Jika dimatikan, produk bisa dijual bebas tanpa memotong stok, dan form stok akan disembunyikan.</span>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div 
+                className="bg-slate-50 border-b border-gray-200 px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => setOpenSettingAplikasi(!openSettingAplikasi)}
+              >
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 cursor-pointer">
+                  <i className="fa-solid fa-laptop-code text-[#0066FF]"></i> Sistem Aplikasi
                 </label>
+                <i className={cn("fa-solid fa-chevron-right text-slate-400 transition-transform duration-300", openSettingAplikasi && "rotate-90")}></i>
               </div>
+              
+              {openSettingAplikasi && (
+                <div className="p-4 animate-in slide-in-from-top-2 fade-in duration-200">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      id="enableStok"
+                      checked={printSettings.enableStok}
+                      onChange={e => setPrintSettings(s => ({ ...s, enableStok: e.target.checked }))}
+                      className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#0066FF] focus:ring-[#0066FF] group-hover:border-blue-400 transition-colors cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <span className="text-[12px] font-black text-gray-800 group-hover:text-[#0066FF] transition-colors">Gunakan Sistem Stok Barang</span>
+                      <span className="block text-[10px] text-gray-500 font-bold mt-1 leading-relaxed">Jika dimatikan, produk bebas dijual tanpa memotong stok (Form stok disembunyikan).</span>
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
 
-            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 shadow-sm space-y-4">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1 border-b border-gray-200 pb-2">Pengaturan Struk</label>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div 
+                className="bg-slate-50 border-b border-gray-200 px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => setOpenSettingStruk(!openSettingStruk)}
+              >
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 cursor-pointer">
+                  <i className="fa-solid fa-receipt text-[#0066FF]"></i> Pengaturan Struk
+                </label>
+                <i className={cn("fa-solid fa-chevron-right text-slate-400 transition-transform duration-300", openSettingStruk && "rotate-90")}></i>
+              </div>
               
-              <div>
-                <label className="text-[11px] font-bold text-gray-700 block mb-1">Nama Toko (Header)</label>
-                <input
-                  type="text"
-                  value={printSettings.namaToko}
-                  onChange={e => setPrintSettings(s => ({ ...s, namaToko: e.target.value }))}
-                  placeholder="Contoh: ALFAZA CELL"
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all shadow-sm"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-gray-700 block mb-1">Alamat / Keterangan</label>
-                <textarea
-                  value={printSettings.alamat}
-                  onChange={e => setPrintSettings(s => ({ ...s, alamat: e.target.value }))}
-                  placeholder="Contoh: Jl. Kemerdekaan No.123"
-                  rows={2}
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none shadow-sm"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-gray-700 block mb-1">Teks Ucapan (Footer)</label>
-                <textarea
-                  value={printSettings.ucapan}
-                  onChange={e => setPrintSettings(s => ({ ...s, ucapan: e.target.value }))}
-                  placeholder="Contoh: Terima kasih atas kunjungan Anda"
-                  rows={2}
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all resize-none shadow-sm"
-                />
-              </div>
+              {openSettingStruk && (
+                <div className="p-4 space-y-3 animate-in slide-in-from-top-2 fade-in duration-200 bg-white">
+                  <div>
+                    <label className="text-[11px] font-black text-gray-700 block mb-1">Nama Toko (Header)</label>
+                    <input
+                      type="text"
+                      value={printSettings.namaToko}
+                      onChange={e => setPrintSettings(s => ({ ...s, namaToko: e.target.value }))}
+                      placeholder="Contoh: ALFAZA CELL"
+                      className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[12px] font-black text-gray-800 outline-none focus:border-[#0066FF] focus:bg-white transition-all shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-black text-gray-700 block mb-1">Alamat / Keterangan</label>
+                    <textarea
+                      value={printSettings.alamat}
+                      onChange={e => setPrintSettings(s => ({ ...s, alamat: e.target.value }))}
+                      placeholder="Contoh: Jl. Kemerdekaan No.123"
+                      rows={2}
+                      className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[12px] font-black text-gray-800 outline-none focus:border-[#0066FF] focus:bg-white transition-all resize-none shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-black text-gray-700 block mb-1">Teks Ucapan (Footer)</label>
+                    <textarea
+                      value={printSettings.ucapan}
+                      onChange={e => setPrintSettings(s => ({ ...s, ucapan: e.target.value }))}
+                      placeholder="Contoh: Terima kasih atas kunjungan Anda"
+                      rows={2}
+                      className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[12px] font-black text-gray-800 outline-none focus:border-[#0066FF] focus:bg-white transition-all resize-none shadow-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -675,9 +701,9 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                 localStorage.setItem(`pos_settings_${storeId}`, JSON.stringify(printSettings));
                 alert('Pengaturan berhasil disimpan!');
               }}
-              className="w-full py-3 bg-[#0066FF] text-white font-black text-[13px] rounded-xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-95 transition-all mt-4"
+              className="w-full py-2.5 bg-[#0066FF] text-white font-black text-[12px] rounded-xl shadow-[0_4px_12px_-4px_rgba(0,102,255,0.5)] hover:bg-[#0052cc] active:scale-[0.98] transition-all mt-4 flex items-center justify-center gap-2"
             >
-              <i className="fa-solid fa-save mr-2"></i>Simpan Pengaturan
+              <i className="fa-solid fa-save"></i> SIMPAN PENGATURAN
             </button>
           </div>
         </div>
