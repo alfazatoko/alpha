@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { formatInputRupiah, cn } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 
 const SUMBER_APLIKASI_BANK = [
   { id: 'BANK', label: 'Bank UOB', sub: 'Bank', icon: 'fa-building-columns' },
@@ -89,16 +90,58 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [isSumberModalOpen, setIsSumberModalOpen] = useState(false)
   const [isTujuanModalOpen, setIsTujuanModalOpen] = useState(false)
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
+  const [orderKuotaMode, setOrderKuotaMode] = useState<'MODAL_JUAL' | 'NOMINAL_ADMIN'>(() => {
+    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+    const saved = localStorage.getItem(`app_order_kuota_mode_${username}`);
+    return (saved === 'MODAL_JUAL' || saved === 'NOMINAL_ADMIN') ? saved : 'MODAL_JUAL';
+  })
+
   const [activeTheme, setActiveTheme] = useState(() => {
     const username = localStorage.getItem('alphaPro_username') || 'unknown';
     const saved = localStorage.getItem(`app_active_theme_${username}`);
     return saved ? saved : 'TEMA_2';
   });
 
-  React.useEffect(() => {
-    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+  // Ambil data dari Supabase saat pertama kali load
+  useEffect(() => {
+    const username = localStorage.getItem('alphaPro_username');
+    if (!username || username === 'unknown') return;
+
+    supabase.from('cashier_settings').select('preferences').eq('username', username).maybeSingle()
+      .then(({ data }) => {
+        if (data && data.preferences) {
+           const prefs = data.preferences as any;
+           if (prefs.orderKuotaMode) {
+              setOrderKuotaMode(prefs.orderKuotaMode);
+              localStorage.setItem(`app_order_kuota_mode_${username}`, prefs.orderKuotaMode);
+           }
+           if (prefs.activeTheme) {
+              setActiveTheme(prefs.activeTheme);
+              localStorage.setItem(`app_active_theme_${username}`, prefs.activeTheme);
+           }
+        }
+      })
+      .catch(err => console.error("Gagal load setting kasir dari Supabase", err));
+  }, []);
+
+  // Simpan ke Supabase jika ada perubahan (supaya sync online)
+  const isSettingsFirstRender = useRef(true);
+  useEffect(() => {
+    if (isSettingsFirstRender.current) {
+      isSettingsFirstRender.current = false;
+      return;
+    }
+    const username = localStorage.getItem('alphaPro_username');
+    if (!username || username === 'unknown') return;
+
+    localStorage.setItem(`app_order_kuota_mode_${username}`, orderKuotaMode);
     localStorage.setItem(`app_active_theme_${username}`, activeTheme);
-  }, [activeTheme]);
+
+    const preferences = { orderKuotaMode, activeTheme };
+    supabase.from('cashier_settings').upsert({ username, preferences }, { onConflict: 'username' })
+      .then(() => console.log('Cashier settings tersimpan di online database.'))
+      .catch(err => console.error("Gagal simpan setting kasir ke Supabase", err));
+  }, [orderKuotaMode, activeTheme]);
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
   const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
@@ -580,8 +623,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     
     // Validasi Khusus Transfer & Tarik Tunai
     if (activeMode === 'DIGITAL' || activeMode === 'TARIK') {
-      const cleanNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-      const cleanAdmin = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+      let cleanNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+      let cleanAdmin = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+      
+      let saveNominal = nominal;
+      let saveAdmin = admin;
+
+      if (kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') {
+         const calculatedModal = cleanNominal + selectedTujuanFee;
+         const calculatedJual = cleanNominal + cleanAdmin;
+         
+         cleanNominal = calculatedModal;
+         cleanAdmin = calculatedJual;
+         saveNominal = formatInputRupiah(calculatedModal.toString());
+         saveAdmin = formatInputRupiah(calculatedJual.toString());
+      }
       
       if (cleanNominal <= 0 || cleanAdmin <= 0) {
         setErrorMsg('Nominal & Admin Wajib diisi!')
@@ -591,7 +647,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Validasi khusus Order Kuota: Jual HARUS lebih besar dari Modal
       if (kategori === 'Order Kuota') {
         if (cleanAdmin <= cleanNominal) {
-          setErrorMsg(`Harga JUAL (${admin}) harus lebih besar dari MODAL (${nominal})!`)
+          setErrorMsg(`Harga JUAL (${saveAdmin}) harus lebih besar dari MODAL (${saveNominal})!`)
           adminRef.current?.focus()
           return
         }
@@ -602,6 +658,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           return
         }
       }
+      
+      // Lanjutkan dengan saveNominal dan saveAdmin
+      const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
+      const subTab = subMode === 'NORMAL' ? 'KHUSUS' : subMode
+      
+      if (tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)') {
+        const nonTunaiAmount = parseInt(nominalNonTunaiSplit.replace(/\D/g, '') || '0', 10)
+        const tunaiAmount = parseInt(nominalCashSplit.replace(/\D/g, '') || '0', 10)
+        const totNominal = parseInt(saveNominal.replace(/\D/g, '') || '0', 10)
+        
+        if (tunaiAmount + nonTunaiAmount !== totNominal) {
+          setErrorMsg('Total Tunai + Non Tunai harus sama dengan Nominal!')
+          return
+        }
+        
+        const splitKeterangan = `${finalKeteranganBase} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
+        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
+      } else {
+        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: finalKeteranganBase }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+      }
+      setIsKetAuto(true)
+      return;
     }
 
     const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
@@ -1059,6 +1137,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         }
                         
                         if (pCat === 'Order Kuota') {
+                          if (orderKuotaMode === 'NOMINAL_ADMIN') {
+                            setOrderKuotaMode('MODAL_JUAL');
+                          }
                           setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
                           setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
@@ -1111,12 +1192,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
+        {/* INPUT MODE TOGGLE (ORDER KUOTA ONLY) */}
+        {kategori === 'Order Kuota' && (
+          <div className="flex items-center justify-between px-3 mb-2 bg-blue-50/50 rounded-xl p-2 border border-blue-100">
+             <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Mode Input:</span>
+             <div className="flex gap-1 bg-white rounded-lg p-1 border border-blue-100 shadow-sm">
+                <button 
+                  onClick={() => { setOrderKuotaMode('MODAL_JUAL'); setNominal(''); setAdmin(''); }}
+                  className={cn("px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all", orderKuotaMode === 'MODAL_JUAL' ? "bg-[#0066ff] text-white shadow-sm" : "text-gray-500 hover:bg-gray-50")}
+                >Modal & Jual</button>
+                <button 
+                  onClick={() => { setOrderKuotaMode('NOMINAL_ADMIN'); setNominal(''); setAdmin(''); }}
+                  className={cn("px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all", orderKuotaMode === 'NOMINAL_ADMIN' ? "bg-[#0066ff] text-white shadow-sm" : "text-gray-500 hover:bg-gray-50")}
+                >Nominal & Admin</button>
+             </div>
+          </div>
+        )}
+
         <div className="flex gap-2 flex-nowrap px-2">
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
                 <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
+                {kategori === 'Order Kuota' ? (orderKuotaMode === 'NOMINAL_ADMIN' ? 'Nominal Asli' : 'Modal') : 'Nominal'}
               </label>
               {true && (
                 <label
@@ -1147,7 +1245,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     e.preventDefault();
                     setTimeout(() => {
                       if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                      else if (kategori === 'Order Kuota' && orderKuotaMode !== 'NOMINAL_ADMIN') btnSimpanRef.current?.click();
                       else adminRef.current?.focus();
                     }, 10);
                   }
@@ -1156,12 +1254,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </div>
           </div>
+
           {activeMode !== 'AKSESORIS' && (
           <div className="relative group flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
                 <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
+                {kategori === 'Order Kuota' ? (orderKuotaMode === 'NOMINAL_ADMIN' ? 'Admin Kasir' : 'Jual') : 'Admin'}
               </label>
               <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                 <input
@@ -1195,8 +1294,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 className={cn(
                   "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
                   kategori === 'Order Kuota' && (() => {
-                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                    let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                    if (orderKuotaMode === 'NOMINAL_ADMIN') {
+                       j = m + j; // Jual = Nominal + Admin
+                       m = m + selectedTujuanFee; // Modal = Nominal + Fee
+                    }
                     return m > 0 && j > 0 && j <= m
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
                       : m > 0 && j > m
@@ -1209,8 +1312,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               />
               {/* Indikator real-time untuk Order Kuota */}
               {kategori === 'Order Kuota' && (() => {
-                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+                let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+                if (orderKuotaMode === 'NOMINAL_ADMIN') {
+                   j = m + j;
+                   m = m + selectedTujuanFee;
+                }
                 if (m > 0 && j > 0) {
                   if (j > m) {
                     return (
@@ -1258,8 +1365,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         {/* Peringatan real-time Order Kuota: Jual < Modal */}
         {kategori === 'Order Kuota' && (() => {
-          const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-          const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+          let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
+          let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
+          if (orderKuotaMode === 'NOMINAL_ADMIN') {
+             j = m + j; // Jual = Nominal + Admin Kasir
+             m = m + selectedTujuanFee; // Modal = Nominal + Fee App
+          }
           if (m > 0 && j > 0 && j <= m) {
             return (
               <div className="-mt-1 bg-red-50 border border-red-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -1373,41 +1484,84 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
-          <div className="grid grid-cols-4 gap-1.5 mb-2 px-3">
-            {activeTransferMethods.map((s) => {
-               const isAct = sumberAplikasi === s;
-               return (
-                 <button 
-                   key={s}
-                   onClick={() => { setSumberAplikasi(s); setIsKetAuto(true); setIsAdminManuallyEdited(false); }}
-                   className={cn(
-                     "py-1.5 px-1 rounded-xl border text-[9px] font-black uppercase text-center transition-all",
-                     isAct ? "border-[#0066ff] bg-[#0066ff] text-white shadow-sm" : "border-gray-150 bg-white text-[#1e293b] shadow-sm hover:border-blue-200"
-                   )}
-                 >
-                   {s}
-                 </button>
-               )
-            })}
+          <div className="mb-2 px-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
+                <div className="w-1.5 h-3.5 bg-[#0066ff] rounded-full"></div>
+                PILIH SUMBER APLIKASI BANK
+              </h3>
+              <span className="text-[8px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Sumber Uang Keluar</span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
+                const isSel = sumberAplikasi === src.id;
+                return (
+                  <button
+                    key={src.id}
+                    onClick={() => { setSumberAplikasi(src.id); setIsKetAuto(true); setIsAdminManuallyEdited(false); }}
+                    className={cn(
+                      "relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300 bg-white",
+                      isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
+                    )}
+                  >
+                    {isSel && (
+                       <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-sm">
+                         <i className="fa-solid fa-check text-[7px]"></i>
+                       </div>
+                    )}
+                    <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center mb-1", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
+                      <i className={cn("fa-solid text-sm", src.icon)}></i>
+                    </div>
+                    <span className={cn("text-[9px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
+                    <span className="text-[7px] font-bold text-gray-400">{src.sub}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
         {activeMode === 'TARIK' && (
-          <div className="grid grid-cols-5 gap-1 mb-2 px-4">
-            {['BANK','GoPay','QRIS','DANA','ATM/EDC'].map(s => {
-              const isAct = selectedSumber === s;
-              return (
-                <button 
-                  key={s}
-                  onClick={() => { setSelectedSumber(s); setIsKetAuto(true); }}
-                  className={cn(
-                    "py-1.5 px-0.5 rounded-xl border text-[8px] font-black uppercase text-center transition-all",
-                    isAct ? "border-[#0066ff] bg-[#0066ff] text-white shadow-sm" : "border-gray-150 bg-white text-[#1e293b] shadow-sm hover:border-blue-200"
-                  )}
-                >
-                  {s}
-                </button>
-              )
-            })}
+          <div className="mb-2 px-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Masuk:</p>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {ITEMS['TARIK_TUNAI'].map((item) => {
+                const isSelected = selectedSumber === (item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { 
+                      const val = item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name;
+                      setSelectedSumber(val); 
+                      setIsKetAuto(true);
+                      setSumberAplikasi('TUNAI LACI KASIR');
+                      setTujuanMasuk(val);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-1 p-2 rounded-xl border-2 transition-all duration-300 relative bg-white overflow-hidden",
+                      isSelected ? "border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.4)] scale-[1.03]" : "border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/50"
+                    )}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rotate-45 translate-x-4 -translate-y-4">
+                        <i className="fa-solid fa-check text-white text-[8px] absolute bottom-1 left-3.5 -rotate-45"></i>
+                      </div>
+                    )}
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center transition-all",
+                      isSelected ? "bg-emerald-500 text-white" : "bg-gray-50 text-gray-400"
+                    )}>
+                      <i className={cn("fa-solid text-[11px]", item.icon, isSelected ? "text-white" : item.color)}></i>
+                    </div>
+                    <span className={cn(
+                      "text-[8px] font-black uppercase text-center leading-tight",
+                      isSelected ? "text-[#0c1f44]" : "text-gray-500"
+                    )}>{item.name}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
 
