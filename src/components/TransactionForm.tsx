@@ -57,10 +57,11 @@ interface TransactionFormProps {
   onModeChange?: (mode: string) => void
   hideModeTabs?: boolean
   hideHeader?: boolean
+  lastTx?: any
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx
 }) => {
   const [kategori, setKategori] = useState('')
   const [nominal, setNominal] = useState('')
@@ -865,6 +866,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           )
         })}
       </div>
+
+      {lastTx && (
+        <div className="bg-emerald-50 border border-emerald-100 rounded-[1.25rem] p-3 mb-4 animate-in fade-in slide-in-from-top-2 shadow-sm flex items-center justify-between">
+          <div className="min-w-0 pr-3">
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+              <i className="fa-solid fa-check-circle text-emerald-500"></i> Transaksi Berhasil
+            </p>
+            <p className="text-[12px] font-black text-gray-800 truncate leading-tight">{lastTx.kategori} {lastTx.keterangan ? `- ${lastTx.keterangan}` : ''}</p>
+            <p className="text-[10px] font-bold text-gray-500 mt-0.5">{new Date(lastTx.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • Admin: Rp {(lastTx.adminFee || 0).toLocaleString('id-ID')}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[14px] font-black text-emerald-600">Rp {(lastTx.nominal || 0).toLocaleString('id-ID')}</p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1">
         {/* === WIZARD TRANSFER (DIGITAL) === */}

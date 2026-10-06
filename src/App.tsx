@@ -2675,6 +2675,7 @@ const MainApp: React.FC<MainAppProps> = ({
                           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
                             <TransactionForm 
                               onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
+                              lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
                             />
                           </div>
                         </div>
@@ -3201,6 +3202,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 presets={presets} 
                 activeStoreId={activeStoreId} 
                 adminRules={adminRules}
+                lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
                 onOpenVoucherJualCepat={() => {
                   setActiveView('view-stok-voucher');
                   setTimeout(() => {
