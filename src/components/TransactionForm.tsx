@@ -108,7 +108,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!username || username === 'unknown') return;
 
     supabase.from('cashier_settings').select('preferences').eq('username', username).maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Gagal load setting kasir dari Supabase", error);
+          return;
+        }
         if (data && data.preferences) {
            const prefs = data.preferences as any;
            if (prefs.orderKuotaMode) {
@@ -120,8 +124,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               localStorage.setItem(`app_active_theme_${username}`, prefs.activeTheme);
            }
         }
-      })
-      .catch(err => console.error("Gagal load setting kasir dari Supabase", err));
+      });
   }, []);
 
   // Simpan ke Supabase jika ada perubahan (supaya sync online)
@@ -139,8 +142,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     const preferences = { orderKuotaMode, activeTheme };
     supabase.from('cashier_settings').upsert({ username, preferences }, { onConflict: 'username' })
-      .then(() => console.log('Cashier settings tersimpan di online database.'))
-      .catch(err => console.error("Gagal simpan setting kasir ke Supabase", err));
+      .then(({ error }) => {
+        if (error) console.error("Gagal simpan setting kasir ke Supabase", error);
+        else console.log('Cashier settings tersimpan di online database.');
+      });
   }, [orderKuotaMode, activeTheme]);
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
