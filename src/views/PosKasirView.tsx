@@ -12,6 +12,7 @@ interface Product {
   stok: number;
   satuan: string;
   kategori: string;
+  image_url?: string;
 }
 
 interface CartItem {
@@ -62,7 +63,8 @@ async function fetchProducts(storeId: string): Promise<Product[]> {
   if (error || !data) return getCachedProducts();
   const mapped = data.map((r: any) => ({
     id: r.id, barcode: r.barcode, nama: r.nama,
-    harga: r.harga, stok: r.stok, satuan: r.satuan, kategori: r.kategori
+    harga: r.harga, stok: r.stok, satuan: r.satuan, kategori: r.kategori,
+    image_url: r.image_url
   }));
   cacheProducts(mapped);
   return mapped;
@@ -71,7 +73,8 @@ async function fetchProducts(storeId: string): Promise<Product[]> {
 async function upsertProduct(storeId: string, p: Product): Promise<void> {
   await supabase.from('pos_products').upsert({
     id: p.id, store_id: storeId, barcode: p.barcode, nama: p.nama,
-    harga: p.harga, stok: p.stok, satuan: p.satuan, kategori: p.kategori
+    harga: p.harga, stok: p.stok, satuan: p.satuan, kategori: p.kategori,
+    image_url: p.image_url
   }, { onConflict: 'id' });
 }
 
@@ -307,18 +310,101 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   };
 
   const handlePrint = () => {
-    const printEl = document.getElementById('struk-print');
-    if (!printEl) return;
+    if (!showStruk) return;
+    
     const win = window.open('', '_blank', 'width=320,height=600');
     if (!win) return;
-    win.document.write(`<html><head><title>Struk</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Courier New',monospace;}body{width:58mm;font-size:10pt;}.center{text-align:center;}.bold{font-weight:bold;}.divider{border-top:1px dashed #000;margin:4px 0;}.row{display:flex;justify-content:space-between;}.small{font-size:8pt;}</style></head><body>${printEl.innerHTML}</body></html>`);
+
+    const dateStr = new Date(showStruk.timestamp).toLocaleDateString('id-ID');
+    const timeStr = new Date(showStruk.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+    let itemsHtml = '';
+    showStruk.items.forEach(item => {
+      itemsHtml += `
+        <div class="item">
+          <div class="bold">${item.product.nama}</div>
+          <div class="row">
+            <span>${item.qty} x ${item.product.harga.toLocaleString('id-ID')}</span>
+            <span>${(item.product.harga * item.qty).toLocaleString('id-ID')}</span>
+          </div>
+        </div>
+      `;
+    });
+
+    const html = `
+      <html>
+        <head>
+          <title>Struk POS</title>
+          <style>
+            @page { margin: 0; size: 58mm auto; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 58mm; 
+              margin: 0;
+              padding: 0; 
+              font-size: 11px; 
+              color: black;
+              background: white;
+            }
+            .content { padding: 4mm; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { border-top: 1px dashed black; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; }
+            .item { margin-bottom: 6px; }
+            .title { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+            .subtitle { font-size: 10px; margin-bottom: 6px; }
+            .small { font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="content">
+            <div class="center">
+              <div class="title">${printSettings.namaToko || 'TOKO SAYA'}</div>
+              ${printSettings.alamat ? `<div class="subtitle">${printSettings.alamat}</div>` : ''}
+            </div>
+            
+            <div class="divider"></div>
+            <div class="small center">
+              No: ${showStruk.id}<br>
+              Kasir: ${showStruk.kasir}<br>
+              ${dateStr} ${timeStr}
+            </div>
+            <div class="divider"></div>
+            
+            ${itemsHtml}
+            
+            <div class="divider"></div>
+            <div class="row bold">
+              <span>TOTAL</span>
+              <span>Rp ${showStruk.grandTotal.toLocaleString('id-ID')}</span>
+            </div>
+            <div class="row">
+              <span>${showStruk.metodeBayar}</span>
+              <span>${showStruk.metodeBayar === 'TUNAI' ? `Rp ${showStruk.uangDiterima.toLocaleString('id-ID')}` : 'LUNAS'}</span>
+            </div>
+            ${showStruk.metodeBayar === 'TUNAI' ? `
+              <div class="row">
+                <span>Kembalian</span>
+                <span>Rp ${showStruk.kembalian.toLocaleString('id-ID')}</span>
+              </div>
+            ` : ''}
+            
+            <div class="divider"></div>
+            ${printSettings.ucapan ? `<div class="center small" style="margin-top:8px;">${printSettings.ucapan}</div>` : ''}
+          </div>
+        </body>
+      </html>
+    `;
+
+    win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 300);
+    setTimeout(() => { win.print(); win.close(); }, 500);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#F7F7F7] font-sans overflow-hidden">
+    <div className="flex flex-col min-h-screen font-sans">
 
       {/* HEADER */}
       <div className="shrink-0 z-30 bg-[#F9FBFF]">
@@ -378,7 +464,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* TAB KASIR */}
       {activeTab === 'kasir' && (
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1">
           <div className="px-3 pt-3 pb-2 bg-white border-b border-gray-100 shrink-0 relative">
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus-within:border-[#0066FF] focus-within:ring-2 focus-within:ring-blue-100 transition-all">
               <i className="fa-solid fa-magnifying-glass text-gray-400 text-sm shrink-0"></i>
@@ -401,9 +487,18 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
               <div className="absolute left-3 right-3 top-full bg-white rounded-xl border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto mt-1">
                 {filteredProducts.map(p => (
                   <button key={p.id} onClick={() => addToCart(p)} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 text-left">
-                    <div>
-                      <p className="text-[12px] font-black text-gray-800">{p.nama}</p>
-                      <p className="text-[10px] text-gray-400 font-bold">{p.kategori}{printSettings.enableStok ? ` • Stok: ${p.stok} ${p.satuan}` : ''}</p>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {p.image_url ? (
+                        <img src={p.image_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 bg-gray-100" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-box text-gray-300 text-[10px]"></i>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-black text-gray-800 truncate">{p.nama}</p>
+                        <p className="text-[10px] text-gray-400 font-bold truncate">{p.kategori}{printSettings.enableStok ? ` • Stok: ${p.stok} ${p.satuan}` : ''}</p>
+                      </div>
                     </div>
                     <span className="text-[12px] font-black text-[#0066FF] shrink-0 ml-2">{formatRp(p.harga)}</span>
                   </button>
@@ -417,7 +512,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-2">
+          <div className="flex-1 px-3 py-2">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
                 <i className="fa-solid fa-cart-shopping text-5xl"></i>
@@ -427,11 +522,18 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
             ) : (
               <div className="space-y-2">
                 {cart.map((item, idx) => (
-                  <div key={item.product.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-3">
-                    <span className="text-[11px] font-black text-gray-300 w-4 text-center shrink-0">{idx + 1}</span>
+                  <div key={item.product.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-2 sm:gap-3">
+                    <span className="text-[10px] font-black text-gray-300 w-3 sm:w-4 text-center shrink-0 hidden sm:block">{idx + 1}</span>
+                    {item.product.image_url ? (
+                      <img src={item.product.image_url} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0 bg-gray-50" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-box text-gray-300 text-xs"></i>
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-black text-gray-900 truncate">{item.product.nama}</p>
-                      <p className="text-[10px] font-bold text-gray-400">{formatRp(item.product.harga)} / {item.product.satuan}</p>
+                      <p className="text-[12px] font-black text-gray-900 truncate leading-tight">{item.product.nama}</p>
+                      <p className="text-[10px] font-bold text-gray-400 mt-0.5">{formatRp(item.product.harga)} / {item.product.satuan}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-colors">
@@ -475,7 +577,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* TAB PRODUK */}
       {activeTab === 'produk' && (
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1">
           <div className="px-3 pt-3 pb-2 bg-white border-b border-gray-100 shrink-0 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
               <i className="fa-solid fa-magnifying-glass text-gray-400 text-sm"></i>
@@ -485,7 +587,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
               <i className="fa-solid fa-plus"></i>Tambah
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 pt-2 pb-[90px]">
+          <div className="flex-1 px-3 pt-2 pb-[90px]">
             {products.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
                 <i className="fa-solid fa-box-open text-5xl"></i>
@@ -544,6 +646,13 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                       <div className="space-y-2 pl-2">
                         {prods.map(p => (
                           <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-3">
+                            {p.image_url ? (
+                              <img src={p.image_url} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-50 border border-gray-100" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
+                                <i className="fa-solid fa-box text-gray-300 text-sm"></i>
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <p className="text-[13px] font-black text-gray-900">{p.nama}</p>
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -578,7 +687,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* TAB RIWAYAT */}
       {activeTab === 'riwayat' && (
-        <div className="flex-1 overflow-y-auto px-3 pt-3 pb-[90px]">
+        <div className="flex-1 px-3 pt-3 pb-[90px]">
           {transactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
               <i className="fa-solid fa-clock-rotate-left text-5xl"></i>
@@ -612,7 +721,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
       )}
 
       {activeTab === 'setting' && (
-        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[90px] bg-white">
+        <div className="flex-1 px-4 pt-4 pb-[90px] bg-white">
           <div className="max-w-md mx-auto space-y-3">
             <div className="mb-4">
               <h2 className="text-sm font-black text-gray-900 mb-0.5"><i className="fa-solid fa-gear mr-2 text-[#0066FF]"></i>Pengaturan Kasir</h2>
@@ -821,7 +930,13 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* MODAL FORM PRODUK */}
       {showProductForm && (
-        <ProductFormModal enableStok={printSettings.enableStok} product={editingProduct} onSave={saveProduct} onClose={() => { setShowProductForm(false); setEditingProduct(null); }} />
+        <ProductFormModal 
+          enableStok={printSettings.enableStok} 
+          product={editingProduct} 
+          categories={Array.from(new Set(products.map(p => p.kategori?.trim() || 'Umum'))).sort()}
+          onSave={saveProduct} 
+          onClose={() => { setShowProductForm(false); setEditingProduct(null); }} 
+        />
       )}
 
       {/* MODAL DELETE CONFIRM */}
@@ -863,12 +978,13 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 // ─── Product Form Modal ───────────────────────────────────────────────────────
 interface ProductFormProps {
   product: Product | null;
+  categories: string[];
   onSave: (p: Product) => void;
   onClose: () => void;
   enableStok?: boolean;
 }
 
-const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose, enableStok = true }) => {
+const ProductFormModal: React.FC<ProductFormProps> = ({ product, categories, onSave, onClose, enableStok = true }) => {
   const [showScanner, setShowScanner] = useState(false);
   const [form, setForm] = useState<Product>(product || {
     id: generateId(),
@@ -878,7 +994,57 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
     stok: 0,
     satuan: 'pcs',
     kategori: '',
+    image_url: ''
   });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      // 1. Compress Image
+      const compressedFile = await new Promise<File>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target?.result as string;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            if (width > height) { if (width > 500) { height *= 500 / width; width = 500; } } 
+            else { if (height > 500) { width *= 500 / height; height = 500; } }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              if (blob) resolve(new File([blob], `${Date.now()}.webp`, { type: "image/webp" }));
+              else reject(new Error("Compression failed"));
+            }, "image/webp", 0.7);
+          };
+          img.onerror = reject;
+        };
+        reader.onerror = reject;
+      });
+
+      // 2. Upload to Supabase Storage
+      const fileName = `${form.id}_${Date.now()}.webp`;
+      const { error } = await supabase.storage.from('pos-products').upload(fileName, compressedFile, { upsert: true });
+      if (error) throw error;
+
+      // 3. Get Public URL
+      const { data: { publicUrl } } = supabase.storage.from('pos-products').getPublicUrl(fileName);
+      set('image_url', publicUrl);
+    } catch (err: any) {
+      console.error(err);
+      alert('Gagal upload gambar. Pesan: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -898,6 +1064,30 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
+          
+          <div className="flex flex-col items-center justify-center mb-4">
+            <div 
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              className={`w-24 h-24 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${form.image_url ? 'border-transparent bg-gray-50' : 'border-gray-300 hover:border-blue-500 bg-gray-50'}`}
+            >
+              {form.image_url ? (
+                <>
+                  <img src={form.image_url} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i className="fa-solid fa-camera text-white text-lg"></i>
+                    <span className="text-white text-[9px] font-bold mt-1">Ubah Foto</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-gray-400 group-hover:text-blue-500 transition-colors">
+                  <i className={`fa-solid ${uploading ? 'fa-spinner fa-spin' : 'fa-image'} text-2xl mb-1`}></i>
+                  <p className="text-[9px] font-bold uppercase">{uploading ? 'Upload...' : 'Tambah Foto'}</p>
+                </div>
+              )}
+            </div>
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+          </div>
+
           {[
             { label: 'Nama Produk *', key: 'nama', type: 'text', placeholder: 'contoh: Aqua 600ml' },
             { label: 'Barcode', key: 'barcode', type: 'text', placeholder: 'Opsional' },
@@ -926,11 +1116,15 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, onSave, onClose
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Kategori</label>
               <input
                 type="text"
-                placeholder="contoh: Minuman"
+                list="category-options"
+                placeholder="Pilih atau Ketik Baru..."
                 value={form.kategori || ''}
                 onChange={e => set('kategori', e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
               />
+              <datalist id="category-options">
+                {categories.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div>
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Satuan</label>

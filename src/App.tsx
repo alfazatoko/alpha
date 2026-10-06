@@ -34,7 +34,7 @@ import VoucherView from './views/VoucherView'
 import KalenderView from './views/KalenderView'
 import NotaView from './views/NotaView'
 import OtomatisView from './views/OtomatisView'
-
+import PosKasirView from './views/PosKasirView'
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -532,6 +532,43 @@ const MainApp: React.FC<MainAppProps> = ({
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light')
   const [screenSize, setScreenSize] = useState(localStorage.getItem('screen') || 'tablet')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
+  
+  const [appMode, setAppMode] = useState<'BRILINK' | 'POS'>(() => {
+    return (localStorage.getItem('global_app_mode') as 'BRILINK' | 'POS') || 'BRILINK'
+  })
+
+  // Sync appMode with cashier_settings in Supabase
+  useEffect(() => {
+    const user = username || localStorage.getItem('alphaPro_username');
+    if (!user || user === 'unknown') return;
+
+    supabase.from('cashier_settings').select('preferences').eq('username', user).maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.preferences?.appMode) {
+          setAppMode(data.preferences.appMode);
+          localStorage.setItem('global_app_mode', data.preferences.appMode);
+        }
+      });
+  }, [username]);
+
+  const isAppModeFirstRender = useRef(true);
+  useEffect(() => {
+    if (isAppModeFirstRender.current) {
+      isAppModeFirstRender.current = false;
+      return;
+    }
+    localStorage.setItem('global_app_mode', appMode);
+    
+    const user = username || localStorage.getItem('alphaPro_username');
+    if (user && user !== 'unknown') {
+      supabase.from('cashier_settings').select('preferences').eq('username', user).maybeSingle()
+        .then(({ data }) => {
+           const currentPrefs = data?.preferences || {};
+           const newPrefs = { ...currentPrefs, appMode };
+           supabase.from('cashier_settings').upsert({ username: user, preferences: newPrefs }, { onConflict: 'username' }).then();
+        });
+    }
+  }, [appMode, username]);
 
   // Apply theme class to <html> element and persist to localStorage
   useEffect(() => {
@@ -2493,20 +2530,50 @@ const MainApp: React.FC<MainAppProps> = ({
 
   return (
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
-      {screenSize === 'pc' && (
-        <SidebarPC 
-          activeView={activeView} 
-          setActiveView={setActiveView} 
-          storeName={storeName}
-          storeSubtext={storeSubtext}
-          storePhoto={storePhoto}
-          kasirName={account?.name}
-          kasirRole={account?.role}
-          setIsSidePanelOpen={setIsSidePanelOpen}
-          onLogout={() => setShowLogoutConfirm(true)}
-        />
-      )}
-      
+      {appMode === 'POS' ? (
+         <div className="absolute inset-0 overflow-y-auto bg-[#F7F7F7] dark:bg-slate-900 pb-24 flex flex-col animate-in fade-in duration-300">
+            <PosKasirView 
+              kasirName={account?.name}
+              kasirRole={account?.role}
+              storeName={storeName}
+              storeSubtext={storeSubtext}
+              storePhoto={storePhoto}
+              dayName={new Date().toLocaleDateString('id-ID', { weekday: 'long' })}
+              fullDate={new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+              clockStr={todayAbsen}
+              storeId={activeStoreId}
+              onBack={() => setIsSidePanelOpen(true)}
+            />
+            <SidePanel 
+              isOpen={isSidePanelOpen}
+              setIsOpen={setIsSidePanelOpen}
+              theme={theme}
+              setTheme={setTheme}
+              screenSize={screenSize}
+              setScreenSize={setScreenSize}
+              appMode={appMode}
+              setAppMode={setAppMode}
+              jamAbsen={todayAbsen}
+              kasirName={account?.name}
+              storeName={storeName}
+              storeSubtext={storeSubtext}
+            />
+         </div>
+      ) : (
+        <>
+          {screenSize === 'pc' && (
+            <SidebarPC 
+              activeView={activeView} 
+              setActiveView={setActiveView} 
+              storeName={storeName}
+              storeSubtext={storeSubtext}
+              storePhoto={storePhoto}
+              kasirName={account?.name}
+              kasirRole={account?.role}
+              setIsSidePanelOpen={setIsSidePanelOpen}
+              onLogout={() => setShowLogoutConfirm(true)}
+            />
+          )}
       {screenSize === 'pc' ? (
         <div className="flex-1 flex gap-4 p-4 h-full bg-slate-50 dark:bg-slate-900 overflow-hidden fade-in modular-pc">
           
@@ -3158,6 +3225,8 @@ const MainApp: React.FC<MainAppProps> = ({
         setTheme={setTheme}
         screenSize={screenSize}
         setScreenSize={setScreenSize}
+        appMode={appMode}
+        setAppMode={setAppMode}
         jamAbsen={todayAbsen}
         kasirName={account.name}
         storeName={storeName}
@@ -3607,7 +3676,8 @@ const MainApp: React.FC<MainAppProps> = ({
           } catch {}
         }}
       />
-
+        </>
+      )}
     </div>
   )
 }

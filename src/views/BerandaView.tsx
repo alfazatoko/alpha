@@ -2916,7 +2916,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       {/* ── POS KASIR OVERLAY ── */}
       {props.activeView === 'view-pos-kasir' && (
-        <div className="absolute inset-0 z-[100] flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-0 z-[100] overflow-y-auto bg-[#F7F7F7] pb-24 flex flex-col animate-in slide-in-from-right duration-300">
           <PosKasirView
             kasirName={props.kasirName}
             kasirRole={props.kasirRole}

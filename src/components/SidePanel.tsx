@@ -13,13 +13,19 @@ interface SidePanelProps {
   setTheme: (theme: string) => void
   screenSize: string
   setScreenSize: (size: string) => void
+  appMode?: 'BRILINK' | 'POS'
+  setAppMode?: (mode: 'BRILINK' | 'POS') => void
   jamAbsen?: string
   kasirName?: string
   storeName?: string
   storeSubtext?: string
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, jamAbsen, kasirName, storeName, storeSubtext }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ 
+  isOpen, setIsOpen, theme, setTheme, screenSize, setScreenSize, 
+  appMode = 'BRILINK', setAppMode,
+  jamAbsen, kasirName, storeName, storeSubtext 
+}) => {
   return (
     <>
       <div className={cn("overlay", isOpen && "show")} onClick={() => setIsOpen(false)}></div>
@@ -78,6 +84,37 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, setIsOpen, theme, setThem
                 <span className="text-emerald-700 text-[10px] font-black uppercase">AKTIF</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* App Mode Master Switch */}
+        <div className="p-6 border-b border-gray-300 bg-gradient-to-br from-blue-50/50 to-indigo-50/50">
+          <h4 className="text-[10px] font-black text-gray-700 mb-4 uppercase tracking-[0.2em] flex items-center gap-2">
+            <i className="fa-solid fa-layer-group text-blue-500"></i> Mode Aplikasi
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <button 
+              onClick={() => setAppMode?.('BRILINK')} 
+              className={cn(
+                "relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all shadow-sm active:scale-95",
+                appMode === 'BRILINK' ? "bg-blue-600 text-white border-blue-700 ring-4 ring-blue-500/30 scale-105 z-10" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500"
+              )}
+            >
+              <i className="fa-solid fa-money-bill-transfer text-2xl mb-2"></i>
+              <span className="text-[10px] font-black uppercase tracking-widest leading-none">BRILINK</span>
+              {appMode === 'BRILINK' && <i className="fa-solid fa-check-circle absolute top-2 right-2 text-white text-xs shadow-sm"></i>}
+            </button>
+            <button 
+              onClick={() => setAppMode?.('POS')} 
+              className={cn(
+                "relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all shadow-sm active:scale-95",
+                appMode === 'POS' ? "bg-purple-600 text-white border-purple-700 ring-4 ring-purple-500/30 scale-105 z-10" : "bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-500"
+              )}
+            >
+              <i className="fa-solid fa-cart-shopping text-2xl mb-2"></i>
+              <span className="text-[10px] font-black uppercase tracking-widest leading-none">POS KASIR</span>
+              {appMode === 'POS' && <i className="fa-solid fa-check-circle absolute top-2 right-2 text-white text-xs shadow-sm"></i>}
+            </button>
           </div>
         </div>
 
