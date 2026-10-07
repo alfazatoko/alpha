@@ -1311,7 +1311,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               </div>
                               <div>
                                 <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-wider">{props.kasirList[selectedKaryawan].name}</h2>
-                                <p className="text-xs font-bold text-indigo-500 mt-1 uppercase tracking-widest">{props.kasirList[selectedKaryawan].role} â€¢ ID: {selectedKaryawan}</p>
+                                <p className="text-xs font-bold text-indigo-500 mt-1 uppercase tracking-widest">{props.kasirList[selectedKaryawan].role} • ID: {selectedKaryawan}</p>
                               </div>
                             </div>
 
@@ -2009,10 +2009,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             const ownerStats = calculateAttendanceStats('owner', ownerName, ownerJoin, props.absensiList || [], props.activeStoreId || '');
             const ownerTotal = ownerStats.hadir + ownerStats.izin + ownerStats.tidakAbsen;
             const ownerHadirRate = ownerTotal > 0 ? (ownerStats.hadir / ownerTotal) * 100 : 100;
-            let ownerBadge = { label: 'Bintang', icon: 'â­', color: 'bg-amber-100 text-amber-700' };
-            if (ownerHadirRate >= 95) ownerBadge = { label: 'Bintang', icon: 'â­', color: 'bg-amber-100 text-amber-700' };
-            else if (ownerHadirRate >= 80) ownerBadge = { label: 'Rajin', icon: 'ðŸ…', color: 'bg-emerald-100 text-emerald-700' };
-            else if (ownerHadirRate >= 60) ownerBadge = { label: 'Cukup', icon: 'ðŸ‘', color: 'bg-blue-100 text-blue-700' };
+            let ownerBadge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            if (ownerHadirRate >= 95) ownerBadge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            else if (ownerHadirRate >= 80) ownerBadge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+            else if (ownerHadirRate >= 60) ownerBadge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
             return (
             <div className="mb-4 space-y-3">
 
@@ -2032,9 +2032,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <div className="flex-1 min-w-0">
                     <p className="text-[8px] font-black text-white/60 uppercase tracking-widest leading-none mb-0.5">PROFIL OWNER</p>
                     <p className="text-sm font-black text-white leading-tight truncate">{ownerName}</p>
-                    <p className="text-[9px] text-blue-200 font-bold mt-0.5 truncate">{props.storeName || 'ALFAZA CELL'} Â· Owner</p>
+                    <p className="text-[9px] text-blue-200 font-bold mt-0.5 truncate">{props.storeName || 'ALFAZA CELL'} · Owner</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-300/30 text-amber-200">ðŸ‘‘ OWNER</span>
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-300/30 text-amber-200">👑 OWNER</span>
                       <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', ownerBadge.color)}>{ownerBadge.icon} {ownerBadge.label}</span>
                     </div>
                   </div>
@@ -2085,11 +2085,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             // Hitung badge kinerja
             const totalDays = myStats.hadir + myStats.izin + myStats.tidakAbsen;
             const hadirRate = totalDays > 0 ? (myStats.hadir / totalDays) * 100 : 0;
-            let badge = { label: 'Baru', icon: 'ðŸŒ±', color: 'bg-slate-100 text-slate-500' };
-            if (hadirRate >= 95) badge = { label: 'Bintang', icon: 'â­', color: 'bg-amber-100 text-amber-700' };
-            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: 'ðŸ…', color: 'bg-emerald-100 text-emerald-700' };
-            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: 'ðŸ‘', color: 'bg-blue-100 text-blue-700' };
-            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: 'âš ï¸', color: 'bg-rose-100 text-rose-600' };
+            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-500' };
+            if (hadirRate >= 95) badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
+            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
 
             // --- COMPUTATION UNTUK SHIFT ---
             const todayD = new Date();
@@ -3839,7 +3839,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           <div>
                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PIN Aktif Saat Ini</p>
                             <p className="text-sm font-black text-rose-600 tracking-[0.4em] mt-0.5">
-                              {showTakeoverPinField ? takeoverPinValue : 'â€¢'.repeat(takeoverPinValue.length)}
+                              {showTakeoverPinField ? takeoverPinValue : '•'.repeat(takeoverPinValue.length)}
                             </p>
                           </div>
                           <button

@@ -313,8 +313,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         else autoText = `Topup > ${sumberAplikasi}`;
       } else {
         if (sumberAplikasi === 'BANK') autoText = `Transfer Bank : ${selectedBank}`;
-        else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP`;
-        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
+        else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP${selectedTujuan ? ` : ${selectedTujuan}` : ''}`;
+        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${selectedTujuan ? ` : ${selectedTujuan}` : ''}${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
         else autoText = `Topup : ${sumberAplikasi}`;
       }
     } else if (activeMode === 'TARIK') {
@@ -1504,7 +1504,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 return (
                   <button
                     key={src.id}
-                    onClick={() => { setSumberAplikasi(src.id); setIsKetAuto(true); setIsAdminManuallyEdited(false); }}
+                    onClick={() => { 
+                      setSumberAplikasi(src.id); 
+                      setIsKetAuto(true); 
+                      setIsAdminManuallyEdited(false); 
+                      if (src.id === 'BANK') setClassicPopupMode('BANK');
+                      else if (src.id === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
+                      else if (src.id === 'FLIP') setClassicPopupMode('FLIP');
+                      else if (src.id === 'DANA') {
+                         setKeterangan('');
+                         setClassicPopupMode(null);
+                         setTimeout(() => keteranganRef.current?.focus(), 100);
+                      }
+                    }}
                     className={cn(
                       "relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300 bg-white",
                       isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
@@ -1621,18 +1633,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* KETERANGAN */}
         <div className="mb-1 px-5">
           <div className="flex justify-between items-center mb-1.5">
-            <label className="text-[14px] font-black text-[#0c1f44]">Keterangan</label>
+            <div className="flex items-center gap-2">
+              <label className="text-[14px] font-black text-[#0c1f44]">Keterangan</label>
+              {activeMode === 'DIGITAL' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sumberAplikasi === 'BANK') setClassicPopupMode('BANK');
+                    else if (sumberAplikasi === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
+                    else if (sumberAplikasi === 'FLIP') setClassicPopupMode('FLIP');
+                    else setClassicPopupMode('BANK');
+                  }}
+                  className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md text-[9px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 shadow-sm border border-blue-100"
+                >
+                  <i className="fa-solid fa-list"></i> PILIH TUJUAN
+                </button>
+              )}
+            </div>
             <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
               <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
               <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-2.5 focus-within:ring-2 focus-within:ring-[#0066ff] transition-all flex flex-col shadow-sm">
-            {isKetAuto && (
+            {isKetAuto && autoTextPrefix && (
               <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
-                {activeMode === 'TARIK' ? `Tarik Tunai : ${selectedSumber}` : 
-                 activeMode === 'DIGITAL' && sumberAplikasi ? (sumberAplikasi === 'BANK' ? 'Transfer Bank' : sumberAplikasi) :
-                 kategori}
+                {autoTextPrefix}
               </div>
             )}
             <textarea 
