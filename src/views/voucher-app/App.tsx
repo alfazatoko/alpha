@@ -800,8 +800,8 @@ export default function App({ onExit, externalRole, externalCashierName, externa
               if (needsArchiving) {
                 setTimeout(() => setUnsyncedChanges(true), 2000);
               }
-            } else if (!cachedProducts && data.voucher_app_data.products) {
-                const p = data.voucher_app_data.products;
+            } else if (!cachedProducts && data?.voucher_app_data?.products) {
+                const p = data.voucher_app_data!.products;
                 if (Array.isArray(p) && p.length === 0) {
                   // setProducts dihapus karena SQL
                 } else {
