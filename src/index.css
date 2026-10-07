@@ -1128,3 +1128,20 @@ body {
 .modular-pc .page-view > .px-1\.5.pb-20.pt-3 {
   padding-bottom: 2rem !important;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #struk-print, #struk-print * {
+    visibility: visible;
+  }
+  #struk-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+}

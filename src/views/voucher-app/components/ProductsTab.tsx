@@ -320,7 +320,7 @@ export default function ProductsTab({
           };
         }
 
-        await supabase.from('store_settings').upsert({
+        await supabase.from('store_voucher_app_data').upsert({
           store_id: copyTargetStoreId,
           voucher_app_data: updatedCloud
         }, { onConflict: 'store_id' });
@@ -422,11 +422,11 @@ export default function ProductsTab({
     // Online Sync
     if (activeStoreId) {
       try {
-        const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+        const { data } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
         const existingData = data?.voucher_app_data || {};
         existingData.global_hidden_products = newHidden;
         
-        await supabase.from('store_settings').upsert({
+        await supabase.from('store_voucher_app_data').upsert({
           store_id: activeStoreId,
           voucher_app_data: existingData
         }, { onConflict: 'store_id' });

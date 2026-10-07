@@ -35,6 +35,7 @@ import KalenderView from './views/KalenderView'
 import NotaView from './views/NotaView'
 import OtomatisView from './views/OtomatisView'
 import PosKasirView from './views/PosKasirView'
+import LaporanPosView from './views/LaporanPosView'
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -172,10 +173,68 @@ const App: React.FC = () => {
 
         if (error) throw error
 
+        // Ambil data akun dari SQL store_cashiers
+        let sqlCashiers: Record<string, KasirAccount> = {};
+        let migratedAny = false;
+        try {
+          const { data: sData } = await supabase.from('store_cashiers').select('*').eq('store_id', activeStoreId);
+          if (sData) {
+            sData.forEach(c => {
+              sqlCashiers[c.username] = {
+                name: c.name,
+                password: c.password,
+                role: c.role,
+                pin: c.pin || ''
+              }
+            });
+          }
+        } catch(e) {}
+
+        // Ambil data profil dari SQL
+        let sqlProfiles: any[] = [];
+        try {
+          const { data: pData } = await supabase.from('cashier_profiles').select('*').eq('store_id', activeStoreId);
+          if (pData) sqlProfiles = pData;
+        } catch(e) {}
+
         if (data) {
           const cList = data.cashiers || {}
-          setKasirList(cList)
-          localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(cList))
+          
+          // Migrate old cashiers that are not in SQL yet
+          const upserts = [];
+          for (const username in cList) {
+            if (!sqlCashiers[username]) {
+              const acct = cList[username];
+              upserts.push({
+                id: `${activeStoreId}_${username}`,
+                store_id: activeStoreId,
+                username: username,
+                name: acct.name,
+                password: acct.password,
+                role: acct.role || 'KASIR',
+                pin: acct.pin || ''
+              });
+              sqlCashiers[username] = { ...acct };
+              migratedAny = true;
+            }
+          }
+          if (upserts.length > 0) {
+            supabase.from('store_cashiers').upsert(upserts).then();
+          }
+
+          // Gunakan sqlCashiers sebagai basis utama
+          const finalCashiers = { ...sqlCashiers };
+
+          // Timpa/Update dengan data dari sqlProfiles jika ada
+          sqlProfiles.forEach(p => {
+             if (finalCashiers[p.kasir_username]) {
+                finalCashiers[p.kasir_username].tanggalJoin = p.tanggal_join;
+                finalCashiers[p.kasir_username].catatanAwalKerja = p.catatan_owner;
+             }
+          });
+
+          setKasirList(finalCashiers)
+          localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(finalCashiers))
         } else {
           try {
             const storedList = localStorage.getItem(`alphaPro_${activeStoreId}_kasir_list`)
@@ -480,7 +539,8 @@ const MainApp: React.FC<MainAppProps> = ({
       'view-owner-gaji': 'owner-gaji',
       'view-owner-backup': 'owner-backup',
       'view-owner-saldo': 'owner-saldo',
-      'view-input-transaksi': 'input-transaksi'
+      'view-input-transaksi': 'input-transaksi',
+      'view-laporan-pos': 'laporan-pos'
     }
     const hashToView: Record<string, string> = Object.fromEntries(
       Object.entries(viewToHash).map(([v, h]) => [h, v])
@@ -522,7 +582,8 @@ const MainApp: React.FC<MainAppProps> = ({
       'view-owner-gaji': 'owner-gaji',
       'view-owner-backup': 'owner-backup',
       'view-owner-saldo': 'owner-saldo',
-      'view-input-transaksi': 'input-transaksi'
+      'view-input-transaksi': 'input-transaksi',
+      'view-laporan-pos': 'laporan-pos'
     }
     const hash = viewToHash[activeView] || activeView.replace('view-', '')
     if (window.location.hash !== `#/${hash}`) {
@@ -682,6 +743,20 @@ const MainApp: React.FC<MainAppProps> = ({
     const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
     if (transferPreset) combinedPresets.push(transferPreset)
 
+    try {
+      const customFaq = JSON.parse(localStorage.getItem(`alphaPro_${targetStoreId}_custom_faq`) || '[]');
+      await supabase.from('store_configs').upsert({
+        store_id: targetStoreId,
+        main_announcement: mainAnnouncement,
+        is_pin_enabled: isPin,
+        gemini_api_key: geminiApiKey || null,
+        running_texts: runningTexts,
+        presets: combinedPresets,
+        custom_faq: customFaq,
+        updated_at: new Date().toISOString()
+      });
+    } catch(e) {}
+
     const { error } = await supabase.from('store_settings').upsert({
       store_id: targetStoreId,
       cashiers: kasirList,
@@ -693,6 +768,35 @@ const MainApp: React.FC<MainAppProps> = ({
       updated_at: new Date().toISOString()
     })
     
+    // Sync to store_cashiers SQL
+    try {
+      const cashierUpserts = Object.keys(kasirList).map(username => {
+        const cAcct = kasirList[username];
+        return {
+          id: `${targetStoreId}_${username}`,
+          store_id: targetStoreId,
+          username: username,
+          name: cAcct.name,
+          password: cAcct.password,
+          role: cAcct.role,
+          pin: cAcct.pin || ''
+        };
+      });
+      if (cashierUpserts.length > 0) {
+        await supabase.from('store_cashiers').upsert(cashierUpserts);
+      }
+      
+      // Hapus kasir yang sudah tidak ada di kasirList dari store_cashiers
+      const { data: existingCashiers } = await supabase.from('store_cashiers').select('id, username').eq('store_id', targetStoreId);
+      if (existingCashiers) {
+        const currentUsernames = new Set(Object.keys(kasirList));
+        const toDeleteIds = existingCashiers.filter(c => !currentUsernames.has(c.username)).map(c => c.id);
+        if (toDeleteIds.length > 0) {
+          await supabase.from('store_cashiers').delete().in('id', toDeleteIds);
+        }
+      }
+    } catch(e) {}
+
     if (error) {
       console.error("Gagal sync upload ke cloud:", error.message)
     } else {
@@ -775,6 +879,36 @@ const MainApp: React.FC<MainAppProps> = ({
       console.error("Gagal sinkronisasi data kasir baru ke cloud:", error.message)
       throw new Error("Gagal menyimpan ke Cloud, namun data lokal terupdate.")
     }
+
+    // Sync to store_cashiers SQL
+    try {
+      const cAcct = updatedList[targetUsername];
+      if (cAcct) {
+        await supabase.from('store_cashiers').upsert({
+          id: `${effectiveStoreId}_${targetUsername}`,
+          store_id: effectiveStoreId,
+          username: targetUsername,
+          name: cAcct.name,
+          password: cAcct.password,
+          role: cAcct.role,
+          pin: cAcct.pin || ''
+        });
+      }
+    } catch(e) {}
+
+    // Sync Cashier Profiles to SQL table (Owner Only Data)
+    try {
+      if (updatedAccount.tanggalJoin !== undefined || updatedAccount.catatanAwalKerja !== undefined) {
+          await supabase.from('cashier_profiles').upsert({
+            id: `cp_${effectiveStoreId}_${targetUsername}`,
+            store_id: effectiveStoreId,
+            kasir_username: targetUsername,
+            tanggal_join: updatedAccount.tanggalJoin || null,
+            catatan_owner: updatedAccount.catatanAwalKerja || null,
+            updated_at: new Date().toISOString()
+          });
+      }
+    } catch(e) {}
   }
 
   const handleDownloadFromCloud = async (silent: boolean = false) => {
@@ -797,6 +931,35 @@ const MainApp: React.FC<MainAppProps> = ({
 
     if (data) {
       let changed = false
+      
+      try {
+        const { data: configData } = await supabase.from('store_configs').select('*').eq('store_id', targetStoreId).maybeSingle();
+        if (configData) {
+          if (configData.presets) data.presets = configData.presets;
+          if (configData.running_texts) data.running_texts = configData.running_texts;
+          if (configData.main_announcement) data.main_announcement = configData.main_announcement;
+          if (configData.is_pin_enabled !== null) data.is_pin_enabled = configData.is_pin_enabled;
+          if (configData.gemini_api_key) data.gemini_api_key = configData.gemini_api_key;
+          if (configData.custom_faq) data.custom_faq = configData.custom_faq;
+        }
+
+        const { data: financeData } = await supabase.from('store_finances').select('*').eq('store_id', targetStoreId).maybeSingle();
+        if (financeData) {
+          data.financial_settings = {
+            startDate: financeData.start_date || '',
+            rentPeriod: financeData.rent_period || 'bulanan',
+            rentAmount: financeData.rent_amount || '',
+            rentDueDate: financeData.rent_due_date || '',
+            electricityBill: financeData.electricity_bill || '',
+            wifiBill: financeData.wifi_bill || ''
+          };
+        }
+
+        const { data: voucherData } = await supabase.from('store_voucher_app_data').select('*').eq('store_id', targetStoreId).maybeSingle();
+        if (voucherData && voucherData.voucher_app_data) {
+          data.voucher_app_data = voucherData.voucher_app_data;
+        }
+      } catch (e) {}
 
       if (data.cashiers) {
         const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`)
@@ -873,24 +1036,158 @@ const MainApp: React.FC<MainAppProps> = ({
       }
 
       // Sync Kasbon
-      if (data.kasbon_data) {
-        const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasbon_list`)
-        const remoteStr = JSON.stringify(data.kasbon_data)
-        if (local !== remoteStr) {
-          localStorage.setItem(`alphaPro_${targetStoreId}_kasbon_list`, remoteStr)
-          changed = true
+      try {
+        const { data: kasbonData, error: kasbonErr } = await supabase.from('cash_advances').select('*').eq('store_id', targetStoreId);
+        let mergedKasbon: any[] = [];
+        
+        // 1. Ambil data dari SQL (jika ada)
+        if (!kasbonErr && kasbonData) {
+          mergedKasbon = kasbonData.map(h => ({
+            id: h.id,
+            tanggal: h.tanggal,
+            nama: h.nama,
+            nominal: h.nominal,
+            keterangan: h.keterangan || '',
+            lunas: h.lunas || false,
+            tglLunas: h.tanggal_lunas || '',
+            kasir: h.kasir || ''
+          }));
         }
-      }
+
+        // 2. Gabungkan dengan data lama di store_settings (jika ada)
+        let oldKasbon = data.kasbon_data;
+        if (typeof oldKasbon === 'string') { try { oldKasbon = JSON.parse(oldKasbon); } catch(e){} }
+        if (oldKasbon && typeof oldKasbon === 'object' && !Array.isArray(oldKasbon)) { oldKasbon = Object.values(oldKasbon); }
+        
+        if (oldKasbon && Array.isArray(oldKasbon)) {
+          const sqlIds = new Set(mergedKasbon.map(k => k.id));
+          for (const old of oldKasbon) {
+            if (old && !sqlIds.has(old.id)) {
+              mergedKasbon.push(old);
+            }
+          }
+        }
+
+        // 3. Simpan ke local
+        if (mergedKasbon.length > 0) {
+          const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasbon_list`)
+          const remoteStr = JSON.stringify(mergedKasbon)
+          if (local !== remoteStr) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_kasbon_list`, remoteStr)
+            changed = true
+          }
+        }
+      } catch (e) {}
 
       // Sync Kontak
-      if (data.kontak_data) {
-        const local = localStorage.getItem(`alphaPro_${targetStoreId}_kontak_list`)
-        const remoteStr = JSON.stringify(data.kontak_data)
-        if (local !== remoteStr) {
-          localStorage.setItem(`alphaPro_${targetStoreId}_kontak_list`, remoteStr)
-          changed = true
+      try {
+        const { data: contactsData, error: contactsErr } = await supabase.from('contacts').select('*').eq('store_id', targetStoreId);
+        let mergedContacts: any[] = [];
+        
+        if (!contactsErr && contactsData) {
+          mergedContacts = contactsData.map(c => ({
+            id: c.id,
+            nama: c.nama,
+            nomor: c.nomor || '',
+            keterangan: c.keterangan || '',
+            photoUrl: c.photo_url || '',
+            kasir: c.kasir || ''
+          }));
         }
-      }
+
+        let oldContacts = data.kontak_data;
+        if (typeof oldContacts === 'string') { try { oldContacts = JSON.parse(oldContacts); } catch(e){} }
+        if (oldContacts && typeof oldContacts === 'object' && !Array.isArray(oldContacts)) { oldContacts = Object.values(oldContacts); }
+
+        if (oldContacts && Array.isArray(oldContacts)) {
+          const sqlIds = new Set(mergedContacts.map(c => c.id));
+          for (const old of oldContacts) {
+            if (old && !sqlIds.has(old.id)) {
+              mergedContacts.push(old);
+            }
+          }
+        }
+
+        if (mergedContacts.length > 0) {
+          const local = localStorage.getItem(`alphaPro_${targetStoreId}_kontak_list`)
+          const remoteStr = JSON.stringify(mergedContacts)
+          if (local !== remoteStr) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_kontak_list`, remoteStr)
+            changed = true
+          }
+        }
+      } catch (e) {}
+      
+      // Sync Catatan Owner
+      try {
+        const { data: notesData, error: notesErr } = await supabase.from('owner_notes').select('*').eq('store_id', targetStoreId);
+        let mergedNotes: any[] = [];
+        
+        if (!notesErr && notesData) {
+          mergedNotes = notesData.map(n => ({
+            id: n.id,
+            judul: n.judul,
+            isi: n.isi,
+            kategori: n.kategori || 'Penting',
+            tanggal: n.tanggal,
+            selesai: n.selesai || false
+          }));
+        }
+
+        let oldNotes = data.catatan_owner_data;
+        if (typeof oldNotes === 'string') { try { oldNotes = JSON.parse(oldNotes); } catch(e){} }
+        if (oldNotes && typeof oldNotes === 'object' && !Array.isArray(oldNotes)) { oldNotes = Object.values(oldNotes); }
+
+        if (oldNotes && Array.isArray(oldNotes)) {
+          const sqlIds = new Set(mergedNotes.map(n => n.id));
+          for (const old of oldNotes) {
+            if (old && !sqlIds.has(old.id)) {
+              mergedNotes.push(old);
+            }
+          }
+        }
+
+        if (mergedNotes.length > 0) {
+          const local = localStorage.getItem(`alphaPro_${targetStoreId}_catatan_owner`)
+          const remoteStr = JSON.stringify(mergedNotes)
+          if (local !== remoteStr) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_catatan_owner`, remoteStr)
+            localStorage.setItem('alphaPro_global_catatanOwner', remoteStr)
+            changed = true
+          }
+        }
+      } catch (e) {}
+
+      // Sync Cashier Profiles
+      try {
+        const { data: profileData, error: profileErr } = await supabase.from('cashier_profiles').select('*').eq('store_id', targetStoreId);
+        
+        if (!profileErr && profileData && data.cashiers) {
+           let updatedCashiers = { ...data.cashiers };
+           let hasProfileChange = false;
+           
+           profileData.forEach(p => {
+              if (updatedCashiers[p.kasir_username]) {
+                 if (updatedCashiers[p.kasir_username].tanggalJoin !== p.tanggal_join || 
+                     updatedCashiers[p.kasir_username].catatanAwalKerja !== p.catatan_owner) {
+                     updatedCashiers[p.kasir_username].tanggalJoin = p.tanggal_join;
+                     updatedCashiers[p.kasir_username].catatanAwalKerja = p.catatan_owner;
+                     hasProfileChange = true;
+                 }
+              }
+           });
+           
+           if (hasProfileChange) {
+              const local = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`);
+              const remoteStr = JSON.stringify(updatedCashiers);
+              if (local !== remoteStr) {
+                localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, remoteStr);
+                setKasirList(updatedCashiers);
+                changed = true;
+              }
+           }
+        }
+      } catch (e) {}
 
       // Sync Voucher
       if (data.voucher_data) {
@@ -945,24 +1242,47 @@ const MainApp: React.FC<MainAppProps> = ({
       }
 
       // Sync Owner Notifications
-      if (data.owner_notifications_data) {
-        const local = localStorage.getItem(`alphaPro_${targetStoreId}_notification_history`)
-        const remoteStr = JSON.stringify(data.owner_notifications_data)
-        if (local !== remoteStr) {
-          localStorage.setItem(`alphaPro_${targetStoreId}_notification_history`, remoteStr)
-          changed = true
+      try {
+        const { data: notifData, error: notifErr } = await supabase.from('owner_notifications').select('*').eq('store_id', targetStoreId);
+        let mergedNotifs: any[] = [];
+        
+        if (!notifErr && notifData) {
+          mergedNotifs = notifData.map(n => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            date: n.date,
+            type: n.type,
+            isRead: n.is_read,
+            actionView: n.action_view,
+            actionLabel: n.action_label
+          }));
         }
-      }
 
-      // Sync Catatan Owner
-      if (data.catatan_owner_data) {
-        const local = localStorage.getItem(`alphaPro_${targetStoreId}_catatan_owner`)
-        const remoteStr = JSON.stringify(data.catatan_owner_data)
-        if (local !== remoteStr) {
-          localStorage.setItem(`alphaPro_${targetStoreId}_catatan_owner`, remoteStr)
-          changed = true
+        let oldNotifs = data.owner_notifications_data;
+        if (typeof oldNotifs === 'string') { try { oldNotifs = JSON.parse(oldNotifs); } catch(e){} }
+        if (oldNotifs && typeof oldNotifs === 'object' && !Array.isArray(oldNotifs)) { oldNotifs = Object.values(oldNotifs); }
+
+        if (oldNotifs && Array.isArray(oldNotifs)) {
+          const sqlIds = new Set(mergedNotifs.map(n => n.id));
+          for (const old of oldNotifs) {
+            if (old && !sqlIds.has(old.id)) {
+              mergedNotifs.push(old);
+            }
+          }
         }
-      }
+
+        if (mergedNotifs.length > 0) {
+          const local = localStorage.getItem(`alphaPro_${targetStoreId}_notification_history`)
+          const remoteStr = JSON.stringify(mergedNotifs)
+          if (local !== remoteStr) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_notification_history`, remoteStr)
+            changed = true
+          }
+        }
+      } catch (e) {}
+
+
 
       // Sync Custom FAQ
       if (data.custom_faq) {
@@ -1233,6 +1553,13 @@ const MainApp: React.FC<MainAppProps> = ({
 
     if (targetId !== 'all') {
       const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      try {
+        await supabase.from('store_configs').upsert({
+          store_id: targetId,
+          running_texts: texts,
+          updated_at: new Date().toISOString()
+        })
+      } catch(e) {}
       await supabase.from('store_settings').upsert({
         store_id: targetId,
         cashiers: kasirList,
@@ -1253,6 +1580,13 @@ const MainApp: React.FC<MainAppProps> = ({
 
     if (targetId !== 'all') {
       const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      try {
+        await supabase.from('store_configs').upsert({
+          store_id: targetId,
+          main_announcement: text,
+          updated_at: new Date().toISOString()
+        })
+      } catch(e) {}
       await supabase.from('store_settings').upsert({
         store_id: targetId,
         cashiers: kasirList,
@@ -1271,8 +1605,19 @@ const MainApp: React.FC<MainAppProps> = ({
     if (!targetId || targetId === 'all') return
     // Simpan lokal dulu
     localStorage.setItem(`alphaPro_${targetId}_financial`, JSON.stringify(settings))
-    // Upload ke Supabase via store_settings kolom financial_settings
+    // Upload ke Supabase via store_finances
     try {
+      await supabase.from('store_finances').upsert({
+        store_id: targetId,
+        start_date: settings.startDate,
+        rent_period: settings.rentPeriod,
+        rent_amount: settings.rentAmount,
+        rent_due_date: settings.rentDueDate,
+        electricity_bill: settings.electricityBill,
+        wifi_bill: settings.wifiBill,
+        updated_at: new Date().toISOString()
+      })
+      // Backup ke store_settings legacy
       await supabase.from('store_settings').upsert({
         store_id: targetId,
         financial_settings: settings,
@@ -2532,6 +2877,9 @@ const MainApp: React.FC<MainAppProps> = ({
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
       {appMode === 'POS' ? (
          <div className="absolute inset-0 overflow-y-auto bg-[#F7F7F7] dark:bg-slate-900 pb-24 flex flex-col animate-in fade-in duration-300">
+            {activeView === 'view-laporan-pos' ? (
+               <LaporanPosView storeId={activeStoreId} onBack={() => setActiveView('view-beranda')} />
+            ) : (
             <PosKasirView 
               kasirName={account?.name}
               kasirRole={account?.role}
@@ -2543,7 +2891,9 @@ const MainApp: React.FC<MainAppProps> = ({
               clockStr={todayAbsen}
               storeId={activeStoreId}
               onBack={() => setIsSidePanelOpen(true)}
+              onGoToLaporan={() => setActiveView('view-laporan-pos')}
             />
+            )}
             <SidePanel 
               isOpen={isSidePanelOpen}
               setIsOpen={setIsSidePanelOpen}
@@ -3579,7 +3929,18 @@ const MainApp: React.FC<MainAppProps> = ({
             const updated = [newKasbon, ...existing]
             localStorage.setItem(key, JSON.stringify(updated))
             window.dispatchEvent(new Event('alphaSyncUpdate'))
-            supabase.from('store_settings').upsert({ store_id: sid, kasbon_data: updated, updated_at: new Date().toISOString() }).then()
+            supabase.from('cash_advances').upsert([{
+              id: newKasbon.id,
+              store_id: sid,
+              tanggal: newKasbon.tanggal,
+              nama: newKasbon.nama,
+              nominal: newKasbon.nominal,
+              keterangan: newKasbon.keterangan || '',
+              lunas: newKasbon.lunas || false,
+              tanggal_lunas: null,
+              kasir: newKasbon.kasir || '',
+              updated_at: new Date().toISOString()
+            }]).then()
           } catch {}
         }}
         onActionKontak={(nama, nomor, keterangan) => {
@@ -3592,7 +3953,16 @@ const MainApp: React.FC<MainAppProps> = ({
             const updated = [newKontak, ...existing]
             localStorage.setItem(key, JSON.stringify(updated))
             window.dispatchEvent(new Event('alphaSyncUpdate'))
-            supabase.from('store_settings').upsert({ store_id: sid, kontak_data: updated, updated_at: new Date().toISOString() }).then()
+            supabase.from('contacts').upsert([{
+              id: newKontak.id,
+              store_id: sid,
+              nama: newKontak.nama,
+              nomor: newKontak.nomor || '',
+              keterangan: newKontak.keterangan || '',
+              photo_url: '',
+              kasir: '',
+              updated_at: new Date().toISOString()
+            }]).then()
           } catch {}
         }}
         onActionIzin={(username, tanggal, alasan) => {
@@ -3655,11 +4025,17 @@ const MainApp: React.FC<MainAppProps> = ({
             localStorage.setItem(globalKey, JSON.stringify(updated))
             if (sid && sid !== 'all') {
               localStorage.setItem(`alphaPro_${sid}_catatan_owner`, JSON.stringify(updated))
-              supabase.from('store_settings').upsert({ 
-                store_id: sid, 
-                catatan_owner_data: updated, 
-                updated_at: new Date().toISOString() 
-              }).then()
+              const mapped = updated.map(c => ({
+                id: c.id,
+                store_id: sid,
+                judul: c.judul,
+                isi: c.isi,
+                kategori: c.kategori || 'Penting',
+                tanggal: c.tanggal,
+                selesai: !!c.selesai,
+                updated_at: new Date().toISOString()
+              }));
+              supabase.from('owner_notes').upsert(mapped).then()
             }
             window.dispatchEvent(new Event('alphaSyncUpdate'))
           } catch(e) {}

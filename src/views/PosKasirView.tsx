@@ -120,11 +120,12 @@ interface PosKasirViewProps {
   dayName?: string;
   storeId?: string;
   onBack?: () => void;
+  onGoToLaporan?: () => void;
   clockStr?: string;
   fullDate?: string;
 }
 
-const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirRole, storeName = 'ALFA TOKO', storeSubtext, storePhoto, dayName, storeId = 'default', onBack, clockStr = '', fullDate = '' }) => {
+const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirRole, storeName = 'ALFA TOKO', storeSubtext, storePhoto, dayName, storeId = 'default', onBack, onGoToLaporan, clockStr = '', fullDate = '' }) => {
   const [products, setProducts] = useState<Product[]>(getCachedProducts);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
@@ -312,95 +313,78 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const handlePrint = () => {
     if (!showStruk) return;
     
-    const win = window.open('', '_blank', 'width=320,height=600');
-    if (!win) return;
-
+    // Generate text for RawBT / Bluetooth Serial (ESC/POS compatible plain text)
+    const w = 32;
+    const center = (s: string) => {
+      const txt = s.substring(0, w);
+      return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
+    };
+    const right = (left: string, right: string) => {
+      const space = w - left.length - right.length;
+      return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
+    };
+    
     const dateStr = new Date(showStruk.timestamp).toLocaleDateString('id-ID');
     const timeStr = new Date(showStruk.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    let itemsHtml = '';
+    let text = center(printSettings.namaToko || 'TOKO SAYA') + '\n';
+    if (printSettings.alamat) {
+      text += center(printSettings.alamat) + '\n';
+    }
+    text += '-'.repeat(w) + '\n';
+    text += `No   : ${showStruk.id}\n`;
+    text += `Kasir: ${showStruk.kasir}\n`;
+    text += `Waktu: ${dateStr} ${timeStr}\n`;
+    text += '-'.repeat(w) + '\n';
+    
     showStruk.items.forEach(item => {
-      itemsHtml += `
-        <div class="item">
-          <div class="bold">${item.product.nama}</div>
-          <div class="row">
-            <span>${item.qty} x ${item.product.harga.toLocaleString('id-ID')}</span>
-            <span>${(item.product.harga * item.qty).toLocaleString('id-ID')}</span>
-          </div>
-        </div>
-      `;
+      text += `${item.product.nama.substring(0, w)}\n`;
+      text += right(`${item.qty} x ${item.product.harga.toLocaleString('id-ID')}`, (item.product.harga * item.qty).toLocaleString('id-ID')) + '\n';
     });
+    
+    text += '-'.repeat(w) + '\n';
+    text += right('TOTAL', `Rp ${showStruk.grandTotal.toLocaleString('id-ID')}`) + '\n';
+    text += right(showStruk.metodeBayar, showStruk.metodeBayar === 'TUNAI' ? `Rp ${showStruk.uangDiterima.toLocaleString('id-ID')}` : 'LUNAS') + '\n';
+    
+    if (showStruk.metodeBayar === 'TUNAI') {
+      text += right('Kembalian', `Rp ${showStruk.kembalian.toLocaleString('id-ID')}`) + '\n';
+    }
+    
+    text += '-'.repeat(w) + '\n';
+    if (printSettings.ucapan) {
+      text += center(printSettings.ucapan) + '\n';
+    }
+    text += '\n\n\n'; // Feed lines for paper tear
 
-    const html = `
-      <html>
-        <head>
-          <title>Struk POS</title>
-          <style>
-            @page { margin: 0; size: 58mm auto; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 58mm; 
-              margin: 0;
-              padding: 0; 
-              font-size: 11px; 
-              color: black;
-              background: white;
-            }
-            .content { padding: 4mm; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .divider { border-top: 1px dashed black; margin: 6px 0; }
-            .row { display: flex; justify-content: space-between; }
-            .item { margin-bottom: 6px; }
-            .title { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
-            .subtitle { font-size: 10px; margin-bottom: 6px; }
-            .small { font-size: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="content">
-            <div class="center">
-              <div class="title">${printSettings.namaToko || 'TOKO SAYA'}</div>
-              ${printSettings.alamat ? `<div class="subtitle">${printSettings.alamat}</div>` : ''}
-            </div>
-            
-            <div class="divider"></div>
-            <div class="small center">
-              No: ${showStruk.id}<br>
-              Kasir: ${showStruk.kasir}<br>
-              ${dateStr} ${timeStr}
-            </div>
-            <div class="divider"></div>
-            
-            ${itemsHtml}
-            
-            <div class="divider"></div>
-            <div class="row bold">
-              <span>TOTAL</span>
-              <span>Rp ${showStruk.grandTotal.toLocaleString('id-ID')}</span>
-            </div>
-            <div class="row">
-              <span>${showStruk.metodeBayar}</span>
-              <span>${showStruk.metodeBayar === 'TUNAI' ? `Rp ${showStruk.uangDiterima.toLocaleString('id-ID')}` : 'LUNAS'}</span>
-            </div>
-            ${showStruk.metodeBayar === 'TUNAI' ? `
-              <div class="row">
-                <span>Kembalian</span>
-                <span>Rp ${showStruk.kembalian.toLocaleString('id-ID')}</span>
-              </div>
-            ` : ''}
-            
-            <div class="divider"></div>
-            ${printSettings.ucapan ? `<div class="center small" style="margin-top:8px;">${printSettings.ucapan}</div>` : ''}
-          </div>
-        </body>
-      </html>
-    `;
-
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 500);
+    // Eksekusi print menggunakan Bluetooth Native / RawBT
+    const btMac = localStorage.getItem('bluetooth_printer_mac');
+    if (btMac && (window as any).bluetoothSerial) {
+      // Connect first if not connected, but usually it's handled, let's just write.
+      // If write fails, we could try reconnecting, but write will throw error so user knows.
+      (window as any).bluetoothSerial.write(text, 
+        () => { console.log('Print bluetooth success'); }, 
+        (err: any) => {
+          // If write fails, maybe try to connect then write
+          (window as any).bluetoothSerial.connect(btMac, () => {
+             (window as any).bluetoothSerial.write(text, () => {}, () => alert('Gagal print ke Bluetooth: ' + err));
+          }, () => {
+             (window as any).bluetoothSerial.connectInsecure(btMac, () => {
+               (window as any).bluetoothSerial.write(text, () => {}, () => alert('Gagal print ke Bluetooth Insecure: ' + err));
+             }, () => {
+               alert('Gagal terhubung ke Printer Bluetooth. Pastikan printer menyala.');
+             });
+          });
+        }
+      );
+    } else {
+      // Fallback ke aplikasi RawBT via intent URI
+      const url = `rawbt:${encodeURIComponent(text)}`;
+      const a = document.createElement('a'); 
+      a.href = url; 
+      document.body.appendChild(a); 
+      a.click(); 
+      document.body.removeChild(a);
+    }
   };
 
   return (
@@ -687,9 +671,14 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
 
       {/* TAB RIWAYAT */}
       {activeTab === 'riwayat' && (
-        <div className="flex-1 px-3 pt-3 pb-[90px]">
+        <div className="flex-1 px-3 pt-3 pb-[90px] flex flex-col">
+          <div className="mb-4 text-center shrink-0">
+             <button onClick={onGoToLaporan} className="w-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-widest hover:bg-[#0066FF]/20 active:scale-95 transition-all">
+               <i className="fa-solid fa-chart-line mr-2"></i>Lihat Laporan Lengkap
+             </button>
+          </div>
           {transactions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
+            <div className="flex flex-col items-center justify-center flex-1 text-gray-300 gap-3">
               <i className="fa-solid fa-clock-rotate-left text-5xl"></i>
               <p className="text-sm font-black uppercase tracking-widest">Belum Ada Transaksi</p>
             </div>

@@ -377,7 +377,7 @@ const AssistantBot: React.FC<Props> = ({
       if (loc) setCustomIntents(JSON.parse(loc))
     } catch (e) {}
     
-    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+    supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
       if (data?.voucher_app_data?.bot_knowledge) {
         setCustomIntents(data.voucher_app_data.bot_knowledge)
         localStorage.setItem(`alphaPro_${activeStoreId}_bot_knowledge`, JSON.stringify(data.voucher_app_data.bot_knowledge))
@@ -396,10 +396,10 @@ const AssistantBot: React.FC<Props> = ({
     if (nextEnabled) playSuccessChime()
 
     if (!activeStoreId) return
-    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+    supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
       const existing = data?.voucher_app_data || {}
       const updated = { ...existing, sound_enabled: nextEnabled }
-      supabase.from('store_settings').upsert({
+      supabase.from('store_voucher_app_data').upsert({
         store_id: activeStoreId,
         voucher_app_data: updated
       }, { onConflict: 'store_id' }).then()
@@ -754,10 +754,10 @@ const AssistantBot: React.FC<Props> = ({
     setTeachTarget('')
     
     // Background sync
-    supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
+    supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle().then(({ data }) => {
       const existingData = data?.voucher_app_data || {}
       const newData = { ...existingData, bot_knowledge: updated }
-      supabase.from('store_settings').upsert({
+      supabase.from('store_voucher_app_data').upsert({
         store_id: activeStoreId,
         voucher_app_data: newData
       }, { onConflict: 'store_id' }).then()

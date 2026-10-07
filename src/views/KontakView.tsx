@@ -82,11 +82,19 @@ const KontakView: React.FC<{
 
       const syncToCloud = async () => {
         try {
-          await supabase.from('store_settings').upsert({
-            store_id: activeStoreId,
-            kontak_data: kontakList,
-            updated_at: new Date().toISOString()
-          });
+          if (kontakList.length > 0) {
+            const mapped = kontakList.map(k => ({
+              id: k.id,
+              store_id: activeStoreId,
+              nama: k.nama,
+              nomor: k.nomor || '',
+              keterangan: k.keterangan || '',
+              photo_url: k.photoUrl || '',
+              kasir: k.kasir || '',
+              updated_at: new Date().toISOString()
+            }));
+            await supabase.from('contacts').upsert(mapped);
+          }
         } catch (e) {
           console.error("Gagal sync Kontak", e);
         }
@@ -617,7 +625,7 @@ const KontakView: React.FC<{
 
       {/* ── Form Modal (Slide Up) ── */}
       {showForm && (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={resetForm}>
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center pb-20" onClick={resetForm}>
           <div
             className="bg-white rounded-t-3xl w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}

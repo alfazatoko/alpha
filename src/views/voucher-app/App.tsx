@@ -330,8 +330,8 @@ export default function App({ onExit, externalRole, externalCashierName, externa
     const cashierId = cashiers[activeCashierIndex]?.id || 'c1';
     
     try {
-      const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
-      const existingData = data?.voucher_app_data || {};
+      const { data } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+      let existingData = data?.voucher_app_data; if (!existingData) { const { data: fallback } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle(); existingData = fallback?.voucher_app_data || {}; }
       const existingCashierData = existingData[cashierId] || {};
 
       // ── Pembatasan Data Harian (Auto-Archive) ──
@@ -373,10 +373,20 @@ export default function App({ onExit, externalRole, externalCashierName, externa
         }
       };
       
-      const { error } = await supabase.from('store_settings').upsert({
+      const { error } = await supabase.from('store_voucher_app_data').upsert({
         store_id: activeStoreId,
-        voucher_app_data: newData
+        voucher_app_data: newData,
+        updated_at: new Date().toISOString()
       }, { onConflict: 'store_id' });
+      
+      // Also write to store_settings for legacy fallback (temporary)
+      try {
+        await supabase.from('store_settings').upsert({
+          store_id: activeStoreId,
+          voucher_app_data: newData,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' });
+      } catch(e){}
       
       if (!error) {
         setUnsyncedChanges(false);
@@ -736,12 +746,22 @@ export default function App({ onExit, externalRole, externalCashierName, externa
             if (shiftData.session_data !== undefined) setGlobalShiftSession(shiftData.session_data);
           }
 
-          const { data } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+          let cloudData = null;
+          const { data } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
           if (data && data.voucher_app_data) {
+             cloudData = data.voucher_app_data;
+          } else {
+             const { data: legacyData } = await supabase.from('store_settings').select('voucher_app_data').eq('store_id', activeStoreId).maybeSingle();
+             if (legacyData && legacyData.voucher_app_data) {
+                cloudData = legacyData.voucher_app_data;
+             }
+          }
+
+          if (cloudData) {
             // Remove legacy loading code (handled by new table)
 
-            const cashierData = data.voucher_app_data[cashierId];
-            const cloudGlobalDetailedHandovers = data.voucher_app_data['all_detailed_handovers'];
+            const cashierData = cloudData[cashierId];
+            const cloudGlobalDetailedHandovers = cloudData['all_detailed_handovers'];
             if (cloudGlobalDetailedHandovers) setDetailedHandovers(cloudGlobalDetailedHandovers);
             if (cashierData) {
                 // Produk tidak lagi diambil dari store_settings, melainkan dari voucher_products (SQL)
@@ -1623,10 +1643,17 @@ export default function App({ onExit, externalRole, externalCashierName, externa
 
     // Also clear from Supabase if online
     if (activeStoreId) {
-      supabase.from('store_settings').upsert({
+      supabase.from('store_voucher_app_data').upsert({
         store_id: activeStoreId,
         voucher_app_data: null
       }, { onConflict: 'store_id' });
+      // Legacy fallback
+      try {
+        supabase.from('store_settings').upsert({
+          store_id: activeStoreId,
+          voucher_app_data: null
+        }, { onConflict: 'store_id' });
+      } catch(e){}
     }
     
     // Force reload to completely wipe memory state

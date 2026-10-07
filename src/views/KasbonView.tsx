@@ -82,11 +82,21 @@ const KasbonView: React.FC<{
       // Auto sync to supabase
       const syncToCloud = async () => {
         try {
-          await supabase.from('store_settings').upsert({
-            store_id: activeStoreId,
-            kasbon_data: hutangList,
-            updated_at: new Date().toISOString()
-          });
+          if (hutangList.length > 0) {
+            const mapped = hutangList.map(h => ({
+              id: h.id,
+              store_id: activeStoreId,
+              tanggal: h.tanggal,
+              nama: h.nama,
+              nominal: h.nominal,
+              keterangan: h.keterangan || '',
+              lunas: h.lunas || false,
+              tanggal_lunas: h.tglLunas || null,
+              kasir: h.kasir || '',
+              updated_at: new Date().toISOString()
+            }));
+            await supabase.from('cash_advances').upsert(mapped);
+          }
         } catch (e) {
           console.error("Gagal sync Kasbon", e);
         }
@@ -551,7 +561,7 @@ const KasbonView: React.FC<{
       </div>
 
       {showForm && (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={resetForm}>
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center pb-20" onClick={resetForm}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">

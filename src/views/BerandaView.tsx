@@ -915,11 +915,76 @@ const GajiPanel: React.FC<{
                     onChange={e => setBonusKasir(e.target.value)}
                     className="w-full text-xs p-2.5 pr-8 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400 appearance-none cursor-pointer"
                   >
+                    <option value="">-- Pilih Kasir --</option>
                     {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
                   </select>
                   <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
                 </div>
               </div>
+              
+              {(() => {
+                const kData = kasirList[bonusKasir];
+                if (!kData) return null;
+                const tglJoin = kData.tanggalJoin;
+                if (!tglJoin) {
+                  return (
+                    <div className="p-3 bg-slate-100 rounded-xl border border-slate-200 text-[10px] font-bold text-slate-500 flex items-center gap-2 mt-1">
+                      <i className="fa-solid fa-circle-exclamation text-slate-400 text-sm"></i> 
+                      <span>Tanggal join kasir belum diatur. Setel di menu <strong>Akun Karyawan</strong> agar pengingat jadwal bonus otomatis aktif.</span>
+                    </div>
+                  );
+                }
+                const joinDateObj = new Date(tglJoin);
+                const joinDay = joinDateObj.getDate();
+                const now = new Date();
+                
+                // Set target date for this month
+                let targetBulanIni = new Date(now.getFullYear(), now.getMonth(), joinDay);
+                let selisihHari = Math.floor((targetBulanIni.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (1000 * 3600 * 24));
+                
+                // If it's passed more than 15 days, it means we probably missed it and should still show it's late, 
+                // but if it's very far ahead, it might be for next month. Let's keep it simple: 
+                // compare with this month's date.
+                let statusBonus = "";
+                let statusColor = "";
+                let icon = "";
+
+                if (selisihHari === 0) {
+                  statusBonus = "HARI INI JADWAL BONUS BULANAN!";
+                  statusColor = "text-emerald-800 bg-emerald-100 border-emerald-300";
+                  icon = "fa-solid fa-party-horn animate-bounce text-emerald-600";
+                } else if (selisihHari < 0 && selisihHari >= -15) {
+                  statusBonus = `TERLEWAT ${Math.abs(selisihHari)} HARI DARI JADWAL (Tgl ${joinDay})`;
+                  statusColor = "text-rose-800 bg-rose-50 border-rose-200";
+                  icon = "fa-solid fa-clock-rotate-left text-rose-500";
+                } else if (selisihHari < 0 && selisihHari < -15) {
+                  // If it's far in the past this month, calculate for next month instead
+                  targetBulanIni = new Date(now.getFullYear(), now.getMonth() + 1, joinDay);
+                  selisihHari = Math.floor((targetBulanIni.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (1000 * 3600 * 24));
+                  statusBonus = `MENGHITUNG HARI: ${selisihHari} HARI LAGI (Tgl ${joinDay} bulan depan)`;
+                  statusColor = "text-amber-800 bg-amber-50 border-amber-200";
+                  icon = "fa-solid fa-hourglass-half text-amber-500";
+                } else if (selisihHari <= 7 && selisihHari > 0) {
+                  statusBonus = `MENGHITUNG HARI: ${selisihHari} HARI LAGI (Tgl ${joinDay})`;
+                  statusColor = "text-amber-800 bg-amber-50 border-amber-200";
+                  icon = "fa-solid fa-hourglass-half text-amber-500";
+                } else {
+                  statusBonus = `BELUM WAKTUNYA (Jadwal: Tgl ${joinDay})`;
+                  statusColor = "text-blue-800 bg-blue-50 border-blue-200/50";
+                  icon = "fa-regular fa-calendar-check text-blue-500";
+                }
+
+                return (
+                  <div className={`mt-2 p-3 rounded-xl border-2 ${statusColor} text-[10px] font-black uppercase tracking-widest flex items-center gap-3 shadow-sm`}>
+                    <i className={`${icon} text-xl shrink-0`}></i>
+                    <div className="flex flex-col gap-0.5 leading-tight">
+                      <span className="opacity-70 text-[8px]">TGL BERGABUNG: {joinDateObj.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</span>
+                      <span>{statusBonus}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              
               <div>
                 <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL BONUS</label>
                 <input
@@ -1577,11 +1642,19 @@ const CatatanPanel: React.FC<{
       const activeSid = localStorage.getItem('alphaPro_activeStoreId');
       if (activeSid && activeSid !== 'all') {
         localStorage.setItem(`alphaPro_${activeSid}_catatan_owner`, JSON.stringify(data));
-        supabase.from('store_settings').upsert({
-          store_id: activeSid,
-          catatan_owner_data: data,
-          updated_at: new Date().toISOString()
-        }).then();
+        if (data.length > 0) {
+          const mapped = data.map(c => ({
+            id: c.id,
+            store_id: activeSid,
+            judul: c.judul,
+            isi: c.isi,
+            kategori: c.kategori || 'Penting',
+            tanggal: c.tanggal,
+            selesai: !!c.selesai,
+            updated_at: new Date().toISOString()
+          }));
+          supabase.from('owner_notes').upsert(mapped).then();
+        }
       }
     } catch(e) {}
     window.dispatchEvent(new Event('alphaSyncUpdate'));
@@ -1833,11 +1906,22 @@ const NotificationLogPanel: React.FC<{
   const syncToCloud = (items: OwnerNotificationItem[] | null) => {
     const storeKey = activeStoreId || 'all'
     if (storeKey !== 'all') {
-      supabase.from('store_settings').upsert({
-        store_id: storeKey,
-        owner_notifications_data: items,
-        updated_at: new Date().toISOString()
-      }).then()
+      if (items === null || items.length === 0) {
+        supabase.from('owner_notifications').delete().eq('store_id', storeKey).then();
+      } else {
+        const sqlItems = items.map(n => ({
+          id: n.id,
+          store_id: storeKey,
+          title: n.title,
+          message: n.message,
+          date: n.date,
+          type: n.type,
+          is_read: n.isRead,
+          action_view: n.actionView || null,
+          action_label: n.actionLabel || null
+        }));
+        supabase.from('owner_notifications').upsert(sqlItems).then();
+      }
     }
   }
 
@@ -3107,6 +3191,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
              <div className="absolute -top-3 right-4 left-4 flex justify-center gap-1.5 z-20">
                 <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 0 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
                 <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 1 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
+                <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth * 2, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 2 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
              </div>
              <div id="trans-carousel" onScroll={(e) => { const el = e.currentTarget; setWhiteCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full gap-4 pt-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
                 {/* Slide 1 */}
@@ -3143,6 +3228,19 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                        <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i></div>
                        <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalTarik)}</span>
                      </div>
+                   </div>
+                </div>
+                {/* Slide 3 */}
+                <div className="snap-center min-w-full flex justify-between gap-[2px]">
+                   <div className="flex-1 min-w-0">
+                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Deposit Saldo</p>
+                     <div className="flex items-center gap-2">
+                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-wallet text-[10px]"></i></div>
+                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerIsiBank)}</span>
+                     </div>
+                   </div>
+                   <div className="w-[1px] bg-transparent mx-1 rounded-full"></div>
+                   <div className="flex-1 pl-1 min-w-0">
                    </div>
                 </div>
              </div>
