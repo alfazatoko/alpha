@@ -938,38 +938,37 @@ const GajiPanel: React.FC<{
                 const joinDay = joinDateObj.getDate();
                 const now = new Date();
                 
-                // Set target date for this month
-                let targetBulanIni = new Date(now.getFullYear(), now.getMonth(), joinDay);
-                let selisihHari = Math.floor((targetBulanIni.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (1000 * 3600 * 24));
+                // Atur target bonus per 6 bulan
+                let targetBonus = new Date(joinDateObj.getFullYear(), joinDateObj.getMonth() + 6, joinDay);
                 
-                // If it's passed more than 15 days, it means we probably missed it and should still show it's late, 
-                // but if it's very far ahead, it might be for next month. Let's keep it simple: 
-                // compare with this month's date.
+                // Terus tambah 6 bulan sampai target jadwalnya adalah masa depan atau belum lewat dari 15 hari yang lalu
+                while (targetBonus.getTime() < now.getTime() - (15 * 1000 * 3600 * 24)) {
+                   targetBonus.setMonth(targetBonus.getMonth() + 6);
+                }
+
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const targetDay = new Date(targetBonus.getFullYear(), targetBonus.getMonth(), targetBonus.getDate());
+                const selisihHari = Math.floor((targetDay.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                
                 let statusBonus = "";
                 let statusColor = "";
                 let icon = "";
 
                 if (selisihHari === 0) {
-                  statusBonus = "HARI INI JADWAL BONUS BULANAN!";
+                  statusBonus = "HARI INI JADWAL BONUS 6 BULANAN!";
                   statusColor = "text-emerald-800 bg-emerald-100 border-emerald-300";
                   icon = "fa-solid fa-party-horn animate-bounce text-emerald-600";
                 } else if (selisihHari < 0 && selisihHari >= -15) {
-                  statusBonus = `TERLEWAT ${Math.abs(selisihHari)} HARI DARI JADWAL (Tgl ${joinDay})`;
+                  statusBonus = `TERLEWAT ${Math.abs(selisihHari)} HARI DARI JADWAL (Tgl ${targetBonus.getDate()} ${targetBonus.toLocaleDateString('id-ID', {month: 'long'})})`;
                   statusColor = "text-rose-800 bg-rose-50 border-rose-200";
                   icon = "fa-solid fa-clock-rotate-left text-rose-500";
-                } else if (selisihHari < 0 && selisihHari < -15) {
-                  // If it's far in the past this month, calculate for next month instead
-                  targetBulanIni = new Date(now.getFullYear(), now.getMonth() + 1, joinDay);
-                  selisihHari = Math.floor((targetBulanIni.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (1000 * 3600 * 24));
-                  statusBonus = `MENGHITUNG HARI: ${selisihHari} HARI LAGI (Tgl ${joinDay} bulan depan)`;
-                  statusColor = "text-amber-800 bg-amber-50 border-amber-200";
-                  icon = "fa-solid fa-hourglass-half text-amber-500";
-                } else if (selisihHari <= 7 && selisihHari > 0) {
-                  statusBonus = `MENGHITUNG HARI: ${selisihHari} HARI LAGI (Tgl ${joinDay})`;
+                } else if (selisihHari <= 14 && selisihHari > 0) {
+                  statusBonus = `MENGHITUNG HARI: ${selisihHari} HARI LAGI (Tgl ${targetBonus.getDate()} ${targetBonus.toLocaleDateString('id-ID', {month: 'long'})})`;
                   statusColor = "text-amber-800 bg-amber-50 border-amber-200";
                   icon = "fa-solid fa-hourglass-half text-amber-500";
                 } else {
-                  statusBonus = `BELUM WAKTUNYA (Jadwal: Tgl ${joinDay})`;
+                  const formatter = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                  statusBonus = `JADWAL BONUS BERIKUTNYA: ${formatter.format(targetDay)}`;
                   statusColor = "text-blue-800 bg-blue-50 border-blue-200/50";
                   icon = "fa-regular fa-calendar-check text-blue-500";
                 }
