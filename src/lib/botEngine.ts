@@ -2485,3 +2485,156 @@ export function generateExecutiveBriefing(
 
   return res
 }
+
+// ── Daily Morning Summary for ALL stores (Owner only) ─────────────────────────
+export async function generateDailySummaryAllStores(
+  googleUid: string,
+  ownerName: string
+): Promise<string> {
+  const { supabase } = await import('./supabase')
+
+  const now = new Date()
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = (() => { const p = (n: number) => String(n).padStart(2,'0'); return yesterday.getFullYear()+'-'+p(yesterday.getMonth()+1)+'-'+p(yesterday.getDate()) })()
+  const yesterdayLabel = yesterday.toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  })
+
+  const { data: stores, error: storesError } = await supabase
+    .from('stores')
+    .select('id, name')
+    .eq('user_id', googleUid)
+    .order('created_at', { ascending: true })
+
+  if (storesError || !stores || stores.length === 0) {
+    return `📊 **RINGKASAN PAGI — ${yesterdayLabel}**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._`
+  }
+
+  let summary = `🌅 **RINGKASAN PAGI — ${yesterdayLabel}**\n`
+  summary += `Hai **${ownerName}**, berikut laporan semua toko kemarin:\n\n`
+
+  let grandOmset = 0
+  let grandAdmin = 0
+  let grandTrx = 0
+
+  for (const store of stores) {
+    const { data: txData, error: txErr } = await supabase
+      .from('transactions')
+      .select('nominal, admin_fee, kategori, kasir_name')
+      .eq('user_id', googleUid)
+      .eq('store_id', store.id)
+      .gte('timestamp', yesterdayStr + 'T00:00:00')
+      .lte('timestamp', yesterdayStr + 'T23:59:59')
+
+    const txList: any[] = txData || []
+    const filtered = txList.filter((t: any) => !t.kategori?.startsWith('Isi '))
+
+    const omset = filtered.reduce((s: number, t: any) => s + (t.nominal || 0), 0)
+    const admin = filtered.reduce((s: number, t: any) => s + (t.admin_fee || 0), 0)
+    const count = filtered.length
+
+    grandOmset += omset
+    grandAdmin += admin
+    grandTrx += count
+
+    const kasirSet = new Set(filtered.map((t: any) => t.kasir_name).filter(Boolean))
+
+    summary += `🏪 **${store.name}**\n`
+    if (count === 0) {
+      summary += `• _Tidak ada transaksi kemarin._\n\n`
+    } else {
+      summary += `• Omset: **Rp ${omset.toLocaleString('id-ID')}** (${count} trx)\n`
+      summary += `• Profit Admin: Rp ${admin.toLocaleString('id-ID')}\n`
+      if (kasirSet.size > 0) summary += `• Kasir: ${Array.from(kasirSet).join(', ')}\n`
+      summary += '\n'
+    }
+  }
+
+  if (stores.length > 1) {
+    summary += `━━━━━━━━━━━━━━━━━━━━━\n`
+    summary += `📈 **TOTAL SEMUA TOKO**\n`
+    summary += `• Omset: **Rp ${grandOmset.toLocaleString('id-ID')}**\n`
+    summary += `• Profit: **Rp ${grandAdmin.toLocaleString('id-ID')}**\n`
+    summary += `• Transaksi: **${grandTrx} trx**\n\n`
+  }
+
+  summary += `💡 Ketik _"rekap hari ini"_ untuk cek transaksi hari ini.`
+
+  return summary
+}
+
+// ── Daily Summary for SPECIFIC DATE, ALL stores (Owner only) ──────────────────
+export async function generateDailySummaryByDate(
+  googleUid: string,
+  ownerName: string,
+  dateStr: string  // format YYYY-MM-DD
+): Promise<string> {
+  const { supabase } = await import('./supabase')
+
+  const d = new Date(dateStr + 'T00:00:00')
+  const dateLabel = d.toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  })
+
+  const { data: stores, error: storesError } = await supabase
+    .from('stores')
+    .select('id, name')
+    .eq('user_id', googleUid)
+    .order('created_at', { ascending: true })
+
+  if (storesError || !stores || stores.length === 0) {
+    return '📊 **REKAP ' + dateLabel.toUpperCase() + '**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._'
+  }
+
+  let summary = '📅 **REKAP — ' + dateLabel + '**\n\n'
+
+  let grandOmset = 0
+  let grandAdmin = 0
+  let grandTrx = 0
+
+  for (const store of stores) {
+    const { data: txData } = await supabase
+      .from('transactions')
+      .select('nominal, admin_fee, kategori, kasir_name')
+      .eq('user_id', googleUid)
+      .eq('store_id', store.id)
+      .gte('timestamp', dateStr + 'T00:00:00')
+      .lte('timestamp', dateStr + 'T23:59:59')
+
+    const txList: any[] = txData || []
+    const filtered = txList.filter((t: any) => !t.kategori?.startsWith('Isi '))
+
+    const omset = filtered.reduce((s: number, t: any) => s + (t.nominal || 0), 0)
+    const admin = filtered.reduce((s: number, t: any) => s + (t.admin_fee || 0), 0)
+    const count = filtered.length
+
+    grandOmset += omset
+    grandAdmin += admin
+    grandTrx += count
+
+    const kasirSet = new Set(filtered.map((t: any) => t.kasir_name).filter(Boolean))
+
+    summary += '🏪 **' + store.name + '**\n'
+    if (count === 0) {
+      summary += '• _Tidak ada transaksi._\n\n'
+    } else {
+      summary += '• Omset: **Rp ' + omset.toLocaleString('id-ID') + '** (' + count + ' trx)\n'
+      summary += '• Profit Admin: Rp ' + admin.toLocaleString('id-ID') + '\n'
+      if (kasirSet.size > 0) summary += '• Kasir: ' + Array.from(kasirSet).join(', ') + '\n'
+      summary += '\n'
+    }
+  }
+
+  if (stores.length > 1) {
+    summary += '━━━━━━━━━━━━━━━━━━━━━\n'
+    summary += '📈 **TOTAL SEMUA TOKO**\n'
+    summary += '• Omset: **Rp ' + grandOmset.toLocaleString('id-ID') + '**\n'
+    summary += '• Profit: **Rp ' + grandAdmin.toLocaleString('id-ID') + '**\n'
+    summary += '• Transaksi: **' + grandTrx + ' trx**\n\n'
+  }
+
+  summary += '💡 Ketik _"rekap tanggal [angka]"_ untuk cek tanggal lain.'
+
+  return summary
+}

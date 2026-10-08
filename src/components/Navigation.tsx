@@ -52,12 +52,26 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
                 >
                   <div className="absolute -top-6 flex flex-col items-center cursor-pointer group">
                     <div className="relative">
-                      <div className="absolute inset-0 bg-blue-500 rounded-full blur-md opacity-40 translate-y-1"></div>
-                      <div className="w-[52px] h-[52px] bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white border-[3px] border-white shadow-sm relative z-10 active:scale-95 transition-transform">
-                        <item.Icon className="w-7 h-7 stroke-[2.5px]" />
+                      <div className={cn(
+                        "absolute inset-0 rounded-full blur-md translate-y-1 transition-all duration-500",
+                        isActive ? "bg-blue-600 opacity-60 animate-pulse" : "bg-blue-500 opacity-40"
+                      )}></div>
+                      <div className={cn(
+                        "w-[52px] h-[52px] rounded-full flex items-center justify-center text-white border-[3px] border-white relative z-10 transition-all duration-500",
+                        isActive 
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-700 shadow-[0_0_20px_rgba(59,130,246,0.6)] scale-110" 
+                          : "bg-gradient-to-br from-blue-400 to-blue-600 shadow-sm active:scale-95 group-hover:scale-105"
+                      )}>
+                        <item.Icon className={cn(
+                          "w-7 h-7 stroke-[2.5px] transition-transform duration-500",
+                          isActive ? "scale-110" : "scale-100"
+                        )} />
                       </div>
                     </div>
-                    <span className="text-[10px] font-black tracking-tight mt-1 text-slate-800">
+                    <span className={cn(
+                      "text-[10px] font-black tracking-tight mt-1 transition-colors duration-300",
+                      isActive ? "text-blue-700" : "text-slate-800"
+                    )}>
                       {item.label}
                     </span>
                   </div>
@@ -74,7 +88,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
                 <div className="flex flex-col items-center cursor-pointer group">
                   <div className={cn(
                     "transition-all duration-300 mb-0.5 flex items-center justify-center rounded-full w-8 h-8",
-                    isActive ? "text-blue-600 bg-blue-50" : "text-slate-400 group-hover:text-slate-600"
+                    isActive ? "text-white bg-blue-600 shadow-md shadow-blue-500/40" : "text-slate-400 group-hover:text-slate-600"
                   )}>
                     <item.Icon className={cn("w-5 h-5", isActive ? "stroke-[2.5px]" : "stroke-[2px]")} />
                   </div>

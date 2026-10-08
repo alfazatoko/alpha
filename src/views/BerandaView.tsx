@@ -5832,6 +5832,12 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
               }, 100);
             }}
+            onOpenRiwayatDetail={(tx) => {
+              props.setActiveView('view-transaksi');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
+              }, 300);
+            }}
             activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
             adminRules={props.adminRules}
           />

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, generateExecutiveBriefing, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, generateExecutiveBriefing, generateDailySummaryAllStores, generateDailySummaryByDate, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
 import { supabase } from '../lib/supabase'
 import { motion } from 'motion/react'
 import { playSuccessChime, playNotificationChime, playMicBeep, playBotPop, isSoundEnabled, setSoundEnabled } from '../lib/soundFX'
@@ -45,6 +45,7 @@ interface Props {
   currentUsername: string
   kasirRole: string
   kasirName?: string
+  googleUid?: string
   geminiApiKey: string
   onSaveGeminiKey: (key: string) => Promise<void>
   onClearGeminiKey: () => Promise<void>
@@ -119,6 +120,7 @@ const AssistantBot: React.FC<Props> = ({
   currentUsername,
   kasirRole,
   kasirName,
+  googleUid,
   geminiApiKey, 
   onSaveGeminiKey, 
   onClearGeminiKey,
@@ -134,6 +136,7 @@ const AssistantBot: React.FC<Props> = ({
   onActionCustomFAQ
 }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [hasMorningSummary, setHasMorningSummary] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   
   // Custom Intent Learning States
@@ -178,6 +181,53 @@ const AssistantBot: React.FC<Props> = ({
   const [showHistoryMenu, setShowHistoryMenu] = useState(false)
   const [pendingActions, setPendingActions] = useState<BotAction[] | null>(null)
   const [pendingActionSummary, setPendingActionSummary] = useState<string>('')
+
+  // ── Morning Summary Auto-trigger (Owner only) ──────────────────────────────
+  useEffect(() => {
+    if (kasirRole !== 'owner' || !googleUid) return
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const flagKey = `alphaPro_morning_summary_${googleUid}_${todayStr}`
+
+    // Cek apakah sudah kirim ringkasan hari ini
+    if (localStorage.getItem(flagKey)) return
+
+    // Tandai badge merah di ikon bot
+    setHasMorningSummary(true)
+
+    // Fetch + tampilkan ringkasan setelah app stabil (delay 2s)
+    const timer = setTimeout(async () => {
+      try {
+        const text = await generateDailySummaryAllStores(googleUid, kasirName || 'Owner')
+
+        setMessages(prev => {
+          const msg = {
+            id: 'morning-summary-' + Date.now(),
+            from: 'bot' as const,
+            mode: 'app' as const,
+            text,
+            timestamp: Date.now()
+          }
+          return [...prev, msg]
+        })
+
+        // Simpan flag agar tidak muncul lagi hari ini
+        localStorage.setItem(flagKey, '1')
+        setHasMorningSummary(false)
+
+        // Auto buka bot agar owner langsung lihat
+        setIsOpen(true)
+
+        setTimeout(() => {
+          playNotificationChime()
+        }, 300)
+      } catch (err) {
+        console.error('Morning summary error:', err)
+      }
+    }, 2000)
+
+    return () => clearTimeout(timer)
+  }, [kasirRole, googleUid, kasirName])
 
   // ── Voice Input & Sound States ─────────────────────────────────────────────
   const [isListening, setIsListening] = useState(false)
@@ -514,6 +564,90 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
+    // ⓪.5 Cek Perintah Manual Khusus
+    const isRekapKemarin = /kemarin/i.test(queryLower) && /(rekap|ringkasan|laporan|cek)/i.test(queryLower)
+    if (isRekapKemarin) {
+      if (kasirRole === 'owner' && googleUid) {
+        try {
+          const summary = await generateDailySummaryAllStores(googleUid, kasirName || 'Owner')
+          setIsTyping(false)
+          addMessage('bot', summary, 'app')
+          setSuggestions(getDynamicSuggestions())
+        } catch (e) {
+          setIsTyping(false)
+          addMessage('bot', '⚠️ Gagal mengambil rekap kemarin.', 'error')
+        }
+      } else {
+        setIsTyping(false)
+        addMessage('bot', '⚠️ Maaf, rekap semua toko kemarin hanya bisa diakses oleh Owner.', 'error')
+      }
+      return
+    }
+
+
+    // ⓪.6 Rekap Tanggal Spesifik — deteksi pintar semua variasi bahasa
+    // Contoh: "rekap tanggal 5", "laporan tgl 3", "cek 7 oktober", "transaksi 5 september", "tanggal 5"
+    const isRekapContext = /(rekap|laporan|ringkasan|cek|lihat|tampil|transaksi)/i.test(queryLower)
+    const hasTanggalKeyword = /(tanggal|tgl|tgal|tnggl)/i.test(queryLower)
+    // Ambil angka 1-31 dari query
+    const allNumbers = [...queryLower.matchAll(/\b(\d{1,2})\b/g)]
+    const validDay = allNumbers.find(m => {
+      const n = parseInt(m[1])
+      return n >= 1 && n <= 31
+    })
+    const tanggalDetected = validDay && (hasTanggalKeyword || isRekapContext)
+    const tanggalMatch = tanggalDetected ? validDay : null
+    if (tanggalMatch) {
+      if (kasirRole === 'owner' && googleUid) {
+        const day = parseInt(tanggalMatch[1])
+        const now = new Date()
+
+        // Deteksi nama bulan jika ada
+        const BULAN: Record<string, number> = {
+          jan: 1, januari: 1, feb: 2, februari: 2, mar: 3, maret: 3,
+          apr: 4, april: 4, mei: 5, jun: 6, juni: 6, jul: 7, juli: 7,
+          agu: 8, agustus: 8, sep: 9, september: 9, okt: 10, oktober: 10,
+          nov: 11, november: 11, des: 12, desember: 12
+        }
+        let month = now.getMonth() + 1
+        let year = now.getFullYear()
+
+        const bulanMatch = queryLower.match(/(januari?|februari?|maret|april|mei|juni?|juli?|agustus|september|oktober|november|desember)/i)
+        if (bulanMatch) {
+          const bName = bulanMatch[1].toLowerCase()
+          for (const [key, val] of Object.entries(BULAN)) {
+            if (bName.startsWith(key)) { month = val; break }
+          }
+        }
+
+        // Jika tanggal yang diminta lebih besar dari hari ini di bulan ini → pakai bulan lalu
+        if (day > now.getDate() && month === now.getMonth() + 1) {
+          month -= 1
+          if (month < 1) { month = 12; year -= 1 }
+        }
+
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const dateStr = `${year}-${pad(month)}-${pad(day)}`
+        const humanDate = new Date(dateStr + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+        addMessage('bot', `🔍 Mengambil rekap **${humanDate}**...`, 'app')
+
+        try {
+          const summary = await generateDailySummaryByDate(googleUid, kasirName || 'Owner', dateStr)
+          setIsTyping(false)
+          addMessage('bot', summary, 'app')
+          setSuggestions(getDynamicSuggestions())
+        } catch (e) {
+          setIsTyping(false)
+          addMessage('bot', `⚠️ Gagal mengambil rekap tanggal ${day}.`, 'error')
+        }
+      } else {
+        setIsTyping(false)
+        addMessage('bot', '⚠️ Maaf, rekap per-tanggal hanya bisa diakses oleh Owner.', 'error')
+      }
+      return
+    }
+
     // ① Coba App Intent dulu
     const intent = parseAppIntent(text)
     if (intent.type === 'navigate') {
@@ -789,6 +923,9 @@ const AssistantBot: React.FC<Props> = ({
           </>
         )}
         {!isOpen && <span className="absolute inset-0 rounded-2xl bg-indigo-400 opacity-30 animate-ping pointer-events-none"/>}
+        {hasMorningSummary && !isOpen && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white animate-pulse shadow-sm shadow-red-500/60 z-10"/>
+        )}
       </motion.button>
 
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}

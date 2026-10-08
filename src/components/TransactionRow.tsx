@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 
@@ -12,6 +12,17 @@ interface TransactionRowProps {
 
 const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDelete, kasirRole }) => {
   const [isOpen, setIsOpen] = useState(false)
+  
+  useEffect(() => {
+    const handleOpen = (e: any) => {
+      if (e.detail === t.id) {
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('openRiwayatDetail', handleOpen);
+    return () => window.removeEventListener('openRiwayatDetail', handleOpen);
+  }, [t.id]);
+
   const dateObj = parseLocalISO(t.timestamp)
   const jam = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 
@@ -60,9 +71,21 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   }
   const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
 
-  if (t.kategori === 'Tarik Tunai' && t.keterangan?.startsWith('TARIK_TUNAI|')) {
-    const parts = t.keterangan.split('|');
-    let metodeRaw = parts[1]?.replace(' [ADMIN_DALAM]', '')?.replace(' [NON_TUNAI]', '')?.trim() || 'Unknown';
+  let isTarikTunaiFormat = false;
+  let metodeRaw = '';
+  
+  if (t.kategori === 'Tarik Tunai') {
+    if (t.keterangan?.startsWith('TARIK_TUNAI|')) {
+       isTarikTunaiFormat = true;
+       metodeRaw = t.keterangan.split('|')[1] || '';
+    } else if (t.keterangan?.toLowerCase().startsWith('tarik tunai :')) {
+       isTarikTunaiFormat = true;
+       metodeRaw = t.keterangan.split(':')[1] || '';
+    }
+  }
+
+  if (isTarikTunaiFormat) {
+    metodeRaw = metodeRaw.replace(/\[ADMIN_DALAM\]/ig, '').replace(/\[NON_TUNAI\]/ig, '').trim();
     if (metodeRaw.toUpperCase() === 'QRIS') metodeRaw = 'QRIS';
     else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC';
     else if (metodeRaw.toUpperCase() === 'ATM') metodeRaw = 'ATM';
@@ -70,7 +93,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
     const adm = t.adminFee;
     const nom = t.nominal;
-    const adminPotong = t.keterangan.includes('[ADMIN_DALAM]');
+    const adminPotong = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
 
     modalTransaksiLabel = `TARIK TUNAI > ${metodeRaw.toUpperCase()}`;
 
@@ -81,6 +104,16 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
     if (adminPotong) {
       adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
+    }
+  } else {
+    // Fallback penghapusan label Admin Dalam secara umum jika tidak tercover di atas
+    if (listKeterangan.toLowerCase().includes('[admin_dalam]')) {
+      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
+      listKeterangan = listKeterangan.replace(/\[admin_dalam\]/ig, '').replace(/\s+/g, ' ').trim();
+    }
+    if (modalKeterangan.toLowerCase().includes('[admin_dalam]')) {
+      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
+      modalKeterangan = modalKeterangan.replace(/\[admin_dalam\]/ig, '').replace(/\s+/g, ' ').trim();
     }
   }
 

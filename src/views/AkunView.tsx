@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { cn, compressImage, getShiftInfo } from '../lib/utils'
 import { supabase } from '../lib/supabase'
@@ -2741,6 +2741,101 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             </div>
                           </div>
                         )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="w-full bg-black/20" style={{ height: '0.5px' }} />
+
+                {/* Notifikasi Audio Transaksi */}
+                <button
+                  onClick={() => setOpenCategory(openCategory === 'audio' ? null : 'audio')}
+                  className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mr-3">
+                    <i className="fa-solid fa-volume-high text-xs"></i>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-gray-900 leading-tight">Suara Notifikasi</p>
+                    <p className="text-[9px] text-gray-400 font-medium mt-0.5">Atur suara saat transaksi berhasil disimpan</p>
+                  </div>
+                  <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'audio' && "rotate-180")} />
+                </button>
+                {openCategory === 'audio' && (
+                  <div className="mt-2 mx-4 mb-2 p-3 bg-purple-50 border border-purple-200 rounded-[1.5rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 shadow-sm border border-purple-200 shrink-0">
+                          <i className="fa-solid fa-music text-xs"></i>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Suara Custom</p>
+                          <p className="text-[8px] text-purple-700 font-bold mt-0.5 leading-snug">Pilih file audio (.mp3, .wav) maksimal 150KB</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => document.getElementById('audioInput')?.click()}
+                          className="flex-1 bg-white border border-purple-200 text-purple-700 rounded-lg py-2 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"
+                        >
+                          <i className="fa-solid fa-upload"></i> Upload Suara
+                        </button>
+                        <input 
+                          id="audioInput" 
+                          type="file" 
+                          accept="audio/mp3,audio/wav,audio/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 200 * 1024) {
+                              alert('Ukuran file maksimal 200KB!');
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = async (ev) => {
+                              const base64Audio = ev.target?.result as string;
+                              
+                              const activeStoreId = localStorage.getItem('alphaPro_active_store_id') || 'all';
+                              if (activeStoreId === 'all') return alert('Pilih toko dulu di Beranda');
+
+                              const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', activeStoreId).maybeSingle();
+                              const newAudioSettings = { ...(data?.audio_settings || {}), transaction_sound_url: base64Audio };
+                              
+                              await supabase.from('store_settings').upsert({
+                                store_id: activeStoreId,
+                                audio_settings: newAudioSettings
+                              });
+                              alert('Suara berhasil disimpan!');
+                              window.location.reload();
+                            };
+                            reader.readAsDataURL(file);
+                          }} 
+                        />
+                        <button 
+                          onClick={async () => {
+                            const activeStoreId = localStorage.getItem('alphaPro_active_store_id') || 'all';
+                            if (activeStoreId === 'all') return;
+                            
+                            if (confirm('Hapus suara custom dan gunakan suara bawaan (Ting)?')) {
+                              const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', activeStoreId).maybeSingle();
+                              const newAudioSettings = { ...(data?.audio_settings || {}) };
+                              delete newAudioSettings.transaction_sound_url;
+                              
+                              await supabase.from('store_settings').upsert({
+                                store_id: activeStoreId,
+                                audio_settings: newAudioSettings
+                              });
+                              alert('Suara berhasil dihapus!');
+                              window.location.reload();
+                            }
+                          }}
+                          className="w-10 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg flex items-center justify-center active:scale-95 transition-transform"
+                        >
+                          <i className="fa-solid fa-trash-can"></i>
+                        </button>
                       </div>
                     </div>
                   </div>

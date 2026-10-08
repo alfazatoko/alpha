@@ -58,10 +58,11 @@ interface TransactionFormProps {
   hideModeTabs?: boolean
   hideHeader?: boolean
   lastTx?: any
+  onOpenRiwayatDetail?: (tx: any) => void
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx, onOpenRiwayatDetail
 }) => {
   const [kategori, setKategori] = useState('')
   const [nominal, setNominal] = useState('')
@@ -753,9 +754,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             {isThemeMenuOpen && (
               <div className="absolute right-0 top-10 w-40 bg-white rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] border border-gray-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="px-3 pb-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 mb-1">Pilih Tema</p>
-                <button onClick={() => { setActiveTheme('TEMA_2'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_2' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 1 (Utama)</button>
-                <button onClick={() => { setActiveTheme('TEMA_3'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_3' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 2 (Sidebar)</button>
-                <button onClick={() => { setActiveTheme('TEMA_1'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_1' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 3 (Classic)</button>
+                <button onClick={() => { setActiveTheme('TEMA_1'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_1' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 1 (Classic)</button>
+                <button onClick={() => { setActiveTheme('TEMA_2'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_2' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 2 (Utama)</button>
+                <button onClick={() => { setActiveTheme('TEMA_3'); setIsThemeMenuOpen(false); }} className={cn("w-full text-left px-3 py-2 text-[11px] font-bold transition-colors", activeTheme === 'TEMA_3' ? "text-blue-600 bg-blue-50" : "text-slate-700 hover:bg-blue-50 hover:text-blue-600")}>Tema 3 (Sidebar)</button>
               </div>
             )}
           </div>
@@ -889,7 +890,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       onClick={() => {
                          setSumberAplikasi(src.id);
                          setActiveSubCategory('');
-                         if (activeTheme === 'TEMA_1') {
+                         if (activeTheme === 'TEMA_1' || activeTheme === 'TEMA_2') {
                             if (src.id === 'BANK') setClassicPopupMode('BANK');
                             else if (src.id === 'DANA') {
                                setIsKetAuto(true);
@@ -944,7 +945,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             )}
 
             {/* KOLOM 2: SUBCATEGORIES */}
-            {sumberAplikasi && activeTheme !== 'TEMA_1' && (
+            {sumberAplikasi && activeTheme === 'TEMA_3' && (
               <div className="grid grid-cols-5 gap-1.5 mb-4 animate-in fade-in slide-in-from-top-2">
                 {SUBCATEGORIES.map((cat) => {
                 const isActive = activeSubCategory === cat.id;
@@ -968,7 +969,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             )}
 
             {/* KOLOM 3: ITEMS */}
-            {sumberAplikasi && activeSubCategory && activeTheme !== 'TEMA_1' && (
+            {sumberAplikasi && activeSubCategory && activeTheme === 'TEMA_3' && (
             <div className="animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
@@ -2318,18 +2319,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {lastTx && (
         <div className="mt-4 bg-white border border-gray-200 rounded-[1.25rem] p-3 shadow-sm relative overflow-hidden animate-in slide-in-from-bottom-4 fade-in">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-inner">
-              <i className="fa-solid fa-bolt text-[10px]"></i>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-inner">
+                <i className="fa-solid fa-bolt text-[10px]"></i>
+              </div>
+              <p className="text-[10px] text-black font-black uppercase tracking-tighter">TERAKHIR</p>
             </div>
-            <p className="text-[10px] text-black font-black uppercase tracking-tighter">TERAKHIR</p>
+            {onOpenRiwayatDetail && (
+              <button 
+                onClick={() => onOpenRiwayatDetail(lastTx)}
+                className="text-[10px] text-blue-600 font-black uppercase tracking-tighter hover:underline"
+              >
+                Detail Riwayat <i className="fa-solid fa-chevron-right text-[8px] ml-0.5"></i>
+              </button>
+            )}
           </div>
           <div className="w-full h-px bg-gray-100 mb-2"></div>
           <div className="flex justify-between items-start">
             <div className="min-w-0 pr-2">
               <h3 className="text-[13px] font-black text-black uppercase leading-none tracking-tight truncate">{lastTx.kategori}</h3>
               {lastTx.keterangan && (
-                <p className="text-[11px] font-bold text-blue-700 mt-1.5 truncate">{lastTx.keterangan}</p>
+                <p className="text-[11px] font-bold text-blue-700 mt-1.5 truncate">
+                  {lastTx.keterangan.replace(/\[ADMIN_DALAM\]/ig, '').replace(/\[NON_TUNAI\]/ig, '').trim()}
+                </p>
               )}
               <p className="text-[10px] text-gray-500 font-bold mt-1.5">{new Date(lastTx.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(lastTx.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')}</p>
             </div>
@@ -2337,7 +2350,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[14px] font-black text-black leading-none">{(lastTx.nominal || 0).toLocaleString('id-ID')}</p>
               {(lastTx.adminFee || 0) > 0 && (
                 <p className="text-[10px] font-black text-teal-600 mt-1 uppercase tracking-tighter">
-                  ADMIN: {(lastTx.adminFee || 0).toLocaleString('id-ID')}
+                  {(lastTx.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]') ? 'POTONG DALAM:' : 'ADMIN:'} {(lastTx.adminFee || 0).toLocaleString('id-ID')}
                 </p>
               )}
             </div>
@@ -2358,6 +2371,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setIsKetAuto(true);
                     setIsAdminManuallyEdited(false);
                     setIsSumberModalOpen(false);
+                    if (activeTheme === 'TEMA_1' || activeTheme === 'TEMA_2') {
+                       if (s === 'BANK') setClassicPopupMode('BANK');
+                       else if (s === 'DANA') {
+                          setKeterangan('');
+                          setClassicPopupMode(null);
+                          setTimeout(() => keteranganRef.current?.focus(), 100);
+                       }
+                       else if (s === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
+                       else if (s === 'FLIP') setClassicPopupMode('FLIP');
+                    }
                   }}
                   className={cn(
                     "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",

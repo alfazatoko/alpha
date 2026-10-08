@@ -19,6 +19,7 @@ import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
 import type { Store } from './types'
+import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
 
 
 // Views
@@ -235,6 +236,9 @@ const App: React.FC = () => {
 
           setKasirList(finalCashiers)
           localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(finalCashiers))
+          
+          // Preload custom sound if any
+          preloadTransactionSound(activeStoreId);
         } else {
           try {
             const storedList = localStorage.getItem(`alphaPro_${activeStoreId}_kasir_list`)
@@ -2236,6 +2240,9 @@ const MainApp: React.FC<MainAppProps> = ({
           store_id: newTx.store_id || undefined
         }
         setTransactions(prev => [optimisticTx, ...prev])
+        
+        // Play notification sound
+        playTransactionSound(finalStoreId)
 
         // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
         if (options?.isSplit && nonTunaiAmount > 0) {
@@ -3026,6 +3033,12 @@ const MainApp: React.FC<MainAppProps> = ({
                             <TransactionForm 
                               onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
                               lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
+                              onOpenRiwayatDetail={(tx) => {
+                                setActiveView('view-transaksi');
+                                setTimeout(() => {
+                                  window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
+                                }, 300);
+                              }}
                             />
                           </div>
                         </div>
@@ -3549,17 +3562,23 @@ const MainApp: React.FC<MainAppProps> = ({
                 <TransactionForm 
                   onSave={handleSimpanTransaksi as any} 
                   isSaving={isSaving} 
-                presets={presets} 
-                activeStoreId={activeStoreId} 
-                adminRules={adminRules}
-                lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
-                onOpenVoucherJualCepat={() => {
-                  setActiveView('view-stok-voucher');
-                  setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
-                  }, 100);
-                }}
-              />
+                  presets={presets} 
+                  activeStoreId={activeStoreId} 
+                  adminRules={adminRules}
+                  lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
+                  onOpenVoucherJualCepat={() => {
+                    setActiveView('view-stok-voucher');
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
+                    }, 100);
+                  }}
+                  onOpenRiwayatDetail={(tx) => {
+                    setActiveView('view-transaksi');
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
+                    }, 300);
+                  }}
+                />
             </div>
           </div>
           )}
@@ -3883,6 +3902,7 @@ const MainApp: React.FC<MainAppProps> = ({
         currentUsername={username}
         kasirRole={activeRole}
         kasirName={account.name}
+        googleUid={googleUid}
         geminiApiKey={geminiApiKey}
         onSaveGeminiKey={handleSaveGeminiKey}
         onClearGeminiKey={handleSaveGeminiKeyClear}

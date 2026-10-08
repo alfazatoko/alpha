@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { GlobalHeader } from '../components/GlobalHeader';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { cn } from '../lib/utils';
+import { playTransactionSound } from '../lib/audioManager';
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Product {
   id: string;
@@ -284,6 +285,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     const updatedTrx = [trx, ...transactions];
     setTransactions(updatedTrx);
     cacheTransactions(updatedTrx);
+    playTransactionSound(storeId);
     await insertTransaction(storeId, trx);
 
     setShowBayarModal(false);
