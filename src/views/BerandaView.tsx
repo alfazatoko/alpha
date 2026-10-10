@@ -3124,7 +3124,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           }
         />
 
-      <div className="mx-1.5 mb-3 mt-[-1.5rem] relative z-[40]">
+      <div className="mx-1.5 mb-3 mt-[-1.25rem] relative z-[40]">
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white overflow-hidden relative">
           
           <div className="absolute top-3 w-full flex justify-center gap-1.5 z-20">

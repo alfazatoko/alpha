@@ -47,6 +47,83 @@ declare global {
 
 // Constants and helpers
 
+// ── Motivasi Slider Component ──
+const MotivasiSlider: React.FC<{ storeName?: string, runningTexts?: string[] }> = ({ storeName, runningTexts = [] }) => {
+  const customTexts = runningTexts.filter(t => t && t.trim() !== '');
+
+  const defaultSlides = [
+    { text: `✨ Selamat Datang di ${storeName || 'ALFAZA CELL'}! Semoga harimu penuh berkah dan rezeki.` },
+    { text: '💪 Semangat bekerja! Rezeki tidak akan lari kemana, terus berikan yang terbaik.' },
+    { text: '🌟 Pelayanan terbaik adalah investasi terbaik. Senyum satu pelanggan = loyalitas selamanya.' },
+    { text: '🚀 Satu transaksi lebih baik dari tidak sama sekali. Terus bergerak, terus bertumbuh!' },
+    { text: '💰 Kerja keras hari ini adalah buah manis yang kamu nikmati esok hari.' },
+    { text: '🎯 Fokus, disiplin, dan konsisten adalah tiga kunci utama menuju kesuksesan.' },
+    { text: '🌈 Setiap transaksi yang kamu catat adalah langkah nyata menuju bisnis yang lebih sehat.' }
+  ];
+
+  const gradients = [
+    'from-[#0f0c29] via-[#302b63] to-[#24243e]',
+    'from-[#004A8B] via-[#0066cc] to-[#0099ff]',
+    'from-[#1a1a2e] via-[#16213e] to-[#0f3460]',
+    'from-[#0d324d] via-[#7f5a83] to-[#a64ac9]',
+    'from-[#005C97] via-[#363795] to-[#005C97]',
+    'from-[#004A8B] via-[#004080] to-[#002855]',
+    'from-[#0f2027] via-[#203a43] to-[#2c5364]'
+  ];
+
+  const slides = customTexts.length > 0 
+    ? customTexts.map((text, i) => ({ text, grad: gradients[i % gradients.length] }))
+    : defaultSlides.map((s, i) => ({ text: s.text, grad: gradients[i % gradients.length] }));
+
+  const [slideIdx, setSlideIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setSlideIdx(i => (i + 1) % slides.length);
+        setVisible(true);
+      }, 400);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+  const s = slides[slideIdx];
+  return (
+    <div className="mx-1.5 mb-3 mt-[-1.25rem] relative z-[40]">
+      <div className={`bg-gradient-to-r ${s.grad} rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative transition-all duration-500`}>
+        {/* Geometric SVG */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
+          <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="90%" cy="50%" r="40" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1" />
+            <circle cx="90%" cy="50%" r="60" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+            <circle cx="5%" cy="80%" r="30" fill="rgba(255,255,255,0.15)" />
+            <circle cx="50%" cy="20%" r="5" fill="#fff" opacity="0.8" />
+            <circle cx="80%" cy="15%" r="3" fill="#fff" opacity="0.9" />
+          </svg>
+        </div>
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+            <i className="fa-solid fa-star text-base text-white"></i>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-[12px] font-black text-white leading-snug"
+              style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(6px)', transition: 'opacity 0.4s ease, transform 0.4s ease' }}
+            >
+              {s.text}
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-center gap-1 mt-2 relative z-10">
+          {slides.map((_, i) => (
+            <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === slideIdx ? 'w-3.5 bg-white' : 'w-1.5 bg-white/40'}`} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const hasBypass = typeof window !== 'undefined' && window.location.search.includes('bypass=true')
 
@@ -3549,7 +3626,7 @@ const MainApp: React.FC<MainAppProps> = ({
           />
 
           {activeView === 'view-input-transaksi' && (
-            <div className="absolute inset-0 overflow-y-auto bg-slate-50 dark:bg-slate-900 pb-48 flex flex-col animate-in fade-in duration-300">
+            <div className="absolute inset-0 overflow-y-auto bg-slate-50 dark:bg-slate-900 pb-48 animate-in fade-in duration-300">
               <GlobalHeader 
                 storePhoto={storePhoto}
                 storeName={storeName}
@@ -3557,27 +3634,14 @@ const MainApp: React.FC<MainAppProps> = ({
                 kasirName={account.name}
                 kasirRole={activeRole}
                 onMenuClick={() => setIsSidePanelOpen(true)}
+                compactMode={true}
+                extraBgPadding={true}
               />
-              <div className="mx-1.5 mt-[-1.5rem] relative z-[40]">
-                <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
-                  <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-                       <i className="fa-solid fa-bullhorn text-lg text-white"></i>
-                     </div>
-                     <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
-                       <p className="text-[10px] font-bold text-blue-100 mb-1 truncate">Informasi & Promo</p>
-                       <div className="w-full overflow-hidden relative h-4 flex items-center mask-image-fade">
-                         <div className="animate-marquee whitespace-nowrap absolute w-full">
-                           <span className="text-sm font-black text-white leading-none inline-block">
-                             Selamat datang di {storeName || 'ALFAZA CELL'}. Dapatkan promo menarik untuk setiap transaksi hari ini! Layanan cepat, aman, dan terpercaya.
-                           </span>
-                         </div>
-                       </div>
-                     </div>
-                  </div>
-                </div>
-              </div>
-              <div className="px-2 mt-3 pb-24 relative z-10 flex-1">
+
+              {/* Blue Card - Kata Mutiara Slide */}
+              <MotivasiSlider storeName={storeName} runningTexts={runningTexts} />
+
+              <div className="px-2 mt-2 pb-24 relative z-10">
                 <TransactionForm 
                   onSave={handleSimpanTransaksi as any} 
                   isSaving={isSaving} 

@@ -409,7 +409,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         />
         
         {/* Blue Card Header (POS Kasir) */}
-        <div className="mx-1.5 mb-2 mt-2 relative z-[40]">
+        <div className="mx-1.5 mb-2 mt-[-1.25rem] relative z-[40]">
           <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
             <div className="flex items-center gap-3">
                <button onClick={onBack} className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0 text-white hover:bg-white/20 transition-all active:scale-95 shadow-sm">

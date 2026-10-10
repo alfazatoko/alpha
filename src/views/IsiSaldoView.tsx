@@ -537,6 +537,8 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         fullDate={fullDate}
         clockStr={clockStr}
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
+        compactMode={false}
+        extraBgPadding={false}
       />
 
       <div className="mx-1.5 mb-5 mt-[-1.5rem] relative z-[40]">

@@ -1910,7 +1910,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="mx-1.5 mb-4 mt-[-2.5rem] relative z-[40]">
+      <div className="mx-1.5 mb-4 mt-[-1.25rem] relative z-[40]">
         <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative flex flex-col gap-3.5">
           
           {/* TOP ROW */}

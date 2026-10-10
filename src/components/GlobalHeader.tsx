@@ -17,13 +17,17 @@ export interface GlobalHeaderProps {
   onNotifClick?: () => void;
   notifPopupContent?: React.ReactNode;
   onShowBannerClick?: () => void;
+  
+  // Customization props for specific views (RiwayatView)
+  compactMode?: boolean; // Pulls the white bar up
+  extraBgPadding?: boolean; // Extends the geometric background
 }
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   storePhoto, storeName, storeSubtext, kasirName, kasirRole, 
   dayName: propDayName, fullDate: propFullDate, clockStr: propClockStr,
   onMenuClick, showNotifBadge, notifBadgeCount, onNotifClick, notifPopupContent,
-  onShowBannerClick
+  onShowBannerClick, compactMode = true, extraBgPadding = true
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -50,7 +54,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
   return (
     <>
-      <div className="relative theme-header pb-8 pt-10 overflow-hidden">
+      <div className={cn("relative theme-header overflow-hidden", extraBgPadding ? "pb-24 pt-5" : "pb-8 pt-5")}>
         {/* FUTURISTIC GEOMETRIC BACKGROUND */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
           {/* Subtle gradient overlay to make the base color richer without breaking themes */}
@@ -161,10 +165,22 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </div>
           </div>
         </div>
+        {/* Placeholder to keep the exact original height and background extension */}
+        {!compactMode && (
+          <div className="px-1.5 opacity-0 pointer-events-none relative z-10" aria-hidden="true">
+            <div className="w-full flex items-center justify-between px-2 py-1 rounded-full border border-transparent">
+              <div className="flex items-center gap-1">
+                <span className="text-[8.5px] sm:text-[9px] py-0.5 border border-transparent">
+                  Placeholder
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* BOTTOM ROW: White Bar */}
-      <div className="sticky top-2 z-[60] px-1.5 transition-all w-full" style={{ marginTop: '-1.5rem' }}>
+      <div className="sticky top-2 z-[60] px-1.5 transition-all w-full" style={{ marginTop: compactMode ? '-6rem' : '-1.5rem' }}>
         <div className="bg-white/95 backdrop-blur-sm w-full flex items-center justify-between px-2 py-1 rounded-full shadow-md border border-gray-200/50">
           <div className="flex items-center gap-1">
             <span className="bg-blue-50/50 text-blue-800 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">
