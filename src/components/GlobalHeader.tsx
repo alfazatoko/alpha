@@ -50,83 +50,120 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
   return (
     <>
-      <div className="relative theme-header pb-8 pt-10">
-        {/* TOP ROW: Logo/Text on left, Buttons on right */}
-      <div className="px-4 flex items-center justify-between gap-3 mb-[2px]">
-        {/* LOGO + TEXT */}
-        <div className="flex items-center gap-3">
-          {storePhoto ? (
-            <img src={storePhoto} alt="Logo" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
-          ) : (
-            <img src="/logo_icon.png" alt="Logo" className="w-11 h-11 sm:w-12 sm:h-12 object-contain" />
-          )}
-          <div>
-            <h1 className="text-[12px] sm:text-[13px] font-black text-white leading-tight uppercase tracking-widest">{storeName || 'ALFAZA CELL'}</h1>
-            <p className="text-blue-200 text-[7px] sm:text-[8px] font-bold uppercase tracking-tighter opacity-80">{storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
-          </div>
+      <div className="relative theme-header pb-8 pt-10 overflow-hidden">
+        {/* FUTURISTIC GEOMETRIC BACKGROUND */}
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          {/* Subtle gradient overlay to make the base color richer without breaking themes */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/20 mix-blend-overlay"></div>
+          
+          <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="stripes" width="6" height="6" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+              </pattern>
+            </defs>
+
+            {/* Striped Circles */}
+            <circle cx="10%" cy="10%" r="60" fill="url(#stripes)" />
+            <circle cx="95%" cy="95%" r="80" fill="url(#stripes)" />
+            <circle cx="35%" cy="30%" r="20" fill="url(#stripes)" opacity="0.8" />
+            <circle cx="80%" cy="60%" r="30" fill="url(#stripes)" opacity="0.6" />
+
+            {/* Thin Rings */}
+            <circle cx="50%" cy="50%" r="90" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+            <circle cx="50%" cy="50%" r="140" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+            <circle cx="-5%" cy="80%" r="70" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+            <circle cx="95%" cy="20%" r="50" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+
+            {/* Glowing Nodes (Planets) */}
+            {/* Node 1 with outer ring */}
+            <circle cx="15%" cy="75%" r="7" fill="rgba(255,255,255,0.7)" />
+            <circle cx="15%" cy="75%" r="14" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+            
+            {/* Other nodes */}
+            <circle cx="50%" cy="15%" r="6" fill="#ffffff" opacity="0.9" />
+            <circle cx="80%" cy="35%" r="4" fill="#ffffff" opacity="0.8" />
+            <circle cx="45%" cy="85%" r="9" fill="rgba(255,255,255,0.5)" />
+            <circle cx="90%" cy="15%" r="3" fill="#ffffff" opacity="0.9" />
+          </svg>
         </div>
 
-        {/* BUTTONS */}
-        <div className="flex flex-col items-end justify-center gap-1">
-          <div className="flex items-center justify-end gap-1.5">
-            {onShowBannerClick && (
-              <button 
-                onClick={onShowBannerClick} 
-                title="Tampilkan Notifikasi Banner"
-                className="w-8 h-8 rounded-[10px] bg-indigo-500/90 backdrop-blur-md flex items-center justify-center text-white border border-indigo-400/50 shadow-lg active:scale-90 hover:bg-indigo-600/90 transition-all"
-              >
-                <i className="fa-solid fa-bullhorn text-[11px]"></i>
-              </button>
-            )}
-            <button 
-              onClick={() => window.location.reload()} 
-              className="w-8 h-8 rounded-[10px] bg-emerald-500/90 backdrop-blur-md flex items-center justify-center text-white border border-emerald-400/50 shadow-lg active:scale-90 hover:bg-emerald-600/90 transition-all"
-            >
-              <i className="fa-solid fa-rotate-right text-[11px]"></i>
-            </button>
-
-            {kasirRole === 'owner' ? (
-              <button 
-                onClick={onNotifClick}
-                className="relative w-8 h-8 rounded-[10px] bg-amber-500/90 backdrop-blur-md flex items-center justify-center text-white border border-amber-400/50 shadow-lg active:scale-90 hover:bg-amber-600/90 transition-all"
-                title="Notifikasi Owner"
-              >
-                <i className="fa-solid fa-bell text-[11px]"></i>
-                {showNotifBadge && (
-                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-600 text-white text-[7.5px] font-black flex items-center justify-center border border-rose-400 shadow-sm animate-in zoom-in duration-200">
-                    {notifBadgeCount}
-                  </span>
-                )}
-              </button>
+        {/* TOP ROW: Logo/Text on left, Buttons on right */}
+        <div className="px-4 flex items-center justify-between gap-3 mb-[2px] relative z-10">
+          {/* LOGO + TEXT */}
+          <div className="flex items-center gap-3">
+            {storePhoto ? (
+              <img src={storePhoto} alt="Logo" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-white/50 shadow-md" />
             ) : (
-              <div className="relative z-[70]">
+              <img src="/logo_icon.png" alt="Logo" className="w-11 h-11 sm:w-12 sm:h-12 object-contain drop-shadow-md" />
+            )}
+            <div>
+              <h1 className="text-[12px] sm:text-[13px] font-black text-white leading-tight uppercase tracking-widest drop-shadow-sm">{storeName || 'ALFAZA CELL'}</h1>
+              <p className="text-blue-100 text-[7px] sm:text-[8px] font-bold uppercase tracking-tighter opacity-90 drop-shadow-sm">{storeSubtext || 'Pembukuan Agen brilink & Konter'}</p>
+            </div>
+          </div>
+
+          {/* BUTTONS */}
+          <div className="flex flex-col items-end justify-center gap-1">
+            <div className="flex items-center justify-end gap-1.5">
+              {onShowBannerClick && (
+                <button 
+                  onClick={onShowBannerClick} 
+                  title="Tampilkan Notifikasi Banner"
+                  className="w-8 h-8 rounded-[10px] bg-indigo-500/90 backdrop-blur-md flex items-center justify-center text-white border border-indigo-400/50 shadow-lg active:scale-90 hover:bg-indigo-600/90 transition-all"
+                >
+                  <i className="fa-solid fa-bullhorn text-[11px]"></i>
+                </button>
+              )}
+              <button 
+                onClick={() => window.location.reload()} 
+                className="w-8 h-8 rounded-[10px] bg-emerald-500/90 backdrop-blur-md flex items-center justify-center text-white border border-emerald-400/50 shadow-lg active:scale-90 hover:bg-emerald-600/90 transition-all"
+              >
+                <i className="fa-solid fa-rotate-right text-[11px]"></i>
+              </button>
+
+              {kasirRole === 'owner' ? (
                 <button 
                   onClick={onNotifClick}
-                  className="relative w-8 h-8 rounded-[10px] bg-rose-500/90 backdrop-blur-md flex items-center justify-center text-white border border-rose-400/50 shadow-lg active:scale-90 hover:bg-rose-600/90 transition-all"
+                  className="relative w-8 h-8 rounded-[10px] bg-amber-500/90 backdrop-blur-md flex items-center justify-center text-white border border-amber-400/50 shadow-lg active:scale-90 hover:bg-amber-600/90 transition-all"
+                  title="Notifikasi Owner"
                 >
                   <i className="fa-solid fa-bell text-[11px]"></i>
                   {showNotifBadge && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[7.5px] font-black shadow-sm border border-red-400">
+                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-600 text-white text-[7.5px] font-black flex items-center justify-center border border-rose-400 shadow-sm animate-in zoom-in duration-200">
                       {notifBadgeCount}
                     </span>
                   )}
                 </button>
-                {notifPopupContent}
-              </div>
-            )}
+              ) : (
+                <div className="relative z-[70]">
+                  <button 
+                    onClick={onNotifClick}
+                    className="relative w-8 h-8 rounded-[10px] bg-rose-500/90 backdrop-blur-md flex items-center justify-center text-white border border-rose-400/50 shadow-lg active:scale-90 hover:bg-rose-600/90 transition-all"
+                  >
+                    <i className="fa-solid fa-bell text-[11px]"></i>
+                    {showNotifBadge && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[7.5px] font-black shadow-sm border border-red-400">
+                        {notifBadgeCount}
+                      </span>
+                    )}
+                  </button>
+                  {notifPopupContent}
+                </div>
+              )}
 
-            <button 
-              onClick={onMenuClick} 
-              className="w-8 h-8 rounded-[10px] bg-blue-500/90 backdrop-blur-md flex items-center justify-center text-white border border-blue-400/50 shadow-lg active:scale-90 hover:bg-blue-600/90 transition-all"
-            >
-              <i className="fa-solid fa-bars text-[11px]"></i>
-            </button>
+              <button 
+                onClick={onMenuClick} 
+                className="w-8 h-8 rounded-[10px] bg-blue-500/90 backdrop-blur-md flex items-center justify-center text-white border border-blue-400/50 shadow-lg active:scale-90 hover:bg-blue-600/90 transition-all"
+              >
+                <i className="fa-solid fa-bars text-[11px]"></i>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
         
         {/* Placeholder to keep the exact original height and background extension */}
-        <div className="px-1.5 opacity-0 pointer-events-none" aria-hidden="true">
+        <div className="px-1.5 opacity-0 pointer-events-none relative z-10" aria-hidden="true">
           <div className="w-full flex items-center justify-between px-2 py-1 rounded-full border border-transparent">
             <div className="flex items-center gap-1">
               <span className="text-[8.5px] sm:text-[9px] py-0.5 border border-transparent">

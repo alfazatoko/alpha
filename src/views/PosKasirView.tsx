@@ -962,6 +962,31 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           }}
         />
       )}
+      {/* FLOATING CART / INPUT PENJUALAN BUTTON */}
+      <button
+        onClick={() => {
+          setActiveTab('kasir');
+          setTimeout(() => searchRef.current?.focus(), 100);
+        }}
+        className="fixed bottom-[90px] right-4 z-[100] bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white rounded-full p-1.5 shadow-[0_8px_30px_rgba(0,102,255,0.4)] flex items-center hover:scale-105 active:scale-95 transition-all duration-300 animate-in slide-in-from-bottom-10 fade-in zoom-in-95"
+      >
+        <div className="bg-white/20 rounded-full w-12 h-12 flex items-center justify-center relative backdrop-blur-sm">
+          <i className="fa-solid fa-cart-plus text-xl"></i>
+          {cart.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-[#FF3B30] text-white text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full border-2 border-[#0052cc] shadow-sm">
+              {cart.reduce((s, i) => s + i.qty, 0)}
+            </span>
+          )}
+        </div>
+        <div className="text-left px-3 pr-4">
+          <p className="text-[9px] font-bold text-blue-100 uppercase tracking-widest mb-0.5">
+            {cart.length > 0 ? 'Keranjang Kasir' : 'Mulai Transaksi'}
+          </p>
+          <p className="text-[14px] font-black tabular-nums leading-none">
+            {cart.length > 0 ? formatRp(grandTotal) : 'Input Penjualan'}
+          </p>
+        </div>
+      </button>
     </div>
   );
 };

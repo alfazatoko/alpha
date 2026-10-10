@@ -229,6 +229,54 @@ const AssistantBot: React.FC<Props> = ({
     return () => clearTimeout(timer)
   }, [kasirRole, googleUid, kasirName])
 
+  // ── Nightly Summary Auto-trigger (Owner only) ──────────────────────────────
+  useEffect(() => {
+    if (kasirRole !== 'owner' || !googleUid) return
+
+    const checkNightlySummary = async () => {
+      const now = new Date()
+      // Memicu ringkasan malam otomatis antara pukul 23:00 - 23:59 (sebelum jam 12 malam)
+      if (now.getHours() !== 23) return
+
+      const todayStr = now.toISOString().split('T')[0]
+      const flagKey = `alphaPro_night_summary_${googleUid}_${todayStr}`
+
+      if (localStorage.getItem(flagKey)) return
+
+      try {
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+        
+        const text = await generateDailySummaryByDate(googleUid, kasirName || 'Owner', dateStr)
+
+        setMessages(prev => {
+          const msg = {
+            id: 'night-summary-' + Date.now(),
+            from: 'bot' as const,
+            mode: 'app' as const,
+            text: `🌙 **LAPORAN CLOSING OTOMATIS (Malam Hari):**\n\n${text}`,
+            timestamp: Date.now()
+          }
+          return [...prev, msg]
+        })
+
+        localStorage.setItem(flagKey, '1')
+        setHasMorningSummary(true) // Menampilkan notifikasi titik merah di ikon bot
+        
+        playNotificationChime()
+      } catch (err) {
+        console.error('Night summary error:', err)
+      }
+    }
+
+    // Check sekali saat komponen mount (jika owner membuka app jam 23.xx)
+    checkNightlySummary()
+
+    // Check secara berkala tiap 5 menit jika app terus terbuka
+    const interval = setInterval(checkNightlySummary, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [kasirRole, googleUid, kasirName])
+
   // ── Voice Input & Sound States ─────────────────────────────────────────────
   const [isListening, setIsListening] = useState(false)
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled())
@@ -564,11 +612,38 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
+    // ⓪.4 Cek Rekap Hari Ini
+    const isRekapHariIni = /(hari ini)/i.test(queryLower) && /(rekap|ringkasan|laporan|cek|transaksi)/i.test(queryLower)
+    if (isRekapHariIni) {
+      if (kasirRole === 'owner' && googleUid) {
+        try {
+          const d = new Date()
+          const pad = (n: number) => String(n).padStart(2, '0')
+          const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+          
+          addMessage('bot', `🔍 Mengambil rekap **Hari Ini**...`, 'app')
+          
+          const summary = await generateDailySummaryByDate(googleUid, kasirName || 'Owner', dateStr)
+          setIsTyping(false)
+          addMessage('bot', summary, 'app')
+          setSuggestions(getDynamicSuggestions())
+        } catch (e) {
+          setIsTyping(false)
+          addMessage('bot', '⚠️ Gagal mengambil rekap hari ini.', 'error')
+        }
+      } else {
+        setIsTyping(false)
+        addMessage('bot', '⚠️ Maaf, rekap semua toko hanya bisa diakses oleh Owner.', 'error')
+      }
+      return
+    }
+
     // ⓪.5 Cek Perintah Manual Khusus
     const isRekapKemarin = /kemarin/i.test(queryLower) && /(rekap|ringkasan|laporan|cek)/i.test(queryLower)
     if (isRekapKemarin) {
       if (kasirRole === 'owner' && googleUid) {
         try {
+          addMessage('bot', `🔍 Mengambil rekap **Kemarin**...`, 'app')
           const summary = await generateDailySummaryAllStores(googleUid, kasirName || 'Owner')
           setIsTyping(false)
           addMessage('bot', summary, 'app')

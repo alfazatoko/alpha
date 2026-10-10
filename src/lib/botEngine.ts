@@ -2538,15 +2538,28 @@ export async function generateDailySummaryAllStores(
     grandAdmin += admin
     grandTrx += count
 
-    const kasirSet = new Set(filtered.map((t: any) => t.kasir_name).filter(Boolean))
+    // Group by kasir
+    const byKasir: Record<string, { omset: number }> = {}
+    filtered.forEach((t: any) => {
+      const kName = t.kasir_name || 'Kasir Default'
+      if (!byKasir[kName]) byKasir[kName] = { omset: 0 }
+      byKasir[kName].omset += (t.nominal || 0)
+    })
 
     summary += `🏪 **${store.name}**\n`
     if (count === 0) {
       summary += `• _Tidak ada transaksi kemarin._\n\n`
     } else {
-      summary += `• Omset: **Rp ${omset.toLocaleString('id-ID')}** (${count} trx)\n`
+      summary += `• Total Omset: **Rp ${omset.toLocaleString('id-ID')}** (${count} trx)\n`
       summary += `• Profit Admin: Rp ${admin.toLocaleString('id-ID')}\n`
-      if (kasirSet.size > 0) summary += `• Kasir: ${Array.from(kasirSet).join(', ')}\n`
+      
+      const kasirKeys = Object.keys(byKasir)
+      if (kasirKeys.length > 0) {
+        summary += `_Rincian Penjualan:_ \n`
+        kasirKeys.forEach(kName => {
+          summary += `  👤 Kasir ${kName} : Rp ${byKasir[kName].omset.toLocaleString('id-ID')}\n`
+        })
+      }
       summary += '\n'
     }
   }
@@ -2613,15 +2626,28 @@ export async function generateDailySummaryByDate(
     grandAdmin += admin
     grandTrx += count
 
-    const kasirSet = new Set(filtered.map((t: any) => t.kasir_name).filter(Boolean))
+    // Group by kasir
+    const byKasir: Record<string, { omset: number }> = {}
+    filtered.forEach((t: any) => {
+      const kName = t.kasir_name || 'Kasir Default'
+      if (!byKasir[kName]) byKasir[kName] = { omset: 0 }
+      byKasir[kName].omset += (t.nominal || 0)
+    })
 
     summary += '🏪 **' + store.name + '**\n'
     if (count === 0) {
       summary += '• _Tidak ada transaksi._\n\n'
     } else {
-      summary += '• Omset: **Rp ' + omset.toLocaleString('id-ID') + '** (' + count + ' trx)\n'
+      summary += '• Total Omset: **Rp ' + omset.toLocaleString('id-ID') + '** (' + count + ' trx)\n'
       summary += '• Profit Admin: Rp ' + admin.toLocaleString('id-ID') + '\n'
-      if (kasirSet.size > 0) summary += '• Kasir: ' + Array.from(kasirSet).join(', ') + '\n'
+      
+      const kasirKeys = Object.keys(byKasir)
+      if (kasirKeys.length > 0) {
+        summary += '_Rincian Penjualan:_\n'
+        kasirKeys.forEach(kName => {
+          summary += '  👤 Kasir ' + kName + ' : Rp ' + byKasir[kName].omset.toLocaleString('id-ID') + '\n'
+        })
+      }
       summary += '\n'
     }
   }
