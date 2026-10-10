@@ -3558,7 +3558,26 @@ const MainApp: React.FC<MainAppProps> = ({
                 kasirRole={activeRole}
                 onMenuClick={() => setIsSidePanelOpen(true)}
               />
-              <div className="px-2 mt-[24px] pb-24 relative z-10 flex-1">
+              <div className="mx-1.5 mt-[12px] relative z-[40]">
+                <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
+                  <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
+                       <i className="fa-solid fa-bullhorn text-lg text-white"></i>
+                     </div>
+                     <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center">
+                       <p className="text-[10px] font-bold text-blue-100 mb-1 truncate">Informasi & Promo</p>
+                       <div className="w-full overflow-hidden relative h-4 flex items-center mask-image-fade">
+                         <div className="animate-marquee whitespace-nowrap absolute w-full">
+                           <span className="text-sm font-black text-white leading-none inline-block">
+                             Selamat datang di {storeName || 'ALFAZA CELL'}. Dapatkan promo menarik untuk setiap transaksi hari ini! Layanan cepat, aman, dan terpercaya.
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-2 mt-3 pb-24 relative z-10 flex-1">
                 <TransactionForm 
                   onSave={handleSimpanTransaksi as any} 
                   isSaving={isSaving} 

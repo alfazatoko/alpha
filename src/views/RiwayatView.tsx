@@ -783,7 +783,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="mx-1.5 mb-4 mt-[12px] relative z-[40]">
+      <div className="mx-1.5 mb-3 mt-0 relative z-[40]">
         <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
           <div className="flex items-center gap-3">
              <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
@@ -795,118 +795,119 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
              </div>
           </div>
 
-          {/* OWNER ONLY: FILTER KASIR DI DALAM HEADER */}
-          {props.kasirRole === 'owner' && props.kasirList && (
-             <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center gap-2">
-                 <div className="flex-1 bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all">
-                   <div className="flex-1 flex items-center min-w-0">
-                     <div className="relative flex-1 min-w-0">
-                       <select 
-                         value={props.filterKasir || 'Semua'}
-                         onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                         className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
-                       >
-                         <option value="Semua" className="text-slate-800">Semua Kasir</option>
-                         {Object.entries(props.kasirList).map(([id, acc]) => (
-                           <option key={id} value={id} className="text-slate-800">{acc.name}</option>
-                         ))}
-                       </select>
-                       <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                     </div>
-                   </div>
-                 </div>
-             </div>
-          )}
-        </div>
-      </div>
+          {/* FILTER KASIR & TANGGAL DI DALAM HEADER BIRU */}
+          <div className="mt-3.5 pt-3 border-t border-white/10 flex flex-col gap-2">
+            
+            {/* OWNER ONLY: FILTER KASIR */}
+            {props.kasirRole === 'owner' && props.kasirList && (
+              <div className="flex-1 bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-sm transition-all">
+                <div className="flex-1 flex items-center min-w-0">
+                  <div className="relative flex-1 min-w-0">
+                    <select 
+                      value={props.filterKasir || 'Semua'}
+                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                    >
+                      <option value="Semua" className="text-slate-800">Semua Kasir</option>
+                      {Object.entries(props.kasirList).map(([id, acc]) => (
+                        <option key={id} value={id} className="text-slate-800">{acc.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                  </div>
+                </div>
+              </div>
+            )}
 
-      <div className="px-1.5 pb-20 pt-3">
-        {/* FILTER BARU (Filter Transaksi) - COMPACT MOBILE */}
-        <div className="mb-3 sticky top-[4rem] z-[45] -mx-1.5 px-1.5 py-1 bg-white/80 backdrop-blur-md rounded-b-xl shadow-sm">
-          <div className="w-full bg-blue-50 border border-blue-200/60 rounded-lg px-2 py-1 flex justify-between items-center transition-all">
-            <div 
-              className="flex items-center gap-1.5 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
-              onClick={() => setIsFilterOpen(true)}
-            >
-              <i className="fa-solid fa-sliders text-[10px] text-blue-600 shrink-0"></i>
-              <div className="min-w-0 flex-1 flex items-center">
-                <span className="text-[9px] sm:text-[9.5px] font-black text-blue-900 uppercase tracking-wider truncate">
-                  {(() => {
-                    const cat = props.filterKategori.includes('Semua') ? 'Riwayat' : props.filterKategori.join(', ');
-                    const search = props.filterPencarian ? ` "${props.filterPencarian}"` : '';
-                    let dateText = '';
-                    if (props.filterTanggalMulai === props.filterTanggalAkhir) {
-                      const d = new Date(props.filterTanggalMulai);
-                      if (!isNaN(d.getTime())) {
-                        const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
-                        const dayName = days[d.getDay()];
-                        const parts = props.filterTanggalMulai.split('-');
-                        if(parts.length === 3) {
-                          dateText = `${dayName} ${parts[2]}-${parts[1]}-${parts[0]}`;
+            {/* FILTER TANGGAL */}
+            <div className="w-full bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex justify-between items-center transition-all shadow-sm">
+              <div 
+                className="flex items-center gap-2 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
+                onClick={() => setIsFilterOpen(true)}
+              >
+                <i className="fa-solid fa-sliders text-[10px] text-white shrink-0"></i>
+                <div className="min-w-0 flex-1 flex items-center">
+                  <span className="text-[9px] sm:text-[10px] font-black text-white uppercase tracking-wider truncate">
+                    {(() => {
+                      const cat = props.filterKategori.includes('Semua') ? 'Riwayat' : props.filterKategori.join(', ');
+                      const search = props.filterPencarian ? ` "${props.filterPencarian}"` : '';
+                      let dateText = '';
+                      if (props.filterTanggalMulai === props.filterTanggalAkhir) {
+                        const d = new Date(props.filterTanggalMulai);
+                        if (!isNaN(d.getTime())) {
+                          const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+                          const dayName = days[d.getDay()];
+                          const parts = props.filterTanggalMulai.split('-');
+                          if(parts.length === 3) {
+                            dateText = `${dayName} ${parts[2]}-${parts[1]}-${parts[0]}`;
+                          } else {
+                            dateText = props.filterTanggalMulai;
+                          }
                         } else {
                           dateText = props.filterTanggalMulai;
                         }
                       } else {
-                        dateText = props.filterTanggalMulai;
+                        dateText = `${props.filterTanggalMulai} s/d ${props.filterTanggalAkhir}`;
                       }
-                    } else {
-                      dateText = `${props.filterTanggalMulai} s/d ${props.filterTanggalAkhir}`;
-                    }
-                    return `${cat}${search} • ${dateText}`;
-                  })()}
-                </span>
+                      return `${cat}${search} • ${dateText}`;
+                    })()}
+                  </span>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex items-center gap-1 shrink-0 ml-1">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const tMulai = new Date(props.filterTanggalMulai);
-                  const tAkhir = new Date(props.filterTanggalAkhir);
-                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
-                    tMulai.setDate(tMulai.getDate() - 1);
-                    tAkhir.setDate(tAkhir.getDate() - 1);
-                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
-                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
-                    setCurrentPage(1);
-                  }
-                }}
-                className="w-7 h-7 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
-              >
-                <i className="fa-solid fa-chevron-left text-[11px]"></i>
-              </button>
-
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const tMulai = new Date(props.filterTanggalMulai);
-                  const tAkhir = new Date(props.filterTanggalAkhir);
-                  if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
-                    tMulai.setDate(tMulai.getDate() + 1);
-                    tAkhir.setDate(tAkhir.getDate() + 1);
-                    props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
-                    props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
-                    setCurrentPage(1);
-                  }
-                }}
-                className="w-7 h-7 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-700 hover:bg-blue-200 transition-all active:scale-95"
-              >
-                <i className="fa-solid fa-chevron-right text-[11px]"></i>
-              </button>
               
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsFilterOpen(true);
-                }}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-all active:scale-95"
-              >
-                <i className="fa-solid fa-chevron-down text-[12px]"></i>
-              </button>
+              <div className="flex items-center gap-1 shrink-0 ml-1">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const tMulai = new Date(props.filterTanggalMulai);
+                    const tAkhir = new Date(props.filterTanggalAkhir);
+                    if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                      tMulai.setDate(tMulai.getDate() - 1);
+                      tAkhir.setDate(tAkhir.getDate() - 1);
+                      props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                      props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                      setCurrentPage(1);
+                    }
+                  }}
+                  className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-chevron-left text-[11px]"></i>
+                </button>
+
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const tMulai = new Date(props.filterTanggalMulai);
+                    const tAkhir = new Date(props.filterTanggalAkhir);
+                    if (!isNaN(tMulai.getTime()) && !isNaN(tAkhir.getTime())) {
+                      tMulai.setDate(tMulai.getDate() + 1);
+                      tAkhir.setDate(tAkhir.getDate() + 1);
+                      props.setFilterTanggalMulai(tMulai.toISOString().split('T')[0]);
+                      props.setFilterTanggalAkhir(tAkhir.toISOString().split('T')[0]);
+                      setCurrentPage(1);
+                    }
+                  }}
+                  className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-chevron-right text-[11px]"></i>
+                </button>
+                
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsFilterOpen(true);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 transition-all active:scale-95 ml-0.5"
+                >
+                  <i className="fa-solid fa-chevron-down text-[12px]"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="px-1.5 pb-20 pt-1">
 
         {/* SUMMARY CARDS — 2x2 grid: TRX | Admin / Uang Masuk | Tarik Tunai */}
         <div className="grid grid-cols-2 gap-2 mb-4">
