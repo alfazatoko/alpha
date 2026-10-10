@@ -40,7 +40,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeView, setActiveView }) =>
       </button>
 
       <div className={cn(
-        "fixed bottom-4 left-4 right-4 z-[150] transition-all duration-500 transform pb-safe max-w-[400px] mx-auto",
+        "fixed bottom-1.5 left-4 right-4 z-[150] transition-all duration-500 transform pb-safe max-w-[400px] mx-auto",
         isVisible ? "translate-y-0 opacity-100" : "translate-y-[150%] opacity-0"
       )}>
         <div className="relative w-full h-[60px] drop-shadow-[0_12px_28px_rgba(0,0,0,0.12)] dark:drop-shadow-[0_12px_28px_rgba(0,0,0,0.4)]">

@@ -132,6 +132,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [search, setSearch] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isCartVisible, setIsCartVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat' | 'setting'>('kasir');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -963,30 +964,67 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         />
       )}
       {/* FLOATING CART / INPUT PENJUALAN BUTTON */}
+      
+      {/* Tombol sembunyi (ketika ditutup) */}
       <button
-        onClick={() => {
-          setActiveTab('kasir');
-          setTimeout(() => searchRef.current?.focus(), 100);
-        }}
-        className="fixed bottom-[90px] right-4 z-[100] bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white rounded-full p-1.5 shadow-[0_8px_30px_rgba(0,102,255,0.4)] flex items-center hover:scale-105 active:scale-95 transition-all duration-300 animate-in slide-in-from-bottom-10 fade-in zoom-in-95"
+        onClick={() => setIsCartVisible(true)}
+        className={cn(
+          "fixed right-0 z-[100] w-10 h-14 bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white rounded-l-2xl shadow-[-4px_0_20px_rgba(0,102,255,0.4)] flex items-center justify-center transition-all duration-500 active:scale-95",
+          isCartVisible ? "bottom-[90px] translate-x-full opacity-0 pointer-events-none" : "bottom-[90px] translate-x-0 opacity-100"
+        )}
       >
-        <div className="bg-white/20 rounded-full w-12 h-12 flex items-center justify-center relative backdrop-blur-sm">
-          <i className="fa-solid fa-cart-plus text-xl"></i>
+        <div className="relative flex flex-col items-center">
+          <i className="fa-solid fa-cart-shopping text-[14px]"></i>
           {cart.length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-[#FF3B30] text-white text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full border-2 border-[#0052cc] shadow-sm">
+            <span className="absolute -top-2 -right-3 bg-rose-500 text-white text-[9px] font-black min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full border border-[#0052cc]">
               {cart.reduce((s, i) => s + i.qty, 0)}
             </span>
           )}
-        </div>
-        <div className="text-left px-3 pr-4">
-          <p className="text-[9px] font-bold text-blue-100 uppercase tracking-widest mb-0.5">
-            {cart.length > 0 ? 'Keranjang Kasir' : 'Mulai Transaksi'}
-          </p>
-          <p className="text-[14px] font-black tabular-nums leading-none">
-            {cart.length > 0 ? formatRp(grandTotal) : 'Input Penjualan'}
-          </p>
+          <i className="fa-solid fa-chevron-left text-[8px] mt-1 opacity-70"></i>
         </div>
       </button>
+
+      {/* Tombol utama (ketika dibuka) */}
+      <div
+        className={cn(
+          "fixed bottom-[90px] right-4 z-[100] transition-all duration-500 flex items-center gap-2",
+          isCartVisible ? "translate-x-0 opacity-100" : "translate-x-[150%] opacity-0 pointer-events-none"
+        )}
+      >
+        {/* Tombol Hide (>) */}
+        <button
+          onClick={() => setIsCartVisible(false)}
+          className="w-8 h-8 rounded-full bg-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex items-center justify-center text-blue-600 active:scale-95 transition-all"
+        >
+          <i className="fa-solid fa-chevron-right text-xs"></i>
+        </button>
+
+        {/* Kolom Transaksi Utama */}
+        <button
+          onClick={() => {
+            setActiveTab('kasir');
+            setTimeout(() => searchRef.current?.focus(), 100);
+          }}
+          className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white rounded-full p-1 shadow-[0_8px_30px_rgba(0,102,255,0.4)] flex items-center hover:scale-105 active:scale-95 transition-all duration-300"
+        >
+          <div className="bg-white/20 rounded-full w-10 h-10 flex items-center justify-center relative backdrop-blur-sm">
+            <i className="fa-solid fa-cart-plus text-lg"></i>
+            {cart.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#FF3B30] text-white text-[9px] font-black min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full border border-[#0052cc] shadow-sm">
+                {cart.reduce((s, i) => s + i.qty, 0)}
+              </span>
+            )}
+          </div>
+          <div className="text-left px-2.5 pr-4">
+            <p className="text-[8px] font-bold text-blue-100 uppercase tracking-widest mb-0.5">
+              {cart.length > 0 ? 'Isi Keranjang' : 'Mulai Transaksi'}
+            </p>
+            <p className="text-[12px] font-black tabular-nums leading-none">
+              {cart.length > 0 ? formatRp(grandTotal) : 'Input Penjualan'}
+            </p>
+          </div>
+        </button>
+      </div>
     </div>
   );
 };
