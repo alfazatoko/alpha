@@ -161,21 +161,10 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </div>
           </div>
         </div>
-        
-        {/* Placeholder to keep the exact original height and background extension */}
-        <div className="px-1.5 opacity-0 pointer-events-none relative z-10" aria-hidden="true">
-          <div className="w-full flex items-center justify-between px-2 py-1 rounded-full border border-transparent">
-            <div className="flex items-center gap-1">
-              <span className="text-[8.5px] sm:text-[9px] py-0.5 border border-transparent">
-                Placeholder
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* BOTTOM ROW: White Bar */}
-      <div className="sticky top-2 z-[60] px-1.5 transition-all w-full" style={{ marginTop: '-60px' }}>
+      <div className="sticky top-2 z-[60] px-1.5 transition-all w-full" style={{ marginTop: '-1.5rem' }}>
         <div className="bg-white/95 backdrop-blur-sm w-full flex items-center justify-between px-2 py-1 rounded-full shadow-md border border-gray-200/50">
           <div className="flex items-center gap-1">
             <span className="bg-blue-50/50 text-blue-800 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">

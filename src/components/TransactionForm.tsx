@@ -543,10 +543,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }
 
   const handleInputFocus = (e: React.FocusEvent<HTMLElement>) => {
-    const target = e.target;
-    setTimeout(() => {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 300);
+    // scrollIntoView removed to prevent aggressive scrolling that hides the header
   };
 
   const handleSlideKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {

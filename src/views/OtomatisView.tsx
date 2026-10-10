@@ -599,7 +599,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
         onMenuClick={() => props.setIsSidePanelOpen?.(true)}
       />
 
-      <div className="mx-1.5 mb-5 mt-[12px] relative z-[40]">
+      <div className="mx-1.5 mb-5 mt-[-1.5rem] relative z-[40]">
         <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
           <div className="flex items-center gap-3">
              <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
