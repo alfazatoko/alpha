@@ -275,66 +275,40 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
   const [showOwnerPin, setShowOwnerPin] = useState(false)
 
-  // State untuk Kredensial Cloud (Email & Password Owner)
-  const [cloudEmailInput, setCloudEmailInput] = useState('')
+  // State untuk Kredensial Cloud (Password Owner)
   const [cloudPasswordInput, setCloudPasswordInput] = useState('')
   const [cloudPasswordConfirm, setCloudPasswordConfirm] = useState('')
   const [showCloudPass, setShowCloudPass] = useState(false)
   const [isSavingCloudAuth, setIsSavingCloudAuth] = useState(false)
 
   const handleSaveCloudAuth = async () => {
-    if (!cloudEmailInput.trim() && !cloudPasswordInput) {
-      alert('Silakan masukkan email baru atau password baru yang ingin diatur.');
+    if (!cloudPasswordInput) {
+      alert('Silakan masukkan password baru yang ingin diatur.');
       return;
     }
 
-    if (cloudPasswordInput) {
-      if (cloudPasswordInput.length < 6) {
-        alert('Password minimal harus 6 karakter!');
-        return;
-      }
-      if (cloudPasswordInput !== cloudPasswordConfirm) {
-        alert('Konfirmasi password tidak cocok!');
-        return;
-      }
+    if (cloudPasswordInput.length < 6) {
+      alert('Password minimal harus 6 karakter!');
+      return;
     }
-
-    if (cloudEmailInput.trim()) {
-      const cleanEmail = cloudEmailInput.trim();
-      if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-        alert('Format email tidak valid!');
-        return;
-      }
+    if (cloudPasswordInput !== cloudPasswordConfirm) {
+      alert('Konfirmasi password tidak cocok!');
+      return;
     }
 
     try {
       setIsSavingCloudAuth(true);
-      const updatePayload: any = {};
-      if (cloudPasswordInput) {
-        updatePayload.password = cloudPasswordInput;
-      }
-      if (cloudEmailInput.trim() && cloudEmailInput.trim() !== props.googleEmail) {
-        updatePayload.email = cloudEmailInput.trim();
-      }
-
-      const { error } = await supabase.auth.updateUser(updatePayload);
+      const { error } = await supabase.auth.updateUser({
+        password: cloudPasswordInput
+      });
       if (error) throw error;
 
-      let msg = 'Kredensial login Cloud berhasil diperbarui!';
-      if (updatePayload.email && updatePayload.password) {
-        msg = 'Email dan Password login Cloud berhasil diperbarui! Anda dapat masuk dengan kredensial baru ini di halaman depan.';
-      } else if (updatePayload.password) {
-        msg = 'Password login Cloud berhasil diperbarui! Anda sekarang dapat masuk menggunakan email Anda dan password baru ini di halaman depan.';
-      } else if (updatePayload.email) {
-        msg = 'Email login Cloud berhasil diperbarui! Silakan periksa inbox jika konfirmasi email diaktifkan.';
-      }
-
-      alert(msg);
+      alert('Password login Cloud berhasil dibuat/diperbarui! Anda sekarang dapat masuk menggunakan email Google Anda dan password ini di halaman depan aplikasi.');
+      
       setCloudPasswordInput('');
       setCloudPasswordConfirm('');
-      setCloudEmailInput('');
     } catch (err: any) {
-      alert('Gagal memperbarui kredensial: ' + (err.message || 'Terjadi kesalahan'));
+      alert('Gagal memperbarui password: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setIsSavingCloudAuth(false);
     }
@@ -690,6 +664,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     const tabs = props.kasirRole === 'owner' ? [
       { id: 'profil', label: 'Profil Toko', icon: 'fa-user-pen', color: 'emerald' },
       { id: 'karyawan', label: 'Manajemen Kasir & SDM', icon: 'fa-users-gear', color: 'indigo' },
+      { id: 'keamanan', label: 'Keamanan & Akses', icon: 'fa-shield-halved', color: 'blue' },
       { id: 'promo', label: 'Tampilan & Promo', icon: 'fa-bullhorn', color: 'orange' },
       { id: 'printer', label: 'Printer & Hardware', icon: 'fa-print', color: 'slate' },
       { id: 'cloud', label: 'Sinkronisasi Cloud', icon: 'fa-cloud', color: 'purple' },
@@ -1169,22 +1144,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             {props.googleEmail || 'Belum terdeteksi'}
                           </p>
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                          Aktif
+                        <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                          Terkunci
                         </span>
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
-                          Ubah / Ganti Email Login (Opsional)
-                        </label>
-                        <input
-                          type="email"
-                          value={cloudEmailInput}
-                          onChange={e => setCloudEmailInput(e.target.value)}
-                          placeholder={props.googleEmail || "nama@email.com"}
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900"
-                        />
                       </div>
 
                       <div>
@@ -3018,7 +2980,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                 {/* Keamanan & Akses */}
                 <button
-                  style={{ display: 'none' }}
                   onClick={() => setOpenCategory(openCategory === 'keamanan' ? null : 'keamanan')}
                   className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
@@ -3145,16 +3106,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </p>
                         </div>
 
-                        <div>
-                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Ganti Email Login (Opsional)</label>
-                          <input
-                            type="email"
-                            value={cloudEmailInput}
-                            onChange={e => setCloudEmailInput(e.target.value)}
-                            placeholder={props.googleEmail || "nama@email.com"}
-                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
-                          />
-                        </div>
+
 
                         <div>
                           <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Password Baru (min. 6 karakter)</label>
