@@ -732,7 +732,7 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         kasirRole={props.kasirRole}
       />
 
-      <div className="px-4 -mt-8 relative z-10 space-y-4 pb-24">
+      <div className="px-4 mt-[12px] relative z-10 space-y-4 pb-24">
         
         {/* MAIN TAB SWITCHER: PROFIT vs PERFORMA KASIR */}
         <div className="bg-white rounded-[2rem] p-2 shadow-lg border border-slate-100 flex gap-2">

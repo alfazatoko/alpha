@@ -3558,7 +3558,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 kasirRole={activeRole}
                 onMenuClick={() => setIsSidePanelOpen(true)}
               />
-              <div className="px-2 mt-0 pb-24 relative z-10 flex-1">
+              <div className="px-2 mt-[24px] pb-24 relative z-10 flex-1">
                 <TransactionForm 
                   onSave={handleSimpanTransaksi as any} 
                   isSaving={isSaving} 
