@@ -10,7 +10,7 @@ interface NotaItem {
 
 const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void; isPc?: boolean }> = ({ active, setActiveView, isPc }) => {
   
-  const [shopName, setShopName] = useState(() => localStorage.getItem('nota_shopName') || "ALPHA - Agen BRILink");
+  const [shopName, setShopName] = useState(() => localStorage.getItem('nota_shopName') || localStorage.getItem('alphaPro_storeName') || "ALFAZA CELL");
   const [address, setAddress] = useState(() => localStorage.getItem('nota_address') || "Jl. Merdeka No. 123, Indonesia");
   const [footerText, setFooterText] = useState(() => localStorage.getItem('nota_footer') || "TERIMA KASIH");
 
@@ -370,34 +370,41 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
 
   if (isPreview) {
     return (
-      <div className="absolute inset-0 z-[100] bg-slate-200 overflow-y-auto pb-20">
-        <div className="sticky top-0 left-0 right-0 p-4 flex justify-between z-50 no-print bg-slate-900 shadow-md">
-          <button onClick={() => setIsPreview(false)} className="px-5 py-2.5 bg-white/10 text-white rounded-full font-bold flex items-center gap-2 active:scale-95">
-            <ArrowLeft className="w-4 h-4" /> KEMBALI
+      <div className="absolute inset-0 z-[100] bg-slate-100 dark:bg-slate-900 overflow-y-auto pb-20">
+        <div className="sticky top-0 left-0 right-0 px-4 py-3 flex justify-between items-center z-50 no-print bg-[#0000c6] text-white shadow-md">
+          <button 
+            onClick={() => setIsPreview(false)} 
+            className="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-black flex items-center gap-1.5 border border-white/20 active:scale-95 transition-all backdrop-blur-md shadow-sm"
+          >
+            <ArrowLeft className="w-4 h-4" /> <span>KEMBALI</span>
           </button>
+          
           <div className="flex items-center gap-2">
             <select 
               value={ukuranKertas} 
               onChange={(e) => setUkuranKertas(e.target.value as any)}
-              className="bg-white/10 border-none text-white rounded-full px-3 py-2.5 text-xs font-bold outline-none cursor-pointer"
+              className="bg-white/15 border border-white/20 text-white rounded-xl px-3 py-1.5 text-xs font-black outline-none cursor-pointer backdrop-blur-md"
             >
-              <option value="58mm" className="text-black">58mm</option>
-              <option value="80mm" className="text-black">80mm</option>
+              <option value="58mm" className="text-slate-900">58mm (Mini)</option>
+              <option value="80mm" className="text-slate-900">80mm (Standar)</option>
             </select>
-            <button onClick={handlePrint} className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-black shadow-xl flex items-center gap-2 active:scale-95">
-              <Printer className="w-5 h-5" /> CETAK
+            <button 
+              onClick={handlePrint} 
+              className="px-4 py-1.5 bg-white text-[#0000c6] hover:bg-blue-50 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <Printer className="w-4 h-4" /> <span>CETAK</span>
             </button>
           </div>
         </div>
 
-        <div className="pt-8 px-4 flex justify-center no-print">
-           <div className="shadow-2xl">
-              <ThermalReceipt />
-           </div>
+        <div className="pt-6 px-4 flex justify-center no-print">
+          <div className="shadow-2xl rounded-sm">
+            <ThermalReceipt />
+          </div>
         </div>
 
         <div className="hidden print:block w-full thermal-print-area">
-           <ThermalReceipt />
+          <ThermalReceipt />
         </div>
 
         <style>{`
@@ -421,75 +428,170 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
   }
 
   return (
-    <div className="page-view active bg-gray-50 hide-scrollbar pb-24">
-      <div className="px-4 pt-7 pb-4 border-b flex justify-between items-center bg-slate-900 text-white shadow-lg">
-        <button 
-          onClick={() => setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-        </button>
-        <div className="text-center">
-          <h2 className="font-black text-xs uppercase tracking-widest leading-none">NOTA DIGITAL</h2>
-          <p className="text-[8px] text-white/50 mt-1 font-bold">ALFAZA CELL</p>
+    <div className="page-view active bg-slate-50 dark:bg-slate-900 min-h-screen hide-scrollbar pb-24">
+      {/* HEADER UTAMA: Senada Halaman Utama (bg-[#0000c6] + Geometric Pattern) */}
+      <div className="relative bg-[#0000c6] text-white overflow-hidden pb-4 pt-6 px-4 shadow-md">
+        {/* Futuristic Geometric Pattern (Sama dengan GlobalHeader halaman utama) */}
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/20 mix-blend-overlay"></div>
+          <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="stripes-nota" width="6" height="6" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+              </pattern>
+            </defs>
+            <circle cx="10%" cy="10%" r="60" fill="url(#stripes-nota)" />
+            <circle cx="95%" cy="95%" r="80" fill="url(#stripes-nota)" />
+            <circle cx="35%" cy="30%" r="20" fill="url(#stripes-nota)" opacity="0.8" />
+            <circle cx="80%" cy="60%" r="30" fill="url(#stripes-nota)" opacity="0.6" />
+            <circle cx="50%" cy="50%" r="90" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+            <circle cx="15%" cy="75%" r="7" fill="rgba(255,255,255,0.7)" />
+            <circle cx="80%" cy="35%" r="4" fill="#ffffff" opacity="0.8" />
+          </svg>
         </div>
-        <button 
-          onClick={() => setActiveView('view-beranda')}
-          className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all border border-white/10 active:scale-90"
-        >
-          <i className="fa-solid fa-xmark"></i>
-        </button>
+
+        {/* Content Header Bar (Minimalis 1 Baris Utama) */}
+        <div className="relative z-10 max-w-2xl mx-auto flex items-center justify-between gap-3">
+          {/* Tombol Back */}
+          <button 
+            onClick={() => setActiveView('view-beranda')}
+            className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:scale-90 hover:bg-white/25 transition-all shadow-sm"
+            title="Kembali ke Beranda"
+          >
+            <i className="fa-solid fa-arrow-left text-sm"></i>
+          </button>
+
+          {/* Judul & Subtitle */}
+          <div className="flex-1 text-center">
+            <h1 className="text-xs sm:text-sm font-black text-white leading-tight uppercase tracking-widest drop-shadow-sm">
+              NOTA THERMAL
+            </h1>
+            <p className="text-[7.5px] sm:text-[8.5px] text-blue-100 font-bold uppercase tracking-wider opacity-90 drop-shadow-sm mt-0.5">
+              {shopName || 'ALFAZA CELL'} • CETAK STRUK BLUETOOTH / USB
+            </p>
+          </div>
+
+          {/* Tombol Aksi Kanan (Cetak / Preview & Exit) */}
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => setIsPreview(true)} 
+              title="Preview & Cetak Struk"
+              className="relative w-9 h-9 rounded-xl bg-white text-[#0000c6] flex items-center justify-center shadow-md active:scale-90 hover:bg-blue-50 transition-all font-black"
+            >
+              <Printer className="w-4 h-4" />
+              {items.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-1 rounded-full bg-rose-600 text-white text-[7.5px] font-black flex items-center justify-center border border-white shadow-sm">
+                  {items.length}
+                </span>
+              )}
+            </button>
+            <button 
+              onClick={() => setActiveView('view-beranda')}
+              className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 active:scale-90 hover:bg-white/25 transition-all shadow-sm"
+              title="Tutup"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-5 shadow-lg flex justify-between items-center rounded-b-[2rem] mb-4">
-        <div>
-          <h2 className="text-sm font-black tracking-tight leading-none uppercase">Nota Thermal</h2>
-          <p className="text-[9px] text-blue-100 font-medium mt-1">Cetak struk via printer thermal</p>
+      {/* Floating Status & Selector Bar (Mirip White Bar di Beranda) */}
+      <div className="px-3 -mt-2.5 relative z-20 max-w-2xl mx-auto">
+        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm w-full flex items-center justify-between px-3 py-1.5 rounded-full shadow-md border border-slate-200/80 dark:border-slate-700/80">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[8.5px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fa-solid fa-receipt text-blue-600"></i> Kertas:
+            </span>
+            <div className="inline-flex rounded-full p-0.5 bg-slate-100 dark:bg-slate-700">
+              <button
+                type="button"
+                onClick={() => setUkuranKertas('58mm')}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[8px] font-black transition-all",
+                  ukuranKertas === '58mm'
+                    ? "bg-[#0000c6] text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-300 hover:text-black"
+                )}
+              >
+                58mm
+              </button>
+              <button
+                type="button"
+                onClick={() => setUkuranKertas('80mm')}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[8px] font-black transition-all",
+                  ukuranKertas === '80mm'
+                    ? "bg-[#0000c6] text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-300 hover:text-black"
+                )}
+              >
+                80mm
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[8.5px] sm:text-[9px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <i className="fa-regular fa-calendar text-blue-600"></i>
+              <span>{tanggal}</span>
+            </span>
+            <span className="text-[8.5px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+              {items.length} Item
+            </span>
+          </div>
         </div>
-        <button onClick={() => setIsPreview(true)} className="w-10 h-10 rounded-2xl bg-white text-blue-600 flex items-center justify-center shadow-lg active:scale-90 transition-all">
-          <Printer className="w-5 h-5" />
-        </button>
       </div>
 
-      <div className="p-5 space-y-4">
-        
+      {/* Konten Utama Form Nota */}
+      <div className="max-w-2xl mx-auto px-3.5 pt-3 space-y-3">
         {/* PENGATURAN TOKO */}
-        <div className="shadow-sm border border-gray-200 rounded-xl bg-white overflow-hidden">
+        <div className="shadow-sm border border-slate-200/80 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-800 overflow-hidden">
           <div 
-            className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+            className="p-3.5 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
             onClick={() => setOpenSettingToko(!openSettingToko)}
           >
-            <h3 className="font-black text-black text-[11px] flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fa-solid fa-store text-blue-700"></i> PENGATURAN TOKO
-            </h3>
-            <i className={cn("fa-solid fa-chevron-right text-gray-400 transition-transform duration-300 text-[11px]", openSettingToko && "rotate-90")}></i>
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-[#0000c6] dark:text-blue-400 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-store text-xs"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-slate-800 dark:text-slate-100 text-[11px] uppercase tracking-wider">
+                  Pengaturan Toko & Footer
+                </h3>
+                <p className="text-[8.5px] text-slate-400 font-bold uppercase">
+                  Nama, alamat & ucapan di struk
+                </p>
+              </div>
+            </div>
+            <i className={cn("fa-solid fa-chevron-right text-slate-400 transition-transform duration-300 text-xs", openSettingToko && "rotate-90")}></i>
           </div>
           
           {openSettingToko && (
-            <div className="p-4 pt-2 space-y-3 border-t border-gray-100 animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="p-3.5 pt-1 space-y-2.5 border-t border-slate-100 dark:border-slate-700/80 animate-in slide-in-from-top-2 fade-in duration-200">
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA TOKO</label>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">NAMA TOKO</label>
                 <input 
                   value={shopName} 
                   onChange={e => setShopName(e.target.value)} 
-                  className="form-input-modern w-full" 
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">ALAMAT TOKO</label>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">ALAMAT TOKO</label>
                 <input 
                   value={address} 
                   onChange={e => setAddress(e.target.value)} 
-                  className="form-input-modern w-full" 
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">TEKS UCAPAN (BAWAH)</label>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">TEKS UCAPAN (BAWAH)</label>
                 <textarea 
                   value={footerText} 
                   onChange={e => setFooterText(e.target.value)} 
                   rows={2}
-                  className="form-input-modern w-full resize-none py-2" 
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all resize-none" 
                 />
               </div>
             </div>
@@ -497,48 +599,58 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
         </div>
 
         {/* INPUT DATA NOTA */}
-        <div className="p-4 shadow-sm border border-gray-200 rounded-xl bg-white space-y-3">
-          <h3 className="font-black text-black text-[11px] mb-3 flex items-center gap-2 uppercase tracking-tighter">
-            <i className="fa-solid fa-file-invoice text-blue-700"></i> INPUT DATA NOTA
-          </h3>
-          
-          <div className="space-y-3">
+        <div className="p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-800 space-y-3">
+          <div className="flex items-center gap-2.5 pb-1">
+            <div className="w-7 h-7 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-[#0000c6] dark:text-blue-400 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-file-invoice text-xs"></i>
+            </div>
             <div>
-              <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">TANGGAL TRANSAKSI</label>
+              <h3 className="font-black text-slate-800 dark:text-slate-100 text-[11px] uppercase tracking-wider">
+                Input Data Transaksi
+              </h3>
+              <p className="text-[8.5px] text-slate-400 font-bold uppercase">
+                Tambahkan item ke daftar nota
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-2.5">
+            <div>
+              <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">TANGGAL TRANSAKSI</label>
               <input 
                 type="date" 
                 value={tanggal} 
                 onChange={e => setTanggal(e.target.value)} 
-                className="form-input-modern w-full" 
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
               />
             </div>
 
             <div>
-              <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">NAMA BARANG / JASA</label>
+              <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">NAMA BARANG / JASA</label>
               <input 
                 ref={namaRef}
                 value={currentItem.nama} 
                 onChange={e => setCurrentItem({...currentItem, nama: e.target.value})} 
-                placeholder="Contoh: Tarik Tunai 1jt" 
+                placeholder="Contoh: Tarik Tunai 1jt / Pulsa 50k" 
                 onKeyDown={(e) => handleKeyDown(e, hargaRef)}
-                className="form-input-modern w-full" 
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex-1">
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">HARGA SATUAN</label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">HARGA SATUAN (RP)</label>
                 <input 
                   ref={hargaRef}
                   value={currentItem.harga} 
                   onChange={e => setCurrentItem({...currentItem, harga: formatInputRupiah(e.target.value)})} 
                   placeholder="0" 
                   onKeyDown={(e) => handleKeyDown(e, jumlahRef)}
-                  className="form-input-modern w-full" 
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-black mb-1 uppercase tracking-widest">JUMLAH (QTY)</label>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">JUMLAH (QTY)</label>
                 <input 
                   ref={jumlahRef}
                   type="number" 
@@ -546,44 +658,65 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
                   onChange={e => setCurrentItem({...currentItem, jumlah: e.target.value})} 
                   placeholder="1" 
                   onKeyDown={(e) => handleKeyDown(e, undefined, true)}
-                  className="form-input-modern w-full" 
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>
             </div>
 
-            <button onClick={handleSimpanItem} className="w-full bg-blue-700 text-white text-[10px] font-black py-2.5 rounded-lg hover:bg-blue-800 shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2">
+            <button 
+              onClick={handleSimpanItem} 
+              className="w-full bg-[#0000c6] hover:bg-blue-800 text-white text-[10px] font-black py-2.5 rounded-xl shadow-md transition-all active:scale-95 uppercase tracking-widest flex items-center justify-center gap-2 mt-1"
+            >
               <Plus className="w-3.5 h-3.5" /> TAMBAH KE DAFTAR
             </button>
           </div>
 
-          <div className="space-y-3 pt-6 border-t border-gray-100">
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Daftar Belanja</h4>
+          {/* Daftar Belanja */}
+          <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div className="flex justify-between items-center">
+              <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Daftar Item Nota</h4>
+              <span className="text-[9px] font-bold text-slate-400">{items.length} item</span>
+            </div>
+
             {items.length === 0 ? (
-              <div className="py-10 text-center text-gray-300 italic text-xs">Belum ada barang ditambahkan</div>
+              <div className="py-8 text-center text-slate-400 dark:text-slate-500 italic text-xs">
+                Belum ada barang ditambahkan
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {items.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl group">
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-gray-800">{item.nama}</p>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase">{item.jumlah} x {item.harga}</p>
+                  <div key={index} className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{item.nama}</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase">{item.jumlah} × Rp {item.harga}</p>
                     </div>
-                    <div className="text-right flex items-center gap-3">
-                      <p className="text-xs font-black text-blue-600">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</p>
-                      <button onClick={() => removeItem(index)} className="p-1.5 rounded-lg bg-red-50 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="text-right flex items-center gap-2.5 shrink-0">
+                      <p className="text-xs font-black text-blue-600 dark:text-blue-400">
+                        {formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}
+                      </p>
+                      <button 
+                        onClick={() => removeItem(index)} 
+                        className="w-6 h-6 rounded-lg bg-red-50 text-red-500 dark:bg-red-950/30 flex items-center justify-center hover:bg-red-100 active:scale-90 transition-all"
+                        title="Hapus Item"
+                      >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
                 ))}
                 
-                <div className="bg-blue-600 p-5 rounded-2xl flex justify-between items-center text-white shadow-lg shadow-blue-100 mt-6">
+                {/* Total & Tombol Cetak */}
+                <div className="bg-[#0000c6] p-4 rounded-2xl flex justify-between items-center text-white shadow-lg shadow-blue-900/20 mt-4">
                   <div>
-                    <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest">Total Bayar</p>
-                    <p className="text-xl font-black leading-none mt-1">{formatRupiah(calculateTotal())}</p>
+                    <p className="text-[8.5px] font-black text-blue-200 uppercase tracking-widest">TOTAL BAYAR</p>
+                    <p className="text-lg font-black leading-tight mt-0.5">{formatRupiah(calculateTotal())}</p>
                   </div>
-                  <button onClick={() => setIsPreview(true)} className="bg-white/20 hover:bg-white/30 p-3 rounded-xl transition-all">
-                    <Printer className="w-5 h-5" />
+                  <button 
+                    onClick={() => setIsPreview(true)} 
+                    className="px-3.5 py-2 bg-white text-[#0000c6] hover:bg-blue-50 text-xs font-black rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Cetak Struk</span>
                   </button>
                 </div>
               </div>

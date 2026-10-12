@@ -133,8 +133,13 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   const [showScanner, setShowScanner] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isCartVisible, setIsCartVisible] = useState(true);
-  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat' | 'setting'>('kasir');
+  const [activeTab, setActiveTab] = useState<'kasir' | 'produk' | 'riwayat' | 'laporan' | 'setting'>('kasir');
+  const [laporanFilter, setLaporanFilter] = useState<'hari_ini' | 'bulan_ini' | 'semua'>('hari_ini');
+  const [laporanDate, setLaporanDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Status Role: Akses Edit/Hapus khusus Owner
+  const isOwner = kasirRole === 'owner' || (typeof window !== 'undefined' && localStorage.getItem('alphaPro_active_role') === 'owner');
 
   const [printSettings, setPrintSettings] = useState<PrintSettings>(() => {
     const saved = localStorage.getItem(`pos_settings_${storeId}`);
@@ -295,7 +300,18 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     setShowStruk(trx);
   };
 
+  // Update Cepat Stok (Khusus Owner)
+  const updateProductStock = async (p: Product, newStok: number) => {
+    if (!isOwner) return;
+    const updatedProd = { ...p, stok: newStok };
+    const updated = products.map(item => item.id === p.id ? updatedProd : item);
+    setProducts(updated);
+    cacheProducts(updated);
+    await upsertProduct(storeId, updatedProd);
+  };
+
   const saveProduct = async (p: Product) => {
+    if (!isOwner) return;
     const isNew = !products.find(x => x.id === p.id);
     const updated = isNew ? [...products, p] : products.map(x => x.id === p.id ? p : x);
     setProducts(updated);
@@ -306,6 +322,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   };
 
   const deleteProduct = async (id: string) => {
+    if (!isOwner) return;
     const updated = products.filter(p => p.id !== id);
     setProducts(updated);
     cacheProducts(updated);
@@ -432,6 +449,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
             { id: 'kasir', label: 'Kasir', icon: 'fa-cash-register' },
             { id: 'produk', label: 'Produk', icon: 'fa-box' },
             { id: 'riwayat', label: 'Riwayat', icon: 'fa-clock-rotate-left' },
+            { id: 'laporan', label: 'Laporan', icon: 'fa-chart-line' },
             { id: 'setting', label: 'Setting', icon: 'fa-gear' },
           ] as const).map(tab => (
             <button
@@ -568,18 +586,47 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           <div className="px-3 pt-3 pb-2 bg-white border-b border-gray-100 shrink-0 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
               <i className="fa-solid fa-magnifying-glass text-gray-400 text-sm"></i>
-              <input type="text" placeholder="Cari produk..." value={search} onChange={e => setSearch(e.target.value)} className="flex-1 bg-transparent text-[12px] font-bold outline-none text-gray-800 placeholder-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Cari produk..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="flex-1 bg-transparent text-[12px] font-bold outline-none text-gray-800 placeholder-gray-400" 
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                  <i className="fa-solid fa-xmark text-xs"></i>
+                </button>
+              )}
             </div>
-            <button onClick={() => { setEditingProduct(null); setShowProductForm(true); }} className="flex items-center gap-2 px-3 py-2 bg-[#0066FF] text-white text-[11px] font-black rounded-xl hover:bg-[#0052cc] active:scale-95 transition-all shadow-md shadow-blue-500/30 shrink-0">
-              <i className="fa-solid fa-plus"></i>Tambah
-            </button>
+            {isOwner && (
+              <button 
+                onClick={() => { setEditingProduct(null); setShowProductForm(true); }} 
+                className="flex items-center gap-2 px-3.5 py-2 bg-[#0066FF] text-white text-[11px] font-black rounded-xl hover:bg-[#0052cc] active:scale-95 transition-all shadow-md shadow-blue-500/30 shrink-0 cursor-pointer"
+              >
+                <i className="fa-solid fa-plus"></i>Tambah
+              </button>
+            )}
           </div>
-          <div className="flex-1 px-3 pt-2 pb-[90px]">
+
+          <div className="flex-1 px-3 pt-3 pb-[90px]">
             {products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
-                <i className="fa-solid fa-box-open text-5xl"></i>
-                <p className="text-sm font-black uppercase tracking-widest">Belum Ada Produk</p>
-                <button onClick={() => { setEditingProduct(null); setShowProductForm(true); }} className="px-4 py-2 bg-[#0066FF] text-white text-[11px] font-black rounded-xl">Tambah Produk Pertama</button>
+              <div className="flex flex-col items-center justify-center py-20 text-gray-300 gap-3">
+                <i className="fa-solid fa-box-open text-5xl text-gray-300"></i>
+                <p className="text-sm font-black uppercase tracking-widest text-gray-400">Belum Ada Produk</p>
+                {isOwner && (
+                  <button 
+                    onClick={() => { setEditingProduct(null); setShowProductForm(true); }} 
+                    className="px-4 py-2 bg-[#0066FF] text-white text-[11px] font-black rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer"
+                  >
+                    Tambah Produk Pertama
+                  </button>
+                )}
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-2">
+                <i className="fa-solid fa-magnifying-glass text-3xl text-gray-300"></i>
+                <p className="text-xs font-bold text-gray-400">Tidak ada produk yang cocok dengan "{search}"</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -591,81 +638,171 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                     return acc;
                   }, {} as Record<string, Product[]>)
                 ).sort((a, b) => a[0] === 'Umum' ? 1 : b[0] === 'Umum' ? -1 : a[0].localeCompare(b[0]))
-                .map(([cat, prods]) => (
-                  <div key={cat} className="space-y-2">
-                    <div 
-                      className="flex justify-between items-center px-2 py-1.5 bg-gray-50 rounded-xl cursor-pointer select-none"
-                      onClick={() => setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }))}
-                    >
-                      <h3 className="font-black text-gray-800 text-[12px] uppercase tracking-wider flex items-center">
-                        <i className={`fa-solid fa-chevron-${expandedCats[cat] ? 'down' : 'right'} text-[10px] text-gray-400 mr-2 w-3 text-center transition-transform`}></i>
-                        {cat} <span className="text-[#0066FF] text-[10px] ml-1.5 bg-blue-50 px-1.5 rounded-full">{prods.length}</span>
-                      </h3>
-                      {cat !== 'Umum' && (
-                        <div className="flex gap-2">
-                          <button onClick={(e) => {
-                            e.stopPropagation();
-                            const newName = window.prompt(`Ubah nama kategori "${cat}" menjadi:`, cat);
-                            if (!newName || newName.trim() === '' || newName === cat) return;
-                            const trimmed = newName.trim();
-                            const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: trimmed } : p);
-                            setProducts(updatedProducts);
-                            localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
-                            updatedProducts.filter(p => p.kategori === trimmed).forEach(p => {
-                              supabase.from('pos_products').update({ kategori: trimmed }).eq('id', p.id).then();
-                            });
-                          }} className="text-[#0066FF] hover:text-blue-800 text-[11px] font-bold">Edit</button>
-                          
-                          <button onClick={(e) => {
-                            e.stopPropagation();
-                            if (!window.confirm(`Hapus kategori "${cat}"? Produk di dalamnya akan dipindah ke kategori "Umum".`)) return;
-                            const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: 'Umum' } : p);
-                            setProducts(updatedProducts);
-                            localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
-                            updatedProducts.filter(p => p.kategori === 'Umum').forEach(p => {
-                              supabase.from('pos_products').update({ kategori: 'Umum' }).eq('id', p.id).then();
-                            });
-                          }} className="text-red-500 hover:text-red-700 text-[11px] font-bold">Hapus</button>
+                .map(([cat, prods]) => {
+                  const isExpanded = expandedCats[cat] ?? true;
+                  return (
+                    <div key={cat} className="space-y-2.5">
+                      {/* Category Header */}
+                      <div 
+                        className="flex justify-between items-center px-3 py-2 bg-gray-50/90 hover:bg-gray-100/80 border border-gray-100 rounded-xl cursor-pointer select-none transition-colors"
+                        onClick={() => setExpandedCats(prev => ({ ...prev, [cat]: prev[cat] === undefined ? false : !prev[cat] }))}
+                      >
+                        <h3 className="font-black text-gray-800 text-[12px] uppercase tracking-wider flex items-center">
+                          <i className={cn("fa-solid text-[10px] text-gray-400 mr-2 w-3 text-center transition-transform", isExpanded ? "fa-chevron-down" : "fa-chevron-right")}></i>
+                          {cat} <span className="text-[#0066FF] text-[10px] ml-1.5 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full font-black">{prods.length}</span>
+                        </h3>
+                        {cat !== 'Umum' && isOwner && (
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <button 
+                              onClick={() => {
+                                const newName = window.prompt(`Ubah nama kategori "${cat}" menjadi:`, cat);
+                                if (!newName || newName.trim() === '' || newName === cat) return;
+                                const trimmed = newName.trim();
+                                const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: trimmed } : p);
+                                setProducts(updatedProducts);
+                                localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
+                                updatedProducts.filter(p => p.kategori === trimmed).forEach(p => {
+                                  supabase.from('pos_products').update({ kategori: trimmed }).eq('id', p.id).then();
+                                });
+                              }} 
+                              className="text-[#0066FF] hover:text-blue-800 text-[11px] font-black px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            
+                            <button 
+                              onClick={() => {
+                                if (!window.confirm(`Hapus kategori "${cat}"? Produk di dalamnya akan dipindah ke kategori "Umum".`)) return;
+                                const updatedProducts = products.map(p => (p.kategori?.trim() || 'Umum') === cat ? { ...p, kategori: 'Umum' } : p);
+                                setProducts(updatedProducts);
+                                localStorage.setItem('alphaPro_pos_products', JSON.stringify(updatedProducts));
+                                updatedProducts.filter(p => p.kategori === 'Umum').forEach(p => {
+                                  supabase.from('pos_products').update({ kategori: 'Umum' }).eq('id', p.id).then();
+                                });
+                              }} 
+                              className="text-red-500 hover:text-red-700 text-[11px] font-black px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Product Grid: 1 Jejer 4 Produk di Tablet/PC & Responsif 2 Kolom di Ponsel */}
+                      {isExpanded && (
+                        <div className="grid grid-cols-2 min-[540px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-2.5">
+                          {prods.map(p => (
+                            <div 
+                              key={p.id} 
+                              className="bg-white rounded-xl border border-gray-100 shadow-2xs hover:shadow-md hover:border-blue-200 transition-all duration-200 p-2 flex flex-col justify-between relative group overflow-hidden"
+                            >
+                              {/* Foto Produk Kompak */}
+                              <div className="w-full h-20 sm:h-24 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden relative flex items-center justify-center mb-1.5 shrink-0 group-hover:border-blue-100 transition-colors">
+                                {p.image_url ? (
+                                  <img src={p.image_url} alt={p.nama} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center text-slate-300">
+                                    <i className="fa-solid fa-box text-xl sm:text-2xl mb-0.5 text-slate-300/80"></i>
+                                    <span className="text-[7.5px] font-bold uppercase tracking-wider text-slate-400">Tanpa Foto</span>
+                                  </div>
+                                )}
+
+                                {/* Badge Status Stok (Habis / Menipis) */}
+                                {printSettings.enableStok && p.stok <= 0 ? (
+                                  <span className="absolute top-1 left-1 bg-rose-600/95 text-white text-[7.5px] font-black px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wider leading-tight">
+                                    HABIS
+                                  </span>
+                                ) : printSettings.enableStok && p.stok <= 5 ? (
+                                  <span className="absolute top-1 left-1 bg-amber-500/95 text-white text-[7.5px] font-black px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wider leading-tight">
+                                    MENIPIS
+                                  </span>
+                                ) : null}
+
+                                {/* Tombol Aksi Owner (Edit & Hapus) */}
+                                {isOwner && (
+                                  <div className="absolute top-1 right-1 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingProduct(p);
+                                        setShowProductForm(true);
+                                      }}
+                                      title="Edit Produk"
+                                      className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-white/95 hover:bg-blue-600 hover:text-white text-gray-600 shadow-sm border border-gray-200/50 flex items-center justify-center transition-all active:scale-90 cursor-pointer"
+                                    >
+                                      <i className="fa-solid fa-pen text-[8.5px] sm:text-[9.5px]"></i>
+                                    </button>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowDeleteConfirm(p.id);
+                                      }}
+                                      title="Hapus Produk"
+                                      className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-white/95 hover:bg-rose-600 hover:text-white text-gray-600 shadow-sm border border-gray-200/50 flex items-center justify-center transition-all active:scale-90 cursor-pointer"
+                                    >
+                                      <i className="fa-solid fa-trash text-[8.5px] sm:text-[9.5px]"></i>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Info Produk Mepet: Nama -> Harga -> Stok */}
+                              <div className="flex flex-col gap-0.5 leading-tight">
+                                {/* 1. Nama Produk */}
+                                <h4 
+                                  className="text-[12.5px] sm:text-[13.5px] font-black text-gray-900 truncate leading-tight capitalize" 
+                                  title={p.nama}
+                                >
+                                  {p.nama}
+                                </h4>
+
+                                {/* 2. Harga Jual */}
+                                <div className="text-[12.5px] sm:text-[13.5px] font-black text-[#0066FF] tabular-nums tracking-tight leading-none">
+                                  {`Rp ${p.harga.toLocaleString('id-ID')}`}
+                                </div>
+
+                                {/* 3. Stok Produk & Tombol Edit Stok */}
+                                {printSettings.enableStok && (
+                                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                                    <span 
+                                      className={cn(
+                                        "text-[9px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded flex items-center gap-1 leading-normal truncate",
+                                        p.stok <= 0 
+                                          ? "bg-rose-50 text-rose-600 border border-rose-100" 
+                                          : p.stok <= 5 
+                                            ? "bg-amber-50 text-amber-700 border border-amber-100" 
+                                            : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                      )}
+                                    >
+                                      <i className={cn("fa-solid text-[7.5px]", p.stok <= 5 ? "fa-triangle-exclamation" : "fa-boxes-stacked")}></i>
+                                      Stok: {p.stok} {p.satuan}
+                                    </span>
+
+                                    {isOwner && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const input = window.prompt(`Ubah stok untuk "${p.nama}":`, String(p.stok));
+                                          if (input === null) return;
+                                          const newStok = parseInt(input.replace(/\D/g, '') || '0', 10);
+                                          updateProductStock(p, newStok);
+                                        }}
+                                        title="Edit Stok Cepat"
+                                        className="px-1 py-0.2 rounded bg-blue-50 hover:bg-blue-100 text-[#0066FF] text-[8px] sm:text-[8.5px] font-black border border-blue-200/60 active:scale-95 transition-all cursor-pointer shrink-0 leading-tight"
+                                      >
+                                        Edit Stok
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                    {expandedCats[cat] && (
-                      <div className="space-y-2 pl-2">
-                        {prods.map(p => (
-                          <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-3">
-                            {p.image_url ? (
-                              <img src={p.image_url} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-50 border border-gray-100" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
-                                <i className="fa-solid fa-box text-gray-300 text-sm"></i>
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-black text-gray-900">{p.nama}</p>
-                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                {p.barcode && <span className="text-[9px] font-bold text-gray-400"><i className="fa-solid fa-barcode mr-1"></i>{p.barcode}</span>}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-[13px] font-black text-[#0066FF] tabular-nums">{`Rp ${p.harga.toLocaleString('id-ID')}`}</p>
-                              {printSettings.enableStok && (
-                                <p className={`text-[10px] font-black ${p.stok <= 5 ? 'text-rose-500' : 'text-emerald-500'}`}>Stok: {p.stok} {p.satuan}</p>
-                              )}
-                            </div>
-                            <div className="flex gap-1.5 shrink-0 ml-1">
-                              <button onClick={() => { setEditingProduct(p); setShowProductForm(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600 transition-colors">
-                                <i className="fa-solid fa-pen text-[10px]"></i>
-                              </button>
-                              <button onClick={() => setShowDeleteConfirm(p.id)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
-                                <i className="fa-solid fa-trash text-[10px]"></i>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -675,10 +812,15 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
       {/* TAB RIWAYAT */}
       {activeTab === 'riwayat' && (
         <div className="flex-1 px-3 pt-3 pb-[90px] flex flex-col">
-          <div className="mb-4 text-center shrink-0">
-             <button onClick={onGoToLaporan} className="w-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-widest hover:bg-[#0066FF]/20 active:scale-95 transition-all">
-               <i className="fa-solid fa-chart-line mr-2"></i>Lihat Laporan Lengkap
-             </button>
+          <div className="mb-3 shrink-0">
+            <button
+              onClick={() => setActiveTab('laporan')}
+              className="w-full bg-gradient-to-r from-[#0066FF]/10 to-indigo-500/10 text-[#0066FF] border border-[#0066FF]/20 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-widest hover:from-[#0066FF]/20 hover:to-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-chart-line"></i>
+              Lihat Tab Laporan Lengkap
+              <i className="fa-solid fa-arrow-right text-[10px]"></i>
+            </button>
           </div>
           {transactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 text-gray-300 gap-3">
@@ -693,8 +835,8 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                 const dateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
                 return (
                   <button key={trx.id} onClick={() => setShowStruk(trx)} className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3 flex items-center gap-3 text-left hover:border-blue-200 transition-all">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-gray-100">
-                      <i className={`fa-solid ${trx.metodeBayar === 'QRIS' ? 'fa-qrcode' : 'fa-money-bill'} text-gray-500 text-sm`}></i>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${trx.metodeBayar === 'QRIS' ? 'bg-blue-50' : 'bg-emerald-50'}`}>
+                      <i className={`fa-solid ${trx.metodeBayar === 'QRIS' ? 'fa-qrcode text-blue-500' : 'fa-money-bill text-emerald-500'} text-sm`}></i>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-black text-gray-900">{trx.items.length} item • {trx.kasir}</p>
@@ -711,6 +853,321 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           )}
         </div>
       )}
+
+      {/* TAB LAPORAN */}
+      {activeTab === 'laporan' && (() => {
+        // ── Filter transaksi ──
+        const today = new Date();
+        const offset = today.getTimezoneOffset() * 60000;
+        const localISO = new Date(today.getTime() - offset).toISOString().slice(0, -1);
+        const monthStr = localISO.substring(0, 7);
+
+        const filtered = transactions.filter(trx => {
+          const trxDate = trx.timestamp.substring(0, 10);
+          const trxMonth = trx.timestamp.substring(0, 7);
+          if (laporanFilter === 'hari_ini') return trxDate === laporanDate;
+          if (laporanFilter === 'bulan_ini') return trxMonth === monthStr;
+          return true;
+        });
+
+        // ── KPI ──
+        let totalPendapatan = 0, totalItem = 0, totalTunai = 0, totalQris = 0;
+        filtered.forEach(trx => {
+          totalPendapatan += trx.grandTotal;
+          totalItem += trx.items.reduce((s: number, i: any) => s + i.qty, 0);
+          if (trx.metodeBayar === 'TUNAI') totalTunai += trx.grandTotal;
+          if (trx.metodeBayar === 'QRIS') totalQris += trx.grandTotal;
+        });
+        const totalTransaksi = filtered.length;
+        const avgOrder = totalTransaksi > 0 ? Math.round(totalPendapatan / totalTransaksi) : 0;
+
+        // ── Top Produk ──
+        const prodMap: Record<string, { nama: string; qty: number; nominal: number }> = {};
+        filtered.forEach(trx => {
+          trx.items.forEach((item: any) => {
+            const pid = item.product?.id || item.product?.nama || 'unknown';
+            if (!prodMap[pid]) prodMap[pid] = { nama: item.product?.nama || '-', qty: 0, nominal: 0 };
+            prodMap[pid].qty += item.qty;
+            prodMap[pid].nominal += (item.product?.harga || 0) * item.qty;
+          });
+        });
+        const topProds = Object.values(prodMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
+        const maxQty = topProds[0]?.qty || 1;
+
+        // ── Jam Sibuk (grouping per jam) ──
+        const hourMap: Record<number, number> = {};
+        filtered.forEach(trx => {
+          const h = new Date(trx.timestamp).getHours();
+          hourMap[h] = (hourMap[h] || 0) + trx.grandTotal;
+        });
+        const hourEntries = Object.entries(hourMap).map(([h, v]) => ({ h: parseInt(h), v })).sort((a, b) => a.h - b.h);
+        const maxHourVal = Math.max(...hourEntries.map(e => e.v), 1);
+
+        // ── Per kasir ──
+        const kasirMap: Record<string, { trx: number; nominal: number }> = {};
+        filtered.forEach(trx => {
+          const k = trx.kasir || 'Tidak diketahui';
+          if (!kasirMap[k]) kasirMap[k] = { trx: 0, nominal: 0 };
+          kasirMap[k].trx++;
+          kasirMap[k].nominal += trx.grandTotal;
+        });
+        const kasirEntries = Object.entries(kasirMap).sort((a, b) => b[1].nominal - a[1].nominal);
+
+        const filterLabel = laporanFilter === 'hari_ini'
+          ? new Date(laporanDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : laporanFilter === 'bulan_ini'
+          ? new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+          : 'Semua Waktu';
+
+        return (
+          <div className="flex-1 overflow-y-auto pb-[90px]">
+            {/* ── Filter Bar ── */}
+            <div className="px-3 pt-3 pb-2 sticky top-0 bg-[#F9FBFF] z-10">
+              <div className="flex gap-1.5">
+                {(['hari_ini', 'bulan_ini', 'semua'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setLaporanFilter(f)}
+                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                      laporanFilter === f
+                        ? 'bg-[#0066FF] text-white shadow-md shadow-blue-200'
+                        : 'bg-white text-gray-500 border border-gray-200 hover:border-blue-200'
+                    }`}
+                  >
+                    {f === 'hari_ini' ? 'Hari Ini' : f === 'bulan_ini' ? 'Bulan Ini' : 'Semua'}
+                  </button>
+                ))}
+              </div>
+              {laporanFilter === 'hari_ini' && (
+                <div className="mt-2 bg-white border border-gray-200 rounded-xl flex items-center px-3 shadow-sm">
+                  <i className="fa-regular fa-calendar text-blue-400 mr-2 text-sm"></i>
+                  <input
+                    type="date"
+                    value={laporanDate}
+                    onChange={e => setLaporanDate(e.target.value)}
+                    className="flex-1 bg-transparent py-2.5 text-[12px] font-bold text-gray-700 outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="px-3 space-y-3">
+              {/* ── Label Periode ── */}
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Periode</p>
+                <p className="text-[12px] font-black text-gray-700">{filterLabel}</p>
+              </div>
+
+              {/* ── KPI Cards ── */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-3.5 text-white shadow-md shadow-emerald-200">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                    <i className="fa-solid fa-wallet text-sm"></i>
+                  </div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Pendapatan</p>
+                  <p className="text-[13px] font-black leading-tight truncate">{formatRp(totalPendapatan)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-[#0066FF] to-[#0047CC] rounded-2xl p-3.5 text-white shadow-md shadow-blue-200">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center mb-2">
+                    <i className="fa-solid fa-receipt text-sm"></i>
+                  </div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Transaksi</p>
+                  <p className="text-[13px] font-black leading-tight">{totalTransaksi} <span className="text-[10px] font-bold opacity-80">struk</span></p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center mb-2">
+                    <i className="fa-solid fa-cubes text-purple-500 text-sm"></i>
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Total Item</p>
+                  <p className="text-[13px] font-black text-gray-800">{totalItem} <span className="text-[10px] text-gray-400">pcs</span></p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center mb-2">
+                    <i className="fa-solid fa-arrow-trend-up text-amber-500 text-sm"></i>
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Rata-rata</p>
+                  <p className="text-[13px] font-black text-gray-800 truncate">{formatRp(avgOrder)}</p>
+                </div>
+              </div>
+
+              {/* ── Metode Pembayaran ── */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <h3 className="text-[11px] font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                  <i className="fa-solid fa-chart-pie text-indigo-500"></i> Metode Pembayaran
+                </h3>
+                {totalPendapatan === 0 ? (
+                  <p className="text-[11px] text-gray-300 text-center py-2 font-bold">Belum ada data</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-[11px] font-bold mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+                          <span className="text-gray-600">Tunai</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-gray-800 font-black">{formatRp(totalTunai)}</span>
+                          <span className="text-gray-400 ml-1 text-[10px]">({totalPendapatan ? Math.round(totalTunai / totalPendapatan * 100) : 0}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-full rounded-full transition-all duration-700"
+                          style={{ width: totalPendapatan ? `${(totalTunai / totalPendapatan) * 100}%` : '0%' }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[11px] font-bold mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+                          <span className="text-gray-600">QRIS / Non-Tunai</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-gray-800 font-black">{formatRp(totalQris)}</span>
+                          <span className="text-gray-400 ml-1 text-[10px]">({totalPendapatan ? Math.round(totalQris / totalPendapatan * 100) : 0}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-blue-400 to-blue-500 h-full rounded-full transition-all duration-700"
+                          style={{ width: totalPendapatan ? `${(totalQris / totalPendapatan) * 100}%` : '0%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Top 5 Produk Terlaris ── */}
+              {topProds.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <h3 className="text-[11px] font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <i className="fa-solid fa-medal text-amber-500"></i> Produk Terlaris
+                  </h3>
+                  <div className="space-y-3">
+                    {topProds.map((p, idx) => (
+                      <div key={idx}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] font-black ${
+                            idx === 0 ? 'bg-amber-400 text-white' :
+                            idx === 1 ? 'bg-gray-300 text-gray-700' :
+                            idx === 2 ? 'bg-orange-300 text-white' :
+                            'bg-gray-100 text-gray-400'
+                          }`}>{idx + 1}</div>
+                          <p className="text-[11px] font-black text-gray-800 flex-1 truncate">{p.nama}</p>
+                          <div className="text-right shrink-0">
+                            <p className="text-[11px] font-black text-emerald-600">{formatRp(p.nominal)}</p>
+                            <p className="text-[9px] text-gray-400 font-bold">{p.qty} terjual</p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-amber-400 to-orange-400 h-full rounded-full transition-all duration-700"
+                            style={{ width: `${(p.qty / maxQty) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Jam Sibuk ── */}
+              {hourEntries.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <h3 className="text-[11px] font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <i className="fa-solid fa-clock text-blue-500"></i> Jam Tersibuk
+                  </h3>
+                  <div className="flex items-end gap-1 h-16">
+                    {hourEntries.map(({ h, v }) => (
+                      <div key={h} className="flex-1 flex flex-col items-center gap-0.5" title={`${h}:00 — ${formatRp(v)}`}>
+                        <div
+                          className="w-full rounded-t-sm bg-gradient-to-t from-[#0066FF] to-blue-300 transition-all duration-500"
+                          style={{ height: `${Math.max(4, Math.round((v / maxHourVal) * 52))}px` }}
+                        ></div>
+                        <p className="text-[8px] font-bold text-gray-400">{h}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Per Kasir ── */}
+              {kasirEntries.length > 1 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <h3 className="text-[11px] font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <i className="fa-solid fa-users text-purple-500"></i> Performa Kasir
+                  </h3>
+                  <div className="space-y-2">
+                    {kasirEntries.map(([name, data]) => (
+                      <div key={name} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-user text-purple-400 text-[10px]"></i>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-black text-gray-800 truncate">{name}</p>
+                            <p className="text-[9px] text-gray-400 font-bold">{data.trx} transaksi</p>
+                          </div>
+                        </div>
+                        <p className="text-[11px] font-black text-gray-700 shrink-0 tabular-nums">{formatRp(data.nominal)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Daftar Transaksi ── */}
+              <div>
+                <h3 className="text-[11px] font-black text-gray-700 mb-2 flex items-center gap-2 uppercase tracking-wider">
+                  <i className="fa-solid fa-list text-gray-400"></i>
+                  Daftar Transaksi
+                  <span className="ml-auto text-[10px] font-bold text-gray-400">{filtered.length} struk</span>
+                </h3>
+                {filtered.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
+                    <i className="fa-solid fa-chart-bar text-4xl text-gray-200 mb-3"></i>
+                    <p className="text-[12px] font-black text-gray-400 uppercase tracking-widest">Belum Ada Data</p>
+                    <p className="text-[10px] text-gray-400 font-bold mt-1">Tidak ada transaksi di periode ini</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filtered.map(trx => {
+                      const d = new Date(trx.timestamp);
+                      const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                      const dateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                      return (
+                        <button
+                          key={trx.id}
+                          onClick={() => setShowStruk(trx)}
+                          className="w-full bg-white rounded-xl border border-gray-100 shadow-sm px-3 py-2.5 flex justify-between items-center gap-2 hover:border-blue-200 hover:shadow-md transition-all text-left"
+                        >
+                          <div className="flex gap-2.5 items-center min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                              trx.metodeBayar === 'QRIS' ? 'bg-blue-50' : 'bg-emerald-50'
+                            }`}>
+                              <i className={cn('fa-solid text-[10px]', trx.metodeBayar === 'QRIS' ? 'fa-qrcode text-blue-500' : 'fa-money-bill-wave text-emerald-500')}></i>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-black text-gray-800">{trx.items.reduce((s: number, i: any) => s + i.qty, 0)} item • {trx.kasir}</p>
+                              <p className="text-[9px] font-bold text-gray-400">{dateStr}, {timeStr}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[12px] font-black text-gray-800 tabular-nums">{formatRp(trx.grandTotal)}</p>
+                            <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">LUNAS</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {activeTab === 'setting' && (
         <div className="flex-1 px-4 pt-4 pb-[90px] bg-white">
@@ -994,35 +1451,40 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         {/* Tombol Hide (>) */}
         <button
           onClick={() => setIsCartVisible(false)}
-          className="w-8 h-8 rounded-full bg-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] flex items-center justify-center text-blue-600 active:scale-95 transition-all"
+          className="w-7 h-7 rounded-full bg-white dark:bg-slate-800 shadow-md flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-white active:scale-95 transition-all border border-slate-100 dark:border-slate-700"
+          title="Sembunyikan"
         >
-          <i className="fa-solid fa-chevron-right text-xs"></i>
+          <i className="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
 
-        {/* Kolom Transaksi Utama */}
+        {/* Tombol Transaksi Bulat dengan Ikon Keranjang Biru (Kompak & Serasi) */}
         <button
           onClick={() => {
             setActiveTab('kasir');
             setTimeout(() => searchRef.current?.focus(), 100);
           }}
-          className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white rounded-full p-1 shadow-[0_8px_30px_rgba(0,102,255,0.4)] flex items-center hover:scale-105 active:scale-95 transition-all duration-300"
+          title={cart.length > 0 ? `Keranjang: ${cart.length} item (${formatRp(grandTotal)})` : 'Mulai Transaksi / Input Penjualan'}
+          className={cn(
+            "w-14 h-14 rounded-full flex flex-col items-center justify-center relative hover:scale-105 active:scale-95 transition-all duration-300 select-none",
+            "bg-white dark:bg-slate-900 border-2 border-blue-500/40 dark:border-blue-400/40 shadow-[0_8px_25px_rgba(0,102,255,0.25)] dark:shadow-[0_8px_25px_rgba(0,102,255,0.4)] ring-4 ring-blue-50/80 dark:ring-slate-800"
+          )}
         >
-          <div className="bg-white/20 rounded-full w-10 h-10 flex items-center justify-center relative backdrop-blur-sm">
-            <i className="fa-solid fa-cart-plus text-lg"></i>
-            {cart.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#FF3B30] text-white text-[9px] font-black min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full border border-[#0052cc] shadow-sm">
-                {cart.reduce((s, i) => s + i.qty, 0)}
-              </span>
-            )}
+          {/* Badge Jumlah Item jika ada isi keranjang */}
+          {cart.length > 0 && (
+            <span className="absolute -top-1.5 -right-1 bg-rose-600 text-white text-[10px] font-black min-w-[20px] h-[20px] px-1 flex items-center justify-center rounded-full border-2 border-white dark:border-slate-850 shadow-md animate-bounce">
+              {cart.reduce((s, i) => s + i.qty, 0)}
+            </span>
+          )}
+
+          {/* Ikon Keranjang Biru */}
+          <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-0.5">
+            <i className="fa-solid fa-cart-shopping text-base"></i>
           </div>
-          <div className="text-left px-2.5 pr-4">
-            <p className="text-[8px] font-bold text-blue-100 uppercase tracking-widest mb-0.5">
-              {cart.length > 0 ? 'Isi Keranjang' : 'Mulai Transaksi'}
-            </p>
-            <p className="text-[12px] font-black tabular-nums leading-none">
-              {cart.length > 0 ? formatRp(grandTotal) : 'Input Penjualan'}
-            </p>
-          </div>
+
+          {/* Teks Kasir Kecil Biru */}
+          <span className="text-[8.5px] font-black uppercase tracking-wider leading-none text-blue-600 dark:text-blue-400">
+            {cart.length > 0 ? 'Bayar' : 'Kasir'}
+          </span>
         </button>
       </div>
     </div>

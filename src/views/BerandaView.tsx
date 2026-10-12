@@ -3056,73 +3056,92 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               setShowKasirNotif(!showKasirNotif);
             }
           }}
-          notifPopupContent={
-            showKasirNotif && (
-              <div className="absolute right-0 top-11 w-72 bg-white rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden z-50 animate-in slide-in-from-top-2 origin-top-right">
-                <div className="px-4 py-3 bg-gradient-to-r from-rose-50 to-red-50 border-b border-rose-100 flex items-center justify-between">
-                  <h4 className="text-[11px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-rose-200/50 flex items-center justify-center shrink-0">
-                      <i className="fa-solid fa-bell text-[10px]"></i>
-                    </div>
-                    PEMBERITAHUAN
-                  </h4>
+          notifPopupContent={undefined}
+        />
+
+        {/* POPUP NOTIFIKASI KASIR (LONCENG) - DI ATAS KOLOM KASIR/TANGGAL & SALDO */}
+        {props.kasirRole !== 'owner' && showKasirNotif && (
+          <div className="fixed inset-0 z-[9999] flex justify-end items-start p-3 pt-14 pointer-events-none">
+            {/* Backdrop transparan untuk klik luar menutup popup */}
+            <div 
+              className="fixed inset-0 bg-black/25 backdrop-blur-[1px] pointer-events-auto animate-in fade-in duration-200"
+              onClick={() => setShowKasirNotif(false)}
+            />
+            
+            {/* Floating popup content */}
+            <div className="relative w-80 max-w-[calc(100vw-1.5rem)] bg-white rounded-3xl shadow-[0_20px_50px_-10px_rgba(0,0,0,0.35)] border border-slate-100 overflow-hidden z-10 pointer-events-auto animate-in slide-in-from-top-3 fade-in duration-200">
+              <div className="px-4 py-3 bg-gradient-to-r from-rose-50 to-red-50 border-b border-rose-100 flex items-center justify-between">
+                <h4 className="text-[11px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-rose-200/50 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-bell text-[10px]"></i>
+                  </div>
+                  PEMBERITAHUAN
+                </h4>
+                <div className="flex items-center gap-1.5">
                   {kasirLateHistory.length > 0 && (
                     <button 
                       onClick={handleClearLateNotifs}
-                      className="px-3 py-1.5 bg-white hover:bg-rose-100 text-rose-600 text-[9px] font-black rounded-full shadow-sm border border-rose-200 transition-all cursor-pointer active:scale-95"
+                      className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-600 text-[9px] font-black rounded-full shadow-xs border border-rose-200 transition-all cursor-pointer active:scale-95"
                     >
                       HAPUS
                     </button>
                   )}
-                </div>
-                <div className="max-h-72 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
-                  
-                  {/* Show Pesan Mendadak if exists */}
-                  {activePesanMendadak && (
-                    <div className="bg-white p-3.5 rounded-2xl border border-rose-200 shadow-sm flex items-start gap-3 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
-                      <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
-                        <i className="fa-solid fa-bullhorn text-[11px]"></i>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1">Pesan Owner</p>
-                        <p className="text-[11px] font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {kasirLateHistory.length === 0 && !activePesanMendadak ? (
-                    <div className="py-8 flex flex-col items-center justify-center opacity-50">
-                      <i className="fa-regular fa-bell-slash text-2xl text-slate-300 mb-2"></i>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Belum ada notifikasi</p>
-                    </div>
-                  ) : (
-                    kasirLateHistory.map((late, i) => (
-                      <div key={i} className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex flex-col gap-2.5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
-                            <span className="text-sm font-black text-slate-800">{late.jam}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">Telat {late.lateMins}m</span>
-                            <p className="text-[8px] font-bold text-slate-400 mt-1.5 uppercase">{late.shiftName}</p>
-                          </div>
-                        </div>
-                        {late.alasan_telat && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 mt-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">ALASAN:</p>
-                            <p className="text-[10px] font-bold text-slate-700 leading-relaxed">{late.alasan_telat}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
+                  <button 
+                    onClick={() => setShowKasirNotif(false)}
+                    className="w-6 h-6 rounded-full bg-rose-100/70 hover:bg-rose-200 text-rose-600 flex items-center justify-center transition-colors cursor-pointer text-[10px] font-black active:scale-90"
+                    title="Tutup"
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
-            )
-          }
-        />
+              <div className="max-h-72 overflow-y-auto p-3 space-y-3 bg-slate-50/50 hide-scrollbar">
+                
+                {/* Show Pesan Mendadak if exists */}
+                {activePesanMendadak && (
+                  <div className="bg-white p-3.5 rounded-2xl border border-rose-200 shadow-sm flex items-start gap-3 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
+                    <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
+                      <i className="fa-solid fa-bullhorn text-[11px]"></i>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1">Pesan Owner</p>
+                      <p className="text-[11px] font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
+                    </div>
+                  </div>
+                )}
+
+                {kasirLateHistory.length === 0 && !activePesanMendadak ? (
+                  <div className="py-8 flex flex-col items-center justify-center opacity-50">
+                    <i className="fa-regular fa-bell-slash text-2xl text-slate-300 mb-2"></i>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Belum ada notifikasi</p>
+                  </div>
+                ) : (
+                  kasirLateHistory.map((late, i) => (
+                    <div key={i} className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{late.tanggal}</p>
+                          <span className="text-sm font-black text-slate-800">{late.jam}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">Telat {late.lateMins}m</span>
+                          <p className="text-[8px] font-bold text-slate-400 mt-1.5 uppercase">{late.shiftName}</p>
+                        </div>
+                      </div>
+                      {late.alasan_telat && (
+                        <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 mt-1">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">ALASAN:</p>
+                          <p className="text-[10px] font-bold text-slate-700 leading-relaxed">{late.alasan_telat}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       <div className="mx-1.5 mb-3 mt-[-1.25rem] relative z-[40]">
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white overflow-hidden relative">
@@ -3266,28 +3285,37 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       <div className="mx-1.5 mb-0.5 relative z-50 space-y-2">
         
-        {/* Pesan Mendadak Popup */}
+        {/* Pesan Mendadak Popup (Di Atas Kolom Kasir/Tanggal & Saldo) */}
         {props.kasirRole !== 'owner' && activePesanMendadak && !dismissedPesanPopup && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-72 max-w-[92vw] bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-gray-100 overflow-hidden z-[60] animate-in slide-in-from-top-4 fade-in duration-300">
-            <div className="p-3.5 bg-red-50/80 border-b border-red-100/50 flex items-center justify-between">
-              <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
-                <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
-              </h4>
-              <button onClick={() => {
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center p-4 pt-16 pointer-events-none animate-in fade-in duration-300">
+            <div 
+              className="fixed inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-auto"
+              onClick={() => {
                 setDismissedPesanPopup(true)
                 sessionStorage.setItem('alphaPro_pesan_dismissed', 'true')
-              }} className="w-6 h-6 rounded-full bg-red-100/80 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shadow-sm">
-                <i className="fa-solid fa-xmark text-[10px]"></i>
-              </button>
-            </div>
-            <div className="p-2.5 bg-gray-50/50">
-              <div className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 shrink-0 mt-0.5">
-                  <i className="fa-solid fa-bullhorn text-[11px]"></i>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Pesan Owner</p>
-                  <p className="text-[12px] font-bold text-gray-900 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
+              }}
+            />
+            <div className="relative w-80 max-w-[92vw] bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] border border-gray-100 overflow-hidden z-10 pointer-events-auto animate-in slide-in-from-top-4 duration-300">
+              <div className="p-3.5 bg-red-50/80 border-b border-red-100/50 flex items-center justify-between">
+                <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-bell"></i> Riwayat Pemberitahuan
+                </h4>
+                <button onClick={() => {
+                  setDismissedPesanPopup(true)
+                  sessionStorage.setItem('alphaPro_pesan_dismissed', 'true')
+                }} className="w-6 h-6 rounded-full bg-red-100/80 hover:bg-red-200 text-red-500 flex items-center justify-center transition-colors shadow-sm cursor-pointer">
+                  <i className="fa-solid fa-xmark text-[10px]"></i>
+                </button>
+              </div>
+              <div className="p-2.5 bg-gray-50/50">
+                <div className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-sm flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 shrink-0 mt-0.5">
+                    <i className="fa-solid fa-bullhorn text-[11px]"></i>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Pesan Owner</p>
+                    <p className="text-[12px] font-bold text-gray-900 whitespace-pre-wrap leading-relaxed">{activePesanMendadak}</p>
+                  </div>
                 </div>
               </div>
             </div>

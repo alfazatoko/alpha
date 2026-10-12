@@ -260,7 +260,7 @@ select {
 
 /* Theme Header Utility - applies to the header frame inside pages */
 .theme-header {
-  background: #0B5ED7; /* default light */
+  background: #0000c6; /* Royal blue matching voucher header */
   transition: background 0.3s ease;
 }
 .theme-blue .theme-header {

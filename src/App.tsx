@@ -18,6 +18,8 @@ import LoginScreen, { type KasirAccount } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
+import DevInspector from './components/DevInspector'
+import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
 
@@ -313,6 +315,11 @@ const App: React.FC = () => {
 
           setKasirList(finalCashiers)
           localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(finalCashiers))
+
+          if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
+            localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
+            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+          }
           
           // Preload custom sound if any
           preloadTransactionSound(activeStoreId);
@@ -460,19 +467,27 @@ const App: React.FC = () => {
 
   // ── Show Google Login if not authenticated ──
   if (!googleSession) {
-    return <GoogleAuthScreen />
+    return (
+      <>
+        <GoogleAuthScreen />
+        <DevInspector activeView="auth" />
+      </>
+    )
   }
 
   // ── Show Selector Screen if role not selected ──
   if (!selectedRole) {
     return (
-      <SelectorScreen 
+      <>
+        <SelectorScreen 
         googleUid={googleSession.user.id} 
         googleEmail={googleSession.user.email} 
         onSelectRole={handleSelectRole} 
         onLogoutGoogle={handleLogoutGoogle} 
       />
-    )
+      <DevInspector activeView="pilih-toko" />
+    </>
+  )
   }
 
   // ── Show Profile Selection (Kasir) if not logged in ──
@@ -497,6 +512,7 @@ const App: React.FC = () => {
             return {};
           })()}
         />
+        <DevInspector activeView="login" />
       </div>
     )
   }
@@ -755,6 +771,18 @@ const MainApp: React.FC<MainAppProps> = ({
     return localStorage.getItem(key) || 'Selamat Datang di ALFAZA CELL'
   })
 
+  // Promo Banners State (1 - 5 foto promosi di halaman transaksi)
+  const [promoBanners, setPromoBanners] = useState<string[]>(() => {
+    try {
+      const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_promoBanners` : 'alphaPro_promoBanners'
+      const saved = localStorage.getItem(key) || localStorage.getItem('alphaPro_promoBanners')
+      const parsed = saved ? JSON.parse(saved) : null
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : []
+    } catch (e) {
+      return []
+    }
+  })
+
   // Presets Otomatis State
   const [presets, setPresets] = useState<any[]>(() => {
     try {
@@ -806,6 +834,21 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [googleUid, activeStoreId])
 
+  // Sync promoBanners when activeStoreId changes
+  useEffect(() => {
+    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_promoBanners` : 'alphaPro_promoBanners'
+    const saved = localStorage.getItem(key) || localStorage.getItem('alphaPro_promoBanners')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPromoBanners(parsed)
+          return
+        }
+      } catch (e) {}
+    }
+  }, [activeStoreId])
+
   const handleUploadToCloud = async () => {
     if (!googleUid || targetStoreId === 'all') return
     
@@ -813,6 +856,7 @@ const MainApp: React.FC<MainAppProps> = ({
     localStorage.setItem(`alphaPro_${targetStoreId}_kasir_list`, JSON.stringify(kasirList))
     localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_presets`, JSON.stringify(presets))
     localStorage.setItem(`alphaPro_${targetStoreId}_runningTexts`, JSON.stringify(runningTexts))
+    localStorage.setItem(`alphaPro_${targetStoreId}_promoBanners`, JSON.stringify(promoBanners))
     localStorage.setItem(`alphaPro_${targetStoreId}_mainAnnouncement`, mainAnnouncement)
 
     const isPin = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`) !== 'false'
@@ -843,6 +887,7 @@ const MainApp: React.FC<MainAppProps> = ({
       cashiers: kasirList,
       presets: combinedPresets,
       running_texts: runningTexts,
+      promo_banners: promoBanners,
       main_announcement: mainAnnouncement,
       is_pin_enabled: isPin,
       gemini_api_key: geminiApiKey || null,
@@ -1000,6 +1045,25 @@ const MainApp: React.FC<MainAppProps> = ({
       setPresets([])
       setRunningTexts(Array(15).fill(''))
       setMainAnnouncement('Selamat Datang di ALFAZA CELL')
+      // Restore promo banners from candidate store or localStorage fallback instead of clearing
+      const candidateStoreId = stores.length > 0 ? stores[0].id : (activeStore?.id || null)
+      if (candidateStoreId) {
+        supabase.from('store_settings').select('promo_banners').eq('store_id', candidateStoreId).maybeSingle()
+          .then(({ data: sData }) => {
+            if (sData?.promo_banners && Array.isArray(sData.promo_banners) && sData.promo_banners.length > 0) {
+              setPromoBanners(sData.promo_banners)
+              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(sData.promo_banners))
+              localStorage.setItem(`alphaPro_${candidateStoreId}_promoBanners`, JSON.stringify(sData.promo_banners))
+            }
+          })
+      }
+      const savedBanners = localStorage.getItem('alphaPro_promoBanners')
+      if (savedBanners) {
+        try {
+          const parsed = JSON.parse(savedBanners)
+          if (Array.isArray(parsed) && parsed.length > 0) setPromoBanners(parsed)
+        } catch(e) {}
+      }
       return
     }
     
@@ -1086,6 +1150,21 @@ const MainApp: React.FC<MainAppProps> = ({
         if (local !== remoteStr) {
           localStorage.setItem(`alphaPro_${targetStoreId}_runningTexts`, remoteStr)
           setRunningTexts(data.running_texts)
+          changed = true
+        }
+      }
+      if (data.promo_banners) {
+        let incomingBanners: string[] = []
+        if (Array.isArray(data.promo_banners)) {
+          incomingBanners = data.promo_banners
+        } else if (typeof data.promo_banners === 'string') {
+          try { incomingBanners = JSON.parse(data.promo_banners) } catch (e) {}
+        }
+        if (incomingBanners.length > 0) {
+          const remoteStr = JSON.stringify(incomingBanners)
+          localStorage.setItem(`alphaPro_${targetStoreId}_promoBanners`, remoteStr)
+          localStorage.setItem('alphaPro_promoBanners', remoteStr)
+          setPromoBanners(incomingBanners)
           changed = true
         }
       }
@@ -1395,12 +1474,26 @@ const MainApp: React.FC<MainAppProps> = ({
         setAdminRules({ 'Transfer Bank': [], 'DANA': [], 'FLIP': [], 'Tarik Tunai': [] })
         setRunningTexts(Array(15).fill(''))
         setMainAnnouncement('Selamat Datang di ALFAZA CELL')
+        try {
+          const lb = localStorage.getItem('alphaPro_promoBanners')
+          if (lb) {
+            const parsed = JSON.parse(lb)
+            if (Array.isArray(parsed) && parsed.length > 0) setPromoBanners(parsed)
+          }
+        } catch(e) {}
       } else {
         try { const lk = localStorage.getItem(`alphaPro_${targetStoreId}_kasir_list`); setKasirList(lk ? JSON.parse(lk) : {}); } catch(e){}
         try { const lp = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`); setPresets(lp ? JSON.parse(lp) : []); } catch(e){}
         try { const la = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`); setAdminRules(la ? JSON.parse(la) : { 'Transfer Bank': [], 'DANA': [], 'FLIP': [], 'Tarik Tunai': [] }); } catch(e){}
         try { const lr = localStorage.getItem(`alphaPro_${targetStoreId}_runningTexts`); setRunningTexts(lr ? JSON.parse(lr) : Array(15).fill('')); } catch(e){}
         setMainAnnouncement(localStorage.getItem(`alphaPro_${targetStoreId}_mainAnnouncement`) || 'Selamat Datang di ALFAZA CELL')
+        try {
+          const lb = localStorage.getItem(`alphaPro_${targetStoreId}_promoBanners`) || localStorage.getItem('alphaPro_promoBanners')
+          if (lb) {
+            const parsed = JSON.parse(lb)
+            if (Array.isArray(parsed) && parsed.length > 0) setPromoBanners(parsed)
+          }
+        } catch(e) {}
       }
 
       handleDownloadFromCloud(true)
@@ -1557,6 +1650,25 @@ const MainApp: React.FC<MainAppProps> = ({
         .order('created_at', { ascending: true })
       if (!error && data) {
         setStores(data)
+        if (data.length > 0) {
+          const storeIds = data.map(s => s.id)
+          supabase
+            .from('store_settings')
+            .select('promo_banners')
+            .in('store_id', storeIds)
+            .not('promo_banners', 'is', null)
+            .then(({ data: bData }) => {
+              if (bData) {
+                for (const row of bData) {
+                  if (row.promo_banners && Array.isArray(row.promo_banners) && row.promo_banners.length > 0) {
+                    setPromoBanners(row.promo_banners)
+                    localStorage.setItem('alphaPro_promoBanners', JSON.stringify(row.promo_banners))
+                    break
+                  }
+                }
+              }
+            })
+        }
       }
     }
     fetchStores()
@@ -1646,10 +1758,43 @@ const MainApp: React.FC<MainAppProps> = ({
         cashiers: kasirList,
         presets: presets,
         running_texts: texts,
+        promo_banners: promoBanners,
         main_announcement: mainAnnouncement,
         is_pin_enabled: isPin,
         updated_at: new Date().toISOString()
       })
+    }
+  }
+
+  const savePromoBanners = async (banners: string[]) => {
+    setPromoBanners(banners)
+    localStorage.setItem('alphaPro_promoBanners', JSON.stringify(banners))
+
+    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    const storeIdsToUpsert = new Set<string>()
+    if (targetId && targetId !== 'all') {
+      storeIdsToUpsert.add(targetId)
+    } else {
+      if (activeStore?.id && activeStore.id !== 'all') storeIdsToUpsert.add(activeStore.id)
+      stores.forEach(s => { if (s.id && s.id !== 'all') storeIdsToUpsert.add(s.id) })
+    }
+
+    if (storeIdsToUpsert.size > 0) {
+      try {
+        for (const sId of storeIdsToUpsert) {
+          localStorage.setItem(`alphaPro_${sId}_promoBanners`, JSON.stringify(banners))
+          await supabase.from('store_settings').upsert({
+            store_id: sId,
+            promo_banners: banners,
+            updated_at: new Date().toISOString()
+          })
+        }
+        showToast('FOTO PROMOSI DISINKRONKAN KE CLOUD!')
+      } catch (e) {
+        console.error('Gagal sinkron promo_banners ke Supabase:', e)
+      }
+    } else {
+      showToast('FOTO PROMOSI DISIMPAN LOKAL!')
     }
   }
 
@@ -1673,6 +1818,7 @@ const MainApp: React.FC<MainAppProps> = ({
         cashiers: kasirList,
         presets: presets,
         running_texts: runningTexts,
+        promo_banners: promoBanners,
         main_announcement: text,
         is_pin_enabled: isPin,
         updated_at: new Date().toISOString()
@@ -3243,6 +3389,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       mainAnnouncement={mainAnnouncement}
                       onSaveRunningTexts={saveRunningTexts}
                       onSaveMainAnnouncement={saveMainAnnouncement}
+                      promoBanners={promoBanners}
+                      onSavePromoBanners={savePromoBanners}
                       storeName={storeName}
                       storeSubtext={storeSubtext}
                       storePhoto={storePhoto}
@@ -3546,6 +3694,8 @@ const MainApp: React.FC<MainAppProps> = ({
             mainAnnouncement={mainAnnouncement}
             onSaveRunningTexts={saveRunningTexts}
             onSaveMainAnnouncement={saveMainAnnouncement}
+            promoBanners={promoBanners}
+            onSavePromoBanners={savePromoBanners}
             storeName={storeName}
             storeSubtext={storeSubtext}
             storePhoto={storePhoto}
@@ -3638,8 +3788,12 @@ const MainApp: React.FC<MainAppProps> = ({
                 extraBgPadding={true}
               />
 
-              {/* Blue Card - Kata Mutiara Slide */}
-              <MotivasiSlider storeName={storeName} runningTexts={runningTexts} />
+              {/* Pure Promo Banner Slider (1 - 5 Foto Promosi Tanpa Teks) */}
+              <PromoBannerSlider 
+                banners={promoBanners} 
+                onGoToSettings={() => setActiveView('view-akun')} 
+                isOwner={activeRole === 'owner'} 
+              />
 
               <div className="px-2 mt-2 pb-24 relative z-10">
                 <TransactionForm 
@@ -4159,6 +4313,7 @@ const MainApp: React.FC<MainAppProps> = ({
       />
         </>
       )}
+      <DevInspector activeView={activeView} />
     </div>
   )
 }

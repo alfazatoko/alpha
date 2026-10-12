@@ -14,6 +14,8 @@ interface AkunViewProps {
   mainAnnouncement?: string
   onSaveRunningTexts?: (texts: string[]) => void
   onSaveMainAnnouncement?: (text: string) => void
+  promoBanners?: string[]
+  onSavePromoBanners?: (banners: string[]) => void
   storeName?: string
   storeSubtext?: string
   storePhoto?: string
@@ -522,6 +524,206 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     const texts = Array.isArray(props.runningTexts) ? props.runningTexts : Array(15).fill('')
     setLocalRunningTextsText(texts.filter(t => t.trim() !== '').join('\n'))
   }, [props.runningTexts])
+
+  // State Promo Banners (1 - 5 foto promosi)
+  const [localPromoBanners, setLocalPromoBanners] = useState<string[]>(props.promoBanners || [])
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false)
+
+  useEffect(() => {
+    if (props.promoBanners) {
+      setLocalPromoBanners(props.promoBanners)
+    }
+  }, [props.promoBanners])
+
+  const handleAddPromoBanner = async (file: File) => {
+    if (localPromoBanners.length >= 5) {
+      alert('Maksimal 5 foto promosi.')
+      return
+    }
+    try {
+      setIsUploadingBanner(true)
+      const compressed = await compressImage(file, 1000, 450, 0.85)
+      const updated = [...localPromoBanners, compressed]
+      setLocalPromoBanners(updated)
+      props.onSavePromoBanners?.(updated)
+    } catch (e) {
+      console.error('Gagal kompres foto banner:', e)
+    } finally {
+      setIsUploadingBanner(false)
+    }
+  }
+
+  const handleReplacePromoBanner = async (index: number, file: File) => {
+    try {
+      setIsUploadingBanner(true)
+      const compressed = await compressImage(file, 1000, 450, 0.85)
+      const updated = [...localPromoBanners]
+      updated[index] = compressed
+      setLocalPromoBanners(updated)
+      props.onSavePromoBanners?.(updated)
+    } catch (e) {
+      console.error('Gagal ganti foto banner:', e)
+    } finally {
+      setIsUploadingBanner(false)
+    }
+  }
+
+  const handleDeletePromoBanner = (index: number) => {
+    const doDelete = () => {
+      const updated = localPromoBanners.filter((_, i) => i !== index)
+      setLocalPromoBanners(updated)
+      props.onSavePromoBanners?.(updated)
+    }
+    if (props.onConfirm) {
+      props.onConfirm(
+        'HAPUS FOTO BANNER',
+        `Apakah Anda yakin ingin menghapus foto promosi ke-${index + 1}?`,
+        doDelete
+      )
+    } else {
+      if (confirm(`Hapus foto promosi ke-${index + 1}?`)) {
+        doDelete()
+      }
+    }
+  }
+
+  const renderPromoBannerManager = (isMobile: boolean) => (
+    <div className={cn(
+      "bg-white dark:bg-slate-800 rounded-3xl border shadow-sm transition-all",
+      isMobile ? "p-4 border-orange-100 dark:border-slate-700 mb-2" : "p-8 border-slate-100 dark:border-slate-700 mb-6"
+    )}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <i className="fa-solid fa-images text-sm"></i>
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+              Foto Banner Promosi
+            </h4>
+            <p className="text-[9px] text-slate-400 font-bold uppercase">
+              Khusus Halaman + Transaksi (1 s/d 5 Foto)
+            </p>
+          </div>
+        </div>
+        <span className="text-[9px] font-black px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+          {localPromoBanners.length} / 5 Foto
+        </span>
+      </div>
+
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4 font-medium leading-relaxed">
+        Foto promosi akan berganti otomatis secara halus di bagian atas halaman + Transaksi kasir (tanpa teks). Rekomendasi ukuran pas: <strong className="text-blue-600 dark:text-blue-400">1000 x 250 px</strong> (rasio 4 : 1) agar tampil pas sempurna di mode HP maupun Tablet tanpa terpotong.
+      </p>
+
+      {/* Grid Foto */}
+      <div className={cn(
+        "grid gap-3",
+        isMobile ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
+      )}>
+        {localPromoBanners.map((imgUrl, idx) => (
+          <div
+            key={idx}
+            className="group relative rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-900 aspect-[4/1] shadow-sm flex flex-col justify-between"
+            style={{ aspectRatio: '1000 / 250' }}
+          >
+            <img
+              src={imgUrl}
+              alt={`Banner ${idx + 1}`}
+              className="w-full h-full object-cover select-none"
+            />
+
+            {/* Badge Slot */}
+            <div className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-sm text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
+              Foto {idx + 1}
+            </div>
+
+            {/* Action Buttons Overlay */}
+            <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between gap-1 z-10">
+              {/* Ganti Foto */}
+              <label
+                title="Ganti Foto Ini"
+                className="flex-1 py-1 px-1 bg-white/95 hover:bg-white text-slate-900 rounded-lg text-[8.5px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform active:scale-95 shadow"
+              >
+                <i className="fa-solid fa-arrows-rotate text-[8px] text-blue-600"></i>
+                <span>Ganti</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isUploadingBanner}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleReplacePromoBanner(idx, file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+
+              {/* Hapus Foto */}
+              <button
+                type="button"
+                title="Hapus Foto Ini"
+                onClick={() => handleDeletePromoBanner(idx)}
+                disabled={isUploadingBanner}
+                className="w-6 h-6 bg-red-500/90 hover:bg-red-600 text-white rounded-lg flex items-center justify-center text-[10px] active:scale-95 transition-transform shadow"
+              >
+                <i className="fa-solid fa-trash-can text-[9px]"></i>
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Slot Tambah Foto Baru (jika belum 5) */}
+        {localPromoBanners.length < 5 && (
+          <label
+            className={cn(
+              "rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex flex-col items-center justify-center text-center p-3 cursor-pointer transition-all aspect-[4/1] group",
+              isUploadingBanner && "opacity-50 pointer-events-none"
+            )}
+            style={{ aspectRatio: '1000 / 250' }}
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform mb-1.5">
+              <i className="fa-solid fa-plus text-xs"></i>
+            </div>
+            <span className="text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-tight">
+              + Tambah Foto
+            </span>
+            <span className="text-[8px] text-blue-500 dark:text-blue-400 font-bold">
+              Slot {localPromoBanners.length + 1} dari 5
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={isUploadingBanner}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleAddPromoBanner(file)
+                e.target.value = ''
+              }}
+            />
+          </label>
+        )}
+      </div>
+
+      {/* Loading Spinner */}
+      {isUploadingBanner && (
+        <div className="mt-2.5 text-center text-[9px] font-bold text-blue-600 animate-pulse flex items-center justify-center gap-1.5">
+          <i className="fa-solid fa-circle-notch fa-spin"></i>
+          <span>Sedang mengompres & mengunggah foto banner...</span>
+        </div>
+      )}
+
+      {localPromoBanners.length === 0 && (
+        <div className="mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-700/60 flex items-center gap-2">
+          <i className="fa-solid fa-circle-info text-blue-500 text-xs shrink-0"></i>
+          <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">
+            Belum ada foto banner yang diunggah. Halaman + Transaksi akan menampilkan kartu banner standar hingga Anda mengunggah minimal 1 foto promosi.
+          </p>
+        </div>
+      )}
+    </div>
+  )
 
   const handleUploadToCloud = async () => {
     if (!props.onUploadToCloud) return
@@ -1466,6 +1668,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       <i className="fa-solid fa-circle-info mr-2"></i> Pilih toko spesifik untuk mengedit teks berjalan.
                     </div>
                   )}
+                  {/* Foto Banner Promosi Manager */}
+                  {renderPromoBannerManager(false)}
+
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
                     <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Teks Berjalan & Pengumuman</h3>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-6 font-bold uppercase">Atur pesan promosi atau instruksi kerja yang akan tampil di halaman utama</p>
@@ -3593,6 +3798,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                 </button>
                 {openCategory === 'promo' && (
                   <div className="mt-2 p-5 bg-orange-50/30 border border-orange-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 space-y-5">
+                    {/* Foto Banner Promosi Manager */}
+                    {renderPromoBannerManager(true)}
+
                     <div>
                       <label className="text-[9px] font-black text-orange-600 uppercase tracking-tight ml-1 mb-2 block">Teks Utama (Highlight)</label>
                       <input

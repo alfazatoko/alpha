@@ -25,3 +25,4 @@ dist-ssr
 release.keystore 
 keystore_base64.txt 
 backend-ai/.env
+.dev_selected_element.json

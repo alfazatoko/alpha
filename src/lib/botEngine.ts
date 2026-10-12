@@ -360,8 +360,8 @@ export function answerFromKB(
 ): string | null {
   const c = text.toLowerCase().trim()
 
-  // ── 0c. EXECUTIVE BRIEFING OWNER (GOAL 4) ─────────────────────────────
-  if (c.includes('briefing owner') || c.includes('executive briefing') || c.includes('ringkasan eksekutif') || c.includes('laporan pagi owner') || c.includes('briefing pagi') || c === 'briefing') {
+  // ── 0c. EXECUTIVE BRIEFING / LAPORAN PENJUALAN OWNER ────────────────
+  if (c.includes('rangkuman hasil penjualan') || c.includes('laporan malam') || c.includes('closing malam') || c.includes('briefing owner') || c.includes('executive briefing') || c.includes('ringkasan eksekutif') || c === 'briefing') {
     return generateExecutiveBriefing(storeId, username, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
   }
 
@@ -2442,10 +2442,10 @@ export function generateExecutiveBriefing(
   const absensiToday = absensiList.filter(a => (a.tanggal || a.timestamp || '').startsWith(todayStr))
   const countHadir = absensiToday.filter(a => a.status === 'Hadir' || a.status === 'Hadir Shift').length
 
-  let res = `🌅 **BRIEFING EKSEKUTIF OWNER (MORNING DIGEST)**\n`
-  res += `📅 *${fullDate}* | Toko: **ALFAZA CELL**\n\n`
+  let res = `🌙 **RANGKUMAN HASIL PENJUALAN HARI INI**\n`
+  res += `📅 Tanggal: **${fullDate}** | Toko: **ALFAZA CELL**\n\n`
 
-  res += `📊 **1. RINGKASAN PERFORMANCE (HARI INI & KEMARIN)**\n`
+  res += `📊 **1. RINGKASAN PENJUALAN & OMSET**\n`
   res += `• Omset Utama Hari Ini: Rp ${omsetToday.toLocaleString('id-ID')} (${countToday} trx)\n`
   res += `• Fee Admin + Profit Voucher: **Rp ${(adminToday + voucherProfitToday).toLocaleString('id-ID')}**\n`
   res += `• Total Omset Kemarin: Rp ${omsetYesterday.toLocaleString('id-ID')} (${countYesterday} trx)\n`
@@ -2508,11 +2508,12 @@ export async function generateDailySummaryAllStores(
     .order('created_at', { ascending: true })
 
   if (storesError || !stores || stores.length === 0) {
-    return `📊 **RINGKASAN PAGI — ${yesterdayLabel}**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._`
+    return `🌙 **RANGKUMAN HASIL PENJUALAN KEMARIN — ${yesterdayLabel}**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._`
   }
 
-  let summary = `🌅 **RINGKASAN PAGI — ${yesterdayLabel}**\n`
-  summary += `Hai **${ownerName}**, berikut laporan semua toko kemarin:\n\n`
+  let summary = `🌙 **RANGKUMAN HASIL PENJUALAN KEMARIN**\n`
+  summary += `📅 Tanggal: **${yesterdayLabel}**\n\n`
+  summary += `Halo **${ownerName}**, berikut rangkuman laporan penjualan harian semua toko dan kasir kemarin:\n\n`
 
   let grandOmset = 0
   let grandAdmin = 0
@@ -2597,19 +2598,22 @@ export async function generateDailySummaryByDate(
     .order('created_at', { ascending: true })
 
   if (storesError || !stores || stores.length === 0) {
-    return '📊 **REKAP ' + dateLabel.toUpperCase() + '**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._'
+    return '🌙 **RANGKUMAN HASIL PENJUALAN HARI INI**\n📅 Tanggal: **' + dateLabel + '**\n\n_Gagal mengambil data toko. Pastikan koneksi internet aktif._'
   }
 
-  let summary = '📅 **REKAP — ' + dateLabel + '**\n\n'
+  let summary = '🌙 **RANGKUMAN HASIL PENJUALAN HARI INI**\n'
+  summary += '📅 Tanggal: **' + dateLabel + '**\n\n'
+  summary += 'Halo **' + ownerName + '**, berikut laporan harian hasil penjualan semua toko dan kasir hari ini:\n\n'
 
   let grandOmset = 0
   let grandAdmin = 0
   let grandTrx = 0
+  const allActiveKasir = new Set<string>()
 
   for (const store of stores) {
     const { data: txData } = await supabase
       .from('transactions')
-      .select('nominal, admin_fee, kategori, kasir_name')
+      .select('nominal, admin_fee, kategori, kasir_name, kasir_id')
       .eq('user_id', googleUid)
       .eq('store_id', store.id)
       .gte('timestamp', dateStr + 'T00:00:00')
@@ -2618,34 +2622,61 @@ export async function generateDailySummaryByDate(
     const txList: any[] = txData || []
     const filtered = txList.filter((t: any) => !t.kategori?.startsWith('Isi '))
 
-    const omset = filtered.reduce((s: number, t: any) => s + (t.nominal || 0), 0)
-    const admin = filtered.reduce((s: number, t: any) => s + (t.admin_fee || 0), 0)
-    const count = filtered.length
+    let omset = filtered.reduce((s: number, t: any) => s + (t.nominal || 0), 0)
+    let admin = filtered.reduce((s: number, t: any) => s + (t.admin_fee || 0), 0)
+    let count = filtered.length
+
+    // Group by kasir
+    const byKasir: Record<string, { omset: number, trxCount: number }> = {}
+    filtered.forEach((t: any) => {
+      const kName = t.kasir_name || t.kasir_id || 'Kasir Default'
+      allActiveKasir.add(kName)
+      if (!byKasir[kName]) byKasir[kName] = { omset: 0, trxCount: 0 }
+      byKasir[kName].omset += (t.nominal || 0)
+      byKasir[kName].trxCount += 1
+    })
+
+    // Cek transaksi POS Kasir (jika ada)
+    try {
+      const { data: posData } = await supabase
+        .from('pos_transactions')
+        .select('grand_total, kasir, created_at')
+        .eq('store_id', store.id)
+        .gte('created_at', dateStr + 'T00:00:00')
+        .lte('created_at', dateStr + 'T23:59:59')
+
+      if (posData && posData.length > 0) {
+        posData.forEach((pt: any) => {
+          const val = Number(pt.grand_total) || 0
+          const kName = pt.kasir || 'Kasir POS'
+          allActiveKasir.add(kName)
+          omset += val
+          count += 1
+          if (!byKasir[kName]) byKasir[kName] = { omset: 0, trxCount: 0 }
+          byKasir[kName].omset += val
+          byKasir[kName].trxCount += 1
+        })
+      }
+    } catch {}
 
     grandOmset += omset
     grandAdmin += admin
     grandTrx += count
 
-    // Group by kasir
-    const byKasir: Record<string, { omset: number }> = {}
-    filtered.forEach((t: any) => {
-      const kName = t.kasir_name || 'Kasir Default'
-      if (!byKasir[kName]) byKasir[kName] = { omset: 0 }
-      byKasir[kName].omset += (t.nominal || 0)
-    })
-
     summary += '🏪 **' + store.name + '**\n'
     if (count === 0) {
-      summary += '• _Tidak ada transaksi._\n\n'
+      summary += '• _Belum ada transaksi hari ini._\n\n'
     } else {
-      summary += '• Total Omset: **Rp ' + omset.toLocaleString('id-ID') + '** (' + count + ' trx)\n'
-      summary += '• Profit Admin: Rp ' + admin.toLocaleString('id-ID') + '\n'
+      summary += '• Total Omset: **Rp ' + omset.toLocaleString('id-ID') + '** (' + count + ' transaksi)\n'
+      if (admin > 0) {
+        summary += '• Profit / Fee Admin: Rp ' + admin.toLocaleString('id-ID') + '\n'
+      }
       
       const kasirKeys = Object.keys(byKasir)
       if (kasirKeys.length > 0) {
-        summary += '_Rincian Penjualan:_\n'
+        summary += '👥 *Rincian Penjualan Kasir:*\n'
         kasirKeys.forEach(kName => {
-          summary += '  👤 Kasir ' + kName + ' : Rp ' + byKasir[kName].omset.toLocaleString('id-ID') + '\n'
+          summary += '  👤 Kasir **' + kName + '**: Rp ' + byKasir[kName].omset.toLocaleString('id-ID') + ' (' + byKasir[kName].trxCount + ' trx)\n'
         })
       }
       summary += '\n'
@@ -2655,12 +2686,15 @@ export async function generateDailySummaryByDate(
   if (stores.length > 1) {
     summary += '━━━━━━━━━━━━━━━━━━━━━\n'
     summary += '📈 **TOTAL SEMUA TOKO**\n'
-    summary += '• Omset: **Rp ' + grandOmset.toLocaleString('id-ID') + '**\n'
-    summary += '• Profit: **Rp ' + grandAdmin.toLocaleString('id-ID') + '**\n'
-    summary += '• Transaksi: **' + grandTrx + ' trx**\n\n'
+    summary += '• Total Omset: **Rp ' + grandOmset.toLocaleString('id-ID') + '**\n'
+    if (grandAdmin > 0) {
+      summary += '• Total Profit: **Rp ' + grandAdmin.toLocaleString('id-ID') + '**\n'
+    }
+    summary += '• Total Transaksi: **' + grandTrx + ' transaksi**\n'
+    summary += '• Kasir Aktif: **' + allActiveKasir.size + ' orang**\n\n'
   }
 
-  summary += '💡 Ketik _"rekap tanggal [angka]"_ untuk cek tanggal lain.'
+  summary += '⏰ _Laporan harian otomatis closing malam (Pukul 23:30 WIB)_'
 
   return summary
 }

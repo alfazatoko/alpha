@@ -54,7 +54,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
   return (
     <>
-      <div className={cn("relative theme-header overflow-hidden", extraBgPadding ? "pb-24 pt-5" : "pb-8 pt-5")}>
+      <div className={cn("relative theme-header bg-[#0000c6] overflow-hidden", extraBgPadding ? "pb-24 pt-5" : "pb-8 pt-5")}>
         {/* FUTURISTIC GEOMETRIC BACKGROUND */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
           {/* Subtle gradient overlay to make the base color richer without breaking themes */}

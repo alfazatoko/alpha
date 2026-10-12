@@ -182,27 +182,30 @@ const AssistantBot: React.FC<Props> = ({
   const [pendingActions, setPendingActions] = useState<BotAction[] | null>(null)
   const [pendingActionSummary, setPendingActionSummary] = useState<string>('')
 
-  // ── Morning Summary Auto-trigger (Owner only) ──────────────────────────────
+  // ── Auto Report Penjualan Kasir Malam Hari (Owner only) — Setiap Jam 23:30 (11.30 Malam) ──
   useEffect(() => {
     if (kasirRole !== 'owner' || !googleUid) return
 
-    const todayStr = new Date().toISOString().split('T')[0]
-    const flagKey = `alphaPro_morning_summary_${googleUid}_${todayStr}`
+    const checkNightlySummary = async () => {
+      const now = new Date()
+      const hour = now.getHours()
+      const minute = now.getMinutes()
 
-    // Cek apakah sudah kirim ringkasan hari ini
-    if (localStorage.getItem(flagKey)) return
+      // Hanya terpicu mulai pukul 23:30 (11.30 malam) ke atas setiap hari
+      if (hour < 23 || (hour === 23 && minute < 30)) return
 
-    // Tandai badge merah di ikon bot
-    setHasMorningSummary(true)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+      const flagKey = `alphaPro_night_report_${googleUid}_${dateStr}`
 
-    // Fetch + tampilkan ringkasan setelah app stabil (delay 2s)
-    const timer = setTimeout(async () => {
+      if (localStorage.getItem(flagKey)) return
+
       try {
-        const text = await generateDailySummaryAllStores(googleUid, kasirName || 'Owner')
+        const text = await generateDailySummaryByDate(googleUid, kasirName || 'Owner', dateStr)
 
         setMessages(prev => {
           const msg = {
-            id: 'morning-summary-' + Date.now(),
+            id: 'night-summary-' + Date.now(),
             from: 'bot' as const,
             mode: 'app' as const,
             text,
@@ -211,57 +214,9 @@ const AssistantBot: React.FC<Props> = ({
           return [...prev, msg]
         })
 
-        // Simpan flag agar tidak muncul lagi hari ini
         localStorage.setItem(flagKey, '1')
-        setHasMorningSummary(false)
-
-        // Auto buka bot agar owner langsung lihat
-        setIsOpen(true)
-
-        setTimeout(() => {
-          playNotificationChime()
-        }, 300)
-      } catch (err) {
-        console.error('Morning summary error:', err)
-      }
-    }, 2000)
-
-    return () => clearTimeout(timer)
-  }, [kasirRole, googleUid, kasirName])
-
-  // ── Nightly Summary Auto-trigger (Owner only) ──────────────────────────────
-  useEffect(() => {
-    if (kasirRole !== 'owner' || !googleUid) return
-
-    const checkNightlySummary = async () => {
-      const now = new Date()
-      // Memicu ringkasan malam otomatis antara pukul 23:00 - 23:59 (sebelum jam 12 malam)
-      if (now.getHours() !== 23) return
-
-      const todayStr = now.toISOString().split('T')[0]
-      const flagKey = `alphaPro_night_summary_${googleUid}_${todayStr}`
-
-      if (localStorage.getItem(flagKey)) return
-
-      try {
-        const pad = (n: number) => String(n).padStart(2, '0')
-        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-        
-        const text = await generateDailySummaryByDate(googleUid, kasirName || 'Owner', dateStr)
-
-        setMessages(prev => {
-          const msg = {
-            id: 'night-summary-' + Date.now(),
-            from: 'bot' as const,
-            mode: 'app' as const,
-            text: `🌙 **LAPORAN CLOSING OTOMATIS (Malam Hari):**\n\n${text}`,
-            timestamp: Date.now()
-          }
-          return [...prev, msg]
-        })
-
-        localStorage.setItem(flagKey, '1')
-        setHasMorningSummary(true) // Menampilkan notifikasi titik merah di ikon bot
+        setHasMorningSummary(true) // Titik merah penanda laporan di tombol bot
+        setIsOpen(true) // Otomatis buka chat panel bot agar owner langsung melihat laporan hasil penjualan
         
         playNotificationChime()
       } catch (err) {
@@ -269,11 +224,11 @@ const AssistantBot: React.FC<Props> = ({
       }
     }
 
-    // Check sekali saat komponen mount (jika owner membuka app jam 23.xx)
+    // Periksa saat komponen mount (jika owner membuka app setelah jam 23:30)
     checkNightlySummary()
 
-    // Check secara berkala tiap 5 menit jika app terus terbuka
-    const interval = setInterval(checkNightlySummary, 5 * 60 * 1000)
+    // Cek berkala tiap 30 detik untuk menangkap waktu tepat jam 23:30 malam
+    const interval = setInterval(checkNightlySummary, 30 * 1000)
     return () => clearInterval(interval)
   }, [kasirRole, googleUid, kasirName])
 
@@ -440,28 +395,6 @@ const AssistantBot: React.FC<Props> = ({
             localStorage.setItem(warnKey, '1')
             setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
           }, 800)
-        }
-      }
-
-      // ── Auto Executive Briefing untuk Owner saat pertama kali membuka bot hari ini ──
-      if (kasirRole === 'owner') {
-        const briefKey = `alphaPro_${activeStoreId}_exec_briefing_${new Date().toISOString().split('T')[0]}`
-        if (!localStorage.getItem(briefKey)) {
-          setTimeout(() => {
-            const briefingText = generateExecutiveBriefing(activeStoreId, kasirName || currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
-            setMessages(prev => {
-              const briefMsg: BotMessage = {
-                id: 'exec-brief-' + Date.now(),
-                from: 'bot',
-                mode: 'app',
-                text: briefingText,
-                timestamp: Date.now()
-              }
-              return [...prev, briefMsg]
-            })
-            localStorage.setItem(briefKey, '1')
-            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-          }, 1200)
         }
       }
     }
@@ -984,7 +917,7 @@ const AssistantBot: React.FC<Props> = ({
         drag
         dragMomentum={false}
         whileDrag={{ scale: 1.1, cursor: 'grabbing' }}
-        onClick={() => { setIsOpen(p=>!p); setShowSettings(false) }}
+        onClick={() => { setIsOpen(p=>!p); setShowSettings(false); setHasMorningSummary(false) }}
         title="Asisten Bot Alpha"
         style={{ backdropFilter:'blur(12px)' }}
         className={`fixed top-16 left-3 z-[998] w-10 rounded-2xl flex flex-col items-center justify-center gap-0.5 py-1 shadow-lg transition-all duration-300 active:scale-90 ${isOpen ? 'bg-indigo-700 shadow-indigo-600/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 hover:scale-110 shadow-indigo-500/40'}`}
