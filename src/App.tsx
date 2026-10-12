@@ -18,7 +18,6 @@ import LoginScreen, { type KasirAccount } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
 import { supabase } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
-import DevInspector from './components/DevInspector'
 import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
@@ -468,26 +467,20 @@ const App: React.FC = () => {
   // ── Show Google Login if not authenticated ──
   if (!googleSession) {
     return (
-      <>
-        <GoogleAuthScreen />
-        <DevInspector activeView="auth" />
-      </>
+      <GoogleAuthScreen />
     )
   }
 
   // ── Show Selector Screen if role not selected ──
   if (!selectedRole) {
     return (
-      <>
-        <SelectorScreen 
+      <SelectorScreen 
         googleUid={googleSession.user.id} 
         googleEmail={googleSession.user.email} 
         onSelectRole={handleSelectRole} 
         onLogoutGoogle={handleLogoutGoogle} 
       />
-      <DevInspector activeView="pilih-toko" />
-    </>
-  )
+    )
   }
 
   // ── Show Profile Selection (Kasir) if not logged in ──
@@ -512,7 +505,6 @@ const App: React.FC = () => {
             return {};
           })()}
         />
-        <DevInspector activeView="login" />
       </div>
     )
   }
@@ -4313,7 +4305,6 @@ const MainApp: React.FC<MainAppProps> = ({
       />
         </>
       )}
-      <DevInspector activeView={activeView} />
     </div>
   )
 }
