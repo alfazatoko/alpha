@@ -535,36 +535,114 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     }
   }, [props.promoBanners])
 
-  const handleAddPromoBanner = async (file: File) => {
-    if (localPromoBanners.length >= 5) {
-      alert('Maksimal 5 foto promosi.')
-      return
-    }
-    try {
-      setIsUploadingBanner(true)
-      const compressed = await compressImage(file, 1000, 450, 0.85)
-      const updated = [...localPromoBanners, compressed]
-      setLocalPromoBanners(updated)
-      props.onSavePromoBanners?.(updated)
-    } catch (e) {
-      console.error('Gagal kompres foto banner:', e)
-    } finally {
-      setIsUploadingBanner(false)
+  // ── State untuk Banner Editor (Geser, Zoom & Crop Foto Banner) ──
+  const [showBannerEditor, setShowBannerEditor] = useState(false)
+  const [bannerEditorSrc, setBannerEditorSrc] = useState('')
+  const [bannerEditorIndex, setBannerEditorIndex] = useState<number | null>(null)
+  const [bannerEditorZoom, setBannerEditorZoom] = useState(1)
+  const [bannerEditorOffset, setBannerEditorOffset] = useState({ x: 0, y: 0 })
+  const [bannerInitialSize, setBannerInitialSize] = useState({ w: 336, h: 140 })
+  const [isDraggingBannerEditor, setIsDraggingBannerEditor] = useState(false)
+  const [dragStartBannerEditor, setDragStartBannerEditor] = useState({ x: 0, y: 0 })
+
+  const FRAME_W = 336
+  const FRAME_H = 140
+
+  const setupBannerEditorImage = (src: string, targetIndex: number | null) => {
+    const img = new Image()
+    img.src = src
+    img.onload = () => {
+      const imgAspect = img.naturalWidth / img.naturalHeight
+      const frameAspect = FRAME_W / FRAME_H
+      let initW = FRAME_W
+      let initH = FRAME_H
+      if (imgAspect >= frameAspect) {
+        initH = FRAME_H
+        initW = FRAME_H * imgAspect
+      } else {
+        initW = FRAME_W
+        initH = FRAME_W / imgAspect
+      }
+      setBannerInitialSize({ w: initW, h: initH })
+      setBannerEditorSrc(src)
+      setBannerEditorIndex(targetIndex)
+      setBannerEditorZoom(1)
+      setBannerEditorOffset({ x: 0, y: 0 })
+      setShowBannerEditor(true)
     }
   }
 
-  const handleReplacePromoBanner = async (index: number, file: File) => {
+  const startBannerUpload = (file: File, targetIndex: number | null) => {
+    if (targetIndex === null && localPromoBanners.length >= 5) {
+      alert('Maksimal 5 foto promosi.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string
+      if (result) {
+        setupBannerEditorImage(result, targetIndex)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const openBannerEditorForPosition = (index: number, imgUrl: string) => {
+    setupBannerEditorImage(imgUrl, index)
+  }
+
+  const handleBannerPointerDown = (e: React.PointerEvent) => {
+    setIsDraggingBannerEditor(true)
+    setDragStartBannerEditor({ x: e.clientX - bannerEditorOffset.x, y: e.clientY - bannerEditorOffset.y })
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handleBannerPointerMove = (e: React.PointerEvent) => {
+    if (!isDraggingBannerEditor) return
+    const newX = e.clientX - dragStartBannerEditor.x
+    const newY = e.clientY - dragStartBannerEditor.y
+    setBannerEditorOffset({ x: newX, y: newY })
+  }
+
+  const handleBannerPointerUp = (e: React.PointerEvent) => {
+    setIsDraggingBannerEditor(false)
     try {
-      setIsUploadingBanner(true)
-      const compressed = await compressImage(file, 1000, 450, 0.85)
-      const updated = [...localPromoBanners]
-      updated[index] = compressed
-      setLocalPromoBanners(updated)
-      props.onSavePromoBanners?.(updated)
-    } catch (e) {
-      console.error('Gagal ganti foto banner:', e)
-    } finally {
-      setIsUploadingBanner(false)
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch (err) {}
+  }
+
+  const handleSaveBannerCropped = () => {
+    if (!bannerEditorSrc) return
+    const img = new Image()
+    img.src = bannerEditorSrc
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 1200
+      canvas.height = 500
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        const ratio = 1200 / FRAME_W
+        const drawW = bannerInitialSize.w * bannerEditorZoom * ratio
+        const drawH = bannerInitialSize.h * bannerEditorZoom * ratio
+        const drawX = 600 - (drawW / 2) + (bannerEditorOffset.x * ratio)
+        const drawY = 250 - (drawH / 2) + (bannerEditorOffset.y * ratio)
+
+        ctx.fillStyle = '#020617'
+        ctx.fillRect(0, 0, 1200, 500)
+        ctx.drawImage(img, drawX, drawY, drawW, drawH)
+
+        const compressed = canvas.toDataURL('image/jpeg', 0.88)
+        let updated: string[] = []
+        if (bannerEditorIndex !== null) {
+          updated = [...localPromoBanners]
+          updated[bannerEditorIndex] = compressed
+        } else {
+          updated = [...localPromoBanners, compressed]
+        }
+        setLocalPromoBanners(updated)
+        props.onSavePromoBanners?.(updated)
+        setShowBannerEditor(false)
+      }
     }
   }
 
@@ -612,63 +690,39 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
       </div>
 
       <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4 font-medium leading-relaxed">
-        Foto promosi akan berganti otomatis secara halus di bagian atas halaman + Transaksi kasir (tanpa teks). Rekomendasi ukuran pas: <strong className="text-blue-600 dark:text-blue-400">1000 x 250 px</strong> (rasio 4 : 1) agar tampil pas sempurna di mode HP maupun Tablet tanpa terpotong.
+        Foto promosi akan berganti otomatis secara halus di bagian atas halaman + Transaksi kasir (tanpa teks). Ukuran dan lekukan disamakan dengan kolom header Riwayat (<strong className="text-blue-600 dark:text-blue-400">Arus kas keluar masuk · Data Transaksi</strong>) agar pas, ramping, dan tidak terpotong baik di mode HP maupun Tablet.
       </p>
 
       {/* Grid Foto */}
       <div className={cn(
         "grid gap-3",
-        isMobile ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
+        isMobile ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
       )}>
         {localPromoBanners.map((imgUrl, idx) => (
           <div
             key={idx}
-            className="group relative rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-900 aspect-[4/1] shadow-sm flex flex-col justify-between"
-            style={{ aspectRatio: '1000 / 250' }}
+            onClick={() => openBannerEditorForPosition(idx, imgUrl)}
+            className="group relative rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 overflow-hidden bg-slate-900 aspect-[2.4/1] shadow-sm flex flex-col justify-center items-center cursor-pointer transition-all active:scale-[0.98]"
+            style={{ aspectRatio: '2.4 / 1' }}
           >
+            {/* Ambient blur backdrop untuk foto jika ada perbedaan rasio */}
+            <img
+              src={imgUrl}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-sm opacity-35 scale-105 pointer-events-none select-none"
+            />
             <img
               src={imgUrl}
               alt={`Banner ${idx + 1}`}
-              className="w-full h-full object-cover select-none"
+              className="relative z-0 w-full h-full object-contain select-none pointer-events-none"
             />
 
-            {/* Badge Slot */}
-            <div className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-sm text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
-              Foto {idx + 1}
-            </div>
-
-            {/* Action Buttons Overlay */}
-            <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between gap-1 z-10">
-              {/* Ganti Foto */}
-              <label
-                title="Ganti Foto Ini"
-                className="flex-1 py-1 px-1 bg-white/95 hover:bg-white text-slate-900 rounded-lg text-[8.5px] font-black flex items-center justify-center gap-1 cursor-pointer transition-transform active:scale-95 shadow"
-              >
-                <i className="fa-solid fa-arrows-rotate text-[8px] text-blue-600"></i>
-                <span>Ganti</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={isUploadingBanner}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) handleReplacePromoBanner(idx, file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-
-              {/* Hapus Foto */}
-              <button
-                type="button"
-                title="Hapus Foto Ini"
-                onClick={() => handleDeletePromoBanner(idx)}
-                disabled={isUploadingBanner}
-                className="w-6 h-6 bg-red-500/90 hover:bg-red-600 text-white rounded-lg flex items-center justify-center text-[10px] active:scale-95 transition-transform shadow"
-              >
-                <i className="fa-solid fa-trash-can text-[9px]"></i>
-              </button>
+            {/* Icon Pensil di Bawah Sebelah Kanan (Tanpa teks, foto jelas terlihat utuh) */}
+            <div className="absolute bottom-2 right-2 z-10 pointer-events-none">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/95 dark:bg-slate-800/95 text-blue-600 dark:text-blue-400 shadow-md flex items-center justify-center border border-white/60 dark:border-white/10 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-pen text-[9px] sm:text-[10px]"></i>
+              </div>
             </div>
           </div>
         ))}
@@ -677,10 +731,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
         {localPromoBanners.length < 5 && (
           <label
             className={cn(
-              "rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex flex-col items-center justify-center text-center p-3 cursor-pointer transition-all aspect-[4/1] group",
+              "rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex flex-col items-center justify-center text-center p-3 cursor-pointer transition-all aspect-[2.4/1] group",
               isUploadingBanner && "opacity-50 pointer-events-none"
             )}
-            style={{ aspectRatio: '1000 / 250' }}
+            style={{ aspectRatio: '2.4 / 1' }}
           >
             <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform mb-1.5">
               <i className="fa-solid fa-plus text-xs"></i>
@@ -698,7 +752,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               disabled={isUploadingBanner}
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file) handleAddPromoBanner(file)
+                if (file) startBannerUpload(file, null)
                 e.target.value = ''
               }}
             />
@@ -4378,6 +4432,183 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           </div>
         </div>
       )}
+
+      {/* ── Modal Atur Posisi / Geser & Zoom Foto Banner ── */}
+      {showBannerEditor && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-5 sm:p-6 max-w-sm sm:max-w-md w-full shadow-2xl border border-slate-100 dark:border-slate-700 flex flex-col items-center relative">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between w-full mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <i className="fa-solid fa-pen-to-square text-xs"></i>
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest leading-none">
+                    Edit Foto Banner
+                  </h3>
+                  <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-0.5">
+                    Geser posisi atau ganti foto baru
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowBannerEditor(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-xs"></i>
+              </button>
+            </div>
+
+            {/* Framing Box (Preview Pemotongan Sesuai Rasio Banner 2.4 : 1) */}
+            <div className="relative w-[320px] sm:w-[336px] h-[133px] sm:h-[140px] rounded-t-[1.25rem] rounded-b-[1.5rem] border-2 border-blue-500 shadow-xl overflow-hidden bg-slate-950 flex items-center justify-center mb-4 ring-4 ring-blue-500/20">
+              {bannerEditorSrc && (
+                <div
+                  className="w-full h-full relative overflow-hidden select-none touch-none"
+                  onPointerDown={handleBannerPointerDown}
+                  onPointerMove={handleBannerPointerMove}
+                  onPointerUp={handleBannerPointerUp}
+                  onPointerCancel={handleBannerPointerUp}
+                  style={{ cursor: isDraggingBannerEditor ? 'grabbing' : 'grab' }}
+                >
+                  <img
+                    src={bannerEditorSrc}
+                    alt="Editor Preview"
+                    className="absolute max-w-none pointer-events-none select-none"
+                    style={{
+                      width: `${bannerInitialSize.w * bannerEditorZoom}px`,
+                      height: `${bannerInitialSize.h * bannerEditorZoom}px`,
+                      left: '50%',
+                      top: '50%',
+                      transform: `translate(calc(-50% + ${bannerEditorOffset.x}px), calc(-50% + ${bannerEditorOffset.y}px))`,
+                    }}
+                  />
+
+                  {/* Grid garis bantu tipis pemandu posisi (Rule of Thirds) */}
+                  <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 border border-white/20 opacity-30">
+                    <div className="border-r border-b border-white/20"></div>
+                    <div className="border-r border-b border-white/20"></div>
+                    <div className="border-b border-white/20"></div>
+                    <div className="border-r border-b border-white/20"></div>
+                    <div className="border-r border-b border-white/20"></div>
+                    <div className="border-b border-white/20"></div>
+                    <div className="border-r border-white/20"></div>
+                    <div className="border-r border-white/20"></div>
+                    <div></div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Toolbar Tombol Opsi: Ganti Photo, Pusatkan, Hapus */}
+            <div className="flex items-center gap-2 w-full mb-3 px-1">
+              <input
+                type="file"
+                id="banner-editor-replace-file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    try {
+                      const base64 = await compressImage(file, 1600, 1600, 0.9)
+                      setupBannerEditorImage(base64, bannerEditorIndex)
+                    } catch (err) {
+                      alert("Gagal memuat foto baru")
+                    }
+                  }
+                  e.target.value = ''
+                }}
+              />
+
+              {/* Tombol Ganti Foto Baru */}
+              <button
+                type="button"
+                onClick={() => document.getElementById('banner-editor-replace-file')?.click()}
+                className="flex-1 py-2 px-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-sm"
+              >
+                <i className="fa-solid fa-camera text-xs"></i>
+                <span>Ganti Foto</span>
+              </button>
+
+              {/* Tombol Pusatkan Posisi */}
+              <button
+                type="button"
+                onClick={() => {
+                  setBannerEditorOffset({ x: 0, y: 0 })
+                  setBannerEditorZoom(1)
+                }}
+                className="flex-1 py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-slate-600 transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+              >
+                <i className="fa-solid fa-arrows-to-dot text-xs"></i>
+                <span>Pusatkan</span>
+              </button>
+
+              {/* Tombol Hapus Foto Banner */}
+              {bannerEditorIndex !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idxToDelete = bannerEditorIndex
+                    setShowBannerEditor(false)
+                    handleDeletePromoBanner(idxToDelete)
+                  }}
+                  className="py-2 px-3 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-[10px] font-black uppercase tracking-wider hover:bg-red-100 dark:hover:bg-red-900/50 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-sm"
+                  title="Hapus foto banner ini"
+                >
+                  <i className="fa-solid fa-trash-can text-xs"></i>
+                  <span>Hapus</span>
+                </button>
+              )}
+            </div>
+
+            {/* Slider Zoom */}
+            <div className="w-full px-1 mb-4">
+              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">
+                <span className="flex items-center gap-1 font-black text-slate-700 dark:text-slate-200 text-[9px]">
+                  <i className="fa-solid fa-magnifying-glass-plus text-blue-500"></i> Zoom Foto
+                </span>
+                <span className="tabular-nums font-mono font-black text-blue-600 dark:text-blue-400 text-[10px]">
+                  {Math.round(bannerEditorZoom * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.8"
+                max="3"
+                step="0.02"
+                value={bannerEditorZoom}
+                onChange={(e) => setBannerEditorZoom(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setShowBannerEditor(false)}
+                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveBannerCropped}
+                className="flex-[1.5] py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                style={{ color: '#ffffff' }}
+              >
+                <i className="fa-solid fa-check"></i> Simpan Foto
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
       {/* Ã¢â€â‚¬Ã¢â€â‚¬ Karyawan Avatar Zoom Lightbox Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showKaryawanAvatarZoom && (
