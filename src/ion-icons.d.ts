@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 declare global {
+  const __APP_VERSION__: string;
   namespace JSX {
     interface IntrinsicElements {
       'ion-icon': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { name?: string }, HTMLElement>;
@@ -25,5 +26,3 @@ declare module 'virtual:pwa-register/react' {
     updateServiceWorker: (reloadPage?: boolean) => Promise<void>;
   };
 }
-
-declare const __APP_VERSION__: string;
