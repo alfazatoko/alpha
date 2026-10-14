@@ -591,6 +591,8 @@ const App: React.FC = () => {
           setCurrentUsername(uname)
           setCurrentAccount(acc)
         }}
+        financialSettings={financialSettings}
+        setFinancialSettings={setFinancialSettings}
       />
     </>
   )
@@ -613,6 +615,8 @@ interface MainAppProps {
   activeRole: 'owner' | 'kasir'
   activeStore: Store | null
   onUpdateActiveCashier: (username: string, account: KasirAccount) => void
+  financialSettings: Record<string, string>
+  setFinancialSettings: React.Dispatch<React.SetStateAction<Record<string, string>>>
 }
 
 const MainApp: React.FC<MainAppProps> = ({ 
@@ -628,7 +632,9 @@ const MainApp: React.FC<MainAppProps> = ({
   activeStoreId,
   activeRole,
   activeStore,
-  onUpdateActiveCashier
+  onUpdateActiveCashier,
+  financialSettings,
+  setFinancialSettings
 }) => {
 
   // PWA Update State
