@@ -3,7 +3,7 @@ import { App as CapApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 import { useRegisterSW } from 'virtual:pwa-register/react'
-import { parseNominal, formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString } from './lib/utils'
+import { parseNominal, formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, APP_VERSION } from './lib/utils'
 import type { Transaction, OperkanSaldo } from './types'
 
 // Components
@@ -143,6 +143,30 @@ const App: React.FC = () => {
   const [currentAccount, setCurrentAccount] = useState<KasirAccount | null>(hasBypass ? { name: 'Demo Owner', role: 'owner', pin: '1234' } : null)
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
   
+  // ── Financial & Shift Settings State (Realtime Cloud Sync) ──
+  const [financialSettings, setFinancialSettings] = useState<Record<string, string>>(() => {
+    try {
+      const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+      const saved = localStorage.getItem(key) || localStorage.getItem('alphaPro_financial')
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  // Sync financialSettings when activeStoreId changes
+  useEffect(() => {
+    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+    const saved = localStorage.getItem(key) || localStorage.getItem('alphaPro_financial')
+    if (saved) {
+      try {
+        setFinancialSettings(JSON.parse(saved))
+      } catch (e) {}
+    } else {
+      setFinancialSettings({})
+    }
+  }, [activeStoreId])
+
   // ── UI States ──
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
@@ -315,6 +339,12 @@ const App: React.FC = () => {
           setKasirList(finalCashiers)
           localStorage.setItem(`alphaPro_${activeStoreId}_kasir_list`, JSON.stringify(finalCashiers))
 
+          // Sync financial_settings (jam absen shift & operasional)
+          if (data.financial_settings && typeof data.financial_settings === 'object') {
+            setFinancialSettings(data.financial_settings)
+            localStorage.setItem(`alphaPro_${activeStoreId}_financial`, JSON.stringify(data.financial_settings))
+          }
+
           if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
@@ -343,6 +373,31 @@ const App: React.FC = () => {
     }
 
     fetchStoreSettings()
+
+    // Realtime subscription for store_settings (sync jam absen shift antar perangkat)
+    const storeSettingsChannel = supabase
+      .channel(`rt_store_settings_${activeStoreId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_settings',
+          filter: `store_id=eq.${activeStoreId}`
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.financial_settings) {
+            const newFin = payload.new.financial_settings
+            setFinancialSettings(newFin)
+            localStorage.setItem(`alphaPro_${activeStoreId}_financial`, JSON.stringify(newFin))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(storeSettingsChannel)
+    }
   }, [activeStoreId, googleSession?.user?.id])
 
   // ── Login / Logout Handlers ──
@@ -503,13 +558,7 @@ const App: React.FC = () => {
           storeId={activeStoreId}
           storePhoto={activeStore?.photo_url || (activeStoreId && activeStoreId !== 'all' ? localStorage.getItem(`alphaPro_${activeStoreId}_store_photo`) : null) || localStorage.getItem('alphaPro_store_photo') || undefined}
           kasirListOverride={kasirList} 
-          financialSettings={(() => {
-            try {
-              const stored = localStorage.getItem(`alphaPro_${activeStoreId}_financial`);
-              if (stored) return JSON.parse(stored);
-            } catch(e) {}
-            return {};
-          })()}
+          financialSettings={financialSettings}
         />
       </div>
     )
@@ -1089,12 +1138,13 @@ const MainApp: React.FC<MainAppProps> = ({
         const { data: financeData } = await supabase.from('store_finances').select('*').eq('store_id', targetStoreId).maybeSingle();
         if (financeData) {
           data.financial_settings = {
-            startDate: financeData.start_date || '',
-            rentPeriod: financeData.rent_period || 'bulanan',
-            rentAmount: financeData.rent_amount || '',
-            rentDueDate: financeData.rent_due_date || '',
-            electricityBill: financeData.electricity_bill || '',
-            wifiBill: financeData.wifi_bill || ''
+            ...(data.financial_settings || {}),
+            startDate: financeData.start_date || (data.financial_settings?.startDate || ''),
+            rentPeriod: financeData.rent_period || (data.financial_settings?.rentPeriod || 'bulanan'),
+            rentAmount: financeData.rent_amount || (data.financial_settings?.rentAmount || ''),
+            rentDueDate: financeData.rent_due_date || (data.financial_settings?.rentDueDate || ''),
+            electricityBill: financeData.electricity_bill || (data.financial_settings?.electricityBill || ''),
+            wifiBill: financeData.wifi_bill || (data.financial_settings?.wifiBill || '')
           };
         }
 
@@ -1391,6 +1441,9 @@ const MainApp: React.FC<MainAppProps> = ({
 
       // Sync Financial Settings
       if (data.financial_settings) {
+        if (targetStoreId === activeStoreId) {
+          setFinancialSettings(data.financial_settings)
+        }
         const local = localStorage.getItem(`alphaPro_${targetStoreId}_financial`)
         const remoteStr = JSON.stringify(data.financial_settings)
         if (local !== remoteStr) {
@@ -1824,12 +1877,24 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  // Save Financial Settings (Beban Operasional) online ke Supabase
+  // Save Financial Settings (Beban Operasional & Shift Absensi) online ke Supabase
   const saveFinancial = async (settings: Record<string, string>) => {
-    const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
+    const targetId = activeRole === 'owner' ? (pantauStoreId || activeStoreId) : activeStoreId
     if (!targetId || targetId === 'all') return
-    // Simpan lokal dulu
-    localStorage.setItem(`alphaPro_${targetId}_financial`, JSON.stringify(settings))
+
+    const payloadSettings = {
+      ...settings,
+      min_app_version: '1.3.2',
+      app_version: APP_VERSION,
+      updated_at: new Date().toISOString()
+    }
+
+    // Update state & simpan lokal
+    if (targetId === activeStoreId) {
+      setFinancialSettings(payloadSettings)
+    }
+    localStorage.setItem(`alphaPro_${targetId}_financial`, JSON.stringify(payloadSettings))
+
     // Upload ke Supabase via store_finances
     try {
       await supabase.from('store_finances').upsert({
@@ -1842,10 +1907,10 @@ const MainApp: React.FC<MainAppProps> = ({
         wifi_bill: settings.wifiBill,
         updated_at: new Date().toISOString()
       })
-      // Backup ke store_settings legacy
+      // Backup ke store_settings (terhubung realtime ke HP kasir v1.3.2+)
       await supabase.from('store_settings').upsert({
         store_id: targetId,
-        financial_settings: settings,
+        financial_settings: payloadSettings,
         updated_at: new Date().toISOString()
       })
     } catch (e) {

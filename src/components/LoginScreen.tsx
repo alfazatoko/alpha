@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { getLocalDateString, getShiftInfo, getActiveShifts, checkShiftLateness, APP_VERSION } from '../lib/utils'
+import { getLocalDateString, getShiftInfo, getActiveShifts, checkShiftLateness, APP_VERSION, isVersionSupported } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 
 export interface KasirAccount {
   pin: string
@@ -52,7 +53,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   storeId, 
   storePhoto,
   kasirListOverride, 
-  financialSettings 
+  financialSettings: propFinancialSettings 
 }) => {
   const [selectedUser, setSelectedUser] = useState('')
   const [pin, setPin] = useState('')
@@ -68,6 +69,70 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   )
 
+  // Live financial & shift settings synced with Supabase Realtime
+  const [liveFinancialSettings, setLiveFinancialSettings] = useState<Record<string, string>>(() => {
+    if (propFinancialSettings && Object.keys(propFinancialSettings).length > 0) {
+      return propFinancialSettings
+    }
+    try {
+      const key = storeId && storeId !== 'all' ? `alphaPro_${storeId}_financial` : 'alphaPro_financial'
+      const stored = localStorage.getItem(key) || localStorage.getItem('alphaPro_financial')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  // Sync when prop updates
+  useEffect(() => {
+    if (propFinancialSettings && Object.keys(propFinancialSettings).length > 0) {
+      setLiveFinancialSettings(propFinancialSettings)
+    }
+  }, [propFinancialSettings])
+
+  // Real-time synchronization from Supabase for this store
+  useEffect(() => {
+    if (!storeId || storeId === 'all') return
+
+    // 1. Fetch fresh store_settings from cloud
+    supabase
+      .from('store_settings')
+      .select('financial_settings')
+      .eq('store_id', storeId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.financial_settings) {
+          setLiveFinancialSettings(data.financial_settings)
+          localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(data.financial_settings))
+        }
+      })
+
+    // 2. Realtime listener for live updates from Owner phone
+    const channel = supabase
+      .channel(`login_store_settings_${storeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_settings',
+          filter: `store_id=eq.${storeId}`
+        },
+        (payload: any) => {
+          const newFin = payload.new?.financial_settings
+          if (newFin) {
+            setLiveFinancialSettings(newFin)
+            localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(newFin))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [storeId])
+
   // Update clock every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -76,10 +141,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     return () => clearInterval(timer)
   }, [])
 
-  // Check active shifts from store financial settings
+  // Check active shifts from store financial settings (only active for updated app v1.3.2+)
   const activeShifts = useMemo(() => {
-    return getActiveShifts(financialSettings)
-  }, [financialSettings])
+    if (!isVersionSupported(APP_VERSION, '1.3.2')) return []
+    return getActiveShifts(liveFinancialSettings, APP_VERSION)
+  }, [liveFinancialSettings])
 
   const isAbsenFeatureActive = activeShifts.length > 0
 
@@ -127,8 +193,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   // Lateness info for the currently selected shift
   const shiftLateness = useMemo(() => {
     if (!selectedShift || activeShifts.length === 0) return { isLate: false, lateMins: 0 }
-    return checkShiftLateness(currentTimeStr, selectedShift, financialSettings)
-  }, [selectedShift, currentTimeStr, financialSettings, activeShifts])
+    return checkShiftLateness(currentTimeStr, selectedShift, liveFinancialSettings)
+  }, [selectedShift, currentTimeStr, liveFinancialSettings, activeShifts])
 
   useEffect(() => {
     if (kasirListOverride) {

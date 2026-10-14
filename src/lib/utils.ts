@@ -106,7 +106,35 @@ export interface ActiveShiftItem {
   tolerance: number;
 }
 
-export const getActiveShifts = (finSettings?: Record<string, string>): ActiveShiftItem[] => {
+/**
+ * Helper to check if current app version meets required min version (e.g. 1.3.2)
+ */
+export const isVersionSupported = (currentVer: string = APP_VERSION, minVer: string = '1.3.2'): boolean => {
+  try {
+    const curParts = (currentVer || '').split('.').map(n => parseInt(n, 10) || 0);
+    const minParts = (minVer || '').split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(curParts.length, minParts.length); i++) {
+      const c = curParts[i] || 0;
+      const m = minParts[i] || 0;
+      if (c > m) return true;
+      if (c < m) return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+};
+
+export const getActiveShifts = (
+  finSettings?: Record<string, string>,
+  clientVersion: string = APP_VERSION
+): ActiveShiftItem[] => {
+  // Hanya aktif untuk aplikasi yang sudah di-update ke versi terbaru (1.3.2+)
+  const minRequired = finSettings?.min_app_version || '1.3.2';
+  if (!isVersionSupported(clientVersion, minRequired)) {
+    return [];
+  }
+
   if (finSettings?.absenEnabled === 'false') {
     return [];
   }

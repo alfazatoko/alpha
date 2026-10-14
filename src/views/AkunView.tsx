@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
-import { cn, compressImage, getShiftInfo, getActiveShifts } from '../lib/utils'
+import { cn, compressImage, getShiftInfo, getActiveShifts, APP_VERSION } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
@@ -487,7 +487,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }, [props.activeStoreId])
 
   const handleSaveFinancial = (key: string, value: string) => {
-    const newSettings = { ...financialSettings, [key]: value }
+    const newSettings = { ...financialSettings, [key]: value, app_version: APP_VERSION, min_app_version: '1.3.2' }
     setFinancialSettings(newSettings)
     const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
     localStorage.setItem(storeKey, JSON.stringify(newSettings))
@@ -498,7 +498,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }
 
   const handleSaveMultipleFinancial = (updates: Record<string, string>) => {
-    const newSettings = { ...financialSettings, ...updates }
+    const newSettings = { ...financialSettings, ...updates, app_version: APP_VERSION, min_app_version: '1.3.2' }
     setFinancialSettings(newSettings)
     const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
     localStorage.setItem(storeKey, JSON.stringify(newSettings))
@@ -2841,6 +2841,19 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </div>
                         </div>
 
+                        {/* Real-time sync badge info */}
+                        <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200/60 px-2.5 py-1.5 rounded-lg">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span className="text-[7.5px] font-black text-emerald-800 uppercase tracking-tight">
+                              Sinkron Realtime Online (v{APP_VERSION}+)
+                            </span>
+                          </div>
+                          <span className="text-[7px] font-bold text-emerald-600 bg-white px-1.5 py-0.5 rounded border border-emerald-100">
+                            Auto-sync HP Kasir
+                          </span>
+                        </div>
+
                         {isEditingShift ? (
                           <div className="space-y-3">
                             {/* Pilihan Cepat Mode Shift */}
@@ -4587,7 +4600,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-gray-300 mt-10">Versi 1.2.0 (Production)</p>
+        <p className="text-center text-[10px] text-gray-300 mt-10">ALPHA Pro v{APP_VERSION} (Production)</p>
       </div>
 
       {/* Ã¢â€â‚¬Ã¢â€â‚¬ Avatar Crop & Detail Modal Ã¢â€â‚¬Ã¢â€â‚¬ */}
