@@ -25,3 +25,5 @@ declare module 'virtual:pwa-register/react' {
     updateServiceWorker: (reloadPage?: boolean) => Promise<void>;
   };
 }
+
+declare const __APP_VERSION__: string;

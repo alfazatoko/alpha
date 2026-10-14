@@ -70,17 +70,18 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
   }
 
   return (
-    <div className="w-full mx-auto px-1.5 mb-3 mt-[-1.25rem] relative z-[40] select-none max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+    <div className="w-full px-1.5 mb-3 mt-[-1.25rem] relative z-[40] select-none">
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white dark:border-white/20 overflow-hidden w-full bg-slate-950 group transition-all duration-300 h-[142px] sm:h-[162px] md:h-[178px]"
+        className="relative rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white dark:border-white/20 overflow-hidden w-full bg-slate-900 group transition-all duration-300 aspect-[2.4/1]"
+        style={{ aspectRatio: '2.4 / 1' }}
       >
         {validBanners.length > 0 ? (
           <>
-            {/* Foto Promosi Murni (Proporsional & Tidak Terpotong) */}
-            <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-center justify-center">
+            {/* Foto Promosi Murni (Proporsional, Full Edge-to-Edge & Tidak Terpotong) */}
+            <div className="w-full h-full relative overflow-hidden bg-slate-900 flex items-center justify-center">
               {validBanners.map((imgUrl, idx) => (
                 <div
                   key={idx}
@@ -88,19 +89,11 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
                     idx === activeIdx ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                   }`}
                 >
-                  {/* Ambient backdrop halus: mengisi background agar estetis */}
-                  <img
-                    src={imgUrl}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute inset-0 w-full h-full object-cover blur-xl opacity-35 scale-110 select-none pointer-events-none"
-                    tabIndex={-1}
-                  />
-                  {/* Foto Utama: Utuh 100% tanpa terpotong di mode HP & Tablet */}
+                  {/* Foto Utama: Full sampai ke pinggir, proporsional dan utuh di mode HP & Tablet */}
                   <img
                     src={imgUrl}
                     alt={`Banner Promosi ${idx + 1}`}
-                    className="relative z-10 w-full h-full object-contain select-none pointer-events-none"
+                    className="w-full h-full object-cover select-none pointer-events-none"
                     loading="lazy"
                     draggable={false}
                   />
@@ -115,35 +108,38 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
             {validBanners.length > 1 && (
               <>
                 <button
+                  type="button"
                   onClick={handlePrev}
-                  className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-md active:scale-95"
+                  className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-md active:scale-95 cursor-pointer"
                   title="Foto sebelumnya"
                 >
-                  <i className="fa-solid fa-chevron-left text-[10px] sm:text-xs"></i>
+                  <i className="fa-solid fa-chevron-left text-[11px] sm:text-xs"></i>
                 </button>
                 <button
+                  type="button"
                   onClick={handleNext}
-                  className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-md active:scale-95"
+                  className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-md active:scale-95 cursor-pointer"
                   title="Foto berikutnya"
                 >
-                  <i className="fa-solid fa-chevron-right text-[10px] sm:text-xs"></i>
+                  <i className="fa-solid fa-chevron-right text-[11px] sm:text-xs"></i>
                 </button>
               </>
             )}
 
             {/* Indikator Titik (Dots) Slide */}
             {validBanners.length > 1 && (
-              <div className="absolute bottom-1.5 sm:bottom-2 inset-x-0 flex justify-center items-center gap-1.5 sm:gap-2 z-20 pointer-events-auto">
+              <div className="absolute bottom-2 sm:bottom-3 inset-x-0 flex justify-center items-center gap-1.5 sm:gap-2 z-20 pointer-events-auto">
                 {validBanners.map((_, i) => (
                   <button
                     key={i}
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       setActiveIdx(i)
                     }}
-                    className={`h-1 sm:h-1.5 rounded-full transition-all duration-300 shadow-sm ${
+                    className={`h-1 sm:h-1.5 rounded-full transition-all duration-300 shadow-sm cursor-pointer ${
                       i === activeIdx
-                        ? 'w-5 sm:w-6 bg-white'
+                        ? 'w-5 sm:w-7 bg-white'
                         : 'w-1 sm:w-1.5 bg-white/50 hover:bg-white/80'
                     }`}
                     title={`Ke foto ${i + 1}`}

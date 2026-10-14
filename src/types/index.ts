@@ -51,6 +51,7 @@ export interface Absensi {
   status: 'Hadir' | 'Libur' | 'Lembur';
   store_id?: string; // Menyimpan ID toko absensi ini
   alasan_telat?: string;
+  shift?: string;
 }
 
 export interface PresetOtomatis {

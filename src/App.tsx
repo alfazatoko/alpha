@@ -346,7 +346,7 @@ const App: React.FC = () => {
   }, [activeStoreId, googleSession?.user?.id])
 
   // ── Login / Logout Handlers ──
-  const handleLogin = useCallback((username: string, account: KasirAccount, alasan_telat?: string) => {
+  const handleLogin = useCallback((username: string, account: KasirAccount, alasan_telat?: string, shiftName?: string) => {
     localStorage.setItem('alphaPro_loggedIn', 'true')
     localStorage.setItem('alphaPro_username', username)
     localStorage.setItem('alphaPro_name', account.name)
@@ -354,6 +354,9 @@ const App: React.FC = () => {
     localStorage.setItem('alphaPro_login_date', getLocalDateString())
     if (alasan_telat) {
       localStorage.setItem('alphaPro_temp_alasan_telat', alasan_telat)
+    }
+    if (shiftName) {
+      localStorage.setItem('alphaPro_temp_shift', shiftName)
     }
     setIsLoggedIn(true)
     setCurrentUsername(username)
@@ -489,13 +492,16 @@ const App: React.FC = () => {
       <div className="relative">
         <button 
           onClick={handleExitStore} 
-          className="absolute top-4 right-4 z-50 bg-white/50 backdrop-blur-md px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-blue-600 border border-blue-100 hover:bg-blue-50 transition-all shadow-md"
+          className="absolute top-4 right-4 z-50 bg-white/80 backdrop-blur-md px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider text-blue-600 border border-blue-100 hover:bg-blue-50 transition-all shadow-md flex items-center gap-1.5"
         >
+          <i className="fa-solid fa-store text-blue-500"></i>
           Pilih Toko Lain
         </button>
         <LoginScreen 
           onLogin={handleLogin} 
           storeName={activeStore?.name} 
+          storeId={activeStoreId}
+          storePhoto={activeStore?.photo_url || (activeStoreId && activeStoreId !== 'all' ? localStorage.getItem(`alphaPro_${activeStoreId}_store_photo`) : null) || localStorage.getItem('alphaPro_store_photo') || undefined}
           kasirListOverride={kasirList} 
           financialSettings={(() => {
             try {
@@ -1972,6 +1978,7 @@ const MainApp: React.FC<MainAppProps> = ({
         const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
         
         const alasanTelat = localStorage.getItem('alphaPro_temp_alasan_telat')
+        const shiftName = localStorage.getItem('alphaPro_temp_shift')
         const payload: any = {
           user_id: googleUid,
           username,
@@ -1985,10 +1992,19 @@ const MainApp: React.FC<MainAppProps> = ({
         if (alasanTelat) {
           payload.alasan_telat = alasanTelat
         }
+        if (shiftName) {
+          payload.shift = shiftName
+        }
         
-        const { error: insertError } = await supabase.from('absensi').insert(payload)
+        let { error: insertError } = await supabase.from('absensi').insert(payload)
+        
+        if (insertError && (insertError.message?.toLowerCase().includes('shift') || insertError.details?.toLowerCase().includes('shift'))) {
+          delete payload.shift
+          insertError = (await supabase.from('absensi').insert(payload)).error
+        }
         
         localStorage.removeItem('alphaPro_temp_alasan_telat')
+        localStorage.removeItem('alphaPro_temp_shift')
 
         if (insertError) {
           console.error("Absensi Insert Error:", insertError.message || insertError)

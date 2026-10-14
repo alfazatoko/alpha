@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
-import { cn, compressImage, getShiftInfo } from '../lib/utils'
+import { cn, compressImage, getShiftInfo, getActiveShifts } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
 interface AkunViewProps {
@@ -497,6 +497,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     }
   }
 
+  const handleSaveMultipleFinancial = (updates: Record<string, string>) => {
+    const newSettings = { ...financialSettings, ...updates }
+    setFinancialSettings(newSettings)
+    const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
+    localStorage.setItem(storeKey, JSON.stringify(newSettings))
+    if (props.onSaveFinancial) {
+      props.onSaveFinancial(newSettings)
+    }
+  }
+
   // State for local smooth typing in Store Profile
   const [localStoreName, setLocalStoreName] = useState(props.storeName || '')
   const [localStoreSubtext, setLocalStoreSubtext] = useState(props.storeSubtext || '')
@@ -705,17 +715,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             className="group relative rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 overflow-hidden bg-slate-900 aspect-[2.4/1] shadow-sm flex flex-col justify-center items-center cursor-pointer transition-all active:scale-[0.98]"
             style={{ aspectRatio: '2.4 / 1' }}
           >
-            {/* Ambient blur backdrop untuk foto jika ada perbedaan rasio */}
-            <img
-              src={imgUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover blur-sm opacity-35 scale-105 pointer-events-none select-none"
-            />
+            {/* Foto Banner: Full Edge-to-Edge Proporsional */}
             <img
               src={imgUrl}
               alt={`Banner ${idx + 1}`}
-              className="relative z-0 w-full h-full object-contain select-none pointer-events-none"
+              className="w-full h-full object-cover select-none pointer-events-none"
             />
 
             {/* Icon Pensil di Bawah Sebelah Kanan (Tanpa teks, foto jelas terlihat utuh) */}
@@ -2810,95 +2814,356 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         </div>
                       </div>
 
-                      {/* SECTION: PENGATURAN JAM KERJA / SHIFT */}
+                      {/* SECTION: PENGATURAN JAM KERJA / SHIFT & ABSENSI */}
                       <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm space-y-3">
-                        <h4 className="text-[9px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 border-b border-emerald-50 pb-1.5">
-                          <i className="fa-solid fa-clock"></i> Pengaturan Shift
-                        </h4>
-                        
+                        <div className="flex items-center justify-between border-b border-emerald-50 pb-2">
+                          <h4 className="text-[9px] font-black uppercase tracking-widest text-emerald-600 flex items-center gap-1.5">
+                            <i className="fa-solid fa-clock"></i> Pengaturan Shift & Absensi
+                          </h4>
+                          {/* Toggle ON/OFF Absensi Kasir */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] font-black text-gray-500 uppercase">Absen:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextVal = financialSettings.absenEnabled === 'false' ? 'true' : 'false';
+                                handleSaveFinancial('absenEnabled', nextVal);
+                              }}
+                              className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
+                                financialSettings.absenEnabled !== 'false'
+                                  ? 'bg-emerald-500 text-white shadow-sm'
+                                  : 'bg-gray-200 text-gray-600'
+                              }`}
+                            >
+                              <i className={`fa-solid ${financialSettings.absenEnabled !== 'false' ? 'fa-check' : 'fa-xmark'}`}></i>
+                              {financialSettings.absenEnabled !== 'false' ? 'Aktif' : 'Nonaktif'}
+                            </button>
+                          </div>
+                        </div>
+
                         {isEditingShift ? (
                           <div className="space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Mode Jam Kerja</label>
-                                <select
-                                  value={financialSettings.shiftMode || '1-shift'}
-                                  onChange={(e) => handleSaveFinancial('shiftMode', e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none appearance-none cursor-pointer"
-                                  style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                >
-                                  <option value="1-shift">1 Shift (Full Day)</option>
-                                  <option value="2-shift">2 Shift (Pagi & Siang)</option>
-                                </select>
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">
-                                    Masuk {financialSettings.shiftMode === '2-shift' ? 'Pagi' : 'Kerja'}
-                                  </label>
-                                  <input
-                                    type="time"
-                                    value={financialSettings.shiftPagiStart || '08:00'}
-                                    onChange={(e) => handleSaveFinancial('shiftPagiStart', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
-                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                  />
-                                </div>
-                                <div className="w-16">
-                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Telat(m)</label>
-                                  <input
-                                    type="text" inputMode="numeric" placeholder="15"
-                                    value={financialSettings.shiftPagiTolerance ?? '15'}
-                                    onChange={(e) => handleSaveFinancial('shiftPagiTolerance', e.target.value.replace(/\D/g, ''))}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 text-center transition-all outline-none"
-                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                                  />
-                                </div>
+                            {/* Pilihan Cepat Mode Shift */}
+                            <div>
+                              <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">
+                                Pilihan Paket Shift
+                              </label>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                {[
+                                  { id: '2-shift-siang-malam', label: '2 Shift (Siang & Malam)' },
+                                  { id: '1-shift-siang', label: '1 Shift (Siang Saja)' },
+                                  { id: '3-shift', label: '3 Shift (Pagi, Siang, Malam)' },
+                                  { id: '2-shift-pagi-siang', label: '2 Shift (Pagi & Siang)' },
+                                  { id: '1-shift-pagi', label: '1 Shift (Pagi Saja)' },
+                                  { id: 'custom', label: 'Kustom Mandiri' },
+                                ].map((p) => {
+                                  const isCur = (financialSettings.shiftMode || '2-shift-siang-malam') === p.id;
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (p.id === '2-shift-siang-malam') {
+                                          handleSaveMultipleFinancial({
+                                            shiftMode: '2-shift-siang-malam',
+                                            shiftPagiEnabled: 'false',
+                                            shiftSiangEnabled: 'true',
+                                            shiftMalamEnabled: 'true',
+                                          });
+                                        } else if (p.id === '1-shift-siang') {
+                                          handleSaveMultipleFinancial({
+                                            shiftMode: '1-shift-siang',
+                                            shiftPagiEnabled: 'false',
+                                            shiftSiangEnabled: 'true',
+                                            shiftMalamEnabled: 'false',
+                                          });
+                                        } else if (p.id === '3-shift') {
+                                          handleSaveMultipleFinancial({
+                                            shiftMode: '3-shift',
+                                            shiftPagiEnabled: 'true',
+                                            shiftSiangEnabled: 'true',
+                                            shiftMalamEnabled: 'true',
+                                          });
+                                        } else if (p.id === '2-shift-pagi-siang') {
+                                          handleSaveMultipleFinancial({
+                                            shiftMode: '2-shift-pagi-siang',
+                                            shiftPagiEnabled: 'true',
+                                            shiftSiangEnabled: 'true',
+                                            shiftMalamEnabled: 'false',
+                                          });
+                                        } else if (p.id === '1-shift-pagi') {
+                                          handleSaveMultipleFinancial({
+                                            shiftMode: '1-shift-pagi',
+                                            shiftPagiEnabled: 'true',
+                                            shiftSiangEnabled: 'false',
+                                            shiftMalamEnabled: 'false',
+                                          });
+                                        } else {
+                                          handleSaveFinancial('shiftMode', 'custom');
+                                        }
+                                      }}
+                                      className={`px-2 py-1.5 rounded-lg text-[8px] font-black uppercase text-left transition-all border ${
+                                        isCur
+                                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                          : 'bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                    >
+                                      {p.label}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
 
-                            {financialSettings.shiftMode === '2-shift' && (
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Masuk Siang</label>
+                            {/* Card Shift Pagi */}
+                            <div className="p-2.5 rounded-xl border border-amber-200/80 bg-amber-50/40 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      financialSettings.shiftPagiEnabled === 'true' ||
+                                      (!financialSettings.shiftPagiEnabled && (financialSettings.shiftMode === '3-shift' || financialSettings.shiftMode === '2-shift-pagi-siang' || financialSettings.shiftMode === '1-shift-pagi'))
+                                    }
+                                    onChange={(e) => {
+                                      handleSaveMultipleFinancial({
+                                        shiftPagiEnabled: e.target.checked ? 'true' : 'false',
+                                        shiftMode: 'custom'
+                                      });
+                                    }}
+                                    className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                                  />
+                                  <span className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-1">
+                                    <i className="fa-solid fa-cloud-sun text-amber-500"></i> Shift Pagi (Matahari Terbit)
+                                  </span>
+                                </label>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[7.5px] font-black text-amber-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-clock-rotate-left mr-0.5 text-amber-600"></i> Jam Absen
+                                  </label>
                                   <input
                                     type="time"
-                                    value={financialSettings.shiftSiangStart || '15:00'}
-                                    onChange={(e) => handleSaveFinancial('shiftSiangStart', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 transition-all outline-none"
-                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                    value={financialSettings.shiftPagiStart || '06:00'}
+                                    onChange={(e) => handleSaveFinancial('shiftPagiStart', e.target.value)}
+                                    className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-amber-300"
                                   />
                                 </div>
-                                <div className="w-16">
-                                  <label className="text-[8px] font-black text-gray-500 uppercase tracking-tight ml-1 mb-1 block">Telat(m)</label>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-amber-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-door-closed mr-0.5 text-rose-600"></i> Jam Closing
+                                  </label>
                                   <input
-                                    type="text" inputMode="numeric" placeholder="15"
-                                    value={financialSettings.shiftSiangTolerance ?? '15'}
-                                    onChange={(e) => handleSaveFinancial('shiftSiangTolerance', e.target.value.replace(/\D/g, ''))}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-black text-gray-900 focus:ring-2 focus:ring-emerald-200 text-center transition-all outline-none"
-                                    style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                                    type="time"
+                                    value={financialSettings.shiftPagiEnd || '11:59'}
+                                    onChange={(e) => handleSaveFinancial('shiftPagiEnd', e.target.value)}
+                                    className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-amber-300"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-amber-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-hourglass-half mr-0.5 text-amber-600"></i> Telat (m)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={financialSettings.shiftPagiTolerance ?? '15'}
+                                    onChange={(e) => handleSaveFinancial('shiftPagiTolerance', e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 text-center outline-none focus:ring-2 focus:ring-amber-300"
+                                    placeholder="15"
                                   />
                                 </div>
                               </div>
-                            )}
-                            <button onClick={() => setIsEditingShift(false)} className="w-full bg-emerald-600 text-white font-black py-1.5 rounded-lg text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                              <i className="fa-solid fa-check"></i> Simpan
+                              <div className="text-[8px] font-bold text-amber-700 bg-amber-100/60 px-2 py-1 rounded-md flex items-center justify-between">
+                                <span>Tampilan di Login:</span>
+                                <span className="font-black font-mono">({financialSettings.shiftPagiStart || '06:00'} - {financialSettings.shiftPagiEnd || '11:59'})</span>
+                              </div>
+                            </div>
+
+                            {/* Card Shift Siang */}
+                            <div className="p-2.5 rounded-xl border border-blue-200/80 bg-blue-50/40 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      financialSettings.shiftSiangEnabled === 'true' ||
+                                      financialSettings.shiftSiangEnabled === undefined ||
+                                      (financialSettings.shiftSiangEnabled !== 'false' && financialSettings.shiftMode !== '1-shift-pagi')
+                                    }
+                                    onChange={(e) => {
+                                      handleSaveMultipleFinancial({
+                                        shiftSiangEnabled: e.target.checked ? 'true' : 'false',
+                                        shiftMode: 'custom'
+                                      });
+                                    }}
+                                    className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
+                                  />
+                                  <span className="text-[10px] font-black text-blue-800 uppercase flex items-center gap-1">
+                                    <i className="fa-solid fa-sun text-yellow-500"></i> Shift Siang (Matahari Cerah)
+                                  </span>
+                                </label>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[7.5px] font-black text-blue-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-clock-rotate-left mr-0.5 text-blue-600"></i> Jam Absen
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftSiangStart || '12:00'}
+                                    onChange={(e) => handleSaveFinancial('shiftSiangStart', e.target.value)}
+                                    className="w-full bg-white border border-blue-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-blue-300"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-blue-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-door-closed mr-0.5 text-rose-600"></i> Jam Closing
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftSiangEnd || '17:59'}
+                                    onChange={(e) => handleSaveFinancial('shiftSiangEnd', e.target.value)}
+                                    className="w-full bg-white border border-blue-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-blue-300"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-blue-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-hourglass-half mr-0.5 text-blue-600"></i> Telat (m)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={financialSettings.shiftSiangTolerance ?? '15'}
+                                    onChange={(e) => handleSaveFinancial('shiftSiangTolerance', e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-white border border-blue-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 text-center outline-none focus:ring-2 focus:ring-blue-300"
+                                    placeholder="15"
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[8px] font-bold text-blue-700 bg-blue-100/60 px-2 py-1 rounded-md flex items-center justify-between">
+                                <span>Tampilan di Login:</span>
+                                <span className="font-black font-mono">({financialSettings.shiftSiangStart || '12:00'} - {financialSettings.shiftSiangEnd || '17:59'})</span>
+                              </div>
+                            </div>
+
+                            {/* Card Shift Malam */}
+                            <div className="p-2.5 rounded-xl border border-indigo-200/80 bg-slate-900/5 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      financialSettings.shiftMalamEnabled === 'true' ||
+                                      (!financialSettings.shiftMalamEnabled && (!financialSettings.shiftMode || financialSettings.shiftMode === '2-shift-siang-malam' || financialSettings.shiftMode === '3-shift'))
+                                    }
+                                    onChange={(e) => {
+                                      handleSaveMultipleFinancial({
+                                        shiftMalamEnabled: e.target.checked ? 'true' : 'false',
+                                        shiftMode: 'custom'
+                                      });
+                                    }}
+                                    className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+                                  />
+                                  <span className="text-[10px] font-black text-indigo-900 uppercase flex items-center gap-1">
+                                    <i className="fa-solid fa-moon text-indigo-500"></i> Shift Malam (Gelap & Bulan)
+                                  </span>
+                                </label>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[7.5px] font-black text-indigo-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-clock-rotate-left mr-0.5 text-indigo-600"></i> Jam Absen
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftMalamStart || '18:00'}
+                                    onChange={(e) => handleSaveFinancial('shiftMalamStart', e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-indigo-300"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-indigo-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-door-closed mr-0.5 text-rose-600"></i> Jam Closing
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={financialSettings.shiftMalamEnd || '23:59'}
+                                    onChange={(e) => handleSaveFinancial('shiftMalamEnd', e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 outline-none focus:ring-2 focus:ring-indigo-300"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[7.5px] font-black text-indigo-900 uppercase block mb-1">
+                                    <i className="fa-solid fa-hourglass-half mr-0.5 text-indigo-600"></i> Telat (m)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={financialSettings.shiftMalamTolerance ?? '15'}
+                                    onChange={(e) => handleSaveFinancial('shiftMalamTolerance', e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-black text-gray-900 text-center outline-none focus:ring-2 focus:ring-indigo-300"
+                                    placeholder="15"
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[8px] font-bold text-indigo-700 bg-indigo-100/60 px-2 py-1 rounded-md flex items-center justify-between">
+                                <span>Tampilan di Login:</span>
+                                <span className="font-black font-mono">({financialSettings.shiftMalamStart || '18:00'} - {financialSettings.shiftMalamEnd || '23:59'})</span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => setIsEditingShift(false)}
+                              className="w-full bg-emerald-600 text-white font-black py-2 rounded-lg text-[9px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20"
+                            >
+                              <i className="fa-solid fa-check"></i> Simpan Pengaturan Shift
                             </button>
                           </div>
                         ) : (
-                          <div className="flex flex-col sm:flex-row gap-2 items-center">
-                            <div className="flex-1 w-full flex items-center justify-between bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100/50">
-                              <div>
-                                <p className="text-[8px] font-black text-emerald-800 uppercase tracking-widest">Status Shift</p>
-                                <p className="text-xs font-black text-emerald-900 mt-0.5">
-                                  {financialSettings.shiftMode === '2-shift' ? '2 Shift' : '1 Shift'} 
-                                  <span className="text-[9px] text-emerald-600 ml-1">
-                                    ({financialSettings.shiftPagiStart || '08:00'}{financialSettings.shiftMode === '2-shift' ? ` & ${financialSettings.shiftSiangStart || '15:00'}` : ''})
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
+                                    financialSettings.absenEnabled !== 'false' ? 'bg-emerald-600 text-white' : 'bg-gray-400 text-white'
+                                  }`}>
+                                    {financialSettings.absenEnabled !== 'false' ? 'Absensi Aktif' : 'Absensi Nonaktif'}
                                   </span>
-                                </p>
+                                  <span className="text-[9px] font-black text-emerald-950 uppercase">
+                                    {getActiveShifts(financialSettings).length} Shift Aktif
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  {getActiveShifts(financialSettings).map((s) => (
+                                    <span
+                                      key={s.id}
+                                      className={`px-2 py-0.5 rounded-lg text-[8px] font-bold border flex items-center gap-1 ${
+                                        s.id === 'PAGI'
+                                          ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                          : s.id === 'SIANG'
+                                          ? 'bg-blue-50 text-blue-900 border-blue-300'
+                                          : 'bg-slate-900 text-indigo-100 border-slate-700'
+                                      }`}
+                                    >
+                                      <i className={`fa-solid ${s.id === 'PAGI' ? 'fa-cloud-sun' : s.id === 'SIANG' ? 'fa-sun' : 'fa-moon'} text-[8px]`}></i>
+                                      {s.name.replace('ABSEN ', '')}: {s.label}
+                                    </span>
+                                  ))}
+                                  {getActiveShifts(financialSettings).length === 0 && (
+                                    <span className="text-[8px] text-gray-400 italic">Tidak ada shift yang aktif</span>
+                                  )}
+                                </div>
                               </div>
-                              <button onClick={() => setIsEditingShift(true)} className="w-8 h-8 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 flex items-center justify-center active:scale-90 transition-all">
-                                <i className="fa-solid fa-pen-to-square text-[10px]"></i>
+                              <button
+                                onClick={() => setIsEditingShift(true)}
+                                className="w-8 h-8 bg-white text-emerald-600 rounded-lg shadow-sm border border-emerald-100 flex items-center justify-center active:scale-90 transition-all hover:bg-emerald-50"
+                              >
+                                <i className="fa-solid fa-pen-to-square text-[11px]"></i>
                               </button>
                             </div>
                           </div>

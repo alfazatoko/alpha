@@ -1,7 +1,7 @@
 import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
-import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo, APP_VERSION } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
@@ -2441,14 +2441,56 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     return localStorage.getItem('alphaPro_owner_rent_dismissed') === 'true'
   })
 
+  const [localAbsensiOverrides, setLocalAbsensiOverrides] = useState<Record<string | number, string>>({})
+  const [updatingLemburIds, setUpdatingLemburIds] = useState<Record<string | number, boolean>>({})
+
+  // Sinkronisasi absensiList dengan perubahan status lokal secara instan (Zero Lag)
+  const effectiveAbsensiList = useMemo(() => {
+    const list = props.absensiList || [];
+    if (Object.keys(localAbsensiOverrides).length === 0) return list;
+    return list.map(a => {
+      if (a.id && localAbsensiOverrides[a.id] !== undefined) {
+        return { ...a, status: localAbsensiOverrides[a.id] };
+      }
+      return a;
+    });
+  }, [props.absensiList, localAbsensiOverrides]);
+
   const handleToggleLembur = async (entryId: number | string, currentStatus: string) => {
+    const newStatus = currentStatus === 'Lembur' ? 'Hadir' : 'Lembur';
+
+    // 1. Instan Optimistic Update: Langsung ubah di UI tanpa menunggu respons server
+    setLocalAbsensiOverrides(prev => ({ ...prev, [entryId]: newStatus }));
+    setUpdatingLemburIds(prev => ({ ...prev, [entryId]: true }));
+
+    // Update in-place ke referensi props.absensiList agar sinkron ke seluruh tab/komponen
+    if (Array.isArray(props.absensiList)) {
+      const target = props.absensiList.find(a => String(a.id) === String(entryId));
+      if (target) target.status = newStatus;
+    }
+
     try {
-      const newStatus = currentStatus === 'Lembur' ? 'Hadir' : 'Lembur';
       const { error } = await supabase.from('absensi').update({ status: newStatus }).eq('id', entryId);
       if (error) throw error;
       if (props.showToast) props.showToast(`Status berhasil diubah menjadi ${newStatus}`);
     } catch (e: any) {
+      // Rollback jika terjadi kesalahan server / jaringan
+      setLocalAbsensiOverrides(prev => {
+        const copy = { ...prev };
+        delete copy[entryId];
+        return copy;
+      });
+      if (Array.isArray(props.absensiList)) {
+        const target = props.absensiList.find(a => String(a.id) === String(entryId));
+        if (target) target.status = currentStatus;
+      }
       if (props.showToast) props.showToast("Gagal mengubah status: " + e.message);
+    } finally {
+      setUpdatingLemburIds(prev => {
+        const copy = { ...prev };
+        delete copy[entryId];
+        return copy;
+      });
     }
   };
 
@@ -4590,7 +4632,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           <div className="flex flex-col gap-3">
                             {cashiers.map(([id, acc]) => {
                               // Data absensi bulan ini untuk kasir ini
-                              const monthData = (props.absensiList || []).filter(a => 
+                              const monthData = effectiveAbsensiList.filter(a => 
                                 (a.username === id || a.nama_kasir === acc.name) && a.tanggal && a.tanggal.startsWith(absenFilterMonth)
                               )
                               
@@ -4787,20 +4829,26 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             <div className="divide-y divide-gray-50">
                               {cashiers.map(([id, acc]) => {
                                 const todayStr = today.toLocaleDateString('en-CA')
-                                const entry = props.absensiList?.find(a => a.username === id && a.tanggal === todayStr)
+                                const entry = effectiveAbsensiList.find(a => a.username === id && a.tanggal === todayStr)
                                 
                                 let shiftLabel = 'BELUM ABSEN'
                                 let shiftColor = 'text-gray-400 bg-gray-50'
                                 
                                 if (entry) {
-                                  const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                  const info = getShiftInfo(entry.jam_masuk, financialSettings, entry.shift);
                                   shiftLabel = info.shiftName;
-                                  if (info.isPagi) shiftColor = 'text-orange-600 bg-orange-50';
+                                  if (info.shiftName === 'PAGI') shiftColor = 'text-amber-600 bg-amber-50';
+                                  else if (info.shiftName === 'MALAM') shiftColor = 'text-indigo-600 bg-indigo-50';
                                   else shiftColor = 'text-purple-600 bg-purple-50';
                                   
                                   if (info.isLate) {
                                      shiftLabel += ` (TELAT ${info.lateMins}M)`;
                                      shiftColor = 'text-red-600 bg-red-50';
+                                  }
+
+                                  if (entry.status === 'Lembur') {
+                                     shiftLabel = 'LEMBUR SAH';
+                                     shiftColor = 'text-emerald-600 bg-emerald-50';
                                   }
                                 }
 
@@ -4838,102 +4886,145 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     const cashiers = Object.entries(props.kasirList).filter(([id]) => id !== 'owner')
                     
                     const [yyyy, mm] = absenFilterMonth.split('-').map(Number);
-                    const daysInMonth = new Date(yyyy, mm, 0).getDate();
-                    const daysInSelectedMonth = Array.from({length: daysInMonth}, (_, i) => {
-                      const d = new Date(yyyy, mm - 1, daysInMonth - i) // descending order
-                      return d
-                    })
+                    const totalDaysInMonth = new Date(yyyy, mm, 0).getDate();
+                    const now = new Date();
+                    const isCurrentMonth = now.getFullYear() === yyyy && (now.getMonth() + 1) === mm;
+                    const isFutureMonth = (yyyy > now.getFullYear()) || (yyyy === now.getFullYear() && mm > (now.getMonth() + 1));
+                    
+                    // Sembunyikan tanggal yang belum sampai harinya.
+                    // - Jika bulan sekarang: batas maksimal hari adalah hari ini (now.getDate()).
+                    // - Jika bulan masa lalu: batas maksimal adalah seluruh hari dalam bulan tersebut.
+                    // - Jika bulan masa depan: 0 hari (kosongkan/sembunyikan).
+                    let maxDay = totalDaysInMonth;
+                    if (isCurrentMonth) {
+                      maxDay = now.getDate();
+                    } else if (isFutureMonth) {
+                      maxDay = 0;
+                    }
+
+                    // Hanya munculkan tanggal kolom hari ini dan hari-hari sebelumnya dari tanggal 1
+                    const daysInSelectedMonth = maxDay > 0
+                      ? Array.from({ length: maxDay }, (_, i) => new Date(yyyy, mm - 1, maxDay - i)) // descending order: dari hari ini mundur ke tgl 1
+                      : [];
 
                     return (
                       <div className="space-y-4">
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Riwayat Bulan {new Date(yyyy, mm - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">
+                          Riwayat Bulan {new Date(yyyy, mm - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                        </p>
                         
-                        {daysInSelectedMonth.map(date => {
-                          const dateStr = date.toLocaleDateString('en-CA')
-                          const dayAttendance = props.absensiList?.filter(a => a.tanggal === dateStr) || []
-                          
-                          // Only show if there's at least one attendance or if it's within a few days
-                          if (dayAttendance.length === 0 && date > new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) {
-                             // Keep showing last 3 days even if empty as per user request to see "Belum Absen"
-                          } else if (dayAttendance.length === 0) {
-                            return null; // Don't show empty old dates
-                          }
-
-                          return (
-                            <div key={dateStr} className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
-                              {/* Date Header */}
-                              <div className="bg-blue-50/50 px-4 py-2.5 border-b border-gray-50">
-                                <h4 className="text-[11px] font-black text-blue-900">
-                                  {date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </h4>
-                              </div>
-                              
-                              <div className="divide-y divide-gray-50">
-                                {cashiers.map(([id, acc]) => {
-                                  const entry = dayAttendance.find(a => a.username === id)
-                                  
-                                  // Determine Shift/Color based on time (matching photo aesthetics)
-                                  let shiftLabel = 'BELUM ABSEN'
-                                  let shiftColor = 'text-gray-300'
-                                  
-                                  if (entry) {
-                                    const info = getShiftInfo(entry.jam_masuk, financialSettings);
-                                    shiftLabel = info.shiftName;
-                                    if (info.isPagi) shiftColor = 'text-orange-500';
-                                    else shiftColor = 'text-purple-600';
-                                    
-                                    if (info.isLate) {
-                                       shiftLabel += ` (TELAT ${info.lateMins}M)`;
-                                       shiftColor = 'text-red-500';
-                                    }
-
-                                    if (entry.status === 'Lembur') {
-                                       shiftLabel = 'LEMBUR SAH';
-                                       shiftColor = 'text-emerald-500';
-                                    }
-                                  }
-
-                                  return (
-                                    <div key={id} className="px-4 py-3 flex justify-between items-center bg-white border-b border-gray-50/50">
-                                      <div className="w-1/3">
-                                        <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
-                                      </div>
-                                      
-                                      <div className="flex-1 text-center">
-                                        <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
-                                          {shiftLabel}
-                                        </p>
-                                        {entry?.alasan_telat && (
-                                          <p className="text-[7.5px] text-red-500 font-bold mt-1 max-w-[120px] mx-auto leading-tight line-clamp-2" title={entry.alasan_telat}>
-                                            "{entry.alasan_telat}"
-                                          </p>
-                                        )}
-                                        {entry && props.kasirRole === 'owner' && (
-                                          <button 
-                                            onClick={(e) => { e.stopPropagation(); if(entry.id) handleToggleLembur(entry.id, entry.status); }}
-                                            className={cn("mt-1.5 px-2 py-0.5 rounded text-[7px] font-black uppercase active:scale-95 transition-all shadow-sm border", entry.status === 'Lembur' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100")}
-                                          >
-                                            {entry.status === 'Lembur' ? 'Batalkan Lembur' : 'Jadikan Lembur'}
-                                          </button>
-                                        )}
-                                      </div>
-                                      
-                                      <div className="w-1/4 text-right">
-                                        <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
-                                        <p className={cn(
-                                          "text-[10px] font-black tabular-nums leading-none",
-                                          entry ? "text-blue-600" : "text-gray-200"
-                                        )}>
-                                          {entry ? entry.jam_masuk : '--:--'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
+                        {daysInSelectedMonth.length === 0 ? (
+                          <div className="bg-white rounded-[1.5rem] p-8 text-center border border-gray-100 shadow-sm">
+                            <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-3 text-gray-300">
+                              <i className="fa-regular fa-calendar-xmark text-xl"></i>
                             </div>
-                          )
-                        })}
+                            <p className="text-[11px] font-black text-gray-600">Belum Ada Riwayat</p>
+                            <p className="text-[9px] font-bold text-gray-400 mt-0.5">Periode bulan yang dipilih belum berjalan.</p>
+                          </div>
+                        ) : (
+                          daysInSelectedMonth.map(date => {
+                            const dateStr = date.toLocaleDateString('en-CA')
+                            const dayAttendance = effectiveAbsensiList.filter(a => a.tanggal === dateStr)
+
+                            return (
+                              <div key={dateStr} className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                                {/* Date Header */}
+                                <div className="bg-blue-50/50 px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
+                                  <h4 className="text-[11px] font-black text-blue-900">
+                                    {date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  </h4>
+                                  {dateStr === now.toLocaleDateString('en-CA') && (
+                                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-wider">
+                                      Hari Ini
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                <div className="divide-y divide-gray-50">
+                                  {cashiers.map(([id, acc]) => {
+                                    const entry = dayAttendance.find(a => a.username === id)
+                                    
+                                    // Determine Shift/Color based on time (matching photo aesthetics)
+                                    let shiftLabel = 'BELUM ABSEN'
+                                    let shiftColor = 'text-gray-300'
+                                    
+                                    if (entry) {
+                                      const info = getShiftInfo(entry.jam_masuk, financialSettings, entry.shift);
+                                      shiftLabel = info.shiftName;
+                                      if (info.isPagi) shiftColor = 'text-orange-500';
+                                      else shiftColor = 'text-purple-600';
+                                      
+                                      if (info.isLate) {
+                                         shiftLabel += ` (TELAT ${info.lateMins}M)`;
+                                         shiftColor = 'text-red-500';
+                                      }
+
+                                      if (entry.status === 'Lembur') {
+                                         shiftLabel = 'LEMBUR SAH';
+                                         shiftColor = 'text-emerald-500';
+                                      }
+                                    }
+
+                                    const isLemburLoading = entry?.id ? !!updatingLemburIds[entry.id] : false;
+
+                                    return (
+                                      <div key={id} className="px-4 py-3 flex justify-between items-center bg-white border-b border-gray-50/50">
+                                        <div className="w-1/3">
+                                          <p className="text-[10px] font-black text-gray-800 uppercase tracking-tight truncate">{acc.name}</p>
+                                        </div>
+                                        
+                                        <div className="flex-1 text-center">
+                                          <p className={cn("text-[8px] font-black uppercase tracking-widest", shiftColor)}>
+                                            {shiftLabel}
+                                          </p>
+                                          {entry?.alasan_telat && (
+                                            <p className="text-[7.5px] text-red-500 font-bold mt-1 max-w-[120px] mx-auto leading-tight line-clamp-2" title={entry.alasan_telat}>
+                                              "{entry.alasan_telat}"
+                                            </p>
+                                          )}
+                                          {entry && props.kasirRole === 'owner' && (
+                                            <button 
+                                              type="button"
+                                              disabled={isLemburLoading}
+                                              onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                if (entry.id && !isLemburLoading) {
+                                                  handleToggleLembur(entry.id, entry.status); 
+                                                }
+                                              }}
+                                              className={cn(
+                                                "mt-1.5 px-2 py-0.5 rounded text-[7px] font-black uppercase active:scale-95 transition-all shadow-sm border cursor-pointer inline-flex items-center justify-center gap-1 min-w-[76px]",
+                                                entry.status === 'Lembur' 
+                                                  ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" 
+                                                  : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100",
+                                                isLemburLoading && "opacity-70 cursor-wait"
+                                              )}
+                                            >
+                                              {isLemburLoading && (
+                                                <i className="fa-solid fa-circle-notch fa-spin text-[6px]"></i>
+                                              )}
+                                              <span>{entry.status === 'Lembur' ? 'Batalkan Lembur' : 'Jadikan Lembur'}</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="w-1/4 text-right">
+                                          <p className="text-[7px] font-black text-gray-300 uppercase leading-none mb-0.5">MASUK</p>
+                                          <p className={cn(
+                                            "text-[10px] font-black tabular-nums leading-none",
+                                            entry ? "text-blue-600" : "text-gray-200"
+                                          )}>
+                                            {entry ? entry.jam_masuk : '--:--'}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
                       </div>
                     )
                   })()}
@@ -5940,7 +6031,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span className="text-[8px] font-black text-blue-100/60 uppercase tracking-widest">Sistem Online</span>
                 </div>
-                <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">v1.1.0 Premium</span>
+                <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">v{APP_VERSION} Premium</span>
               </div>
             </div>
           </div>
