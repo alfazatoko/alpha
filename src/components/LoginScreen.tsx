@@ -94,16 +94,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   useEffect(() => {
     if (!storeId || storeId === 'all') return
 
-    // 1. Fetch fresh store_settings from cloud
+    // 1. Fetch fresh store_settings from cloud (financial_settings & promo_banners)
     supabase
       .from('store_settings')
-      .select('financial_settings')
+      .select('financial_settings, promo_banners')
       .eq('store_id', storeId)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (!error && data?.financial_settings) {
-          setLiveFinancialSettings(data.financial_settings)
-          localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(data.financial_settings))
+        if (!error && data) {
+          if (data.financial_settings) {
+            setLiveFinancialSettings(data.financial_settings)
+            localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(data.financial_settings))
+          }
+          if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
+            localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(data.promo_banners))
+            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+          }
         }
       })
 
@@ -123,6 +129,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           if (newFin) {
             setLiveFinancialSettings(newFin)
             localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(newFin))
+          }
+          const newBanners = payload.new?.promo_banners
+          if (newBanners && Array.isArray(newBanners) && newBanners.length > 0) {
+            localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(newBanners))
+            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(newBanners))
           }
         }
       )

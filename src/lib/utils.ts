@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge';
 declare const __APP_VERSION__: string;
 
 // Versi aplikasi tersinkronisasi otomatis dari package.json via Vite define
-export const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ? __APP_VERSION__ : '1.3.2';
+export const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) ? __APP_VERSION__ : '1.3.3';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

@@ -346,6 +346,7 @@ const App: React.FC = () => {
           }
 
           if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
+            setPromoBanners(data.promo_banners)
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
           }
@@ -887,20 +888,79 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [googleUid, activeStoreId])
 
-  // Sync promoBanners when activeStoreId changes
+  // Sync & Realtime promoBanners: otomatis ambil dari cloud Supabase saat login / buka aplikasi,
+  // dan dengarkan secara realtime saat Owner ganti banner agar HP kasir langsung ter-update seketika
   useEffect(() => {
-    const key = activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_promoBanners` : 'alphaPro_promoBanners'
+    const effectiveStoreId = activeRole === 'owner'
+      ? (pantauStoreId !== 'all' ? pantauStoreId : (activeStoreId !== 'all' ? activeStoreId : (activeStore?.id !== 'all' ? activeStore?.id : null)))
+      : (activeStoreId !== 'all' ? activeStoreId : null)
+
+    if (!effectiveStoreId) return
+
+    // 1. Ambil dari localStorage terlebih dahulu sebagai cache instan (tanpa loading flicker)
+    const key = `alphaPro_${effectiveStoreId}_promoBanners`
     const saved = localStorage.getItem(key) || localStorage.getItem('alphaPro_promoBanners')
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length > 0) {
           setPromoBanners(parsed)
-          return
         }
       } catch (e) {}
     }
-  }, [activeStoreId])
+
+    // 2. Fetch data banner paling fresh dari Supabase store_settings (saat kasir login ulang atau buka aplikasi)
+    const fetchFreshBanners = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('promo_banners')
+          .eq('store_id', effectiveStoreId)
+          .maybeSingle()
+
+        if (!error && data?.promo_banners && Array.isArray(data.promo_banners)) {
+          setPromoBanners(data.promo_banners)
+          localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
+          localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+        }
+      } catch (err) {
+        console.error('Gagal fetch fresh promo_banners:', err)
+      }
+    }
+
+    fetchFreshBanners()
+
+    // 3. Realtime subscription: saat Owner ganti banner di HP Owner,
+    // semua HP Kasir di toko tersebut langsung ter-update otomatis tanpa perlu refresh atau login ulang
+    const channelName = `rt_promo_banners_${effectiveStoreId}_${Date.now()}`
+    const bannerChannel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_settings',
+          filter: `store_id=eq.${effectiveStoreId}`
+        },
+        (payload: any) => {
+          if (payload.new && Array.isArray(payload.new.promo_banners)) {
+            const incoming = payload.new.promo_banners
+            setPromoBanners(incoming)
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(incoming))
+            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(incoming))
+          } else {
+            // Re-fetch jika payload Supabase partial
+            fetchFreshBanners()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(bannerChannel)
+    }
+  }, [activeStoreId, pantauStoreId, activeRole, isLoggedIn, activeStore?.id])
 
   const handleUploadToCloud = async () => {
     if (!googleUid || targetStoreId === 'all') return

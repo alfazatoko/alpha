@@ -543,7 +543,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }
 
   const handleInputFocus = (e: React.FocusEvent<HTMLElement>) => {
-    // scrollIntoView removed to prevent aggressive scrolling that hides the header
+    const target = e.target;
+    setTimeout(() => {
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
   };
 
   const handleSlideKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -868,15 +871,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <div className="space-y-1">
         {/* === WIZARD TRANSFER (DIGITAL) === */}
         {activeMode === 'DIGITAL' && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm mb-2 animate-in fade-in slide-in-from-top-2">
+          <div className="bg-white rounded-2xl border border-gray-100 pt-1.5 px-2 pb-1 shadow-sm mb-1 animate-in fade-in slide-in-from-top-2">
             {/* KOLOM 1: SUMBER UANG KELUAR */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
-                  <div className="w-1.5 h-3.5 bg-[#0066ff] rounded-full"></div>
+            <div className="mb-0">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-[10px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-wider">
+                  <div className="w-1.5 h-3 bg-[#0066ff] rounded-full"></div>
                   PILIH SUMBER APLIKASI BANK
                 </h3>
-                <span className="text-[8px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Sumber Uang Keluar</span>
+                <button 
+                  onClick={() => setIsTujuanModalOpen(true)}
+                  className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-100 text-[7.5px] font-black uppercase shadow-xs hover:bg-emerald-100 transition-colors"
+                  title="Pilih Tujuan Masuk"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <span>{tujuanMasuk === 'TUNAI LACI KASIR' ? 'Masuk: Laci' : tujuanMasuk}</span>
+                  <i className="fa-solid fa-chevron-down text-[6px] ml-0.5"></i>
+                </button>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
@@ -893,57 +904,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                setIsKetAuto(true);
                                setKeterangan('');
                                setClassicPopupMode(null);
-                               setTimeout(() => keteranganRef.current?.focus(), 100);
+                               setTimeout(() => {
+                                 keteranganRef.current?.focus();
+                                 keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                               }, 150);
                             }
                             else if (src.id === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
                             else if (src.id === 'FLIP') setClassicPopupMode('FLIP');
                          }
                       }}
                       className={cn(
-                        "relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300",
+                        "relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border-2 transition-all duration-300",
                         isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
                       )}
                     >
                       {isSel && (
-                         <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-sm">
-                           <i className="fa-solid fa-check text-[7px]"></i>
+                         <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center border border-white shadow-sm">
+                           <i className="fa-solid fa-check text-[6.5px]"></i>
                          </div>
                       )}
-                      <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center mb-1", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
-                        <i className={cn("fa-solid text-sm", src.icon)}></i>
+                      <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center mb-0.5", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
+                        <i className={cn("fa-solid text-xs", src.icon)}></i>
                       </div>
-                      <span className={cn("text-[9px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
-                      <span className="text-[7px] font-bold text-gray-400">{src.sub}</span>
+                      <span className={cn("text-[8.5px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
+                      <span className="text-[6.5px] font-bold text-gray-400 leading-none">{src.sub}</span>
                     </button>
                   )
                 })}
               </div>
             </div>
-
-            {/* SUMMARY (KELUAR & MASUK) */}
-            {sumberAplikasi && (
-              <div className={cn("flex items-center gap-4 bg-gray-50/80 rounded-xl p-2 border border-gray-100 justify-between animate-in fade-in", activeTheme === 'TEMA_1' ? "mb-0" : "mb-4")}>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold text-gray-500">Keluar:</span>
-                  <span className="text-[10px] font-black text-blue-600 uppercase">{sumberAplikasi}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold text-gray-500">Masuk:</span>
-                  <button 
-                    onClick={() => setIsTujuanModalOpen(true)}
-                    className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full border border-emerald-100"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                    <span className="text-[9px] font-black uppercase">{tujuanMasuk}</span>
-                    <i className="fa-solid fa-chevron-down text-[7px] ml-1"></i>
-                  </button>
-                </div>
-              </div>
-            )}
-
-
-        </div>
-      )}
+          </div>
+        )}
 
         {/* Quick Picker - Sumber (Tarik Tunai) */}
         {activeMode === 'TARIK' && (
@@ -992,23 +983,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
-        <div className="relative group px-2 mb-2">
-          <div className="bg-[#f4f7ff] rounded-xl border border-blue-100 p-2">
-            <div className="flex justify-between items-center mb-1.5 px-1">
-              <label className="text-[11px] font-black text-slate-800 flex items-center gap-1.5">
-                <div className="w-5 h-5 rounded-full bg-[#0066ff] flex items-center justify-center shadow-sm">
-                  <i className="fa-solid fa-file-lines text-white text-[10px]"></i>
+        <div className="relative group px-2 mb-1.5">
+          <div className="bg-[#f4f7ff] rounded-xl border border-blue-100 px-2 py-1.5">
+            <div className="flex justify-between items-center mb-1 px-0.5">
+              <label className="text-[10px] font-black text-slate-800 flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded-full bg-[#0066ff] flex items-center justify-center shadow-sm">
+                  <i className="fa-solid fa-file-lines text-white text-[8px]"></i>
                 </div>
                 Keterangan Transaksi
               </label>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={isKetAuto} onChange={(e) => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-[#0066ff] rounded-sm cursor-pointer" />
-                <span className="text-[10px] font-black text-[#0066ff] uppercase tracking-widest">OTOMATIS</span>
+                <span className="text-[9px] font-black text-[#0066ff] uppercase tracking-widest">OTOMATIS</span>
               </label>
             </div>
-            <div className="bg-white rounded-lg border border-gray-100 p-2 focus-within:ring-2 focus-within:ring-blue-100 transition-all flex flex-col">
+            <div className="bg-white rounded-lg border border-gray-100 px-2 py-1 focus-within:ring-2 focus-within:ring-blue-100 transition-all flex flex-col">
               {isKetAuto && autoTextPrefix && (
-                <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
+                <div className="text-[11px] font-bold text-[#0066ff] mb-1 pb-1 border-b border-gray-100">
                   {autoTextPrefix}
                 </div>
               )}
@@ -1029,10 +1020,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    setTimeout(() => nominalRef.current?.focus(), 10);
+                    setTimeout(() => {
+                      nominalRef.current?.focus();
+                      nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 10);
                   }
                 }}
-                className="w-full resize-none text-[11px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[24px]"
+                className="w-full resize-none text-[10.5px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[20px]"
               ></textarea>
             </div>
           </div>
@@ -1176,7 +1170,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setTimeout(() => {
                       if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
                       else if (kategori === 'Order Kuota' && orderKuotaMode !== 'NOMINAL_ADMIN') btnSimpanRef.current?.click();
-                      else adminRef.current?.focus();
+                      else {
+                        adminRef.current?.focus();
+                        adminRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
                     }, 10);
                   }
                 }}
@@ -1415,16 +1412,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="mb-2 px-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[11px] font-black text-[#0c1f44] flex items-center gap-1.5 uppercase tracking-widest">
-                <div className="w-1.5 h-3.5 bg-[#0066ff] rounded-full"></div>
-                PILIH SUMBER APLIKASI BANK
-              </h3>
-              <span className="text-[8px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Sumber Uang Keluar</span>
-            </div>
             <div className="grid grid-cols-4 gap-1.5">
               {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
                 const isSel = sumberAplikasi === src.id;
+                // Warna icon per sumber
+                const iconColors: Record<string, string> = {
+                  'BANK': 'bg-[#0066ff]',
+                  'DANA': 'bg-blue-500',
+                  'ORDER KUOTA': 'bg-amber-500',
+                  'FLIP': 'bg-orange-500',
+                };
                 return (
                   <button
                     key={src.id}
@@ -1440,22 +1437,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                          setClassicPopupMode(null);
                          setTimeout(() => keteranganRef.current?.focus(), 100);
                       }
+                      // Auto-scroll ke area keterangan agar terbaca
+                      setTimeout(() => {
+                        keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 150);
                     }}
                     className={cn(
-                      "relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300 bg-white",
-                      isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
+                      "relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl border-2 transition-all duration-300 bg-white overflow-hidden",
+                      isSel ? "border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.4)] scale-[1.03]" : "border-gray-100 shadow-sm hover:border-emerald-200 hover:bg-emerald-50/50"
                     )}
                   >
                     {isSel && (
-                       <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-white shadow-sm">
-                         <i className="fa-solid fa-check text-[7px]"></i>
-                       </div>
+                      <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rotate-45 translate-x-4 -translate-y-4">
+                        <i className="fa-solid fa-check text-white text-[8px] absolute bottom-1 left-3.5 -rotate-45"></i>
+                      </div>
                     )}
-                    <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center mb-1", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
-                      <i className={cn("fa-solid text-sm", src.icon)}></i>
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center transition-all",
+                      isSel ? "bg-emerald-500 text-white" : 'bg-gray-100 text-gray-400'
+                    )}>
+                      <i className={cn("fa-solid text-[11px]", src.icon, isSel ? "text-white" : "text-gray-500")}></i>
                     </div>
-                    <span className={cn("text-[9px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
-                    <span className="text-[7px] font-bold text-gray-400">{src.sub}</span>
+                    <span className={cn("text-[8px] font-black uppercase tracking-tight text-center leading-tight", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{src.label}</span>
                   </button>
                 )
               })}
@@ -1512,43 +1515,33 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="mx-4 grid grid-cols-2 gap-2 mb-2">
             {/* KOLOM 1: UANG KELUAR */}
             <div 
-              className="flex flex-col justify-between bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:shadow-md transition-all"
+              className="flex items-center gap-2 bg-white rounded-xl px-2.5 py-1.5 shadow-sm border border-red-100 cursor-pointer hover:border-red-400 hover:shadow-md transition-all"
               onClick={() => setIsSumberModalOpen(true)}
             >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Aplikasi Uang Keluar</span>
-                <div className="w-4 h-4 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-chevron-down text-[8px] text-red-500"></i>
-                </div>
+              <div className="w-6 h-6 rounded-lg bg-red-500 text-white flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-arrow-up text-[10px]"></i>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                </div>
-                <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
+                <span className="text-[10px] font-black text-[#0c1f44] uppercase leading-tight truncate">
                   {sumberAplikasi || selectedSumber || 'Pilih Keluar'}
                 </span>
+                <i className="fa-solid fa-chevron-down text-[8px] text-red-400 shrink-0"></i>
               </div>
             </div>
 
             {/* KOLOM 2: UANG MASUK */}
             <div 
-              className="flex flex-col justify-between bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-200 cursor-pointer hover:border-[#0066ff] hover:shadow-md transition-all"
+              className="flex items-center gap-2 bg-white rounded-xl px-2.5 py-1.5 shadow-sm border border-emerald-100 cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all"
               onClick={() => setIsTujuanModalOpen(true)}
             >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[8px] font-bold text-[#64748b] leading-none uppercase tracking-wider">Sumber Uang Masuk</span>
-                <div className="w-4 h-4 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-chevron-down text-[8px] text-emerald-500"></i>
-                </div>
+              <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-arrow-down text-[10px]"></i>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-arrow-down-left-from-square text-[10px]"></i>
-                </div>
-                <span className="text-[11px] font-black text-[#0c1f44] uppercase leading-tight truncate">
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
+                <span className="text-[10px] font-black text-[#0c1f44] uppercase leading-tight truncate">
                   {tujuanMasuk || 'Pilih Masuk'}
                 </span>
+                <i className="fa-solid fa-chevron-down text-[8px] text-emerald-400 shrink-0"></i>
               </div>
             </div>
           </div>
@@ -1556,9 +1549,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
         {/* KETERANGAN */}
         <div className="mb-1 px-5">
-          <div className="flex justify-between items-center mb-1.5">
-            <div className="flex items-center gap-2">
-              <label className="text-[14px] font-black text-[#0c1f44]">Keterangan</label>
+          <div className="flex justify-between items-center mb-1">
+            <div className="flex items-center gap-1.5">
+              <label className="text-[11px] font-black text-[#0c1f44]">Keterangan</label>
               {activeMode === 'DIGITAL' && (
                 <button
                   type="button"
@@ -1568,27 +1561,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     else if (sumberAplikasi === 'FLIP') setClassicPopupMode('FLIP');
                     else setClassicPopupMode('BANK');
                   }}
-                  className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md text-[9px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 shadow-sm border border-blue-100"
+                  className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md text-[8px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 shadow-sm border border-blue-100"
                 >
-                  <i className="fa-solid fa-list"></i> PILIH TUJUAN
+                  <i className="fa-solid fa-list text-[7px]"></i> PILIH TUJUAN
                 </button>
               )}
             </div>
-            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1.5 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
-              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-3 h-3 accent-white rounded-sm" />
-              <span className="text-[9px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
+            <label className="flex items-center gap-1 cursor-pointer bg-[#0066ff] px-1 py-0.5 rounded-md shadow-sm hover:bg-blue-700 transition-colors">
+              <input type="checkbox" checked={isKetAuto} onChange={e => setIsKetAuto(e.target.checked)} className="w-2.5 h-2.5 accent-white rounded-sm" />
+              <span className="text-[8px] font-bold text-white uppercase tracking-widest">OTOMATIS</span>
             </label>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-2.5 focus-within:ring-2 focus-within:ring-[#0066ff] transition-all flex flex-col shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 px-2 py-1.5 focus-within:ring-2 focus-within:ring-[#0066ff] transition-all flex flex-col shadow-sm">
             {isKetAuto && autoTextPrefix && (
-              <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
+              <div className="text-[10px] font-bold text-[#0066ff] mb-1 pb-1 border-b border-gray-100">
                 {autoTextPrefix}
               </div>
             )}
             <textarea 
               ref={keteranganRef}
               onFocus={handleInputFocus}
-              rows={isKetAuto ? 1 : 2}
+              rows={1}
               placeholder="Masukkan keterangan transaksi..."
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
@@ -1606,7 +1599,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setTimeout(() => nominalRef.current?.focus(), 10);
                 }
               }}
-              className="w-full resize-none text-[12px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[24px]"
+              className="w-full resize-none text-[11px] font-bold text-gray-700 bg-transparent outline-none p-0 min-h-[18px]"
             ></textarea>
           </div>
 
@@ -2299,7 +2292,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                        else if (s === 'DANA') {
                           setKeterangan('');
                           setClassicPopupMode(null);
-                          setTimeout(() => keteranganRef.current?.focus(), 100);
+                          setTimeout(() => {
+                            keteranganRef.current?.focus();
+                            keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }, 150);
                        }
                        else if (s === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
                        else if (s === 'FLIP') setClassicPopupMode('FLIP');
@@ -2586,7 +2582,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             }
                             setKeterangan(''); // Keterangan manual dibiarkan kosong
                             setClassicPopupMode(null);
-                            setTimeout(() => keteranganRef.current?.focus(), 100);
+                            setTimeout(() => {
+                              keteranganRef.current?.focus();
+                              keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 150);
                           }} 
                           className={cn("w-full flex flex-col items-center justify-center p-2 border border-slate-100 rounded-[14px] transition-all group shadow-sm bg-white", !isEditingPopup && "hover:border-blue-300 hover:bg-blue-50")}
                         >
