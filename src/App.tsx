@@ -346,7 +346,6 @@ const App: React.FC = () => {
           }
 
           if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
-            setPromoBanners(data.promo_banners)
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
           }
