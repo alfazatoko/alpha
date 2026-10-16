@@ -1884,7 +1884,9 @@ const MainApp: React.FC<MainAppProps> = ({
 
   const savePromoBanners = async (banners: string[]) => {
     setPromoBanners(banners)
-    localStorage.setItem('alphaPro_promoBanners', JSON.stringify(banners))
+    try {
+      localStorage.setItem('alphaPro_promoBanners', JSON.stringify(banners))
+    } catch (e) {}
 
     const targetId = activeRole === 'owner' ? pantauStoreId : activeStoreId
     const storeIdsToUpsert = new Set<string>()
@@ -1898,16 +1900,23 @@ const MainApp: React.FC<MainAppProps> = ({
     if (storeIdsToUpsert.size > 0) {
       try {
         for (const sId of storeIdsToUpsert) {
-          localStorage.setItem(`alphaPro_${sId}_promoBanners`, JSON.stringify(banners))
-          await supabase.from('store_settings').upsert({
+          try {
+            localStorage.setItem(`alphaPro_${sId}_promoBanners`, JSON.stringify(banners))
+          } catch (e) {}
+          const { error } = await supabase.from('store_settings').upsert({
             store_id: sId,
             promo_banners: banners,
             updated_at: new Date().toISOString()
           })
+          if (error) {
+            console.error(`Gagal upsert promo_banners ke store ${sId}:`, error)
+            throw error
+          }
         }
-        showToast('FOTO PROMOSI DISINKRONKAN KE CLOUD!')
-      } catch (e) {
+        showToast('FOTO BANNER HD DISINKRONKAN KE SEMUA HP!')
+      } catch (e: any) {
         console.error('Gagal sinkron promo_banners ke Supabase:', e)
+        showToast('GAGAL SINKRON CLOUD: ' + (e.message || 'Error koneksi'))
       }
     } else {
       showToast('FOTO PROMOSI DISIMPAN LOKAL!')
@@ -3244,7 +3253,7 @@ const MainApp: React.FC<MainAppProps> = ({
   return (
     <div className={cn("app-container", `theme-${theme}`, screenSize !== 'auto' && screenSize)}>
       {appMode === 'POS' ? (
-         <div className="absolute inset-0 overflow-y-auto bg-[#F7F7F7] dark:bg-slate-900 pb-24 flex flex-col animate-in fade-in duration-300">
+         <div className="absolute inset-0 overflow-y-auto overflow-x-hidden w-full max-w-full bg-[#F7F7F7] dark:bg-slate-900 pb-24 flex flex-col animate-in fade-in duration-300">
             {activeView === 'view-laporan-pos' ? (
                <LaporanPosView storeId={activeStoreId} onBack={() => setActiveView('view-beranda')} />
             ) : (
@@ -3642,7 +3651,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       handleSimpanTransaksi={handleSimpanTransaksi as any}
                       handleSyncPast30Days={() => setSyncPast30Days(true)}
                       transactions={todayTransactions}
-                      allTransactions={displayTransactions}
+                      allTransactions={activeRole === 'owner' ? storeFilteredTransactions : displayTransactions}
                       isSaving={isSaving}
                       totalAdmin={totalAdmin}
                       totalVolume={totalVolume}
@@ -3705,7 +3714,7 @@ const MainApp: React.FC<MainAppProps> = ({
             handleSimpanTransaksi={handleSimpanTransaksi as any}
             handleSyncPast30Days={() => setSyncPast30Days(true)}
             transactions={todayTransactions}
-            allTransactions={displayTransactions}
+            allTransactions={activeRole === 'owner' ? storeFilteredTransactions : displayTransactions}
             isSaving={isSaving}
             totalAdmin={totalAdmin}
             totalVolume={totalVolume}

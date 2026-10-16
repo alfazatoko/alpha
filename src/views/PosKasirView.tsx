@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { GlobalHeader } from '../components/GlobalHeader';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
@@ -10,6 +10,7 @@ interface Product {
   barcode: string;
   nama: string;
   harga: number;
+  harga_modal?: number;
   stok: number;
   satuan: string;
   kategori: string;
@@ -64,7 +65,11 @@ async function fetchProducts(storeId: string): Promise<Product[]> {
   if (error || !data) return getCachedProducts();
   const mapped = data.map((r: any) => ({
     id: r.id, barcode: r.barcode, nama: r.nama,
-    harga: r.harga, stok: r.stok, satuan: r.satuan, kategori: r.kategori,
+    harga: Number(r.harga || 0),
+    harga_modal: r.harga_modal !== undefined && r.harga_modal !== null ? Number(r.harga_modal) : 0,
+    stok: Number(r.stok || 0),
+    satuan: r.satuan || 'pcs',
+    kategori: r.kategori || 'Umum',
     image_url: r.image_url
   }));
   cacheProducts(mapped);
@@ -72,11 +77,24 @@ async function fetchProducts(storeId: string): Promise<Product[]> {
 }
 
 async function upsertProduct(storeId: string, p: Product): Promise<void> {
-  await supabase.from('pos_products').upsert({
+  const payload: any = {
     id: p.id, store_id: storeId, barcode: p.barcode, nama: p.nama,
     harga: p.harga, stok: p.stok, satuan: p.satuan, kategori: p.kategori,
     image_url: p.image_url
-  }, { onConflict: 'id' });
+  };
+  if (p.harga_modal !== undefined && p.harga_modal !== null) {
+    payload.harga_modal = p.harga_modal;
+  }
+  const { error } = await supabase.from('pos_products').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    // Fallback jika kolom harga_modal belum dibuat di Supabase
+    if (error.message?.includes('harga_modal') || error.code === '42703') {
+      delete payload.harga_modal;
+      await supabase.from('pos_products').upsert(payload, { onConflict: 'id' });
+    } else {
+      console.error('upsertProduct error:', error);
+    }
+  }
 }
 
 async function deleteProductRemote(storeId: string, id: string): Promise<void> {
@@ -408,7 +426,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
   };
 
   return (
-    <div className="flex flex-col min-h-screen font-sans">
+    <div className="flex flex-col min-h-screen font-sans overflow-x-hidden w-full max-w-full">
 
       {/* HEADER */}
       <div className="shrink-0 z-30 bg-[#F9FBFF]">
@@ -444,7 +462,24 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         </div>
 
         {/* TABS */}
-        <div className="flex gap-1 mt-2.5 border-b border-gray-100 px-4">
+        <div 
+          className="flex items-center gap-1.5 mt-2.5 border-b border-gray-200/80 px-3 overflow-x-auto hide-scrollbar w-full touch-pan-x select-none scroll-smooth cursor-grab active:cursor-grabbing"
+          onMouseDown={(e) => {
+            const el = e.currentTarget;
+            const startX = e.pageX - el.offsetLeft;
+            const scrollLeft = el.scrollLeft;
+            const onMouseMove = (ev: MouseEvent) => {
+              const x = ev.pageX - el.offsetLeft;
+              el.scrollLeft = scrollLeft - (x - startX);
+            };
+            const onMouseUp = () => {
+              window.removeEventListener('mousemove', onMouseMove);
+              window.removeEventListener('mouseup', onMouseUp);
+            };
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+          }}
+        >
           {([
             { id: 'kasir', label: 'Kasir', icon: 'fa-cash-register' },
             { id: 'produk', label: 'Produk', icon: 'fa-box' },
@@ -454,13 +489,27 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           ] as const).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-black transition-all border-b-2 -mb-[1px] ${activeTab === tab.id ? 'text-[#0066FF] border-[#0066FF]' : 'text-gray-400 border-transparent hover:text-gray-600'}`}
+              onClick={(e) => {
+                setActiveTab(tab.id);
+                const container = e.currentTarget.parentElement;
+                if (container) {
+                  const btn = e.currentTarget;
+                  const targetLeft = btn.offsetLeft - (container.clientWidth / 2) + (btn.clientWidth / 2);
+                  container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-[11.5px] font-black transition-all border-b-2 -mb-[1px] shrink-0 whitespace-nowrap active:scale-95 ${
+                activeTab === tab.id 
+                  ? 'text-[#0066FF] border-[#0066FF] bg-blue-50/60 rounded-t-lg' 
+                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50/60 rounded-t-lg'
+              }`}
             >
-              <i className={`fa-solid ${tab.icon} text-[10px]`}></i>
-              {tab.label}
+              <i className={`fa-solid ${tab.icon} text-[11px]`}></i>
+              <span>{tab.label}</span>
               {tab.id === 'kasir' && cart.length > 0 && (
-                <span className="bg-[#0066FF] text-white text-[8px] font-black rounded-full w-4 h-4 flex items-center justify-center">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+                <span className="bg-[#0066FF] text-white text-[8px] font-black rounded-full min-w-4 h-4 px-1 flex items-center justify-center shrink-0">
+                  {cart.reduce((s, i) => s + i.qty, 0)}
+                </span>
               )}
             </button>
           ))}
@@ -756,9 +805,19 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                                   {p.nama}
                                 </h4>
 
-                                {/* 2. Harga Jual */}
-                                <div className="text-[12.5px] sm:text-[13.5px] font-black text-[#0066FF] tabular-nums tracking-tight leading-none">
-                                  {`Rp ${p.harga.toLocaleString('id-ID')}`}
+                                {/* 2. Harga Jual & Harga Modal */}
+                                <div className="flex items-baseline justify-between gap-1 leading-none">
+                                  <div className="text-[12.5px] sm:text-[13.5px] font-black text-[#0066FF] tabular-nums tracking-tight">
+                                    {`Rp ${p.harga.toLocaleString('id-ID')}`}
+                                  </div>
+                                  {Boolean(isOwner && p.harga_modal && p.harga_modal > 0) && (
+                                    <span 
+                                      className="text-[8.5px] font-bold text-slate-400 tabular-nums shrink-0" 
+                                      title={`Harga Modal: Rp ${p.harga_modal.toLocaleString('id-ID')}`}
+                                    >
+                                      Mod: {p.harga_modal.toLocaleString('id-ID')}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* 3. Stok Produk & Tombol Edit Stok */}
@@ -920,7 +979,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
           : 'Semua Waktu';
 
         return (
-          <div className="flex-1 overflow-y-auto pb-[90px]">
+          <div className="flex-1 w-full max-w-full overflow-y-auto pb-[90px]">
             {/* ── Filter Bar ── */}
             <div className="px-3 pt-3 pb-2 sticky top-0 bg-[#F9FBFF] z-10">
               <div className="flex gap-1.5">
@@ -1170,7 +1229,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
       })()}
 
       {activeTab === 'setting' && (
-        <div className="flex-1 px-4 pt-4 pb-[90px] bg-white">
+        <div className="flex-1 w-full max-w-full px-4 pt-4 pb-[90px] bg-white overflow-y-auto">
           <div className="max-w-md mx-auto space-y-3">
             <div className="mb-4">
               <h2 className="text-sm font-black text-gray-900 mb-0.5"><i className="fa-solid fa-gear mr-2 text-[#0066FF]"></i>Pengaturan Kasir</h2>
@@ -1382,7 +1441,7 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
         <ProductFormModal 
           enableStok={printSettings.enableStok} 
           product={editingProduct} 
-          categories={Array.from(new Set(products.map(p => p.kategori?.trim() || 'Umum'))).sort()}
+          categories={Array.from(new Set(products.map(p => p.kategori?.trim()).filter(Boolean) as string[])).sort()}
           onSave={saveProduct} 
           onClose={() => { setShowProductForm(false); setEditingProduct(null); }} 
         />
@@ -1502,18 +1561,58 @@ interface ProductFormProps {
 
 const ProductFormModal: React.FC<ProductFormProps> = ({ product, categories, onSave, onClose, enableStok = true }) => {
   const [showScanner, setShowScanner] = useState(false);
-  const [form, setForm] = useState<Product>(product || {
-    id: generateId(),
-    barcode: '',
-    nama: '',
-    harga: 0,
-    stok: 0,
-    satuan: 'pcs',
-    kategori: '',
-    image_url: ''
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+  const categoryContainerRef = useRef<HTMLDivElement>(null);
+
+  const [form, setForm] = useState<Product>(() => {
+    if (product) {
+      return {
+        ...product,
+        harga_modal: product.harga_modal ? Number(product.harga_modal) : 0,
+        harga: Number(product.harga || 0),
+        stok: Number(product.stok || 0),
+        satuan: product.satuan || 'pcs',
+        kategori: product.kategori || ''
+      };
+    }
+    return {
+      id: generateId(),
+      barcode: '',
+      nama: '',
+      harga: 0,
+      harga_modal: 0,
+      stok: 0,
+      satuan: 'pcs',
+      kategori: '',
+      image_url: ''
+    };
   });
+
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tutup menu kategori jika klik di luar
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryContainerRef.current && !categoryContainerRef.current.contains(e.target as Node)) {
+        setShowCategoryMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Hanya gunakan kategori yang dibuat manual oleh owner
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(categories.map(c => c?.trim()).filter(Boolean))).sort();
+  }, [categories]);
+
+  // Filter kategori berdasarkan input pengguna
+  const filteredCategories = useMemo(() => {
+    const q = (form.kategori || '').trim().toLowerCase();
+    if (!q) return availableCategories;
+    return availableCategories.filter(c => c.toLowerCase().includes(q));
+  }, [availableCategories, form.kategori]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1565,23 +1664,37 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, categories, onS
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.nama.trim()) return;
-    onSave(form);
+    onSave({
+      ...form,
+      kategori: form.kategori?.trim() || 'Umum',
+      satuan: form.satuan || 'pcs',
+      harga: Number(form.harga || 0),
+      harga_modal: Number(form.harga_modal || 0),
+      stok: Number(form.stok || 0)
+    });
   };
 
   const set = (k: keyof Product, v: any) => setForm(f => ({ ...f, [k]: v }));
 
+  // Perhitungan margin keuntungan
+  const modalVal = form.harga_modal || 0;
+  const jualVal = form.harga || 0;
+  const profitVal = jualVal - modalVal;
+  const marginPct = jualVal > 0 && modalVal > 0 ? Math.round((profitVal / jualVal) * 100) : null;
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-white w-full max-w-md rounded-3xl p-5 animate-in zoom-in-95 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white w-full max-w-md rounded-3xl p-5 animate-in zoom-in-95 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-[15px] font-black text-gray-900">{product ? 'Edit Produk' : 'Tambah Produk'}</h2>
-          <button onClick={onClose} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors">
+          <button onClick={onClose} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-600 transition-colors cursor-pointer">
             <i className="fa-solid fa-xmark text-sm"></i>
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           
-          <div className="flex flex-col items-center justify-center mb-4">
+          {/* Upload Foto */}
+          <div className="flex flex-col items-center justify-center mb-3">
             <div 
               onClick={() => !uploading && fileInputRef.current?.click()}
               className={`w-24 h-24 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all relative overflow-hidden group ${form.image_url ? 'border-transparent bg-gray-50' : 'border-gray-300 hover:border-blue-500 bg-gray-50'}`}
@@ -1604,67 +1717,194 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, categories, onS
             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
           </div>
 
-          {[
-            { label: 'Nama Produk *', key: 'nama', type: 'text', placeholder: 'contoh: Aqua 600ml' },
-            { label: 'Barcode', key: 'barcode', type: 'text', placeholder: 'Opsional' },
-          ].map(({ label, key, type, placeholder }) => (
-            <div key={key}>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">{label}</label>
-              <div className="relative flex items-center">
-                <input
-                  type={type}
-                  required={key === 'nama'}
-                  placeholder={placeholder}
-                  value={String(form[key as keyof Product])}
-                  onChange={e => set(key as keyof Product, e.target.value)}
-                  className={`w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all ${key === 'barcode' ? 'pr-12' : ''}`}
-                />
-                {key === 'barcode' && (
-                  <button type="button" onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#0066FF]/10 text-[#0066FF] hover:bg-[#0066FF]/20 flex items-center justify-center transition-colors">
-                    <i className="fa-solid fa-barcode text-sm"></i>
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Kategori</label>
+          {/* Nama Produk */}
+          <div>
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+              Nama Produk *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="contoh: Aqua 600ml"
+              value={form.nama}
+              onChange={e => set('nama', e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal"
+            />
+          </div>
+
+          {/* Barcode */}
+          <div>
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+              Barcode
+            </label>
+            <div className="relative flex items-center">
               <input
                 type="text"
-                list="category-options"
-                placeholder="Pilih atau Ketik Baru..."
-                value={form.kategori || ''}
-                onChange={e => set('kategori', e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all"
+                placeholder="Opsional (Scan atau ketik barcode)"
+                value={form.barcode}
+                onChange={e => set('barcode', e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 pr-12 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal"
               />
-              <datalist id="category-options">
-                {categories.map(c => <option key={c} value={c} />)}
-              </datalist>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Satuan</label>
-              <select
-                value={form.satuan || 'pcs'}
-                onChange={e => set('satuan', e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all appearance-none"
+              <button 
+                type="button" 
+                onClick={() => setShowScanner(true)} 
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#0066FF]/10 text-[#0066FF] hover:bg-[#0066FF]/20 flex items-center justify-center transition-colors cursor-pointer"
+                title="Scan Barcode Kamera"
               >
-                <option value="pcs">Pcs (Satuan)</option>
-                <option value="kg">Kg (Kiloan)</option>
-                <option value="liter">Liter</option>
-                <option value="gram">Gram</option>
-                <option value="lusin">Lusin</option>
-                <option value="karton">Karton / Dus</option>
-                <option value="box">Box</option>
-                <option value="pack">Pack</option>
-                <option value="renceng">Renceng</option>
-                <option value="porsi">Porsi</option>
-              </select>
+                <i className="fa-solid fa-barcode text-sm"></i>
+              </button>
             </div>
           </div>
+
+          {/* Kolom Kategori & Satuan */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Kategori dengan Panah Dropdown Jelas & Pilihan Rapi */}
+            <div className="relative" ref={categoryContainerRef}>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                Kategori
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  placeholder="Pilih atau Ketik..."
+                  value={form.kategori || ''}
+                  onFocus={() => setShowCategoryMenu(true)}
+                  onChange={e => {
+                    set('kategori', e.target.value);
+                    setShowCategoryMenu(true);
+                  }}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 pr-9 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryMenu(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-slate-500 hover:text-[#0066FF] hover:bg-blue-50 flex items-center justify-center transition-all cursor-pointer"
+                  title="Tampilkan daftar kategori"
+                >
+                  <i className={cn("fa-solid fa-chevron-down text-xs transition-transform duration-200", showCategoryMenu && "rotate-180 text-[#0066FF]")}></i>
+                </button>
+              </div>
+
+              {/* Popover Pilihan Kategori Rapi */}
+              {showCategoryMenu && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-3 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <span className="text-[9.5px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-tags text-blue-500 text-[10px]"></i>
+                      Pilihan Kategori
+                    </span>
+                    {form.kategori && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          set('kategori', '');
+                        }}
+                        className="text-[9px] font-black text-rose-500 hover:underline cursor-pointer"
+                      >
+                        Kosongkan
+                      </button>
+                    )}
+                  </div>
+
+                  {availableCategories.length === 0 ? (
+                    <div className="py-2.5 text-center text-[10.5px] text-slate-500 font-medium">
+                      <i className="fa-solid fa-circle-info text-blue-500 mr-1.5"></i>
+                      Belum ada kategori tersimpan. Ketik nama kategori baru di atas.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                        {filteredCategories.map(cat => {
+                          const isSelected = (form.kategori || '').trim().toLowerCase() === cat.toLowerCase();
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                set('kategori', cat);
+                                setShowCategoryMenu(false);
+                              }}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95",
+                                isSelected
+                                  ? "bg-[#0066FF] text-white shadow-xs font-black"
+                                  : "bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-[#0066FF] border border-slate-200/60"
+                              )}
+                            >
+                              <span>{cat}</span>
+                              {isSelected && <i className="fa-solid fa-check text-[9px]"></i>}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {filteredCategories.length === 0 && Boolean(form.kategori?.trim()) && (
+                        <div className="py-2 text-center text-[10.5px] text-slate-500">
+                          Gunakan <strong className="text-blue-600">"{form.kategori}"</strong> sebagai kategori baru
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Satuan dengan Panah Dropdown Jelas */}
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                Satuan
+              </label>
+              <div className="relative flex items-center">
+                <select
+                  value={form.satuan || 'pcs'}
+                  onChange={e => set('satuan', e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 pr-9 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                >
+                  <option value="pcs">Pcs (Satuan)</option>
+                  <option value="kg">Kg (Kiloan)</option>
+                  <option value="liter">Liter</option>
+                  <option value="gram">Gram</option>
+                  <option value="lusin">Lusin</option>
+                  <option value="karton">Karton / Dus</option>
+                  <option value="box">Box</option>
+                  <option value="pack">Pack</option>
+                  <option value="renceng">Renceng</option>
+                  <option value="porsi">Porsi</option>
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 flex items-center justify-center">
+                  <i className="fa-solid fa-chevron-down text-xs"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Kolom Harga Modal & Harga Jual Berdampingan */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Harga Jual *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                  Harga Modal
+                </label>
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">
+                  Opsional
+                </span>
+              </div>
+              <input 
+                type="text" 
+                placeholder="Rp 0" 
+                value={form.harga_modal ? `Rp ${form.harga_modal.toLocaleString('id-ID')}` : ''} 
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  set('harga_modal', val ? parseInt(val, 10) : 0);
+                }} 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal" 
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                Harga Jual *
+              </label>
               <input 
                 type="text" 
                 required 
@@ -1672,30 +1912,62 @@ const ProductFormModal: React.FC<ProductFormProps> = ({ product, categories, onS
                 value={form.harga ? `Rp ${form.harga.toLocaleString('id-ID')}` : ''} 
                 onChange={e => {
                   const val = e.target.value.replace(/[^0-9]/g, '');
-                  set('harga', parseInt(val || '0', 10));
+                  set('harga', val ? parseInt(val, 10) : 0);
                 }} 
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal" 
               />
             </div>
-            {enableStok && (
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Stok Awal</label>
+          </div>
+
+          {/* Indikator Selisih / Margin Keuntungan */}
+          {jualVal > 0 && modalVal > 0 && (
+            <div className={cn(
+              "flex items-center justify-between px-3.5 py-2 rounded-xl border text-[10px] font-bold transition-all",
+              profitVal >= 0
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
+                : "bg-rose-50 text-rose-700 border-rose-200/70"
+            )}>
+              <span className="flex items-center gap-1.5">
+                <i className={cn("fa-solid text-[9px]", profitVal >= 0 ? "fa-arrow-trend-up text-emerald-600" : "fa-arrow-trend-down text-rose-600")}></i>
+                <span>{profitVal >= 0 ? 'Estimasi Margin Keuntungan:' : 'Peringatan Margin Rugi:'}</span>
+              </span>
+              <span className="font-black tabular-nums">
+                {profitVal >= 0 ? '+' : '-'}Rp {Math.abs(profitVal).toLocaleString('id-ID')}
+                {marginPct !== null && ` (${marginPct}%)`}
+              </span>
+            </div>
+          )}
+
+          {/* Stok Awal */}
+          {enableStok && (
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                Stok Awal
+              </label>
+              <div className="relative flex items-center">
                 <input 
                   type="text" 
                   placeholder="0" 
                   value={form.stok ? form.stok.toLocaleString('id-ID') : ''} 
                   onChange={e => {
                     const val = e.target.value.replace(/[^0-9]/g, '');
-                    set('stok', parseInt(val || '0', 10));
+                    set('stok', val ? parseInt(val, 10) : 0);
                   }} 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all" 
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 pr-14 text-[12px] font-bold text-gray-800 outline-none focus:border-[#0066FF] focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-400 placeholder:font-normal" 
                 />
+                <span className="absolute right-3.5 text-[11px] font-bold text-gray-400 uppercase pointer-events-none">
+                  {form.satuan || 'pcs'}
+                </span>
               </div>
-            )}
-          </div>
-          <button type="submit" className="w-full py-3.5 bg-[#0066FF] text-white font-black text-[14px] rounded-2xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-[0.98] transition-all mt-2">
-            <i className="fa-solid fa-floppy-disk mr-2"></i>
-            {product ? 'Simpan Perubahan' : 'Tambah Produk'}
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            className="w-full py-3.5 bg-[#0066FF] text-white font-black text-[14px] rounded-2xl shadow-lg shadow-blue-500/30 hover:bg-[#0052cc] active:scale-[0.98] transition-all mt-3 cursor-pointer flex items-center justify-center gap-2"
+          >
+            <i className="fa-solid fa-floppy-disk"></i>
+            <span>{product ? 'Simpan Perubahan' : 'Tambah Produk'}</span>
           </button>
         </form>
       </div>

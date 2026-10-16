@@ -2266,24 +2266,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     }
   }, [])
 
-  // Auto-scroll carousels
-  useEffect(() => {
-    if (!props.active) return;
-    
-    const transInterval = setInterval(() => {
-      const whiteEl = document.getElementById('trans-carousel')
-      if (whiteEl && whiteEl.clientWidth > 0) {
-        let newIndex = Math.round(whiteEl.scrollLeft / whiteEl.clientWidth) + 1;
-        if (newIndex > 2) newIndex = 0;
-        whiteEl.scrollTo({ left: newIndex * whiteEl.clientWidth, behavior: 'smooth' })
-        setWhiteCardIndex(newIndex)
-      }
-    }, 5000);
-    
-    return () => {
-      clearInterval(transInterval);
-    };
-  }, [props.active]);
 
   const [showRincian, setShowRincian] = useState(false)
   const [showLainnya, setShowLainnya] = useState(false)
@@ -2743,6 +2725,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [grafikFilterKasir, setGrafikFilterKasir] = useState('Semua')
   const [grafikRange, setGrafikRange] = useState<'harian'|'mingguan'|'bulanan'>('harian')
   const [grafikType, setGrafikType] = useState<'bar'|'line'|'pie'>('bar')
+  const [grafikRefreshKey, setGrafikRefreshKey] = useState(0)
 
   // Performa State
   const [performaRange, setPerformaRange] = useState<'harian'|'mingguan'|'bulanan'>('bulanan')
@@ -2757,6 +2740,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   useEffect(() => {
     if (activeOwnerSubView === 'performa' || activeOwnerSubView === 'grafik') {
+      let isSubscribed = true
       const fetchAnalytics = async () => {
         setIsAnalyticsLoading(true)
         try {
@@ -2765,77 +2749,112 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           
           if (activeOwnerSubView === 'performa') {
             if (performaRange === 'harian') days = 0
-            else if (performaRange === 'mingguan') days = 6
-            else days = 29
+            else if (performaRange === 'mingguan') days = 7
+            else days = 31
           } else {
             if (grafikRange === 'harian') days = 7
             else if (grafikRange === 'mingguan') days = 30
-            else days = 90
+            else days = 185 // 6 Bulan penuh
           }
 
           const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days)
           const fmt = (d: Date) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
           const startStr = fmt(cutoffDate)
-          const endStr = fmt(now)
-          const storeId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')
+          const storeId = (props.pantauStoreId && props.pantauStoreId !== 'all') 
+            ? props.pantauStoreId 
+            : (props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : 'all')
 
-          let query = supabase
-            .from('transactions')
-            .select('kasir_id, nominal, admin_fee, timestamp, kategori')
-            .eq('user_id', props.userId)
-            .order('timestamp', { ascending: false })
-            .limit(3000)
-
-          if (storeId !== 'all') {
-            query = query.eq('store_id', storeId)
-          }
-
-          const { data, error } = await query
-
-          if (error) {
-            console.error('Analytics Error:', error.message || error)
-          } else if (data) {
-            // Filter locally to avoid any Supabase Postgres date casting bugs
-            // Filter locally using strict string comparison to bypass ALL timezone bugs
-            const validData = data.filter(r => {
-              if (!r.timestamp || !r.kategori || r.kategori.startsWith('Isi')) return false
+          // Helper to process and aggregate rows safely
+          const processTransactions = (rows: any[]) => {
+            const valid = rows.filter(r => {
+              if (!r || !r.kategori || String(r.kategori).startsWith('Isi')) return false
+              if (storeId !== 'all' && r.store_id && r.store_id !== storeId) return false
               const txDay = typeof r.timestamp === 'string' ? r.timestamp.substring(0, 10) : ''
-              return txDay >= startStr && txDay <= endStr
+              return !startStr || txDay >= startStr
             })
-            
-            // Group data locally exactly like the RPC did
-            const aggregated = validData.reduce((acc, row) => {
-               const day = typeof row.timestamp === 'string' ? row.timestamp.substring(0, 10) : ''
-               if (!day) return acc;
-               
-               const kId = row.kasir_id || 'Unknown'
-               const key = `${day}_${kId}`
-               if (!acc[key]) {
-                 acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0, total_admin: 0 }
-               }
-               acc[key].total_omzet += Number(row.nominal || 0)
-               acc[key].total_transaksi += 1
-               acc[key].total_admin += Number(row.admin_fee || 0)
-               return acc
+
+            const aggregated = valid.reduce((acc, row) => {
+              const day = typeof row.timestamp === 'string' ? row.timestamp.substring(0, 10) : ''
+              if (!day) return acc
+              const kId = row.kasir_id || 'Unknown'
+              const key = `${day}_${kId}`
+              if (!acc[key]) {
+                acc[key] = { kasir_id: kId, tanggal: day, total_omzet: 0, total_transaksi: 0, total_admin: 0 }
+              }
+              acc[key].total_omzet += Number(row.nominal || 0)
+              acc[key].total_transaksi += 1
+              acc[key].total_admin += Number(row.admin_fee ?? row.adminFee ?? 0)
+              return acc
             }, {} as Record<string, any>)
 
-            const finalAnalyticsData = Object.values(aggregated)
-            console.log('Analytics Berhasil ditarik & digrup:', finalAnalyticsData.length, 'baris grup dari', validData.length, 'transaksi')
-            setAnalyticsData(finalAnalyticsData)
-            setAnalyticsRawData(validData)
-            
-            // Temporary debug toast
-            if (finalAnalyticsData.length === 0) {
-              props.showToast(`Debug: Supabase=${data.length} txs, ValidDate=${validData.length} txs`)
+            return {
+              grouped: Object.values(aggregated),
+              raw: valid
             }
           }
+
+          // 1. Process from local props.allTransactions / props.transactions first as immediate fallback
+          const localPool = (props.allTransactions && props.allTransactions.length > 0)
+            ? props.allTransactions
+            : (props.transactions || [])
+          
+          const localResult = processTransactions(localPool)
+          if (localResult.grouped.length > 0 && isSubscribed) {
+            setAnalyticsData(localResult.grouped)
+            setAnalyticsRawData(localResult.raw)
+          }
+
+          // 2. Fetch from Supabase if userId is available
+          if (props.userId) {
+            let query = supabase
+              .from('transactions')
+              .select('id, kasir_id, nominal, admin_fee, timestamp, kategori, store_id')
+              .eq('user_id', props.userId)
+              .gte('timestamp', `${startStr}T00:00:00`)
+              .order('timestamp', { ascending: false })
+              .limit(3000)
+
+            if (storeId !== 'all') {
+              query = query.eq('store_id', storeId)
+            }
+
+            const { data, error } = await query
+
+            if (error) {
+              console.warn('Analytics remote fetch warning:', error.message || error)
+            } else if (data && isSubscribed) {
+              // Deduplicate remote + local by id
+              const mapById = new Map<string, any>()
+              data.forEach(r => { if (r.id) mapById.set(r.id, r) })
+              localPool.forEach(r => {
+                if (r.id && !mapById.has(r.id)) {
+                  mapById.set(r.id, {
+                    id: r.id,
+                    kasir_id: r.kasir_id,
+                    nominal: r.nominal,
+                    admin_fee: r.adminFee ?? r.admin_fee,
+                    timestamp: r.timestamp,
+                    kategori: r.kategori,
+                    store_id: r.store_id
+                  })
+                }
+              })
+              const combinedList = Array.from(mapById.values())
+              const remoteResult = processTransactions(combinedList.length > 0 ? combinedList : data)
+              setAnalyticsData(remoteResult.grouped)
+              setAnalyticsRawData(remoteResult.raw)
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching analytics:', err)
         } finally {
-          setIsAnalyticsLoading(false)
+          if (isSubscribed) setIsAnalyticsLoading(false)
         }
       }
       fetchAnalytics()
+      return () => { isSubscribed = false }
     }
-  }, [activeOwnerSubView, performaRange, grafikRange, props.activeStoreId, props.pantauStoreId])
+  }, [activeOwnerSubView, performaRange, grafikRange, props.activeStoreId, props.pantauStoreId, props.userId, props.allTransactions, grafikRefreshKey])
 
   const [ownerSaldoKasirId, setOwnerSaldoKasirId] = useState('')
   const [ownerSaldoNominal, setOwnerSaldoNominal] = useState('')
@@ -3041,7 +3060,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
       {/* ── POS KASIR OVERLAY ── */}
       {props.activeView === 'view-pos-kasir' && (
-        <div className="absolute inset-0 z-[100] overflow-y-auto bg-[#F7F7F7] pb-24 flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-0 z-[100] overflow-y-auto overflow-x-hidden w-full max-w-full bg-[#F7F7F7] pb-24 flex flex-col animate-in slide-in-from-right duration-300">
           <PosKasirView
             kasirName={props.kasirName}
             kasirRole={props.kasirRole}
@@ -3246,64 +3265,73 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           
           <div className="mx-4 mb-4 h-[1px] bg-white/10 rounded-full"></div>
           
-          {/* TRANSACTIONS SLIDER (Moved inside blue card) */}
-          <div className="px-4 mb-2 relative z-20">
-             <div className="absolute -top-3 right-4 left-4 flex justify-center gap-1.5 z-20">
-                <div onClick={() => document.getElementById('trans-carousel')?.scrollTo({left:0, behavior:'smooth'})} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 0 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-                <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 1 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-                <div onClick={() => { const el = document.getElementById('trans-carousel'); if(el) el.scrollTo({left: el.clientWidth * 2, behavior:'smooth'}) }} className={cn("h-1 rounded-full cursor-pointer transition-all", whiteCardIndex === 2 ? "w-3 bg-white" : "w-1.5 bg-white/30")}></div>
-             </div>
-             <div id="trans-carousel" onScroll={(e) => { const el = e.currentTarget; setWhiteCardIndex(Math.round(el.scrollLeft / el.clientWidth)); }} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar w-full gap-4 pt-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
-                {/* Slide 1 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Trx Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-simple text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{ownerTotalTrx}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Fee (Tunai & Non Tunai)</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-trend-up text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalAdmin)}</span>
-                     </div>
-                   </div>
+          {/* TRANSAKSI 5 KATEGORI SEJEJER (FREE HORIZONTAL SCROLL) */}
+          <div className="px-3 mb-2.5 relative z-20">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 py-2.5 px-1 shadow-inner">
+              <div 
+                className="flex items-center overflow-x-auto hide-scrollbar w-full touch-pan-x select-none cursor-grab active:cursor-grabbing"
+                style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
+                onMouseDown={(e) => {
+                  const el = e.currentTarget;
+                  const startX = e.pageX - el.offsetLeft;
+                  const scrollLeft = el.scrollLeft;
+                  const onMouseMove = (ev: MouseEvent) => {
+                    const x = ev.pageX - el.offsetLeft;
+                    el.scrollLeft = scrollLeft - (x - startX);
+                  };
+                  const onMouseUp = () => {
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                  };
+                  window.addEventListener('mousemove', onMouseMove);
+                  window.addEventListener('mouseup', onMouseUp);
+                }}
+              >
+                {/* 1. TRX HARI INI */}
+                <div className="min-w-[95px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
+                  <p className="text-[9px] font-black text-sky-200 uppercase tracking-wider mb-0.5 whitespace-nowrap">TRX HARI INI</p>
+                  <p className="text-xs font-black text-white tabular-nums leading-tight mb-0.5 whitespace-nowrap">{ownerTotalTrx}</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Jml Trx</p>
                 </div>
-                {/* Slide 2 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Uang Masuk</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-chart-pie text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalUangMasuk)}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-white/20 mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Tarik Tunai Hari Ini</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerTotalTarik)}</span>
-                     </div>
-                   </div>
+
+                <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
+
+                {/* 2. ADMIN / LABA */}
+                <div className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
+                  <p className="text-[9px] font-black text-emerald-300 uppercase tracking-wider mb-0.5 whitespace-nowrap">ADMIN / LABA</p>
+                  <p className="text-xs font-black text-emerald-200 tabular-nums leading-tight mb-0.5 whitespace-nowrap">{formatRupiah(ownerTotalAdmin)}</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Fee & Laba</p>
                 </div>
-                {/* Slide 3 */}
-                <div className="snap-center min-w-full flex justify-between gap-[2px]">
-                   <div className="flex-1 min-w-0">
-                     <p className="text-[10px] font-bold text-blue-100 mb-0.5 truncate">Total Deposit Saldo</p>
-                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0"><i className="fa-solid fa-wallet text-[10px]"></i></div>
-                       <span className="text-xs font-black text-white tabular-nums truncate">{formatRupiah(ownerIsiBank)}</span>
-                     </div>
-                   </div>
-                   <div className="w-[1px] bg-transparent mx-1 rounded-full"></div>
-                   <div className="flex-1 pl-1 min-w-0">
-                   </div>
+
+                <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
+
+                {/* 3. UANG MASUK */}
+                <div className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
+                  <p className="text-[9px] font-black text-indigo-200 uppercase tracking-wider mb-0.5 whitespace-nowrap">UANG MASUK</p>
+                  <p className="text-xs font-black text-white tabular-nums leading-tight mb-0.5 whitespace-nowrap">{formatRupiah(ownerTotalUangMasuk)}</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Penjualan</p>
                 </div>
-             </div>
+
+                <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
+
+                {/* 4. TARIK TUNAI */}
+                <div className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
+                  <p className="text-[9px] font-black text-rose-300 uppercase tracking-wider mb-0.5 whitespace-nowrap">TARIK TUNAI</p>
+                  <p className="text-xs font-black text-rose-200 tabular-nums leading-tight mb-0.5 whitespace-nowrap">{formatRupiah(ownerTotalTarik)}</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Laci Keluar</p>
+                </div>
+
+                <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
+
+                {/* 5. DEPOSIT SALDO */}
+                <div className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
+                  <p className="text-[9px] font-black text-amber-300 uppercase tracking-wider mb-0.5 whitespace-nowrap">DEPOSIT SALDO</p>
+                  <p className="text-xs font-black text-amber-200 tabular-nums leading-tight mb-0.5 whitespace-nowrap">{formatRupiah(ownerIsiBank)}</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Isi Bank</p>
+                </div>
+
+              </div>
+            </div>
           </div>
           
           <div className="px-4 pb-4 flex flex-col gap-3 relative z-10">
@@ -5189,18 +5217,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               )}
 
               {activeOwnerSubView === 'grafik' && (() => {
-                if (isAnalyticsLoading) {
-                  return (
-                    <div className="flex flex-col items-center justify-center py-10 bg-white/50 rounded-3xl border border-white border-dashed">
-                       <i className="fa-solid fa-spinner fa-spin text-4xl text-purple-200 mb-3"></i>
-                       <p className="text-center text-[11px] font-bold text-purple-400 uppercase tracking-widest">Memuat Grafik...</p>
-                    </div>
-                  )
-                }
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
 
-                const now = new Date()
-                now.setHours(0,0,0,0)
-                
                 // Helper to format Date string to 'YYYY-MM-DD' safely
                 const formatLocalISO = (d: Date | string) => {
                   if (!d) return '';
@@ -5217,83 +5236,165 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   } catch (e) {
                     return '';
                   }
-                }
+                };
+
+                // Daftar Kasir yang tersedia untuk filter (dari props.kasirList + transaksi riil)
+                const kasirFilterOptions = (() => {
+                  const options = [{ id: 'Semua', name: 'Semua Kasir' }];
+                  const seen = new Set<string>(['semua', 'owner']);
+                  
+                  // Kasir dari master list
+                  Object.entries(props.kasirList || {}).forEach(([id, acc]) => {
+                    const cleanId = id.trim().toLowerCase();
+                    if (!seen.has(cleanId)) {
+                      seen.add(cleanId);
+                      options.push({ id, name: acc.name || id });
+                    }
+                  });
+
+                  // Kasir yang ada di raw data transaksi
+                  analyticsRawData.forEach(r => {
+                    const kId = (r.kasir_id || '').trim();
+                    if (kId && !seen.has(kId.toLowerCase())) {
+                      seen.add(kId.toLowerCase());
+                      const matchedName = props.kasirList?.[kId]?.name || kId;
+                      options.push({ id: kId, name: matchedName });
+                    }
+                  });
+
+                  return options;
+                })();
 
                 // Filter analytics by selected Kasir
                 let filteredAnalytics = analyticsData;
-                let filterKasirName = grafikFilterKasir;
-                
+                let filteredRawTxs = analyticsRawData;
+
                 if (grafikFilterKasir !== 'Semua') {
-                  filterKasirName = props.kasirList[grafikFilterKasir]?.name || grafikFilterKasir;
-                  // DB stores kasir_id as login username (grafikFilterKasir), so match against that
+                  const targetKasir = grafikFilterKasir.trim().toLowerCase();
                   filteredAnalytics = filteredAnalytics.filter(r => 
-                    (r.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase()
+                    (r.kasir_id || '').trim().toLowerCase() === targetKasir
+                  );
+                  filteredRawTxs = filteredRawTxs.filter(r => 
+                    (r.kasir_id || '').trim().toLowerCase() === targetKasir
                   );
                 }
 
-                // Function to group by date string prefix
+                // Helper aggregation functions by date string prefix
                 const sumByPrefix = (prefix: string) => 
                   filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
-                                   .reduce((s, r) => s + Number(r.total_omzet), 0)
+                                   .reduce((s, r) => s + Number(r.total_omzet || 0), 0);
 
-                let trendData: { label: string, value: number }[] = []
-                
+                const countByPrefix = (prefix: string) =>
+                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                   .reduce((s, r) => s + Number(r.total_transaksi || 0), 0);
+
+                const adminByPrefix = (prefix: string) =>
+                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                   .reduce((s, r) => s + Number(r.total_admin || 0), 0);
+
+                // Trend Data generation based on range
+                let trendData: {
+                  label: string;
+                  shortLabel: string;
+                  subLabel: string;
+                  dateKey: string;
+                  value: number;
+                  count: number;
+                  admin: number;
+                }[] = [];
+
                 if (grafikRange === 'harian') {
-                  trendData = Array.from({length: 7}, (_, i) => {
-                    const d = new Date(now)
-                    d.setDate(d.getDate() - (6 - i))
-                    const prefix = formatLocalISO(d)
-                    return { label: d.toLocaleDateString('id-ID', { weekday: 'short' }), value: sumByPrefix(prefix) }
-                  })
+                  trendData = Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(now);
+                    d.setDate(d.getDate() - (6 - i));
+                    const prefix = formatLocalISO(d);
+                    const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+                    const dateNum = d.getDate();
+                    const monthName = d.toLocaleDateString('id-ID', { month: 'short' });
+                    return {
+                      label: `${dayName}, ${dateNum} ${monthName}`,
+                      shortLabel: `${dayName} ${dateNum}`,
+                      subLabel: `${dateNum}/${d.getMonth() + 1}`,
+                      dateKey: prefix,
+                      value: sumByPrefix(prefix),
+                      count: countByPrefix(prefix),
+                      admin: adminByPrefix(prefix)
+                    };
+                  });
                 } else if (grafikRange === 'mingguan') {
-                  trendData = Array.from({length: 4}, (_, i) => {
-                    const d = new Date(now)
-                    d.setDate(d.getDate() - (21 - i * 7)) 
-                    let weekSum = 0
-                    for(let j=0; j<7; j++) {
-                      const wd = new Date(d)
-                      wd.setDate(wd.getDate() + j)
-                      const prefix = formatLocalISO(wd)
-                      weekSum += sumByPrefix(prefix)
+                  trendData = Array.from({ length: 4 }, (_, i) => {
+                    const startWeek = new Date(now);
+                    startWeek.setDate(startWeek.getDate() - (21 - i * 7));
+                    let weekVal = 0;
+                    let weekCount = 0;
+                    let weekAdmin = 0;
+                    for (let j = 0; j < 7; j++) {
+                      const wd = new Date(startWeek);
+                      wd.setDate(wd.getDate() + j);
+                      const p = formatLocalISO(wd);
+                      weekVal += sumByPrefix(p);
+                      weekCount += countByPrefix(p);
+                      weekAdmin += adminByPrefix(p);
                     }
-                    return { label: `M${i+1}`, value: weekSum }
-                  })
+                    const endWeek = new Date(startWeek);
+                    endWeek.setDate(endWeek.getDate() + 6);
+                    const dateRangeStr = `${startWeek.getDate()}/${startWeek.getMonth() + 1} - ${endWeek.getDate()}/${endWeek.getMonth() + 1}`;
+                    return {
+                      label: `Minggu ${i + 1} (${dateRangeStr})`,
+                      shortLabel: `M${i + 1}`,
+                      subLabel: dateRangeStr,
+                      dateKey: formatLocalISO(startWeek),
+                      value: weekVal,
+                      count: weekCount,
+                      admin: weekAdmin
+                    };
+                  });
                 } else {
-                  trendData = Array.from({length: 6}, (_, i) => {
-                    const d = new Date(now)
-                    d.setMonth(d.getMonth() - (5 - i))
-                    const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                    return { label: d.toLocaleDateString('id-ID', { month: 'short' }), value: sumByPrefix(yearMonth) }
-                  })
+                  trendData = Array.from({ length: 6 }, (_, i) => {
+                    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+                    const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    const monthShort = d.toLocaleDateString('id-ID', { month: 'short' });
+                    const monthLong = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                    return {
+                      label: monthLong,
+                      shortLabel: monthShort,
+                      subLabel: String(d.getFullYear()),
+                      dateKey: yearMonth,
+                      value: sumByPrefix(yearMonth),
+                      count: countByPrefix(yearMonth),
+                      admin: adminByPrefix(yearMonth)
+                    };
+                  });
                 }
 
-                const maxTrendVal = Math.max(...trendData.map(d => d.value), 1)
+                // Global KPI totals
+                const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet || 0), 0);
+                const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi || 0), 0);
+                const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0;
+                const totalAdminLaba = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_admin || 0), 0);
+                const maxTrendVal = Math.max(...trendData.map(d => d.value), 1);
+                const peakTrendItem = trendData.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), trendData[0] || { value: 0, label: '-' });
 
-                // KPI Metriks from Analytics Data
-                const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet), 0)
-                const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi), 0)
-                const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0
-                const totalAdminLaba = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_admin || 0), 0)
+                // Breakdown Kategori Penjualan
+                const kategoriMap = new Map<string, { nominal: number; count: number }>();
+                filteredRawTxs.forEach(t => {
+                  if (!t || !t.kategori || String(t.kategori).startsWith('Isi')) return;
+                  const cat = t.kategori || 'Lainnya';
+                  const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
+                  kategoriMap.set(cat, {
+                    nominal: prev.nominal + (Number(t.nominal) || 0),
+                    count: prev.count + 1
+                  });
+                });
+                const categoryData = Array.from(kategoriMap.entries())
+                  .map(([k, v]) => ({ label: k, value: v.nominal, count: v.count }))
+                  .sort((a, b) => b.value - a.value);
+                const totalCatNominal = categoryData.reduce((s, d) => s + d.value, 0) || 1;
 
-                // Use analyticsRawData (which contains up to 6 months of raw txs) for Category and Time analysis
-                const recentValidTxs = analyticsRawData.filter(t => t && t.kategori && !t.kategori.startsWith('Isi'))
-                let filteredRecentTxs = recentValidTxs
-                if (grafikFilterKasir !== 'Semua') {
-                  filteredRecentTxs = filteredRecentTxs.filter(t => (t.kasir_id || '').trim().toLowerCase() === grafikFilterKasir.trim().toLowerCase())
-                }
-
-                // Kategori Terlaris (Tren Terbaru)
-                const kategoriMap = new Map<string, number>()
-                filteredRecentTxs.forEach(t => {
-                  const cat = t.kategori || 'Lainnya'
-                  kategoriMap.set(cat, (kategoriMap.get(cat) || 0) + (t.nominal || 0))
-                })
-                const categoryData = Array.from(kategoriMap.entries()).map(([k, v]) => ({ label: k, value: v })).sort((a,b) => b.value - a.value)
-
-                // Jam Sibuk (Time Blocks Tren Terbaru)
-                const hourMap = new Array(24).fill(0)
-                filteredRecentTxs.forEach(t => {
-                  if (!t.timestamp) return;
+                // Distribusi Waktu (Jam Sibuk)
+                const hourMap = new Array(24).fill(0);
+                filteredRawTxs.forEach(t => {
+                  if (!t || !t.timestamp) return;
                   try {
                     let h = 0;
                     if (typeof t.timestamp === 'string' && t.timestamp.includes('T')) {
@@ -5303,345 +5404,644 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       if (!isNaN(d.getTime())) h = d.getHours();
                     }
                     if (!isNaN(h) && h >= 0 && h < 24) hourMap[h]++;
-                  } catch(e) {}
-                })
+                  } catch (e) {}
+                });
+
                 const timeBlocks = [
-                  { label: 'Pagi', sub: '06-12', value: hourMap.slice(6, 12).reduce((a,b)=>a+b,0) },
-                  { label: 'Siang', sub: '12-15', value: hourMap.slice(12, 15).reduce((a,b)=>a+b,0) },
-                  { label: 'Sore', sub: '15-18', value: hourMap.slice(15, 18).reduce((a,b)=>a+b,0) },
-                  { label: 'Malam', sub: '18-24', value: hourMap.slice(18, 24).reduce((a,b)=>a+b,0) + hourMap.slice(0, 6).reduce((a,b)=>a+b,0) }
-                ]
-                const maxTimeVal = Math.max(...timeBlocks.map(d => d.value), 1)
+                  { label: 'Pagi', hours: '06:00 - 12:00', icon: 'fa-sun', color: 'from-amber-400 to-amber-500', barColor: 'bg-amber-400', value: hourMap.slice(6, 12).reduce((a, b) => a + b, 0) },
+                  { label: 'Siang', hours: '12:00 - 15:00', icon: 'fa-cloud-sun', color: 'from-orange-500 to-amber-600', barColor: 'bg-orange-500', value: hourMap.slice(12, 15).reduce((a, b) => a + b, 0) },
+                  { label: 'Sore', hours: '15:00 - 18:00', icon: 'fa-cloud-sun-rain', color: 'from-blue-500 to-indigo-600', barColor: 'bg-blue-500', value: hourMap.slice(15, 18).reduce((a, b) => a + b, 0) },
+                  { label: 'Malam', hours: '18:00 - 24:00', icon: 'fa-moon', color: 'from-indigo-600 to-purple-800', barColor: 'bg-indigo-600', value: hourMap.slice(18, 24).reduce((a, b) => a + b, 0) + hourMap.slice(0, 6).reduce((a, b) => a + b, 0) }
+                ];
+                const maxTimeVal = Math.max(...timeBlocks.map(d => d.value), 1);
+                const busiestBlock = timeBlocks.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), timeBlocks[0]);
+
+                // Leaderboard Kasir
+                const kasirLeaderboard = (() => {
+                  if (grafikFilterKasir !== 'Semua') return [];
+                  const map = new Map<string, { omzet: number; count: number }>();
+                  filteredRawTxs.forEach(t => {
+                    const kId = (t.kasir_id || 'Unknown').trim();
+                    const prev = map.get(kId) || { omzet: 0, count: 0 };
+                    map.set(kId, {
+                      omzet: prev.omzet + (Number(t.nominal) || 0),
+                      count: prev.count + 1
+                    });
+                  });
+                  return Array.from(map.entries())
+                    .map(([id, stats]) => {
+                      const name = props.kasirList?.[id]?.name || id;
+                      const pct = totalVolume > 0 ? (stats.omzet / totalVolume) * 100 : 0;
+                      return { id, name, omzet: stats.omzet, count: stats.count, pct };
+                    })
+                    .sort((a, b) => b.omzet - a.omzet);
+                })();
+
+                const categoryColors = [
+                  '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'
+                ];
 
                 return (
-                  <div className="space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {/* Controls */}
-                    <div className="bg-white p-2 rounded-[1.25rem] border border-gray-100 shadow-sm flex items-center justify-between gap-2">
-                      <div className="relative flex-1">
-                        <select
-                          value={grafikFilterKasir}
-                          onChange={(e) => setGrafikFilterKasir(e.target.value)}
-                          className="w-full bg-gray-50 border border-gray-100 text-gray-800 text-[10px] font-black py-2.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer appearance-none transition-all hover:bg-gray-100"
-                        >
-                          <option value="Semua">Semua Kasir</option>
-                          {Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
-                            <option key={id} value={id}>{acc.name}</option>
-                          ))}
-                        </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
-                      </div>
-
-                      <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
-                        {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
-                          <button 
-                            key={range}
-                            onClick={() => setGrafikRange(range)}
-                            className={cn(
-                              "text-[9px] font-black uppercase px-2.5 py-2 rounded-lg transition-all",
-                              grafikRange === range ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                            )}
+                  <div className="space-y-6 pb-8 animate-in fade-in duration-300">
+                    {/* Header Controls */}
+                    <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {/* Kasir Selector */}
+                        <div className="relative flex-1 max-w-xs">
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">
+                            <i className="fa-solid fa-user-tag"></i>
+                          </div>
+                          <select
+                            value={grafikFilterKasir}
+                            onChange={(e) => setGrafikFilterKasir(e.target.value)}
+                            className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-800 text-[11px] font-black py-2.5 pl-8 pr-8 rounded-xl outline-none cursor-pointer appearance-none transition-all"
                           >
-                            {range === 'harian' ? 'HARI' : range === 'mingguan' ? 'MINGGU' : 'BULAN'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-emerald-200 relative overflow-hidden group">
-                        <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
-                        <p className="text-[8px] font-black text-emerald-100 uppercase tracking-widest relative z-10 mb-1">TOTAL OMZET</p>
-                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {totalVolume.toLocaleString('id-ID')}</h2>
-                      </div>
-                      
-                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-blue-200 relative overflow-hidden group">
-                        <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
-                        <p className="text-[8px] font-black text-blue-100 uppercase tracking-widest relative z-10 mb-1">TRANSAKSI</p>
-                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">{totalItems.toLocaleString('id-ID')} <span className="text-[9px]">item</span></h2>
-                      </div>
-
-                      <div className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-3.5 rounded-[1.5rem] text-white shadow-lg shadow-purple-200 relative overflow-hidden group">
-                        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
-                        <p className="text-[8px] font-black text-purple-100 uppercase tracking-widest relative z-10 mb-1">RATA-RATA</p>
-                        <h2 className="text-sm font-black text-white relative z-10 truncate tabular-nums">Rp {avgTransaction.toLocaleString('id-ID')}</h2>
-                      </div>
-                    </div>
-
-                    {/* KPI Card: Total Laba/Admin */}
-                    <div className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 p-4 rounded-[1.5rem] text-white shadow-lg shadow-orange-200 relative overflow-hidden group">
-                      <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-                      <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
-                      <div className="relative z-10 flex items-center justify-between">
-                        <div>
-                          <p className="text-[9px] font-black text-amber-100 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                            <i className="fa-solid fa-sack-dollar"></i> TOTAL LABA / ADMIN FEE
-                          </p>
-                          <h2 className="text-xl font-black text-white tabular-nums">Rp {totalAdminLaba.toLocaleString('id-ID')}</h2>
-                          <p className="text-[9px] text-amber-100 mt-0.5 font-bold">
-                            {totalItems > 0 ? `Rata-rata Rp ${Math.round(totalAdminLaba / totalItems).toLocaleString('id-ID')} / transaksi` : 'Belum ada transaksi'}
-                          </p>
+                            {kasirFilterOptions.map(opt => (
+                              <option key={opt.id} value={opt.id}>{opt.name}</option>
+                            ))}
+                          </select>
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                          <i className="fa-solid fa-coins text-2xl text-white/80"></i>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Chart 1: Tren Pendapatan */}
-                    <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
-                        <div>
-                          <h4 className="text-[13px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                            <i className="fa-solid fa-chart-line text-blue-500"></i> Tren Pendapatan
-                          </h4>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                            {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'}
-                          </p>
+                        {/* Quick Refresh Button */}
+                        <button
+                          onClick={() => setGrafikRefreshKey(k => k + 1)}
+                          title="Segarkan Data Grafik"
+                          className={cn(
+                            "w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all active:scale-95 shrink-0",
+                            isAnalyticsLoading && "animate-spin text-emerald-600"
+                          )}
+                        >
+                          <i className="fa-solid fa-arrows-rotate text-xs"></i>
+                        </button>
+                      </div>
+
+                      {/* Time Range Filter & Type Switcher */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Range Toggle */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                          {(['harian', 'mingguan', 'bulanan'] as const).map(range => (
+                            <button
+                              key={range}
+                              onClick={() => setGrafikRange(range)}
+                              className={cn(
+                                "text-[10px] font-black uppercase px-3 py-1.5 rounded-lg transition-all",
+                                grafikRange === range ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                              )}
+                            >
+                              {range === 'harian' ? '7 Hari' : range === 'mingguan' ? '4 Minggu' : '6 Bulan'}
+                            </button>
+                          ))}
                         </div>
-                        
-                        {/* Toggle Bar vs Line */}
-                        <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100">
+
+                        {/* Chart Type Toggle */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
                           <button
                             onClick={() => setGrafikType('bar')}
-                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'bar' ? "bg-white text-blue-600 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                            title="Tampilan Diagram Batang"
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5",
+                              grafikType === 'bar' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
                           >
-                            <i className="fa-solid fa-chart-column"></i> Bar
+                            <i className="fa-solid fa-chart-column"></i>
+                            <span className="hidden sm:inline">Batang</span>
                           </button>
                           <button
                             onClick={() => setGrafikType('line')}
-                            className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5", grafikType === 'line' ? "bg-white text-amber-500 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                            title="Tampilan Grafik Garis Halus"
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5",
+                              grafikType === 'line' ? "bg-white text-amber-500 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
                           >
-                            <i className="fa-solid fa-bolt"></i> Petir
+                            <i className="fa-solid fa-wave-square"></i>
+                            <span className="hidden sm:inline">Kurva</span>
                           </button>
                         </div>
                       </div>
+                    </div>
 
-                      <style>{`
-                        @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-                        .animate-grow { animation: growUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: bottom; }
-                        @keyframes dashLine { to { stroke-dashoffset: 0; } }
-                      `}</style>
-
-                      {grafikType === 'bar' ? (
-                        <div className="h-44 flex items-end justify-between gap-1.5 relative mt-6">
-                          {/* Background lines */}
-                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7">
-                             {[...Array(4)].map((_, i) => (
-                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
-                             ))}
-                          </div>
-
-                          {trendData.map((d, i) => {
-                            const heightPct = Math.max((d.value / maxTrendVal) * 100, 2);
-                            return (
-                              <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-7 z-10">
-                                <div className="absolute -top-8 bg-gray-800 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/bar:opacity-100 group-active/bar:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 shadow-lg transform -translate-y-2 group-hover/bar:-translate-y-4">
-                                  Rp {d.value.toLocaleString('id-ID')}
-                                  <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
-                                </div>
-                                <div 
-                                  className="w-full max-w-[32px] bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t-xl shadow-sm animate-grow transition-all group-hover/bar:brightness-110 group-active/bar:brightness-110 cursor-pointer relative overflow-hidden"
-                                  style={{ height: `${heightPct}%`, animationDelay: `${i * 50}ms` }}
-                                >
-                                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/bar:opacity-100 transition-opacity"></div>
-                                </div>
-                                <span className="absolute bottom-0 text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate w-full text-center">
-                                  {d.label}
-                                </span>
-                              </div>
-                            )
-                          })}
+                    {/* KPI Ringkasan Cards (4 Grid) */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Total Omzet */}
+                      <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-4 rounded-2xl text-white shadow-md shadow-emerald-500/10 relative overflow-hidden group">
+                        <div className="absolute -right-3 -top-3 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] font-black text-emerald-100 uppercase tracking-widest">Total Omzet</p>
+                          <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]">
+                            <i className="fa-solid fa-money-bill-trend-up"></i>
+                          </span>
                         </div>
-                      ) : (
-                        <div className="h-44 relative mt-6 pt-4">
-                          {/* Background Grid Lines */}
-                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7 pt-4">
-                             {[...Array(4)].map((_, i) => (
-                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
-                             ))}
+                        <h3 className="text-base sm:text-lg font-black text-white truncate tabular-nums">
+                          Rp {totalVolume.toLocaleString('id-ID')}
+                        </h3>
+                        <p className="text-[9px] text-emerald-100 mt-1 font-bold">
+                          {trendData.length > 0 ? `Rata-rata Rp ${Math.round(totalVolume / trendData.length).toLocaleString('id-ID')} / ${grafikRange === 'bulanan' ? 'bln' : grafikRange === 'mingguan' ? 'mgg' : 'hari'}` : '-'}
+                        </p>
+                      </div>
+
+                      {/* Total Laba / Admin Fee */}
+                      <div className="bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 p-4 rounded-2xl text-white shadow-md shadow-orange-500/10 relative overflow-hidden group">
+                        <div className="absolute -right-3 -top-3 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] font-black text-amber-100 uppercase tracking-widest">Laba / Admin Fee</p>
+                          <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]">
+                            <i className="fa-solid fa-coins"></i>
+                          </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-black text-white truncate tabular-nums">
+                          Rp {totalAdminLaba.toLocaleString('id-ID')}
+                        </h3>
+                        <p className="text-[9px] text-amber-100 mt-1 font-bold">
+                          {totalItems > 0 ? `Rata-rata Rp ${Math.round(totalAdminLaba / totalItems).toLocaleString('id-ID')} / trx` : '-'}
+                        </p>
+                      </div>
+
+                      {/* Total Transaksi */}
+                      <div className="bg-gradient-to-br from-blue-500 to-indigo-700 p-4 rounded-2xl text-white shadow-md shadow-blue-500/10 relative overflow-hidden group">
+                        <div className="absolute -right-3 -top-3 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] font-black text-blue-100 uppercase tracking-widest">Volume Transaksi</p>
+                          <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]">
+                            <i className="fa-solid fa-receipt"></i>
+                          </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-black text-white truncate tabular-nums">
+                          {totalItems.toLocaleString('id-ID')} <span className="text-xs font-normal">Trx</span>
+                        </h3>
+                        <p className="text-[9px] text-blue-100 mt-1 font-bold">
+                          {trendData.length > 0 ? `${(totalItems / trendData.length).toFixed(1)} trx / ${grafikRange === 'bulanan' ? 'bln' : grafikRange === 'mingguan' ? 'mgg' : 'hari'}` : '-'}
+                        </p>
+                      </div>
+
+                      {/* Rata-rata Nilai Trx (Basket Size) */}
+                      <div className="bg-gradient-to-br from-purple-500 to-fuchsia-700 p-4 rounded-2xl text-white shadow-md shadow-purple-500/10 relative overflow-hidden group">
+                        <div className="absolute -right-3 -top-3 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700"></div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] font-black text-purple-100 uppercase tracking-widest">Rata-rata Nilai Trx</p>
+                          <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]">
+                            <i className="fa-solid fa-calculator"></i>
+                          </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-black text-white truncate tabular-nums">
+                          Rp {avgTransaction.toLocaleString('id-ID')}
+                        </h3>
+                        <p className="text-[9px] text-purple-100 mt-1 font-bold">
+                          {peakTrendItem && peakTrendItem.value > 0 ? `Puncak: ${peakTrendItem.shortLabel}` : 'Stabil'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Chart Card Utama */}
+                    <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                              Grafik Tren Pendapatan Penjualan
+                            </h4>
                           </div>
-                          
-                          {/* SVG Line / Petir */}
-                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
-                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                              <defs>
-                                <linearGradient id="petirGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
-                                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-                                </linearGradient>
-                                <filter id="glowPetir">
-                                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                                  <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                  </feMerge>
-                                </filter>
-                              </defs>
-                              
-                              {(() => {
-                                const pts = trendData.map((d, i) => {
-                                  const x = (i / Math.max(trendData.length - 1, 1)) * 100;
-                                  const y = 100 - (d.value / maxTrendVal) * 100;
-                                  return `${x},${y}`;
-                                }).join(' ');
-                                
-                                const areaPts = `0,100 ${pts} 100,100`;
-                                
-                                return (
-                                  <>
-                                    <polygon points={areaPts} fill="url(#petirGrad)" className="animate-in fade-in duration-1000" />
-                                    <polyline 
-                                      points={pts} 
-                                      fill="none" 
-                                      stroke="#f59e0b" 
-                                      strokeWidth="3" 
-                                      vectorEffect="non-scaling-stroke"
-                                      strokeLinejoin="round" 
-                                      strokeLinecap="round" 
-                                      filter="url(#glowPetir)"
-                                      className="animate-[dashLine_1.5s_ease-out_forwards]"
-                                      strokeDasharray="1000"
-                                      strokeDashoffset="1000"
-                                    />
-                                  </>
-                                )
-                              })()}
-                            </svg>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                            Periode: {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'} • Filter: {grafikFilterKasir === 'Semua' ? 'Semua Kasir' : (props.kasirList?.[grafikFilterKasir]?.name || grafikFilterKasir)}
+                          </p>
+                        </div>
+
+                        {peakTrendItem && peakTrendItem.value > 0 && (
+                          <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-800 px-3 py-1 rounded-xl border border-amber-200/70 text-[10px] font-black">
+                            <i className="fa-solid fa-trophy text-amber-500"></i>
+                            <span>Tertinggi: {peakTrendItem.shortLabel} (Rp {peakTrendItem.value.toLocaleString('id-ID')})</span>
                           </div>
-                          
-                          {/* Nodes & Tooltips */}
-                          <div className="absolute inset-0 pb-7 pt-4 w-full h-full">
-                            {trendData.map((d, i) => {
-                              const leftPct = (i / Math.max(trendData.length - 1, 1)) * 100;
-                              const bottomPct = (d.value / maxTrendVal) * 100;
-                              return (
-                                <div key={i} className="absolute group/node cursor-pointer z-10 w-6 h-6 -translate-x-1/2 translate-y-1/2" style={{ left: `${leftPct}%`, bottom: `calc(${bottomPct}% + 28px)` }}>
-                                  <div className="absolute bottom-full mb-2 bg-amber-600 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg opacity-0 group-hover/node:opacity-100 transition-opacity whitespace-nowrap z-20 shadow-lg transform -translate-x-1/2 left-1/2 pointer-events-none">
-                                    Rp {d.value.toLocaleString('id-ID')}
-                                    <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-600 rotate-45"></div>
-                                  </div>
-                                  <div className="w-3 h-3 rounded-full border-[3px] border-white bg-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-md transform transition-transform group-hover/node:scale-150"></div>
+                        )}
+                      </div>
+
+                      {/* Canvas Chart Area */}
+                      {totalVolume === 0 && !isAnalyticsLoading ? (
+                        <div className="py-16 text-center flex flex-col items-center justify-center">
+                          <div className="w-16 h-16 rounded-2xl bg-slate-50 text-slate-300 flex items-center justify-center text-3xl mb-3">
+                            <i className="fa-solid fa-chart-line"></i>
+                          </div>
+                          <p className="text-xs font-black text-slate-600 uppercase tracking-wider">Belum Ada Transaksi Pada Periode Ini</p>
+                          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">
+                            Tidak ditemukan data transaksi untuk {grafikFilterKasir !== 'Semua' ? `kasir "${grafikFilterKasir}"` : 'toko ini'} dalam rentang {grafikRange}.
+                          </p>
+                          <div className="flex gap-2 mt-4">
+                            <button
+                              onClick={() => setGrafikRange('bulanan')}
+                              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-[10px] font-black uppercase transition-all"
+                            >
+                              Lihat 6 Bulan
+                            </button>
+                            {grafikFilterKasir !== 'Semua' && (
+                              <button
+                                onClick={() => setGrafikFilterKasir('Semua')}
+                                className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase transition-all"
+                              >
+                                Pilih Semua Kasir
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : grafikType === 'bar' ? (
+                        /* Modern Bar Chart */
+                        <div className="pt-6">
+                          <div className="h-56 flex items-end justify-between gap-2 sm:gap-4 relative pb-8">
+                            {/* Horizontal guide lines */}
+                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+                              {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
+                                <div key={idx} className="w-full border-t border-dashed border-slate-100 flex items-center justify-end">
+                                  <span className="text-[8px] font-bold text-slate-300 -mt-3.5 bg-white px-1">
+                                    Rp {Math.round(maxTrendVal * ratio).toLocaleString('id-ID')}
+                                  </span>
                                 </div>
-                              )
+                              ))}
+                            </div>
+
+                            {/* Bar Columns */}
+                            {trendData.map((d, i) => {
+                              const heightPct = Math.max((d.value / maxTrendVal) * 100, d.value > 0 ? 6 : 2);
+                              const isPeak = d.value === maxTrendVal && d.value > 0;
+                              return (
+                                <div key={i} className="relative flex flex-col items-center flex-1 h-full justify-end z-10 group/col">
+                                  {/* Floating Tooltip */}
+                                  <div className="absolute -top-12 opacity-0 group-hover/col:opacity-100 group-active/col:opacity-100 transition-all duration-200 pointer-events-none z-30 transform -translate-y-2 group-hover/col:-translate-y-3">
+                                    <div className="bg-slate-900 text-white p-2 rounded-xl shadow-xl whitespace-nowrap text-center">
+                                      <p className="text-[8px] font-bold text-slate-400">{d.label}</p>
+                                      <p className="text-[11px] font-black text-emerald-400 tabular-nums">Rp {d.value.toLocaleString('id-ID')}</p>
+                                      <div className="flex items-center justify-center gap-2 text-[8px] text-slate-300 mt-0.5">
+                                        <span>{d.count} trx</span>
+                                        <span>•</span>
+                                        <span className="text-amber-300">Laba Rp {d.admin.toLocaleString('id-ID')}</span>
+                                      </div>
+                                      <div className="w-2 h-2 bg-slate-900 rotate-45 mx-auto -mb-1"></div>
+                                    </div>
+                                  </div>
+
+                                  {/* Bar Body */}
+                                  <div className="w-full flex justify-center items-end h-full">
+                                    <div
+                                      style={{ height: `${heightPct}%` }}
+                                      className={cn(
+                                        "w-full max-w-[36px] rounded-t-xl transition-all duration-500 cursor-pointer relative group-hover/col:scale-105",
+                                        isPeak 
+                                          ? "bg-gradient-to-t from-emerald-600 via-teal-500 to-cyan-400 shadow-md shadow-emerald-500/30" 
+                                          : d.value > 0 
+                                            ? "bg-gradient-to-t from-slate-400 via-blue-500 to-cyan-400 group-hover/col:from-blue-600 group-hover/col:to-cyan-300 shadow-sm" 
+                                            : "bg-slate-100"
+                                      )}
+                                    >
+                                      {isPeak && (
+                                        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-amber-500 text-[10px]">
+                                          <i className="fa-solid fa-crown"></i>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Bottom Label */}
+                                  <div className="absolute -bottom-1 left-0 right-0 text-center">
+                                    <p className={cn("text-[9px] font-black uppercase truncate", isPeak ? "text-emerald-600 font-extrabold" : "text-slate-600")}>
+                                      {d.shortLabel}
+                                    </p>
+                                    <p className="text-[7px] text-slate-400 font-bold -mt-0.5">{d.subLabel}</p>
+                                  </div>
+                                </div>
+                              );
                             })}
                           </div>
+                        </div>
+                      ) : (
+                        /* Smooth Spline Curve Chart (Petir) */
+                        <div className="pt-6">
+                          <div className="h-56 relative pb-8">
+                            {/* Horizontal guide lines */}
+                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+                              {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
+                                <div key={idx} className="w-full border-t border-dashed border-slate-100 flex items-center justify-end">
+                                  <span className="text-[8px] font-bold text-slate-300 -mt-3.5 bg-white px-1">
+                                    Rp {Math.round(maxTrendVal * ratio).toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
 
-                          {/* Labels */}
-                          <div className="absolute bottom-0 left-0 w-full flex justify-between px-1">
-                            {trendData.map((d, i) => (
-                              <div key={i} className="flex-1 flex justify-center">
-                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter truncate text-center">
-                                  {d.label}
-                                </span>
-                              </div>
-                            ))}
+                            {/* Responsive SVG Area & Line */}
+                            <div className="absolute inset-0 pb-8 w-full h-full">
+                              <svg viewBox="0 0 1000 240" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                                <defs>
+                                  <linearGradient id="chartSplineGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                                  </linearGradient>
+                                  <linearGradient id="chartStrokeGrad" x1="0" y1="0" x2="1" y2="0">
+                                    <stop offset="0%" stopColor="#06b6d4" />
+                                    <stop offset="50%" stopColor="#10b981" />
+                                    <stop offset="100%" stopColor="#f59e0b" />
+                                  </linearGradient>
+                                </defs>
+
+                                {(() => {
+                                  const n = trendData.length;
+                                  if (n < 2) return null;
+                                  const pts = trendData.map((d, i) => {
+                                    const x = 30 + (i / (n - 1)) * 940;
+                                    const y = 20 + (1 - (d.value / maxTrendVal)) * 190;
+                                    return { x, y, data: d };
+                                  });
+
+                                  // Simple smooth path generation
+                                  let pathD = `M ${pts[0].x} ${pts[0].y}`;
+                                  for (let i = 0; i < pts.length - 1; i++) {
+                                    const p0 = pts[i];
+                                    const p1 = pts[i + 1];
+                                    const cpX = (p0.x + p1.x) / 2;
+                                    pathD += ` C ${cpX} ${p0.y}, ${cpX} ${p1.y}, ${p1.x} ${p1.y}`;
+                                  }
+
+                                  const areaD = `${pathD} L ${pts[pts.length - 1].x} 230 L ${pts[0].x} 230 Z`;
+
+                                  return (
+                                    <>
+                                      <path d={areaD} fill="url(#chartSplineGrad)" />
+                                      <path
+                                        d={pathD}
+                                        fill="none"
+                                        stroke="url(#chartStrokeGrad)"
+                                        strokeWidth="3.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </>
+                                  );
+                                })()}
+                              </svg>
+                            </div>
+
+                            {/* Node Markers & Tooltips */}
+                            <div className="absolute inset-0 pb-8 w-full h-full pointer-events-none">
+                              {trendData.map((d, i) => {
+                                const leftPct = (i / Math.max(trendData.length - 1, 1)) * 100;
+                                const bottomPct = Math.min(Math.max((d.value / maxTrendVal) * 100, 4), 96);
+                                const isPeak = d.value === maxTrendVal && d.value > 0;
+                                return (
+                                  <div
+                                    key={i}
+                                    className="absolute group/node pointer-events-auto"
+                                    style={{ left: `${leftPct}%`, bottom: `${bottomPct}%`, transform: 'translate(-50%, 50%)' }}
+                                  >
+                                    {/* Tooltip */}
+                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/node:opacity-100 transition-opacity z-30 pointer-events-none">
+                                      <div className="bg-slate-900 text-white p-2 rounded-xl shadow-xl whitespace-nowrap text-center">
+                                        <p className="text-[8px] font-bold text-slate-400">{d.label}</p>
+                                        <p className="text-[11px] font-black text-amber-400 tabular-nums">Rp {d.value.toLocaleString('id-ID')}</p>
+                                        <p className="text-[8px] text-slate-300">{d.count} transaksi • Laba Rp {d.admin.toLocaleString('id-ID')}</p>
+                                        <div className="w-2 h-2 bg-slate-900 rotate-45 mx-auto -mb-1"></div>
+                                      </div>
+                                    </div>
+
+                                    {/* Circle Marker */}
+                                    <div className={cn(
+                                      "w-3.5 h-3.5 rounded-full border-2 border-white shadow-md cursor-pointer transition-transform group-hover/node:scale-150",
+                                      isPeak ? "bg-amber-500 ring-2 ring-amber-300" : "bg-emerald-500"
+                                    )}></div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Bottom Labels */}
+                            <div className="absolute -bottom-1 left-0 right-0 flex justify-between px-1">
+                              {trendData.map((d, i) => (
+                                <div key={i} className="flex-1 text-center">
+                                  <p className="text-[9px] font-black text-slate-600 uppercase truncate">{d.shortLabel}</p>
+                                  <p className="text-[7px] text-slate-400 font-bold -mt-0.5">{d.subLabel}</p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                      {/* Chart 2: Kategori Terlaris (Donut) */}
-                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
-                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
-                          <i className="fa-solid fa-chart-pie text-orange-500"></i> Kategori
-                        </h4>
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Omzet per jenis</p>
-                        
-                        {(() => {
-                          const total = categoryData.reduce((s, d) => s + d.value, 0) || 1;
-                          let currentOffset = 0;
-                          const colors = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
-                          return (
-                            <div className="flex-1 flex flex-col">
-                              <div className="h-28 flex items-center justify-center relative mb-4">
-                                <svg width="100%" height="100%" viewBox="0 0 100 100" className="overflow-visible transform -rotate-90">
-                                  {categoryData.map((d, i) => {
-                                    if (d.value === 0) return null;
-                                    const radius = 40;
-                                    const circumference = 2 * Math.PI * radius;
-                                    const percentage = d.value / total;
-                                    const strokeLength = percentage * circumference;
-                                    const dasharray = `${strokeLength} ${circumference}`;
-                                    const dashoffset = -currentOffset;
-                                    currentOffset += strokeLength;
-                                    return (
-                                      <circle
-                                        key={i}
-                                        cx="50"
-                                        cy="50"
-                                        r={radius}
-                                        fill="transparent"
-                                        stroke={colors[i % colors.length]}
-                                        strokeWidth="16"
-                                        strokeDasharray={dasharray}
-                                        strokeDashoffset={dashoffset}
-                                        strokeLinecap={percentage > 0.99 ? "round" : "butt"}
-                                        className="animate-in zoom-in duration-1000 hover:stroke-[20] transition-all cursor-pointer"
-                                        style={{ animationDelay: `${i * 100}ms` }}
-                                      >
-                                        <title>{d.label}: Rp {d.value.toLocaleString('id-ID')}</title>
-                                      </circle>
-                                    )
-                                  })}
-                                </svg>
-                                {/* Center Label */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-4px]">
-                                  <span className="text-[10px] font-black text-gray-800">{categoryData.length > 0 ? categoryData[0].label : '-'}</span>
-                                  <span className="text-[7px] text-gray-400 font-bold uppercase tracking-widest">Terlaris</span>
-                                </div>
-                              </div>
-                              <div className="space-y-1.5 mt-auto">
-                                {categoryData.slice(0, 3).map((d, i) => (
-                                  <div key={i} className="flex justify-between items-center">
-                                    <div className="flex items-center gap-1.5 overflow-hidden">
-                                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[i % colors.length] }}></div>
-                                      <span className="text-[9px] font-black text-gray-600 truncate">{d.label}</span>
+                    {/* Breakdown 2 Kolom: Kategori Terlaris & Jam Sibuk */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Kartu 1: Kategori Terlaris */}
+                      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                              <i className="fa-solid fa-chart-pie text-emerald-500"></i> Kategori Terlaris
+                            </h4>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Kontribusi omzet per kategori</p>
+                          </div>
+                          <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl">
+                            {categoryData.length} Jenis
+                          </span>
+                        </div>
+
+                        {categoryData.length === 0 ? (
+                          <div className="flex-1 flex flex-col items-center justify-center py-8 text-slate-400">
+                            <i className="fa-solid fa-tags text-2xl mb-2 text-slate-300"></i>
+                            <p className="text-[10px] font-bold">Belum ada kategori penjualan</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 flex-1 flex flex-col justify-center">
+                            {categoryData.slice(0, 5).map((cat, idx) => {
+                              const pct = ((cat.value / totalCatNominal) * 100);
+                              const color = categoryColors[idx % categoryColors.length];
+                              return (
+                                <div key={idx} className="space-y-1">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
+                                      <span className="font-black text-slate-700 truncate">{cat.label}</span>
+                                      <span className="text-[9px] font-bold text-slate-400">({cat.count} trx)</span>
                                     </div>
-                                    <span className="text-[9px] font-black text-gray-900 ml-2">{(d.value/total*100).toFixed(0)}%</span>
+                                    <div className="text-right shrink-0">
+                                      <span className="font-black text-slate-900 tabular-nums">Rp {cat.value.toLocaleString('id-ID')}</span>
+                                      <span className="text-[9px] font-black text-emerald-600 ml-1.5">({pct.toFixed(1)}%)</span>
+                                    </div>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        })()}
+                                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full transition-all duration-700"
+                                      style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: color }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Chart 3: Jam Sibuk */}
-                      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100 flex flex-col">
-                        <h4 className="text-[11px] font-black text-gray-900 uppercase tracking-tight flex items-center gap-2 mb-1">
-                          <i className="fa-solid fa-clock text-indigo-500"></i> Jam Sibuk
-                        </h4>
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Transaksi</p>
-                        
-                        <div className="flex-1 flex items-end justify-between gap-1 relative mt-2">
-                           <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-4">
-                             {[...Array(3)].map((_, i) => (
-                               <div key={i} className="w-full border-t border-dashed border-gray-100 flex-1"></div>
-                             ))}
-                           </div>
-                           
-                           {timeBlocks.map((d, i) => {
-                             const heightPct = Math.max((d.value / maxTimeVal) * 100, 5);
-                             return (
-                               <div key={i} className="relative flex flex-col items-center flex-1 group/bar h-full justify-end pb-4 z-10">
-                                 <div className="absolute -top-6 bg-gray-800 text-white text-[8px] font-black px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-20">
-                                   {d.value} trx
-                                 </div>
-                                 <div 
-                                   className="w-full max-w-[24px] bg-indigo-100 rounded-t-lg animate-grow transition-all group-hover/bar:bg-indigo-400 relative overflow-hidden"
-                                   style={{ height: `${heightPct}%`, animationDelay: `${i * 100 + 200}ms` }}
-                                 >
-                                   <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-500"></div>
-                                 </div>
-                                 <span className="absolute bottom-0 text-[8px] font-black text-gray-500 uppercase tracking-tighter truncate w-full text-center">
-                                   {d.label}
-                                 </span>
-                               </div>
-                             )
-                           })}
+                      {/* Kartu 2: Jam Sibuk Operasional */}
+                      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                              <i className="fa-solid fa-clock text-blue-500"></i> Jam Sibuk Pelanggan
+                            </h4>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Distribusi waktu transaksi harian</p>
+                          </div>
+                          {busiestBlock && busiestBlock.value > 0 && (
+                            <span className="text-[9px] font-black text-blue-700 bg-blue-50 border border-blue-200/60 px-2.5 py-1 rounded-xl">
+                              Puncak: {busiestBlock.label}
+                            </span>
+                          )}
                         </div>
+
+                        <div className="grid grid-cols-2 gap-2.5 flex-1 items-center">
+                          {timeBlocks.map((blk, idx) => {
+                            const isBusiest = blk.value === maxTimeVal && blk.value > 0;
+                            const pct = totalItems > 0 ? ((blk.value / totalItems) * 100) : 0;
+                            return (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  "p-3 rounded-2xl border transition-all",
+                                  isBusiest 
+                                    ? "bg-gradient-to-br from-blue-50 to-indigo-50/50 border-blue-200 shadow-sm" 
+                                    : "bg-slate-50/70 border-slate-100"
+                                )}
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={cn(
+                                      "w-6 h-6 rounded-lg flex items-center justify-center text-[10px] text-white bg-gradient-to-br",
+                                      blk.color
+                                    )}>
+                                      <i className={`fa-solid ${blk.icon}`}></i>
+                                    </span>
+                                    <div>
+                                      <p className="text-[10px] font-black text-slate-800 uppercase leading-none">{blk.label}</p>
+                                      <p className="text-[7px] font-bold text-slate-400 mt-0.5">{blk.hours}</p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-black text-slate-900 tabular-nums">{blk.value} <span className="text-[8px] font-normal text-slate-400">trx</span></span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-200/60 rounded-full overflow-hidden mt-2">
+                                  <div
+                                    className={cn("h-full rounded-full transition-all duration-700", blk.barColor)}
+                                    style={{ width: `${Math.max(pct, blk.value > 0 ? 5 : 0)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Leaderboard Kasir (Hanya tampil jika filter 'Semua Kasir' & ada lebih dari 1 kasir) */}
+                    {kasirLeaderboard.length > 0 && (
+                      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                            <i className="fa-solid fa-ranking-star text-amber-500"></i> Peringkat Penjualan Kasir
+                          </h4>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                            Periode {grafikRange}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {kasirLeaderboard.map((k, idx) => {
+                            const medalColors = [
+                              'bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-amber-200',
+                              'bg-gradient-to-r from-slate-300 to-slate-400 text-white shadow-slate-200',
+                              'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-orange-200'
+                            ];
+                            return (
+                              <div
+                                key={k.id}
+                                onClick={() => setGrafikFilterKasir(k.id)}
+                                className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-100/70 transition-all cursor-pointer flex items-center justify-between group active:scale-98"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={cn(
+                                    "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-sm shrink-0",
+                                    idx < 3 ? medalColors[idx] : "bg-white text-slate-600 border border-slate-200"
+                                  )}>
+                                    #{idx + 1}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-black text-slate-800 truncate group-hover:text-emerald-700 transition-colors">
+                                      {k.name}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 font-bold">{k.count} Transaksi</p>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-xs font-black text-slate-900 tabular-nums">Rp {k.omzet.toLocaleString('id-ID')}</p>
+                                  <p className="text-[9px] font-black text-emerald-600">{k.pct.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tabel Rangkuman Data Terperinci */}
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 overflow-hidden">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                          <i className="fa-solid fa-table-list text-slate-500"></i> Rangkuman Data Periode
+                        </h4>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">
+                          {trendData.length} Baris Data
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-[11px]">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-slate-400 font-black text-[9px] uppercase tracking-wider">
+                              <th className="py-2.5 px-3">Periode</th>
+                              <th className="py-2.5 px-3 text-center">Transaksi</th>
+                              <th className="py-2.5 px-3 text-right">Omzet</th>
+                              <th className="py-2.5 px-3 text-right">Laba Admin</th>
+                              <th className="py-2.5 px-3 text-right">Rata-rata</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {trendData.slice().reverse().map((row, i) => {
+                              const isHighest = row.value === maxTrendVal && row.value > 0;
+                              const rowAvg = row.count > 0 ? Math.round(row.value / row.count) : 0;
+                              return (
+                                <tr key={i} className={cn("hover:bg-slate-50/80 transition-colors", isHighest && "bg-emerald-50/40")}>
+                                  <td className="py-2.5 px-3 font-bold text-slate-800 flex items-center gap-2">
+                                    {isHighest && <i className="fa-solid fa-star text-amber-500 text-[9px]" title="Nilai Tertinggi"></i>}
+                                    <span>{row.label}</span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-bold text-slate-600 tabular-nums">
+                                    {row.count} trx
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-black text-slate-900 tabular-nums">
+                                    Rp {row.value.toLocaleString('id-ID')}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-bold text-amber-600 tabular-nums">
+                                    Rp {row.admin.toLocaleString('id-ID')}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-bold text-slate-500 tabular-nums">
+                                    Rp {rowAvg.toLocaleString('id-ID')}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-slate-100 bg-slate-50/60 font-black text-[11px] text-slate-900">
+                              <td className="py-3 px-3 uppercase text-[10px] tracking-wider text-slate-600">Total Keseluruhan</td>
+                              <td className="py-3 px-3 text-center text-blue-600 tabular-nums">{totalItems} trx</td>
+                              <td className="py-3 px-3 text-right text-emerald-700 tabular-nums">Rp {totalVolume.toLocaleString('id-ID')}</td>
+                              <td className="py-3 px-3 text-right text-amber-600 tabular-nums">Rp {totalAdminLaba.toLocaleString('id-ID')}</td>
+                              <td className="py-3 px-3 text-right text-purple-700 tabular-nums">Rp {avgTransaction.toLocaleString('id-ID')}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -5683,10 +6083,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     const totalGlobalOmzet = analyticsData.reduce((s, row) => s + Number(row.total_omzet), 0)
                     const totalGlobalTxs = analyticsData.reduce((s, row) => s + Number(row.total_transaksi), 0)
 
-                    const performaData = Object.keys(props.kasirList)
+                    const performaData = Object.keys(props.kasirList || {})
                       .filter(id => id !== 'owner')
                       .map(kId => {
-                        const kasirName = props.kasirList[kId]?.name || kId;
+                        const kasirName = props.kasirList?.[kId]?.name || kId;
                         // DB stores kasir_id as the login username (kId), NOT the display name
                         const rows = analyticsData.filter(r => 
                           (r.kasir_id || '').trim().toLowerCase() === kId.trim().toLowerCase()
@@ -5698,7 +6098,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
                         return {
                           id: kId,
-                          name: props.kasirList[kId]?.name || kId,
+                          name: kasirName,
                           vol,
                           count,
                           avg,

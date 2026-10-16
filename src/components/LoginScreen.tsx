@@ -106,9 +106,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setLiveFinancialSettings(data.financial_settings)
             localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(data.financial_settings))
           }
-          if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
-            localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(data.promo_banners))
-            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+          if (data.promo_banners && Array.isArray(data.promo_banners)) {
+            try {
+              localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(data.promo_banners))
+              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+            } catch (e) {}
           }
         }
       })
@@ -128,12 +130,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           const newFin = payload.new?.financial_settings
           if (newFin) {
             setLiveFinancialSettings(newFin)
-            localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(newFin))
+            try {
+              localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(newFin))
+            } catch (e) {}
           }
           const newBanners = payload.new?.promo_banners
-          if (newBanners && Array.isArray(newBanners) && newBanners.length > 0) {
-            localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(newBanners))
-            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(newBanners))
+          if (newBanners && Array.isArray(newBanners)) {
+            try {
+              localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(newBanners))
+              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(newBanners))
+            } catch (e) {}
           }
         }
       )

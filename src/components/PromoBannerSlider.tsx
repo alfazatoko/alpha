@@ -94,7 +94,8 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
                     src={imgUrl}
                     alt={`Banner Promosi ${idx + 1}`}
                     className="w-full h-full object-cover select-none pointer-events-none"
-                    loading="lazy"
+                    loading={idx === 0 ? "eager" : "lazy"}
+                    decoding="async"
                     draggable={false}
                   />
                 </div>

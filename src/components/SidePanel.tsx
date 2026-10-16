@@ -28,8 +28,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
 }) => {
   return (
     <>
-      <div className={cn("overlay", isOpen && "show")} onClick={() => setIsOpen(false)}></div>
-      <div className={cn("side-panel", isOpen && "open")}>
+      <div className={cn("overlay", isOpen ? "show" : "invisible pointer-events-none")} onClick={() => setIsOpen(false)}></div>
+      <div className={cn("side-panel", isOpen ? "open" : "invisible pointer-events-none")}>
         {/* Header Section */}
         <div className="p-6 border-b border-gray-300 bg-gray-50/50">
           <div className="flex justify-between items-center mb-6">

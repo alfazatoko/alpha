@@ -282,6 +282,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [cloudPasswordConfirm, setCloudPasswordConfirm] = useState('')
   const [showCloudPass, setShowCloudPass] = useState(false)
   const [isSavingCloudAuth, setIsSavingCloudAuth] = useState(false)
+  const [openSecuritySub, setOpenSecuritySub] = useState<string | null>(null)
 
   const handleSaveCloudAuth = async () => {
     if (!cloudPasswordInput) {
@@ -327,6 +328,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [takeoverPinConfirmInput, setTakeoverPinConfirmInput] = useState('')
   const [showTakeoverPinField, setShowTakeoverPinField] = useState(false)
   const [takeoverPinSaved, setTakeoverPinSaved] = useState(false)
+
+  useEffect(() => {
+    try {
+      setTakeoverPinValue(localStorage.getItem(takeoverPinKey) || '1234');
+    } catch {
+      setTakeoverPinValue('1234');
+    }
+  }, [takeoverPinKey]);
 
   // States for Native Bluetooth via Capacitor
   const [btConnected, setBtConnected] = useState(false);
@@ -560,6 +569,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
   const setupBannerEditorImage = (src: string, targetIndex: number | null) => {
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.src = src
     img.onload = () => {
       const imgAspect = img.naturalWidth / img.naturalHeight
@@ -621,43 +631,121 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     } catch (err) {}
   }
 
-  const handleSaveBannerCropped = () => {
-    if (!bannerEditorSrc) return
-    const img = new Image()
-    img.src = bannerEditorSrc
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = 1200
-      canvas.height = 500
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        const ratio = 1200 / FRAME_W
-        const drawW = bannerInitialSize.w * bannerEditorZoom * ratio
-        const drawH = bannerInitialSize.h * bannerEditorZoom * ratio
-        const drawX = 600 - (drawW / 2) + (bannerEditorOffset.x * ratio)
-        const drawY = 250 - (drawH / 2) + (bannerEditorOffset.y * ratio)
+  const handleSaveBannerCropped = async () => {
+    if (!bannerEditorSrc || isUploadingBanner) return
+    setIsUploadingBanner(true)
 
-        ctx.fillStyle = '#020617'
-        ctx.fillRect(0, 0, 1200, 500)
-        ctx.drawImage(img, drawX, drawY, drawW, drawH)
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = bannerEditorSrc
 
-        const compressed = canvas.toDataURL('image/jpeg', 0.88)
-        let updated: string[] = []
-        if (bannerEditorIndex !== null) {
-          updated = [...localPromoBanners]
-          updated[bannerEditorIndex] = compressed
+      await new Promise<void>((resolve, reject) => {
+        if (img.complete && img.naturalWidth > 0) {
+          resolve()
         } else {
-          updated = [...localPromoBanners, compressed]
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('Gagal memuat gambar untuk di-crop'))
         }
-        setLocalPromoBanners(updated)
-        props.onSavePromoBanners?.(updated)
-        setShowBannerEditor(false)
+      })
+
+      // Canvas HD Banner: 1600 x 667 (Rasio 2.4 : 1, Tajam & Presisi di semua Layar HP & Tablet)
+      const CANVAS_W = 1600
+      const CANVAS_H = 667
+      const canvas = document.createElement('canvas')
+      canvas.width = CANVAS_W
+      canvas.height = CANVAS_H
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Canvas context 2D tidak tersedia')
+
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+
+      const ratio = CANVAS_W / FRAME_W
+      const drawW = bannerInitialSize.w * bannerEditorZoom * ratio
+      const drawH = bannerInitialSize.h * bannerEditorZoom * ratio
+      const drawX = (CANVAS_W / 2) - (drawW / 2) + (bannerEditorOffset.x * ratio)
+      const drawY = (CANVAS_H / 2) - (drawH / 2) + (bannerEditorOffset.y * ratio)
+
+      ctx.fillStyle = '#020617'
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+      ctx.drawImage(img, drawX, drawY, drawW, drawH)
+
+      // Convert ke Blob WebP HD (Quality 0.88 - Resolusi sangat tajam, ukuran file ringan ~180KB)
+      const blob: Blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b)
+          else {
+            canvas.toBlob((jpegBlob) => {
+              if (jpegBlob) resolve(jpegBlob)
+              else reject(new Error('Gagal memproses blob gambar HD'))
+            }, 'image/jpeg', 0.88)
+          }
+        }, 'image/webp', 0.88)
+      })
+
+      const isWebp = blob.type === 'image/webp'
+      const ext = isWebp ? 'webp' : 'jpg'
+      const storeId = props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : 'main'
+      const fileName = `banners/banner_${storeId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`
+
+      // Upload file HD ke Supabase Storage (bucket pos-products yang sudah online dan aktif)
+      const { error: uploadErr } = await supabase.storage
+        .from('pos-products')
+        .upload(fileName, blob, {
+          upsert: true,
+          contentType: blob.type || 'image/webp',
+          cacheControl: '31536000'
+        })
+
+      if (uploadErr) throw uploadErr
+
+      // Dapatkan Public CDN URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('pos-products')
+        .getPublicUrl(fileName)
+
+      if (!publicUrl) throw new Error('Gagal mendapatkan URL publik banner dari Supabase')
+
+      // Housekeeping: Jika menggantikan banner lama di pos-products/banners, bersihkan file lama
+      if (bannerEditorIndex !== null && localPromoBanners[bannerEditorIndex]) {
+        const oldUrl = localPromoBanners[bannerEditorIndex]
+        if (oldUrl.includes('pos-products') && oldUrl.includes('banners/')) {
+          const oldPath = oldUrl.split('/pos-products/')[1]
+          if (oldPath) {
+            supabase.storage.from('pos-products').remove([decodeURIComponent(oldPath)]).catch(() => {})
+          }
+        }
       }
+
+      let updated: string[] = []
+      if (bannerEditorIndex !== null) {
+        updated = [...localPromoBanners]
+        updated[bannerEditorIndex] = publicUrl
+      } else {
+        updated = [...localPromoBanners, publicUrl]
+      }
+
+      setLocalPromoBanners(updated)
+      props.onSavePromoBanners?.(updated)
+      setShowBannerEditor(false)
+    } catch (err: any) {
+      console.error('Gagal simpan & upload banner HD:', err)
+      alert('Gagal mengunggah foto banner HD ke Supabase: ' + (err.message || 'Error tidak diketahui'))
+    } finally {
+      setIsUploadingBanner(false)
     }
   }
 
   const handleDeletePromoBanner = (index: number) => {
-    const doDelete = () => {
+    const doDelete = async () => {
+      const targetUrl = localPromoBanners[index]
+      if (targetUrl && targetUrl.includes('pos-products') && targetUrl.includes('banners/')) {
+        const oldPath = targetUrl.split('/pos-products/')[1]
+        if (oldPath) {
+          supabase.storage.from('pos-products').remove([decodeURIComponent(oldPath)]).catch(() => {})
+        }
+      }
       const updated = localPromoBanners.filter((_, i) => i !== index)
       setLocalPromoBanners(updated)
       props.onSavePromoBanners?.(updated)
@@ -695,7 +783,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           </div>
         </div>
         <span className="text-[9px] font-black px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
-          {localPromoBanners.length} / 5 Foto
+          {localPromoBanners.length} / 5 Foto · Cloud HD
         </span>
       </div>
 
@@ -768,7 +856,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
       {isUploadingBanner && (
         <div className="mt-2.5 text-center text-[9px] font-bold text-blue-600 animate-pulse flex items-center justify-center gap-1.5">
           <i className="fa-solid fa-circle-notch fa-spin"></i>
-          <span>Sedang mengompres & mengunggah foto banner...</span>
+          <span>Sedang memproses & mengunggah foto banner HD ke Supabase Cloud...</span>
         </div>
       )}
 
@@ -1379,6 +1467,100 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                       >
                         <i className="fa-solid fa-shield-halved"></i>
                         Simpan PIN Owner Baru
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card PIN Darurat Ambil Alih Stok */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/20 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                          <i className="fa-solid fa-shield-heart text-sm"></i>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">PIN Darurat Ambil Alih Stok</h3>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">Digunakan kasir saat "Ambil Alih Stok (Darurat)"</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200/50">
+                        Otorisasi Kasir
+                      </span>
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      {/* Current PIN Display */}
+                      <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PIN Aktif Saat Ini</p>
+                          <p className="text-sm font-black text-rose-600 dark:text-rose-400 tracking-[0.4em] mt-1 font-mono">
+                            {showTakeoverPinField ? takeoverPinValue : '••••'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowTakeoverPinField(v => !v)}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-2 transition-colors cursor-pointer"
+                          title={showTakeoverPinField ? 'Sembunyikan' : 'Tampilkan'}
+                        >
+                          <i className={showTakeoverPinField ? 'fa-solid fa-eye-slash text-sm' : 'fa-solid fa-eye text-sm'}></i>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
+                          PIN Darurat Baru (min. 4 digit)
+                        </label>
+                        <input
+                          type={showTakeoverPinField ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={takeoverPinInput}
+                          onChange={e => setTakeoverPinInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Masukkan PIN darurat baru"
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-rose-100 dark:focus:ring-rose-950/30 tracking-widest"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">
+                          Konfirmasi PIN Darurat
+                        </label>
+                        <input
+                          type={showTakeoverPinField ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={takeoverPinConfirmInput}
+                          onChange={e => setTakeoverPinConfirmInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Ulangi PIN darurat"
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-rose-100 dark:focus:ring-rose-950/30 tracking-widest"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!takeoverPinInput || takeoverPinInput.length < 4) return alert('PIN Darurat minimal 4 digit!');
+                          if (takeoverPinInput !== takeoverPinConfirmInput) return alert('Konfirmasi PIN tidak cocok!');
+                          try {
+                            localStorage.setItem(takeoverPinKey, takeoverPinInput);
+                            setTakeoverPinValue(takeoverPinInput);
+                            setTakeoverPinInput('');
+                            setTakeoverPinConfirmInput('');
+                            setTakeoverPinSaved(true);
+                            setTimeout(() => setTakeoverPinSaved(false), 2000);
+                          } catch { alert('Gagal menyimpan PIN Darurat!'); }
+                        }}
+                        className={cn(
+                          "w-full font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2 cursor-pointer",
+                          takeoverPinSaved
+                            ? "bg-emerald-600 text-white"
+                            : "bg-rose-600 hover:bg-rose-700 text-white"
+                        )}
+                        style={{ color: '#ffffff' }}
+                      >
+                        <i className={takeoverPinSaved ? 'fa-solid fa-circle-check' : 'fa-solid fa-lock-open'}></i>
+                        {takeoverPinSaved ? 'PIN Darurat Tersimpan!' : 'Simpan PIN Darurat'}
                       </button>
                     </div>
                   </div>
@@ -3530,160 +3712,343 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'keamanan' && "rotate-180")} />
                 </button>
                 {openCategory === 'keamanan' && (
-                  <div className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300 overflow-hidden space-y-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                  <div className="mt-2 bg-white rounded-2xl border border-slate-200/80 shadow-xs divide-y divide-slate-100 overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                    {/* 1. Toggle PIN Masuk */}
+                    <div className="p-3.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0 pr-2">
+                        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                           <i className="fa-solid fa-key text-xs"></i>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-800">Gunakan PIN Masuk</p>
-                          <p className="text-[9px] text-gray-500 font-medium">Wajibkan PIN saat login</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-slate-800 leading-none">Gunakan PIN Masuk</p>
+                            <span className={cn(
+                              "text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider",
+                              isPinEnabled ? "bg-emerald-50 text-emerald-600 border border-emerald-200/60" : "bg-slate-100 text-slate-400"
+                            )}>
+                              {isPinEnabled ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-medium truncate mt-1">Wajibkan PIN saat login kasir &amp; owner</p>
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={togglePin}
                         className={cn(
-                          "w-12 h-6 rounded-full p-1 transition-all duration-300 relative",
-                          isPinEnabled ? "bg-blue-600" : "bg-gray-300"
+                          "w-11 h-6 rounded-full p-0.5 transition-all duration-300 relative shrink-0 cursor-pointer",
+                          isPinEnabled ? "bg-blue-600" : "bg-slate-300"
                         )}
                       >
                         <div className={cn(
-                          "w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300",
-                          isPinEnabled ? "translate-x-6" : "translate-x-0"
+                          "w-5 h-5 bg-white rounded-full shadow-xs transition-all duration-300",
+                          isPinEnabled ? "translate-x-5" : "translate-x-0"
                         )}></div>
                       </button>
                     </div>
 
-                    {/* Ganti PIN Owner */}
+                    {/* Khusus Akun Owner */}
                     {props.kasirRole === 'owner' && (
                       <>
-                        <div className="border-t border-blue-100 pt-4 space-y-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                            <i className="fa-solid fa-user-shield text-xs"></i>
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-gray-800">Ganti PIN Owner</p>
-                            <p className="text-[9px] text-gray-500 font-medium">Ubah PIN masuk akun Owner</p>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type={showOwnerPin ? 'text' : 'password'}
-                            inputMode="numeric"
-                            maxLength={8}
-                            value={ownerPinOld}
-                            onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
-                            placeholder="PIN Lama"
-                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
-                          />
-                          <button type="button" onClick={() => setShowOwnerPin(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                            <i className={showOwnerPin ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
+                        {/* 2. Ganti PIN Owner */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setOpenSecuritySub(openSecuritySub === 'ownerPin' ? null : 'ownerPin')}
+                            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <i className="fa-solid fa-user-shield text-xs"></i>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-slate-800 leading-none">Ganti PIN Owner</p>
+                                <p className="text-[9px] text-slate-400 font-medium truncate mt-1">Ubah PIN masuk akun Owner</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[9px] font-bold text-slate-400">
+                                {openSecuritySub === 'ownerPin' ? 'Tutup' : 'Ubah'}
+                              </span>
+                              <div className={cn(
+                                "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200",
+                                openSecuritySub === 'ownerPin' ? "bg-amber-50 text-amber-600 rotate-180" : "text-slate-300"
+                              )}>
+                                <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                              </div>
+                            </div>
                           </button>
+
+                          {openSecuritySub === 'ownerPin' && (
+                            <div className="px-4 pb-4 pt-1 bg-amber-50/20 border-t border-amber-100/60 animate-in slide-in-from-top-2 duration-200 space-y-2.5">
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">Form PIN Owner</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowOwnerPin(v => !v)}
+                                  className="text-[10px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <i className={showOwnerPin ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i>
+                                  <span>{showOwnerPin ? 'Sembunyikan' : 'Lihat PIN'}</span>
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <input
+                                  type={showOwnerPin ? 'text' : 'password'}
+                                  inputMode="numeric"
+                                  maxLength={8}
+                                  value={ownerPinOld}
+                                  onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
+                                  placeholder="PIN Lama"
+                                  className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    type={showOwnerPin ? 'text' : 'password'}
+                                    inputMode="numeric"
+                                    maxLength={8}
+                                    value={ownerPinNew}
+                                    onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="PIN Baru (min 4)"
+                                    className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+                                  />
+                                  <input
+                                    type={showOwnerPin ? 'text' : 'password'}
+                                    inputMode="numeric"
+                                    maxLength={8}
+                                    value={ownerPinConfirm}
+                                    onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="Ulangi PIN Baru"
+                                    className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+                                  />
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
+                                  if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
+                                  const ownerAcc = props.kasirList?.['owner'];
+                                  if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                                  if (props.onSaveCashierSelf) {
+                                    props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+                                      .then(() => {
+                                        setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
+                                        alert('PIN Owner berhasil diubah!');
+                                        setOpenSecuritySub(null);
+                                      })
+                                      .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
+                                  }
+                                }}
+                                className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white font-black py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                style={{ color: '#ffffff' }}
+                              >
+                                <i className="fa-solid fa-shield-halved text-xs"></i>
+                                Simpan PIN Owner
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <input
-                          type={showOwnerPin ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
-                          value={ownerPinNew}
-                          onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
-                          placeholder="PIN Baru (min. 4 digit)"
-                          className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
-                        />
-                        <input
-                          type={showOwnerPin ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
-                          value={ownerPinConfirm}
-                          onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Konfirmasi PIN Baru"
-                          className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50 tracking-widest"
-                        />
-                        <button
-                          onClick={() => {
-                            if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
-                            if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
-                            const ownerAcc = props.kasirList?.['owner'];
-                            if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
-                            if (props.onSaveCashierSelf) {
-                              props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
-                                .then(() => {
-                                  setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
-                                  alert('PIN Owner berhasil diubah!');
-                                })
-                                .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
-                            }
-                          }}
-                          className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
-                          style={{ color: '#ffffff' }}
-                        >
-                          <i className="fa-solid fa-shield-halved"></i>
-                          Simpan PIN Owner
-                        </button>
-                      </div>
 
-                      {/* Kredensial Login Cloud / Email & Password Owner */}
-                      <div className="border-t border-blue-100 pt-4 space-y-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-                            <i className="fa-solid fa-cloud-lock text-xs"></i>
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-gray-800">Kredensial Login Cloud (Owner)</p>
-                            <p className="text-[9px] text-gray-500 font-medium">Atur Email &amp; Password untuk masuk di awal</p>
-                          </div>
-                        </div>
-
-                        <div className="bg-white/90 border border-blue-100 rounded-xl p-3">
-                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Email Aktif Saat Ini</p>
-                          <p className="text-xs font-bold text-gray-800 mt-0.5 break-all flex items-center gap-1.5">
-                            <i className="fa-solid fa-envelope text-indigo-500 text-[10px]"></i>
-                            {props.googleEmail || 'Belum terdeteksi'}
-                          </p>
-                        </div>
-
-
-
+                        {/* 3. PIN Darurat Ambil Alih Stok */}
                         <div>
-                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Password Baru (min. 6 karakter)</label>
-                          <div className="relative">
-                            <input
-                              type={showCloudPass ? 'text' : 'password'}
-                              value={cloudPasswordInput}
-                              onChange={e => setCloudPasswordInput(e.target.value)}
-                              placeholder="Masukkan Password Baru"
-                              className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
-                            />
-                            <button type="button" onClick={() => setShowCloudPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                              <i className={showCloudPass ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setOpenSecuritySub(openSecuritySub === 'takeoverPin' ? null : 'takeoverPin')}
+                            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                                <i className="fa-solid fa-shield-heart text-xs"></i>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-black text-slate-800 leading-none">PIN Darurat Ambil Alih Stok</p>
+                                  <span className="text-[7px] font-black uppercase px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-600 border border-rose-200/50">
+                                    Otorisasi
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-medium truncate mt-1">
+                                  Digunakan kasir saat "Ambil Alih Stok (Darurat)"
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[9px] font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">
+                                {showTakeoverPinField ? takeoverPinValue : '••••'}
+                              </span>
+                              <div className={cn(
+                                "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200",
+                                openSecuritySub === 'takeoverPin' ? "bg-rose-50 text-rose-600 rotate-180" : "text-slate-300"
+                              )}>
+                                <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                              </div>
+                            </div>
+                          </button>
+
+                          {openSecuritySub === 'takeoverPin' && (
+                            <div className="px-4 pb-4 pt-1 bg-rose-50/20 border-t border-rose-100/60 animate-in slide-in-from-top-2 duration-200 space-y-2.5">
+                              {/* PIN Aktif bar */}
+                              <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-rose-100">
+                                <div>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">PIN Aktif Saat Ini</p>
+                                  <p className="text-sm font-black text-rose-600 tracking-[0.3em] font-mono">
+                                    {showTakeoverPinField ? takeoverPinValue : '••••'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowTakeoverPinField(v => !v)}
+                                  className="text-xs text-slate-400 hover:text-slate-700 p-1 transition-colors cursor-pointer"
+                                  title={showTakeoverPinField ? 'Sembunyikan' : 'Tampilkan'}
+                                >
+                                  <i className={showTakeoverPinField ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i>
+                                </button>
+                              </div>
+
+                              {/* Input PIN Darurat Baru */}
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type={showTakeoverPinField ? 'text' : 'password'}
+                                  inputMode="numeric"
+                                  maxLength={8}
+                                  value={takeoverPinInput}
+                                  onChange={e => setTakeoverPinInput(e.target.value.replace(/\D/g, ''))}
+                                  placeholder="PIN Baru (min 4)"
+                                  className="w-full bg-white border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+                                />
+                                <input
+                                  type={showTakeoverPinField ? 'text' : 'password'}
+                                  inputMode="numeric"
+                                  maxLength={8}
+                                  value={takeoverPinConfirmInput}
+                                  onChange={e => setTakeoverPinConfirmInput(e.target.value.replace(/\D/g, ''))}
+                                  placeholder="Konfirmasi PIN"
+                                  className="w-full bg-white border border-slate-200 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!takeoverPinInput || takeoverPinInput.length < 4) return alert('PIN Darurat minimal 4 digit!');
+                                  if (takeoverPinInput !== takeoverPinConfirmInput) return alert('Konfirmasi PIN tidak cocok!');
+                                  try {
+                                    localStorage.setItem(takeoverPinKey, takeoverPinInput);
+                                    setTakeoverPinValue(takeoverPinInput);
+                                    setTakeoverPinInput('');
+                                    setTakeoverPinConfirmInput('');
+                                    setTakeoverPinSaved(true);
+                                    setTimeout(() => {
+                                      setTakeoverPinSaved(false);
+                                      setOpenSecuritySub(null);
+                                    }, 1500);
+                                  } catch { alert('Gagal menyimpan PIN Darurat!'); }
+                                }}
+                                className={cn(
+                                  "w-full font-black py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer",
+                                  takeoverPinSaved
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-rose-600 hover:bg-rose-700 text-white"
+                                )}
+                                style={{ color: '#ffffff' }}
+                              >
+                                <i className={takeoverPinSaved ? 'fa-solid fa-circle-check text-xs' : 'fa-solid fa-lock-open text-xs'}></i>
+                                {takeoverPinSaved ? 'PIN Darurat Tersimpan!' : 'Simpan PIN Darurat'}
+                              </button>
+                            </div>
+                          )}
                         </div>
 
+                        {/* 4. Kredensial Login Cloud (Owner) */}
                         <div>
-                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Konfirmasi Password Baru</label>
-                          <input
-                            type={showCloudPass ? 'text' : 'password'}
-                            value={cloudPasswordConfirm}
-                            onChange={e => setCloudPasswordConfirm(e.target.value)}
-                            placeholder="Ulangi Password Baru"
-                            className="w-full bg-white border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-blue-50"
-                          />
-                        </div>
+                          <button
+                            type="button"
+                            onClick={() => setOpenSecuritySub(openSecuritySub === 'cloudAuth' ? null : 'cloudAuth')}
+                            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                <i className="fa-solid fa-cloud-lock text-xs"></i>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-slate-800 leading-none">Kredensial Login Cloud</p>
+                                <p className="text-[9px] text-slate-400 font-medium truncate mt-1">
+                                  Email &amp; Password masuk cloud
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[9px] font-bold text-slate-400">
+                                {openSecuritySub === 'cloudAuth' ? 'Tutup' : 'Atur'}
+                              </span>
+                              <div className={cn(
+                                "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200",
+                                openSecuritySub === 'cloudAuth' ? "bg-indigo-50 text-indigo-600 rotate-180" : "text-slate-300"
+                              )}>
+                                <i className="fa-solid fa-chevron-down text-[10px]"></i>
+                              </div>
+                            </div>
+                          </button>
 
-                        <button
-                          onClick={handleSaveCloudAuth}
-                          disabled={isSavingCloudAuth}
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                          style={{ color: '#ffffff' }}
-                        >
-                          {isSavingCloudAuth ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-floppy-disk"></i>}
-                          Simpan Kredensial Cloud
-                        </button>
-                      </div>
-                    </>
-                  )}
+                          {openSecuritySub === 'cloudAuth' && (
+                            <div className="px-4 pb-4 pt-1 bg-indigo-50/20 border-t border-indigo-100/60 animate-in slide-in-from-top-2 duration-200 space-y-2.5">
+                              <div className="bg-white border border-indigo-100 rounded-xl p-2.5 flex items-center justify-between">
+                                <div className="min-w-0 pr-2">
+                                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Email Terdaftar</p>
+                                  <p className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5 mt-0.5">
+                                    <i className="fa-solid fa-envelope text-indigo-500 text-[10px]"></i>
+                                    {props.googleEmail || 'Belum terdeteksi'}
+                                  </p>
+                                </div>
+                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200/50 shrink-0">
+                                  Terkunci
+                                </span>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="relative">
+                                  <input
+                                    type={showCloudPass ? 'text' : 'password'}
+                                    value={cloudPasswordInput}
+                                    onChange={e => setCloudPasswordInput(e.target.value)}
+                                    placeholder="Password Baru (min 6)"
+                                    className="w-full bg-white border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCloudPass(v => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
+                                  >
+                                    <i className={showCloudPass ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i>
+                                  </button>
+                                </div>
+                                <input
+                                  type={showCloudPass ? 'text' : 'password'}
+                                  value={cloudPasswordConfirm}
+                                  onChange={e => setCloudPasswordConfirm(e.target.value)}
+                                  placeholder="Konfirmasi Password Baru"
+                                  className="w-full bg-white border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={handleSaveCloudAuth}
+                                disabled={isSavingCloudAuth}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                style={{ color: '#ffffff' }}
+                              >
+                                {isSavingCloudAuth ? <i className="fa-solid fa-circle-notch fa-spin text-xs"></i> : <i className="fa-solid fa-floppy-disk text-xs"></i>}
+                                Simpan Password Cloud
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -4408,80 +4773,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         </div>
                       </div>
                     )}
-
-                      {/* PIN DARURAT AMBIL ALIH STOK */}
-                      <div className="border-t border-blue-100 pt-4 space-y-3 mt-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-7 h-7 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
-                            <i className="fa-solid fa-lock-open text-xs"></i>
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-gray-800">PIN Darurat Ambil Alih Stok</p>
-                            <p className="text-[9px] text-gray-500 font-medium">Digunakan kasir saat "Ambil Alih Stok (Darurat)"</p>
-                          </div>
-                        </div>
-
-                        {/* Current PIN display */}
-                        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2.5 border border-rose-100">
-                          <div>
-                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">PIN Aktif Saat Ini</p>
-                            <p className="text-sm font-black text-rose-600 tracking-[0.4em] mt-0.5">
-                              {showTakeoverPinField ? takeoverPinValue : '•'.repeat(takeoverPinValue.length)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowTakeoverPinField(v => !v)}
-                            className="text-gray-400 hover:text-gray-700 transition"
-                          >
-                            <i className={showTakeoverPinField ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs'}></i>
-                          </button>
-                        </div>
-
-                        {/* New PIN inputs */}
-                        <input
-                          type={showTakeoverPinField ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
-                          value={takeoverPinInput}
-                          onChange={e => setTakeoverPinInput(e.target.value.replace(/\D/g, ''))}
-                          placeholder="PIN Darurat Baru (min. 4 digit)"
-                          className="w-full bg-white border border-rose-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-rose-50 tracking-widest"
-                        />
-                        <input
-                          type={showTakeoverPinField ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
-                          value={takeoverPinConfirmInput}
-                          onChange={e => setTakeoverPinConfirmInput(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Konfirmasi PIN Darurat"
-                          className="w-full bg-white border border-rose-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-900 outline-none focus:ring-4 focus:ring-rose-50 tracking-widest"
-                        />
-                        <button
-                          onClick={() => {
-                            if (!takeoverPinInput || takeoverPinInput.length < 4) return alert('PIN Darurat minimal 4 digit!');
-                            if (takeoverPinInput !== takeoverPinConfirmInput) return alert('Konfirmasi PIN tidak cocok!');
-                            try {
-                              localStorage.setItem(takeoverPinKey, takeoverPinInput);
-                              setTakeoverPinValue(takeoverPinInput);
-                              setTakeoverPinInput('');
-                              setTakeoverPinConfirmInput('');
-                              setTakeoverPinSaved(true);
-                              setTimeout(() => setTakeoverPinSaved(false), 2000);
-                            } catch { alert('Gagal menyimpan PIN Darurat!'); }
-                          }}
-                          className={cn(
-                            "w-full font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
-                            takeoverPinSaved
-                              ? "bg-emerald-600 text-white"
-                              : "bg-rose-600 hover:bg-rose-700 text-white"
-                          )}
-                          style={{ color: '#ffffff' }}
-                        >
-                          <i className={takeoverPinSaved ? 'fa-solid fa-circle-check' : 'fa-solid fa-lock-open'}></i>
-                          {takeoverPinSaved ? 'PIN Darurat Tersimpan!' : 'Simpan PIN Darurat'}
-                        </button>
-                      </div>
                  </div>
 
                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
@@ -4867,19 +5158,31 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             <div className="flex gap-2.5 w-full">
               <button
                 type="button"
+                disabled={isUploadingBanner}
                 onClick={() => setShowBannerEditor(false)}
-                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
+                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 Batal
               </button>
 
               <button
                 type="button"
+                disabled={isUploadingBanner}
                 onClick={handleSaveBannerCropped}
-                className="flex-[1.5] py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-[1.5] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 style={{ color: '#ffffff' }}
               >
-                <i className="fa-solid fa-check"></i> Simpan Foto
+                {isUploadingBanner ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                    <span>Mengunggah HD...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Simpan & Upload HD</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
