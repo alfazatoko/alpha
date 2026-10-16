@@ -87,7 +87,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     : (localStorage.getItem('alphaPro_role') || 'kasir');
   const isActualOwner = userRole === 'owner';
 
-  const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
+  const [customLabels, setCustomLabels] = useState<Record<string, any>>(() => {
     try {
       const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_custom_labels` : 'alphaPro_custom_labels';
       const saved = localStorage.getItem(storeKey);
@@ -99,7 +99,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   });
 
   const [isEditLabelsModalOpen, setIsEditLabelsModalOpen] = useState(false);
-  const [tempLabels, setTempLabels] = useState<Record<string, string>>(customLabels);
+  const [tempLabels, setTempLabels] = useState<Record<string, any>>(customLabels);
   const [isSavingLabels, setIsSavingLabels] = useState(false);
 
   // Sync customLabels dari Supabase & Realtime per-toko
