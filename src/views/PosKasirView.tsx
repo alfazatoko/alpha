@@ -813,9 +813,9 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
                                   {Boolean(isOwner && p.harga_modal && p.harga_modal > 0) && (
                                     <span 
                                       className="text-[8.5px] font-bold text-slate-400 tabular-nums shrink-0" 
-                                      title={`Harga Modal: Rp ${p.harga_modal.toLocaleString('id-ID')}`}
+                                      title={`Harga Modal: Rp ${(p.harga_modal ?? 0).toLocaleString('id-ID')}`}
                                     >
-                                      Mod: {p.harga_modal.toLocaleString('id-ID')}
+                                      Mod: {(p.harga_modal ?? 0).toLocaleString('id-ID')}
                                     </span>
                                   )}
                                 </div>

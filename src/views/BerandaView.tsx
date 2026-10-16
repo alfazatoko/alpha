@@ -2832,7 +2832,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     id: r.id,
                     kasir_id: r.kasir_id,
                     nominal: r.nominal,
-                    admin_fee: r.adminFee ?? r.admin_fee,
+                    admin_fee: r.adminFee ?? (r as any).admin_fee ?? 0,
                     timestamp: r.timestamp,
                     kategori: r.kategori,
                     store_id: r.store_id
