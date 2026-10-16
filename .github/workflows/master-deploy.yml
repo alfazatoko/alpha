@@ -6,6 +6,9 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   # JOB 1: Build & Deploy Website
   deploy-web:
@@ -94,3 +97,20 @@ jobs:
         with:
           name: ALFAZA-ALPHA-RELEASE-APK
           path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Create GitHub Release (Download Langsung APK)
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: v1.3.5
+          name: "ALFAZA ALPHA POS v1.3.5"
+          body: |
+            ### Pembaruan Aplikasi v1.3.5
+            - **Perbaikan Fatal Crash:** Mengamankan fitur autocomplete di form transaksi saat mengetik keterangan Order Kuota.
+            - **Pemisahan Kolom Database:** Kolom `promo_banners` dan `presets` dipisah secara resmi di Supabase.
+            - **Pembersihan Cache Presets:** Objek konfigurasi internal dibersihkan dari daftar preset kasir.
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
