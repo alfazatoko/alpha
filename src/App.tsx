@@ -2440,10 +2440,11 @@ const MainApp: React.FC<MainAppProps> = ({
           filteredTxs = dateTxs.filter(t => t.kasir_id === filterKasir)
         }
 
-        let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0, kKhusus = 0, kNonTunai = 0;
+        let sBank = 0, kMod = 0, pDig = 0, pAks = 0, tAdm = 0, tTar = 0, kKhusus = 0, kNonTunai = 0, kAdminDalam = 0;
         filteredTxs.forEach(tx => {
           const isKhusus = (tx.keterangan || '').includes('[KHUSUS]');
           const isNonTunai = (tx.keterangan || '').includes('[NON_TUNAI]');
+          const isAdminDalam = (tx.keterangan || '').includes('[ADMIN_DALAM]');
           const isLain = isKhusus || isNonTunai;
           const isAksesoris = tx.kategori === 'Aksesoris';
           
@@ -2462,6 +2463,7 @@ const MainApp: React.FC<MainAppProps> = ({
           // Hitung detail Kas Lainnya untuk laporan
           if (isKhusus) kKhusus += (tx.nominal + tx.adminFee);
           if (isNonTunai) kNonTunai += (tx.nominal + tx.adminFee);
+          if (isAdminDalam) kAdminDalam += (tx.adminFee || (tx as any).admin || 0);
         });
 
         setDailyReport({
@@ -2471,9 +2473,10 @@ const MainApp: React.FC<MainAppProps> = ({
           totalAksesoris: pAks,
           totalAdmin: tAdm,
           totalTarik: tTar,
-          kasLainnya: kKhusus + kNonTunai,
+          kasLainnya: kAdminDalam + kKhusus + kNonTunai,
           totalKhusus: kKhusus,
           totalNonTunai: kNonTunai,
+          totalAdminDalam: kAdminDalam,
           saldoReal: 0,
           totalSaldoKas: kMod + pDig + pAks + tAdm - tTar
         })
@@ -3236,7 +3239,11 @@ const MainApp: React.FC<MainAppProps> = ({
     .filter(t => (t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + (t.nominal + t.adminFee), 0)
 
-  const kasLainnya = totalKhusus + totalNonTunai
+  const totalAdminDalam = todayTransactions
+    .filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
+    .reduce((s, t) => s + (t.adminFee || (t as any).admin || 0), 0)
+
+  const kasLainnya = totalAdminDalam + totalKhusus + totalNonTunai
 
   // Calculate Penjualan Voucher Tunai for Today (for Saldo Laci Kasir)
   let penjualanVoucherTunai = 0;
@@ -3437,6 +3444,7 @@ const MainApp: React.FC<MainAppProps> = ({
                           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
                             <TransactionForm 
                               onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
+                              isOwner={activeRole === 'owner'}
                               lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
                               onOpenRiwayatDetail={(tx) => {
                                 setActiveView('view-transaksi');
@@ -3716,6 +3724,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       kasLainnya={kasLainnya}
                       totalKhusus={totalKhusus}
                       totalNonTunai={totalNonTunai}
+                      totalAdminDalam={totalAdminDalam}
                       username={username}
                       showToast={showToast}
                       onConfirm={handleConfirm}
@@ -3778,6 +3787,7 @@ const MainApp: React.FC<MainAppProps> = ({
             kasLainnya={kasLainnya}
             totalKhusus={totalKhusus}
             totalNonTunai={totalNonTunai}
+            totalAdminDalam={totalAdminDalam}
             username={username}
             showToast={showToast}
             onConfirm={handleConfirm}
@@ -3984,6 +3994,7 @@ const MainApp: React.FC<MainAppProps> = ({
                   presets={presets} 
                   activeStoreId={activeStoreId} 
                   adminRules={adminRules}
+                  isOwner={activeRole === 'owner'}
                   lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
                   onOpenVoucherJualCepat={() => {
                     setActiveView('view-stok-voucher');

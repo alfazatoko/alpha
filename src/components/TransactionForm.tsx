@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { formatInputRupiah, cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
@@ -46,6 +47,22 @@ const ITEMS: Record<string, { id: string, name: string, icon: string, color: str
   ]
 };
 
+export const DEFAULT_CUSTOM_BUTTON_LABELS: Record<string, string> = {
+  'DIGITAL': 'Transfer',
+  'TARIK': 'Tarik Tunai',
+  'AKSESORIS': 'Aksesoris',
+  'VOUCHER': 'Voucher',
+  'BANK': 'Bank UOB',
+  'DANA': 'DANA',
+  'ORDER KUOTA': 'Order Kuota',
+  'FLIP': 'Flip',
+  'EDC / ATM': 'EDC/ATM',
+  'QRIS': 'QRIS',
+  'TRANSFER BANK': 'TRANSFER',
+  'TARIK_DANA': 'DANA',
+  'GOPAY': 'GOPAY'
+};
+
 interface TransactionFormProps {
   onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }) => void
   isSaving?: boolean
@@ -59,11 +76,134 @@ interface TransactionFormProps {
   hideHeader?: boolean
   lastTx?: any
   onOpenRiwayatDetail?: (tx: any) => void
+  isOwner?: boolean
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx, onOpenRiwayatDetail
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx, onOpenRiwayatDetail, isOwner
 }) => {
+  const userRole = isOwner !== undefined 
+    ? (isOwner ? 'owner' : 'kasir') 
+    : (localStorage.getItem('alphaPro_role') || 'kasir');
+  const isActualOwner = userRole === 'owner';
+
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>(() => {
+    try {
+      const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_custom_labels` : 'alphaPro_custom_labels';
+      const saved = localStorage.getItem(storeKey);
+      if (saved) {
+        return { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...JSON.parse(saved) };
+      }
+    } catch (e) {}
+    return DEFAULT_CUSTOM_BUTTON_LABELS;
+  });
+
+  const [isEditLabelsModalOpen, setIsEditLabelsModalOpen] = useState(false);
+  const [tempLabels, setTempLabels] = useState<Record<string, string>>(customLabels);
+  const [isSavingLabels, setIsSavingLabels] = useState(false);
+
+  // Sync customLabels dari Supabase & Realtime per-toko
+  useEffect(() => {
+    if (!activeStoreId || activeStoreId === 'all') return;
+
+    const storeKey = `alphaPro_${activeStoreId}_custom_labels`;
+
+    // 1. Fetch dari cloud Supabase (tabel khusus store_custom_labels)
+    const fetchLabels = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('store_custom_labels')
+          .select('labels')
+          .eq('store_id', activeStoreId)
+          .maybeSingle();
+
+        if (data && data.labels && typeof data.labels === 'object') {
+          const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...data.labels };
+          setCustomLabels(merged);
+          localStorage.setItem(storeKey, JSON.stringify(data.labels));
+        }
+      } catch (e) {
+        // Abaikan jika tabel belum dibuat di schema Supabase (tetap pakai local)
+      }
+    };
+
+    fetchLabels();
+
+    // 2. Realtime listener per store_id: saat Owner simpan, seluruh HP kasir langsung ter-update seketika
+    const channelName = `rt_custom_labels_${activeStoreId}_${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_custom_labels',
+          filter: `store_id=eq.${activeStoreId}`
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.labels && typeof payload.new.labels === 'object') {
+            const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...payload.new.labels };
+            setCustomLabels(merged);
+            localStorage.setItem(storeKey, JSON.stringify(payload.new.labels));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeStoreId]);
+
+  const handleSaveCustomLabels = async () => {
+    setIsSavingLabels(true);
+    try {
+      const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_custom_labels` : 'alphaPro_custom_labels';
+      setCustomLabels(tempLabels);
+      localStorage.setItem(storeKey, JSON.stringify(tempLabels));
+      window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', { detail: tempLabels }));
+
+      const visibleTransfer = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].filter(m => !tempLabels['HIDE_' + m]);
+      if (visibleTransfer.length > 0) {
+        setActiveTransferMethods(visibleTransfer);
+        if (tempLabels['HIDE_' + sumberAplikasi]) {
+          setSumberAplikasi(visibleTransfer[0]);
+        }
+      }
+
+      if (activeStoreId && activeStoreId !== 'all') {
+        localStorage.setItem(`alphaPro_${activeStoreId}_transferMethods`, JSON.stringify(visibleTransfer));
+        window.dispatchEvent(new CustomEvent('alphaUpdateTransferMethods', { detail: visibleTransfer }));
+
+        try {
+          await supabase
+            .from('store_custom_labels')
+            .upsert({
+              store_id: activeStoreId,
+              labels: tempLabels,
+              updated_at: new Date().toISOString()
+            });
+        } catch (e) {}
+      }
+
+      setIsEditLabelsModalOpen(false);
+    } catch (e) {
+      console.error('Gagal simpan custom labels ke cloud:', e);
+      setIsEditLabelsModalOpen(false);
+    } finally {
+      setIsSavingLabels(false);
+    }
+  };
+
+  const handleResetCustomLabels = () => {
+    const resetObj: Record<string, any> = { ...DEFAULT_CUSTOM_BUTTON_LABELS };
+    ['BANK', 'DANA', 'ORDER KUOTA', 'FLIP', 'EDC / ATM', 'QRIS', 'TRANSFER BANK', 'TARIK_DANA', 'GOPAY'].forEach(k => {
+      resetObj['HIDE_' + k] = false;
+    });
+    setTempLabels(resetObj);
+  };
+
   const [kategori, setKategori] = useState('')
   const [nominal, setNominal] = useState('')
   const [admin, setAdmin] = useState('')
@@ -200,27 +340,48 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const handleUpdate = () => {
       try {
         const transferPreset = presets?.find((p: any) => p.id === '_TRANSFER_METHODS_');
+        let methods = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'];
         if (transferPreset && transferPreset.data) {
-          setActiveTransferMethods(transferPreset.data)
-          setSumberAplikasi(prev => transferPreset.data.includes(prev) ? prev : (transferPreset.data[0] || 'BANK'))
-          return
-        }
-        const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`)
-        if (saved) {
-          const methods = JSON.parse(saved)
-          setActiveTransferMethods(methods)
-          setSumberAplikasi(prev => methods.includes(prev) ? prev : (methods[0] || 'BANK'))
+          methods = transferPreset.data;
         } else {
-          setActiveTransferMethods(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+          const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`);
+          if (saved) methods = JSON.parse(saved);
         }
+        const filtered = methods.filter((m: string) => !customLabels['HIDE_' + m]);
+        const finalMethods = filtered.length > 0 ? filtered : methods;
+        setActiveTransferMethods(finalMethods);
+        setSumberAplikasi(prev => finalMethods.includes(prev) ? prev : (finalMethods[0] || 'BANK'));
       } catch (e) {
-        setActiveTransferMethods(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+        const fallback = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].filter(m => !customLabels['HIDE_' + m]);
+        setActiveTransferMethods(fallback.length > 0 ? fallback : ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA']);
+      }
+    };
+    handleUpdate();
+    window.addEventListener('alphaSyncUpdate', handleUpdate);
+    return () => window.removeEventListener('alphaSyncUpdate', handleUpdate);
+  }, [activeStoreId, presets, customLabels]);
+
+  React.useEffect(() => {
+    const isCurrentTarikHidden = (
+      (selectedSumber === 'QRIS' && customLabels['HIDE_QRIS']) ||
+      (selectedSumber === 'DANA' && customLabels['HIDE_TARIK_DANA']) ||
+      ((selectedSumber === 'ATM' || selectedSumber === 'ATM/EDC') && customLabels['HIDE_EDC / ATM']) ||
+      (selectedSumber === 'GOPAY' && customLabels['HIDE_GOPAY']) ||
+      ((selectedSumber === 'BANK' || selectedSumber === 'TRANSFER') && customLabels['HIDE_TRANSFER BANK'])
+    );
+    if (isCurrentTarikHidden) {
+      const visibleTarik = ITEMS['TARIK_TUNAI'].filter(item => {
+        const hKey = item.id === 'DANA' ? 'HIDE_TARIK_DANA' : 'HIDE_' + item.id;
+        return !customLabels[hKey];
+      });
+      if (visibleTarik.length > 0) {
+        const first = visibleTarik[0];
+        const val = first.name === 'EDC/ATM' ? 'ATM/EDC' : first.name === 'TRANSFER' ? 'BANK' : first.name;
+        setSelectedSumber(val);
+        setTujuanMasuk(val);
       }
     }
-    handleUpdate()
-    window.addEventListener('alphaSyncUpdate', handleUpdate)
-    return () => window.removeEventListener('alphaSyncUpdate', handleUpdate)
-  }, [activeStoreId, presets])
+  }, [customLabels, selectedSumber]);
   // --- KALKULATOR STATE ---
   const [showCalc, setShowCalc] = useState(false)
   const [calcDisplay, setCalcDisplay] = useState('0')
@@ -305,28 +466,36 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!isKetAuto) return '';
     let autoText = '';
     
+    const bankLabel = customLabels['BANK'] || 'Bank UOB';
+    const flipLabel = customLabels['FLIP'] || 'Flip';
+    const orderKuotaLabel = customLabels['ORDER KUOTA'] || 'Order Kuota';
+    const danaLabel = customLabels['DANA'] || 'DANA';
+    const tarikLabel = customLabels['TARIK'] || 'Tarik Tunai';
+    const tarikSubLabel = selectedSumber === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[selectedSumber] || selectedSumber);
+
     if (activeMode === 'DIGITAL') {
       if (activeTheme === 'TEMA_1') {
-        if (sumberAplikasi === 'BANK') autoText = `Transfer > Bank ${selectedBank}`;
-        else if (sumberAplikasi === 'FLIP') autoText = `Flip > ${selectedTujuan.replace('BANK ', 'Bank ')}`;
-        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota > ${selectedTujuan}`;
-        else if (sumberAplikasi === 'DANA') autoText = `Dana > Aplikasi Dana`;
-        else autoText = `Topup > ${sumberAplikasi}`;
+        if (sumberAplikasi === 'BANK') autoText = `Transfer > ${bankLabel} ${selectedBank}`;
+        else if (sumberAplikasi === 'FLIP') autoText = `${flipLabel} > ${selectedTujuan.replace('BANK ', 'Bank ')}`;
+        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `${orderKuotaLabel} > ${selectedTujuan}`;
+        else if (sumberAplikasi === 'DANA') autoText = `${danaLabel} > Aplikasi Dana`;
+        else autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
       } else {
-        if (sumberAplikasi === 'BANK') autoText = `Transfer Bank : ${selectedBank}`;
-        else if (sumberAplikasi === 'FLIP') autoText = `Transfer FLIP${selectedTujuan ? ` : ${selectedTujuan}` : ''}`;
-        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `Order Kuota${selectedTujuan ? ` : ${selectedTujuan}` : ''}${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
-        else autoText = `Topup : ${sumberAplikasi}`;
+        if (sumberAplikasi === 'BANK') autoText = `${bankLabel} : ${selectedBank}`;
+        else if (sumberAplikasi === 'FLIP') autoText = `${flipLabel}${selectedTujuan ? ` : ${selectedTujuan}` : ''}`;
+        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `${orderKuotaLabel}${selectedTujuan ? ` : ${selectedTujuan}` : ''}${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
+        else autoText = `Topup : ${customLabels[sumberAplikasi] || sumberAplikasi}`;
       }
     } else if (activeMode === 'TARIK') {
-      autoText = `Tarik Tunai : ${selectedSumber}`;
+      autoText = `${tarikLabel} : ${tarikSubLabel}`;
     } else {
-      autoText = `${kategori}`;
+      const modeCustom = customLabels[activeMode] || kategori;
+      autoText = `${modeCustom}`;
       if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += ` ${nominal}`;
     }
     
     return activeTheme === 'TEMA_1' ? autoText : autoText.toUpperCase();
-  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, selectedTujuan, activeTheme]);
+  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, selectedTujuan, activeTheme, customLabels]);
   
   // Split Payment Logic
   const handleNominalCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -736,6 +905,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
         <div className="flex items-center gap-1.5 p-1 bg-white border border-gray-200 rounded-full shadow-sm">
+          {isActualOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                setTempLabels({ ...customLabels });
+                setIsEditLabelsModalOpen(true);
+              }}
+              className="w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shadow-sm hover:scale-105 transition-all"
+              title="Kustomisasi Nama Tombol (Khusus Owner)"
+            >
+              <i className="fa-solid fa-pencil text-[13px]"></i>
+            </button>
+          )}
+
           <button
             onClick={() => { setShowCalc(v => !v); setIsThemeMenuOpen(false); }}
             className="w-8 h-8 rounded-full bg-[#0066ff] text-white flex items-center justify-center shadow-sm hover:bg-blue-700 transition-all"
@@ -824,10 +1007,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       <>
       <div className="grid grid-cols-4 gap-1 mb-1">
         {([
-          { id: 'DIGITAL', label: 'Transfer', icon: 'fa-paper-plane', key: 'Q', ref: btnDigitalRef, active: 'from-blue-500 to-blue-700 shadow-blue-500/40', ic: 'text-blue-500', hov: 'hover:bg-blue-50 hover:border-blue-200' },
-          { id: 'TARIK', label: 'Tarik Tunai', icon: 'fa-money-bill-transfer', key: 'W', ref: btnTarikRef, active: 'from-red-500 to-red-700 shadow-red-500/40', ic: 'text-red-500', hov: 'hover:bg-red-50 hover:border-red-200' },
-          { id: 'AKSESORIS', label: 'Aksesoris', icon: 'fa-headset', key: 'E', ref: btnAksesorisRef, active: 'from-emerald-500 to-emerald-700 shadow-emerald-500/40', ic: 'text-emerald-500', hov: 'hover:bg-emerald-50 hover:border-emerald-200' },
-          { id: 'VOUCHER', label: 'Voucher', icon: 'fa-ticket', key: 'R', ref: btnVoucherRef, active: 'from-orange-500 to-orange-700 shadow-orange-500/40', ic: 'text-orange-500', hov: 'hover:bg-orange-50 hover:border-orange-200' },
+          { id: 'DIGITAL', label: customLabels['DIGITAL'] || 'Transfer', icon: 'fa-paper-plane', key: 'Q', ref: btnDigitalRef, active: 'from-blue-500 to-blue-700 shadow-blue-500/40', ic: 'text-blue-500', hov: 'hover:bg-blue-50 hover:border-blue-200' },
+          { id: 'TARIK', label: customLabels['TARIK'] || 'Tarik Tunai', icon: 'fa-money-bill-transfer', key: 'W', ref: btnTarikRef, active: 'from-red-500 to-red-700 shadow-red-500/40', ic: 'text-red-500', hov: 'hover:bg-red-50 hover:border-red-200' },
+          { id: 'AKSESORIS', label: customLabels['AKSESORIS'] || 'Aksesoris', icon: 'fa-headset', key: 'E', ref: btnAksesorisRef, active: 'from-emerald-500 to-emerald-700 shadow-emerald-500/40', ic: 'text-emerald-500', hov: 'hover:bg-emerald-50 hover:border-emerald-200' },
+          { id: 'VOUCHER', label: customLabels['VOUCHER'] || 'Voucher', icon: 'fa-ticket', key: 'R', ref: btnVoucherRef, active: 'from-orange-500 to-orange-700 shadow-orange-500/40', ic: 'text-orange-500', hov: 'hover:bg-orange-50 hover:border-orange-200' },
         ] as const).map((mode) => {
           const isAct = activeMode === mode.id
           return (
@@ -889,8 +1072,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <i className="fa-solid fa-chevron-down text-[6px] ml-0.5"></i>
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
+                {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
                   const isSel = sumberAplikasi === src.id;
                   return (
                     <button
@@ -926,7 +1109,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center mb-0.5", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
                         <i className={cn("fa-solid text-xs", src.icon)}></i>
                       </div>
-                      <span className={cn("text-[8.5px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{src.label}</span>
+                      <span className={cn("text-[8.5px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{customLabels[src.id] || src.label}</span>
                       <span className="text-[6.5px] font-bold text-gray-400 leading-none">{src.sub}</span>
                     </button>
                   )
@@ -942,8 +1125,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Masuk:</p>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {ITEMS['TARIK_TUNAI'].map((item) => {
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, ITEMS['TARIK_TUNAI'].filter(item => !customLabels[item.id === 'DANA' ? 'HIDE_TARIK_DANA' : 'HIDE_' + item.id]).length)}, minmax(0, 1fr))` }}>
+              {ITEMS['TARIK_TUNAI'].filter(item => !customLabels[item.id === 'DANA' ? 'HIDE_TARIK_DANA' : 'HIDE_' + item.id]).map((item) => {
                 const isSelected = selectedSumber === (item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name);
                 return (
                   <button
@@ -975,7 +1158,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <span className={cn(
                       "text-[8px] font-black uppercase text-center leading-tight",
                       isSelected ? "text-[#0c1f44]" : "text-gray-500"
-                    )}>{item.name}</span>
+                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[item.id] || item.name)}</span>
                   </button>
                 )
               })}
@@ -1376,10 +1559,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* 4 TOMBOL LAYANAN */}
         <div className="grid grid-cols-4 gap-2 mb-2 px-4">
           {([
-            { id: 'DIGITAL',   label: 'TRANSFER',     icon: 'fa-paper-plane',        iconBg: '#0066ff' },
-            { id: 'TARIK',     label: 'TARIK TUNAI',  icon: 'fa-money-bill-transfer', iconBg: '#10b981' },
-            { id: 'AKSESORIS', label: 'AKSESORIS',    icon: 'fa-headset',             iconBg: '#7c3aed' },
-            { id: 'VOUCHER',   label: 'VOUCHER',       icon: 'fa-ticket',              iconBg: '#f97316' },
+            { id: 'DIGITAL',   label: (customLabels['DIGITAL'] || 'TRANSFER').toUpperCase(),     icon: 'fa-paper-plane',        iconBg: '#0066ff' },
+            { id: 'TARIK',     label: (customLabels['TARIK'] || 'TARIK TUNAI').toUpperCase(),  icon: 'fa-money-bill-transfer', iconBg: '#10b981' },
+            { id: 'AKSESORIS', label: (customLabels['AKSESORIS'] || 'AKSESORIS').toUpperCase(),    icon: 'fa-headset',             iconBg: '#7c3aed' },
+            { id: 'VOUCHER',   label: (customLabels['VOUCHER'] || 'VOUCHER').toUpperCase(),       icon: 'fa-ticket',              iconBg: '#f97316' },
           ] as const).map((mode) => {
             const isAct = activeMode === mode.id;
             return (
@@ -1419,8 +1602,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="mb-2 px-3">
-            <div className="grid grid-cols-4 gap-1.5">
-              {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id)).map(src => {
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
+              {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
                 const isSel = sumberAplikasi === src.id;
                 // Warna icon per sumber
                 const iconColors: Record<string, string> = {
@@ -1465,7 +1648,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     )}>
                       <i className={cn("fa-solid text-[11px]", src.icon, isSel ? "text-white" : "text-gray-500")}></i>
                     </div>
-                    <span className={cn("text-[8px] font-black uppercase tracking-tight text-center leading-tight", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{src.label}</span>
+                    <span className={cn("text-[8px] font-black uppercase tracking-tight text-center leading-tight", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{customLabels[src.id] || src.label}</span>
                   </button>
                 )
               })}
@@ -1477,8 +1660,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Masuk:</p>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {ITEMS['TARIK_TUNAI'].map((item) => {
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, ITEMS['TARIK_TUNAI'].filter(item => !customLabels[item.id === 'DANA' ? 'HIDE_TARIK_DANA' : 'HIDE_' + item.id]).length)}, minmax(0, 1fr))` }}>
+              {ITEMS['TARIK_TUNAI'].filter(item => !customLabels[item.id === 'DANA' ? 'HIDE_TARIK_DANA' : 'HIDE_' + item.id]).map((item) => {
                 const isSelected = selectedSumber === (item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name);
                 return (
                   <button
@@ -1509,7 +1692,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <span className={cn(
                       "text-[8px] font-black uppercase text-center leading-tight",
                       isSelected ? "text-[#0c1f44]" : "text-gray-500"
-                    )}>{item.name}</span>
+                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[item.id] || item.name)}</span>
                   </button>
                 )
               })}
@@ -2300,7 +2483,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSumberModalOpen(false)}>
           <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col py-2">
-              {activeTransferMethods.map((s, idx, arr) => (
+              {activeTransferMethods.filter(s => !customLabels['HIDE_' + s]).map((s, idx, arr) => (
                 <button 
                   key={s}
                   onClick={() => {
@@ -2394,10 +2577,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <h3 className="text-center text-[15px] font-black text-slate-800 mb-4 tracking-widest uppercase shrink-0 pt-2">Pilih Mode Utama</h3>
                 <div className="flex flex-col gap-2 overflow-y-auto pb-4 px-2 -mx-2 pt-2">
                   {[
-                    { id: 'DIGITAL', label: 'TRANSFER', subtext: 'Transfer, Ewallet dan PPOB', icon: 'fa-paper-plane', color: 'text-blue-500', bg: 'bg-blue-50' },
-                    { id: 'TARIK', label: 'TARIK TUNAI', subtext: '', icon: 'fa-money-bill-transfer', color: 'text-red-500', bg: 'bg-red-50' },
-                    { id: 'AKSESORIS', label: 'AKSESORIS', subtext: '', icon: 'fa-headset', color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                    { id: 'VOUCHER', label: 'VOUCHER', subtext: '', icon: 'fa-ticket', color: 'text-orange-500', bg: 'bg-orange-50' },
+                    { id: 'DIGITAL', label: (customLabels['DIGITAL'] || 'TRANSFER').toUpperCase(), subtext: 'Transfer, Ewallet dan PPOB', icon: 'fa-paper-plane', color: 'text-blue-500', bg: 'bg-blue-50' },
+                    { id: 'TARIK', label: (customLabels['TARIK'] || 'TARIK TUNAI').toUpperCase(), subtext: '', icon: 'fa-money-bill-transfer', color: 'text-red-500', bg: 'bg-red-50' },
+                    { id: 'AKSESORIS', label: (customLabels['AKSESORIS'] || 'AKSESORIS').toUpperCase(), subtext: '', icon: 'fa-headset', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                    { id: 'VOUCHER', label: (customLabels['VOUCHER'] || 'VOUCHER').toUpperCase(), subtext: '', icon: 'fa-ticket', color: 'text-orange-500', bg: 'bg-orange-50' },
                   ].map(m => {
                     const isSelected = activeMode === m.id;
                     return (
@@ -2465,9 +2648,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {/* Kolom Kanan: Pilihan Menu */}
                 <div className="flex-1 flex flex-col overflow-y-auto pt-4 pb-4 px-4">
                   <div className="flex flex-col gap-2 mb-6">
-                    {tema3Step === 'DIGITAL' && activeTransferMethods.map((s, idx) => {
+                    {tema3Step === 'DIGITAL' && activeTransferMethods.filter(s => !customLabels['HIDE_' + s]).map((s, idx) => {
                       const isAct = sumberAplikasi === s;
-                      const label = s === 'BANK' ? 'BANK' : s;
+                      const label = s === 'BANK' ? (customLabels['BANK'] || 'BANK') : (customLabels[s] || s);
                       const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
                       const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;
                       return (
@@ -2500,7 +2683,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       )
                     })}
 
-                    {tema3Step === 'TARIK' && ['QRIS','DANA','ATM','GOPAY','BANK'].map((s, idx) => {
+                    {tema3Step === 'TARIK' && ['QRIS','DANA','ATM','GOPAY','BANK'].filter(s => {
+                      const hKey = s === 'DANA' ? 'HIDE_TARIK_DANA' : s === 'ATM' ? 'HIDE_EDC / ATM' : s === 'BANK' ? 'HIDE_TRANSFER BANK' : 'HIDE_' + s;
+                      return !customLabels[hKey];
+                    }).map((s, idx) => {
                       const icon = s === 'QRIS' ? 'fa-qrcode' : s === 'ATM' ? 'fa-credit-card' : s === 'DANA' ? 'fa-wallet' : s === 'GOPAY' ? 'fa-wallet' : 'fa-building-columns';
                       const isSelected = activeMode === 'TARIK' && selectedSumber === s;
                       return (
@@ -2528,7 +2714,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           </div>
                           <span className={cn("text-[12px] font-black uppercase tracking-widest transition-colors", 
                             isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
-                          )}>{s}</span>
+                          )}>{s === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : s === 'ATM' ? (customLabels['EDC / ATM'] || 'ATM') : (customLabels[s] || s)}</span>
                         </button>
                       );
                     })}
@@ -2652,6 +2838,277 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL KUSTOMISASI LABEL TOMBOL (KHUSUS OWNER) */}
+      {isEditLabelsModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Modal */}
+            <div className="px-5 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <i className="fa-solid fa-pencil text-sm text-white"></i>
+                </div>
+                <div>
+                  <h3 className="text-[13px] font-black uppercase tracking-wider">Kustomisasi Nama Tombol</h3>
+                  <p className="text-[10px] text-amber-100 font-bold">Khusus Owner • Terapkan Online ke Seluruh HP Kasir</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditLabelsModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all"
+              >
+                <i className="fa-solid fa-xmark text-xs"></i>
+              </button>
+            </div>
+
+            {/* Body Modal */}
+            <div className="p-4 overflow-y-auto space-y-4 flex-1 custom-scrollbar text-left">
+              {/* Grup 1: Mode Layanan Utama */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Baris 1: Mode Layanan Utama</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Transfer (Default: Transfer)</label>
+                    <input
+                      type="text"
+                      value={tempLabels['DIGITAL'] ?? ''}
+                      onChange={(e) => setTempLabels(prev => ({ ...prev, 'DIGITAL': e.target.value }))}
+                      placeholder="Transfer"
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Tarik Tunai (Default: Tarik Tunai)</label>
+                    <input
+                      type="text"
+                      value={tempLabels['TARIK'] ?? ''}
+                      onChange={(e) => setTempLabels(prev => ({ ...prev, 'TARIK': e.target.value }))}
+                      placeholder="Tarik Tunai"
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Aksesoris (Default: Aksesoris)</label>
+                    <input
+                      type="text"
+                      value={tempLabels['AKSESORIS'] ?? ''}
+                      onChange={(e) => setTempLabels(prev => ({ ...prev, 'AKSESORIS': e.target.value }))}
+                      placeholder="Aksesoris"
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Voucher (Default: Voucher)</label>
+                    <input
+                      type="text"
+                      value={tempLabels['VOUCHER'] ?? ''}
+                      onChange={(e) => setTempLabels(prev => ({ ...prev, 'VOUCHER': e.target.value }))}
+                      placeholder="Voucher"
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grup 2: Sub-Kategori Transfer */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Pilihan Sumber Transfer</h4>
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-bold">Atur Nama & Sembunyikan Tombol</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { key: 'BANK', defaultName: 'Bank UOB', icon: 'fa-building-columns' },
+                    { key: 'DANA', defaultName: 'DANA', icon: 'fa-wallet' },
+                    { key: 'ORDER KUOTA', defaultName: 'Order Kuota', icon: 'fa-bolt' },
+                    { key: 'FLIP', defaultName: 'Flip', icon: 'fa-arrow-right-arrow-left' }
+                  ].map(({ key, defaultName, icon }) => {
+                    const isHidden = !!tempLabels['HIDE_' + key];
+                    return (
+                      <div 
+                        key={key} 
+                        className={cn(
+                          "p-2.5 rounded-xl border transition-all flex flex-col justify-between",
+                          isHidden 
+                            ? "bg-red-50/50 border-red-200" 
+                            : "bg-white border-slate-200/80 shadow-xs"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <i className={cn("fa-solid text-[10px]", icon, isHidden ? "text-red-400" : "text-emerald-600")}></i>
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-wider truncate",
+                              isHidden ? "text-red-500 line-through" : "text-slate-700"
+                            )}>
+                              {defaultName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempLabels(prev => ({
+                                ...prev,
+                                ['HIDE_' + key]: !prev['HIDE_' + key]
+                              }));
+                            }}
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 shrink-0",
+                              isHidden
+                                ? "bg-red-500 text-white shadow-xs"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100"
+                            )}
+                            title={isHidden ? "Klik untuk Menampilkan tombol ini di kasir" : "Klik untuk Menyembunyikan tombol ini dari kasir"}
+                          >
+                            <i className={cn("fa-solid text-[7.5px]", isHidden ? "fa-eye-slash" : "fa-eye")}></i>
+                            {isHidden ? "Sembunyi" : "Tampil"}
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={tempLabels[key] ?? ''}
+                          onChange={(e) => setTempLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={defaultName}
+                          disabled={isHidden}
+                          className={cn(
+                            "w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border outline-none transition-all",
+                            isHidden
+                              ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed italic"
+                              : "bg-slate-50 border-slate-200 focus:bg-white focus:border-emerald-500 text-slate-800"
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Grup 3: Sub-Kategori Tarik Tunai */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Pilihan Sumber Tarik Tunai</h4>
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-bold">Atur Nama & Sembunyikan Tombol</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { key: 'EDC / ATM', defaultName: 'EDC/ATM', icon: 'fa-credit-card' },
+                    { key: 'QRIS', defaultName: 'QRIS', icon: 'fa-qrcode' },
+                    { key: 'TRANSFER BANK', defaultName: 'TRANSFER', icon: 'fa-building-columns' },
+                    { key: 'TARIK_DANA', defaultName: 'DANA', icon: 'fa-wallet' },
+                    { key: 'GOPAY', defaultName: 'GOPAY', icon: 'fa-wallet', colSpan: true }
+                  ].map(({ key, defaultName, icon, colSpan }) => {
+                    const isHidden = !!tempLabels['HIDE_' + key];
+                    return (
+                      <div 
+                        key={key} 
+                        className={cn(
+                          "p-2.5 rounded-xl border transition-all flex flex-col justify-between",
+                          colSpan && "col-span-2",
+                          isHidden 
+                            ? "bg-red-50/50 border-red-200" 
+                            : "bg-white border-slate-200/80 shadow-xs"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <i className={cn("fa-solid text-[10px]", icon, isHidden ? "text-red-400" : "text-purple-600")}></i>
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-wider truncate",
+                              isHidden ? "text-red-500 line-through" : "text-slate-700"
+                            )}>
+                              {defaultName}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempLabels(prev => ({
+                                ...prev,
+                                ['HIDE_' + key]: !prev['HIDE_' + key]
+                              }));
+                            }}
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 shrink-0",
+                              isHidden
+                                ? "bg-red-500 text-white shadow-xs"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100"
+                            )}
+                            title={isHidden ? "Klik untuk Menampilkan tombol ini di kasir" : "Klik untuk Menyembunyikan tombol ini dari kasir"}
+                          >
+                            <i className={cn("fa-solid text-[7.5px]", isHidden ? "fa-eye-slash" : "fa-eye")}></i>
+                            {isHidden ? "Sembunyi" : "Tampil"}
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={tempLabels[key] ?? ''}
+                          onChange={(e) => setTempLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={defaultName}
+                          disabled={isHidden}
+                          className={cn(
+                            "w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border outline-none transition-all",
+                            isHidden
+                              ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed italic"
+                              : "bg-slate-50 border-slate-200 focus:bg-white focus:border-purple-500 text-slate-800"
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleResetCustomLabels}
+                className="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-black uppercase tracking-wider transition-all"
+              >
+                <i className="fa-solid fa-rotate-left mr-1"></i> Reset Default
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditLabelsModalOpen(false)}
+                  className="px-3.5 py-2 rounded-xl text-slate-500 hover:text-slate-800 text-[10px] font-black uppercase tracking-wider transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingLabels}
+                  onClick={handleSaveCustomLabels}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-[10px] font-black uppercase tracking-wider shadow-md transition-all flex items-center gap-1.5"
+                >
+                  {isSavingLabels ? (
+                    <>
+                      <i className="fa-solid fa-circle-notch fa-spin"></i> Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-check"></i> Simpan & Terapkan
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
 

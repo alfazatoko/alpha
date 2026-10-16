@@ -56,6 +56,7 @@ interface BerandaViewProps {
   kasLainnya: number
   totalKhusus: number
   totalNonTunai: number
+  totalAdminDalam?: number
   username: string
   showToast: (m: string) => void
   onConfirm: (t: string, m: string, c: () => void) => void
@@ -3041,9 +3042,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const ownerKasModal = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Modal Tunai Kasir').reduce((s, t) => s + t.nominal, 0)
   
   // Kas Lain Nya Calculations (Matching LaporanView logic)
-  const ownerAdminDalam = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[ADMIN_DALAM]')).reduce((s, t) => s + t.adminFee, 0)
-  const ownerNonTunai = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
-  const ownerKhusus = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[KHUSUS]')).reduce((s, t) => s + t.nominal + t.adminFee, 0)
+  const ownerAdminDalam = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[ADMIN_DALAM]')).reduce((s, t) => s + (t.adminFee || (t as any).admin || 0), 0)
+  const ownerNonTunai = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + (t.nominal || 0) + (t.adminFee || (t as any).admin || 0), 0)
+  const ownerKhusus = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && (t.keterangan || '').includes('[KHUSUS]')).reduce((s, t) => s + (t.nominal || 0) + (t.adminFee || (t as any).admin || 0), 0)
+
+  const kasirAdminDalam = props.totalAdminDalam !== undefined
+    ? props.totalAdminDalam
+    : (props.transactions || [])
+        .filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
+        .reduce((s, t) => s + (t.adminFee || (t as any).admin || 0), 0)
 
   const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin - ownerTotalTarik
   
@@ -3800,6 +3807,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 totalAdminFee={props.totalAdmin}
                 penjualanVoucherTunai={props.penjualanVoucherTunai}
                 tarikTunaiNasabah={props.totalTarik}
+                adminDalamNonTunai={kasirAdminDalam}
                 transaksiKhusus={props.totalKhusus || 0}
                 transaksiNonTunai={props.totalNonTunai || 0}
               />

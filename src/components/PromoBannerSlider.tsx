@@ -70,7 +70,7 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
   }
 
   return (
-    <div className="w-full px-1.5 mb-3 mt-[-1.25rem] relative z-[40] select-none">
+    <div className="w-full px-1.5 mb-3 mt-[-1.25rem] relative z-[20] select-none">
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

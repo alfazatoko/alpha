@@ -84,7 +84,7 @@ export const KasSummary: React.FC<KasSummaryProps> = ({
 
         <div className="space-y-0">
           {[
-            { label: 'Admin Dalam/Non Tunai', val: adminDalamNonTunai, show: adminDalamNonTunai > 0 },
+            { label: 'Admin Dalam/Non Tunai', val: adminDalamNonTunai, show: true },
             { label: 'Transaksi Khusus', val: transaksiKhusus, show: true },
             { label: 'Transaksi Non Tunai', val: transaksiNonTunai, show: true }
           ].filter(item => item.show).map((item, idx) => (
