@@ -369,7 +369,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
               ) : (
                 <div className="space-y-4">
                   {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
-                    const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
+                    const filtered = props.presets.filter(p => p && !p.id?.startsWith('_') && (p.kategori || 'Order Kuota') === kat);
                     if (filtered.length === 0) return null;
 
                     const isCollapsed = !!collapsedCategories[kat];
@@ -727,7 +727,7 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
             ) : (
               <div className="space-y-3">
                 {['Order Kuota', 'Transfer Bank', 'DANA', 'FLIP', 'Tarik Tunai'].map(kat => {
-                  const filtered = props.presets.filter(p => (p.kategori || 'Order Kuota') === kat);
+                  const filtered = props.presets.filter(p => p && !p.id?.startsWith('_') && (p.kategori || 'Order Kuota') === kat);
                   if (filtered.length === 0) return null;
 
                   const isCollapsed = !!collapsedCategories[kat];

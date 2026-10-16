@@ -348,12 +348,6 @@ const App: React.FC = () => {
           if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
-          } else if (data.presets && Array.isArray(data.presets)) {
-            const bItem = data.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
-            if (bItem?.data && Array.isArray(bItem.data) && bItem.data.length > 0) {
-              localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(bItem.data))
-              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bItem.data))
-            }
           }
           
           // Preload custom sound if any
@@ -914,27 +908,9 @@ const MainApp: React.FC<MainAppProps> = ({
       } catch (e) {}
     }
 
-    // 2. Fetch data banner paling fresh dari Supabase store_settings (saat kasir login ulang atau buka aplikasi)
+    // 2. Fetch data banner langsung dari kamar kolom promo_banners di Supabase store_settings
     const fetchFreshBanners = async () => {
       try {
-        // Cek fallback presets terlebih dahulu (_PROMO_BANNERS_)
-        const { data: pData } = await supabase
-          .from('store_settings')
-          .select('presets')
-          .eq('store_id', effectiveStoreId)
-          .maybeSingle()
-
-        if (pData?.presets && Array.isArray(pData.presets)) {
-          const bannerItem = pData.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
-          if (bannerItem && Array.isArray(bannerItem.data) && bannerItem.data.length > 0) {
-            setPromoBanners(bannerItem.data)
-            localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(bannerItem.data))
-            localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bannerItem.data))
-            return
-          }
-        }
-
-        // Coba juga baca langsung dari kolom promo_banners jika kolomnya ada
         const { data, error } = await supabase
           .from('store_settings')
           .select('promo_banners')
@@ -946,9 +922,7 @@ const MainApp: React.FC<MainAppProps> = ({
           localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
           localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
         }
-      } catch (err) {
-        // Abaikan jika kolom belum dibuat di schema Supabase
-      }
+      } catch (err) {}
     }
 
     fetchFreshBanners()
@@ -972,18 +946,6 @@ const MainApp: React.FC<MainAppProps> = ({
             setPromoBanners(incoming)
             localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(incoming))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(incoming))
-          } else if (payload.new && Array.isArray(payload.new.presets)) {
-            const bannerItem = payload.new.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
-            if (bannerItem && Array.isArray(bannerItem.data)) {
-              setPromoBanners(bannerItem.data)
-              localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(bannerItem.data))
-              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bannerItem.data))
-            } else {
-              fetchFreshBanners()
-            }
-          } else {
-            // Re-fetch jika payload Supabase partial
-            fetchFreshBanners()
           }
         }
       )
@@ -1006,11 +968,10 @@ const MainApp: React.FC<MainAppProps> = ({
 
     const isPin = localStorage.getItem(`alphaPro_${targetStoreId}_isPinEnabled`) !== 'false'
 
-    const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_PROMO_BANNERS_')
+    const basePresets = presets.filter(p => p && !p.id?.startsWith?.('_'))
     const combinedPresets = [
       ...basePresets,
-      { id: '_ADMIN_RULES_', data: adminRules },
-      ...(promoBanners && promoBanners.length > 0 ? [{ id: '_PROMO_BANNERS_', data: promoBanners }] : [])
+      { id: '_ADMIN_RULES_', data: adminRules }
     ]
     const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
     if (popupPreset) combinedPresets.push(popupPreset)
@@ -1206,15 +1167,12 @@ const MainApp: React.FC<MainAppProps> = ({
       // Restore promo banners from candidate store or localStorage fallback instead of clearing
       const candidateStoreId = stores.length > 0 ? stores[0].id : (activeStore?.id || null)
       if (candidateStoreId) {
-        supabase.from('store_settings').select('presets').eq('store_id', candidateStoreId).maybeSingle()
+        supabase.from('store_settings').select('promo_banners').eq('store_id', candidateStoreId).maybeSingle()
           .then(({ data: sData }) => {
-            if (sData?.presets && Array.isArray(sData.presets)) {
-              const bItem = sData.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
-              if (bItem?.data && Array.isArray(bItem.data) && bItem.data.length > 0) {
-                setPromoBanners(bItem.data)
-                localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bItem.data))
-                localStorage.setItem(`alphaPro_${candidateStoreId}_promoBanners`, JSON.stringify(bItem.data))
-              }
+            if (sData?.promo_banners && Array.isArray(sData.promo_banners) && sData.promo_banners.length > 0) {
+              setPromoBanners(sData.promo_banners)
+              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(sData.promo_banners))
+              localStorage.setItem(`alphaPro_${candidateStoreId}_promoBanners`, JSON.stringify(sData.promo_banners))
             }
           })
       }
@@ -1280,18 +1238,13 @@ const MainApp: React.FC<MainAppProps> = ({
       if (data.presets) {
         let incomingPresets = data.presets
         let incomingAdminRules = null
-        let incomingPromoBanners: string[] | null = null
         if (Array.isArray(incomingPresets)) {
           const adminIdx = incomingPresets.findIndex((p: any) => p.id === '_ADMIN_RULES_')
           if (adminIdx >= 0) {
             incomingAdminRules = incomingPresets[adminIdx].data
-            incomingPresets = incomingPresets.filter((p: any) => p.id !== '_ADMIN_RULES_')
           }
-          const bannerIdx = incomingPresets.findIndex((p: any) => p && p.id === '_PROMO_BANNERS_')
-          if (bannerIdx >= 0) {
-            incomingPromoBanners = incomingPresets[bannerIdx].data
-            incomingPresets = incomingPresets.filter((p: any) => p && p.id !== '_PROMO_BANNERS_')
-          }
+          // Kamar Presets Murni: buang semua objek metadata yang berawalan _
+          incomingPresets = incomingPresets.filter((p: any) => p && !p.id?.startsWith?.('_'))
         }
 
         const local = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`)
@@ -1311,12 +1264,15 @@ const MainApp: React.FC<MainAppProps> = ({
             changed = true
           }
         }
+      }
 
-        if (incomingPromoBanners && Array.isArray(incomingPromoBanners) && incomingPromoBanners.length > 0) {
-          const remoteBannerStr = JSON.stringify(incomingPromoBanners)
+      if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
+        const remoteBannerStr = JSON.stringify(data.promo_banners)
+        const local = localStorage.getItem(`alphaPro_${targetStoreId}_promoBanners`)
+        if (local !== remoteBannerStr) {
           localStorage.setItem(`alphaPro_${targetStoreId}_promoBanners`, remoteBannerStr)
           localStorage.setItem('alphaPro_promoBanners', remoteBannerStr)
-          setPromoBanners(incomingPromoBanners)
+          setPromoBanners(data.promo_banners)
           changed = true
         }
       }
@@ -1833,18 +1789,15 @@ const MainApp: React.FC<MainAppProps> = ({
           const storeIds = data.map(s => s.id)
           supabase
             .from('store_settings')
-            .select('presets')
+            .select('promo_banners')
             .in('store_id', storeIds)
             .then(({ data: bData }) => {
               if (bData) {
                 for (const row of bData) {
-                  if (row.presets && Array.isArray(row.presets)) {
-                    const bItem = row.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
-                    if (bItem?.data && Array.isArray(bItem.data) && bItem.data.length > 0) {
-                      setPromoBanners(bItem.data)
-                      localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bItem.data))
-                      break
-                    }
+                  if (row.promo_banners && Array.isArray(row.promo_banners) && row.promo_banners.length > 0) {
+                    setPromoBanners(row.promo_banners)
+                    localStorage.setItem('alphaPro_promoBanners', JSON.stringify(row.promo_banners))
+                    break
                   }
                 }
               }
@@ -1975,64 +1928,19 @@ const MainApp: React.FC<MainAppProps> = ({
             localStorage.setItem(`alphaPro_${sId}_promoBanners`, JSON.stringify(banners))
           } catch (e) {}
 
-          // Siapkan presets yang menyertakan _PROMO_BANNERS_ untuk realtime & fallback sync
-          let storePresets: any[] = []
-          try {
-            const { data: pData } = await supabase
-              .from('store_settings')
-              .select('presets')
-              .eq('store_id', sId)
-              .maybeSingle()
-            if (pData?.presets && Array.isArray(pData.presets)) {
-              storePresets = pData.presets
-            } else {
-              const local = localStorage.getItem(`alphaPro_${googleUid}_${sId}_presets`) || localStorage.getItem(`alphaPro_${sId}_presets`)
-              if (local) storePresets = JSON.parse(local)
-            }
-          } catch (e) {}
-
-          if (!Array.isArray(storePresets)) storePresets = [...presets]
-          const cleanedPresets = storePresets.filter((p: any) => p && p.id !== '_PROMO_BANNERS_')
-          if (banners && banners.length > 0) {
-            cleanedPresets.push({ id: '_PROMO_BANNERS_', data: banners })
-          }
-
-          // Coba upsert dengan kolom promo_banners terlebih dahulu
-          const payloadWithColumn: any = {
-            store_id: sId,
-            presets: cleanedPresets,
-            promo_banners: banners,
-            updated_at: new Date().toISOString()
-          }
-
-          const { error: upsertErr } = await supabase.from('store_settings').upsert(payloadWithColumn)
-
-          if (upsertErr) {
-            // Jika kolom promo_banners belum ada di database Supabase (PGRST204), fallback ke presets
-            if (upsertErr.code === 'PGRST204' || upsertErr.message?.includes('promo_banners')) {
-              const { error: fallbackErr } = await supabase.from('store_settings').upsert({
-                store_id: sId,
-                presets: cleanedPresets,
-                updated_at: new Date().toISOString()
-              })
-              if (fallbackErr) {
-                console.error(`Gagal fallback upsert store_settings ke store ${sId}:`, fallbackErr)
-                throw fallbackErr
-              }
-            } else {
-              console.error(`Gagal upsert promo_banners ke store ${sId}:`, upsertErr)
-              throw upsertErr
-            }
-          }
-
-          // Sinkronkan juga ke store_configs (jika tabel digunakan)
-          try {
-            await supabase.from('store_configs').upsert({
+          // Kamar Mandiri: Upsert murni ke kolom promo_banners tanpa mengotori presets
+          const { error: upsertErr } = await supabase
+            .from('store_settings')
+            .upsert({
               store_id: sId,
-              presets: cleanedPresets,
+              promo_banners: banners,
               updated_at: new Date().toISOString()
             })
-          } catch (e) {}
+
+          if (upsertErr) {
+            console.error(`Gagal upsert promo_banners ke store ${sId}:`, upsertErr)
+            throw upsertErr
+          }
         }
         showToast('FOTO BANNER HD DISINKRONKAN KE SEMUA HP!')
       } catch (e: any) {

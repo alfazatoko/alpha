@@ -1035,37 +1035,44 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
             <div className="mt-1 flex flex-wrap gap-1">
               {(() => {
-                const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+                const safeKet = keterangan || '';
+                const safeKat = kategori || '';
+                const searchQuery = safeKet.toUpperCase().replace(safeKat.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
                 
                 // Only show if user has typed something and there's a match
                 if (searchQuery.length === 0) return null;
                 
                 const filtered = presets.filter(p => {
+                  if (!p || p.id?.startsWith?.('_') || typeof p.keterangan !== 'string' || !p.keterangan.trim()) return false;
                   const pCat = p.kategori || 'Order Kuota';
-                  return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+                  return pCat.toLowerCase() === safeKat.toLowerCase() && p.keterangan.toLowerCase().includes(searchQuery);
                 });
                 
                 if (filtered.length === 0) return null;
                 
                 return filtered.map(p => {
                   const pCat = p.kategori || 'Order Kuota';
+                  const pKet = p.keterangan || '';
+                  const pModal = Number(p.modal) || 0;
+                  const pJual = Number(p.jual) || 0;
+                  const isOrderKuota = pCat.toLowerCase() === 'order kuota';
                   return (
                     <button
                       key={p.id}
                       onClick={() => {
                         if (activeTheme === 'TEMA_1') {
-                           setKeterangan(p.keterangan.toUpperCase());
+                           setKeterangan(pKet.toUpperCase());
                         } else {
-                           setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
+                           setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
                            setIsKetAuto(false);
                         }
                         
-                        if (pCat === 'Order Kuota') {
+                        if (isOrderKuota) {
                           if (orderKuotaMode === 'NOMINAL_ADMIN') {
                             setOrderKuotaMode('MODAL_JUAL');
                           }
-                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
-                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
                           nominalRef.current?.focus();
@@ -1073,9 +1080,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                       className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left"
                     >
-                      {pCat === 'Order Kuota' 
-                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
-                        : p.keterangan}
+                      {isOrderKuota
+                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        : pKet}
                     </button>
                   );
                 })
@@ -1605,11 +1612,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
           {/* Autocomplete Suggestions */}
           {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (() => {
-            const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+            const safeKet = keterangan || '';
+            const safeKat = kategori || '';
+            const searchQuery = safeKet.toUpperCase().replace(safeKat.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
             if (searchQuery.length === 0) return null;
             const filtered = presets.filter(p => {
+              if (!p || p.id?.startsWith?.('_') || typeof p.keterangan !== 'string' || !p.keterangan.trim()) return false;
               const pCat = p.kategori || 'Order Kuota';
-              return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+              return pCat.toLowerCase() === safeKat.toLowerCase() && p.keterangan.toLowerCase().includes(searchQuery);
             });
             if (filtered.length === 0) return null;
             
@@ -1617,14 +1627,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {filtered.map(p => {
                   const pCat = p.kategori || 'Order Kuota';
+                  const pKet = p.keterangan || '';
+                  const pModal = Number(p.modal) || 0;
+                  const pJual = Number(p.jual) || 0;
+                  const isOrderKuota = pCat.toLowerCase() === 'order kuota';
                   return (
                     <button
                       key={p.id}
                       onClick={() => {
-                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
-                        if (pCat === 'Order Kuota') {
-                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
-                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                        setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
+                        if (isOrderKuota) {
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
                           nominalRef.current?.focus();
@@ -1633,9 +1647,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[11px] font-black uppercase tracking-wide px-3 py-1.5 rounded-xl transition-all text-left shadow-sm"
                     >
-                      {pCat === 'Order Kuota' 
-                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
-                        : p.keterangan}
+                      {isOrderKuota 
+                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        : pKet}
                     </button>
                   );
                 })}
@@ -1989,23 +2003,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           {presets && presets.length > 0 && (activeMode === 'DIGITAL' || activeMode === 'TARIK') && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
               {(() => {
-                const searchQuery = keterangan.toUpperCase().replace(kategori.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
+                const safeKet = keterangan || '';
+                const safeKat = kategori || '';
+                const searchQuery = safeKet.toUpperCase().replace(safeKat.toUpperCase(), '').replace(/=/g, '').trim().toLowerCase();
                 if (searchQuery.length === 0) return null;
                 const filtered = presets.filter(p => {
+                  if (!p || p.id?.startsWith?.('_') || typeof p.keterangan !== 'string' || !p.keterangan.trim()) return false;
                   const pCat = p.kategori || 'Order Kuota';
-                  return pCat === kategori && p.keterangan.toLowerCase().includes(searchQuery);
+                  return pCat.toLowerCase() === safeKat.toLowerCase() && p.keterangan.toLowerCase().includes(searchQuery);
                 });
                 if (filtered.length === 0) return null;
                 return filtered.map(p => {
                   const pCat = p.kategori || 'Order Kuota';
+                  const pKet = p.keterangan || '';
+                  const pModal = Number(p.modal) || 0;
+                  const pJual = Number(p.jual) || 0;
+                  const isOrderKuota = pCat.toLowerCase() === 'order kuota';
                   return (
                     <button
                       key={p.id}
                       onClick={() => {
-                        setKeterangan(`${kategori.toUpperCase()} = ${p.keterangan.toUpperCase()}`);
-                        if (pCat === 'Order Kuota') {
-                          setNominal(p.modal.toLocaleString('id-ID').replace(/,/g, '.'));
-                          setAdmin(p.jual.toLocaleString('id-ID').replace(/,/g, '.'));
+                        setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
+                        if (isOrderKuota) {
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
                           nominalRef.current?.focus();
@@ -2014,9 +2035,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }}
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-wide px-2.5 py-1.5 rounded-xl transition-all text-left shadow-sm"
                     >
-                      {pCat === 'Order Kuota' 
-                        ? `${p.keterangan} (M:${p.modal / 1000}k J:${p.jual / 1000}k)` 
-                        : p.keterangan}
+                      {isOrderKuota 
+                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        : pKet}
                     </button>
                   );
                 })
