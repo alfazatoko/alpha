@@ -94,10 +94,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   useEffect(() => {
     if (!storeId || storeId === 'all') return
 
-    // 1. Fetch fresh store_settings from cloud (financial_settings & promo_banners)
+    // 1. Fetch fresh store_settings from cloud (financial_settings & presets/promo_banners)
     supabase
       .from('store_settings')
-      .select('financial_settings, promo_banners')
+      .select('financial_settings, presets')
       .eq('store_id', storeId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -106,10 +106,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setLiveFinancialSettings(data.financial_settings)
             localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(data.financial_settings))
           }
-          if (data.promo_banners && Array.isArray(data.promo_banners)) {
+          let incomingBanners: string[] | null = null
+          if ((data as any).promo_banners && Array.isArray((data as any).promo_banners)) {
+            incomingBanners = (data as any).promo_banners
+          } else if (data.presets && Array.isArray(data.presets)) {
+            const bItem = data.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
+            if (bItem?.data && Array.isArray(bItem.data)) {
+              incomingBanners = bItem.data
+            }
+          }
+          if (incomingBanners && incomingBanners.length > 0) {
             try {
-              localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(data.promo_banners))
-              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
+              localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(incomingBanners))
+              localStorage.setItem('alphaPro_promoBanners', JSON.stringify(incomingBanners))
             } catch (e) {}
           }
         }
@@ -134,7 +143,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               localStorage.setItem(`alphaPro_${storeId}_financial`, JSON.stringify(newFin))
             } catch (e) {}
           }
-          const newBanners = payload.new?.promo_banners
+          let newBanners = payload.new?.promo_banners
+          if (!newBanners && payload.new?.presets && Array.isArray(payload.new.presets)) {
+            const bItem = payload.new.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
+            if (bItem?.data && Array.isArray(bItem.data)) {
+              newBanners = bItem.data
+            }
+          }
           if (newBanners && Array.isArray(newBanners)) {
             try {
               localStorage.setItem(`alphaPro_${storeId}_promoBanners`, JSON.stringify(newBanners))
