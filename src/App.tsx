@@ -348,13 +348,11 @@ const App: React.FC = () => {
           if (data.promo_banners && Array.isArray(data.promo_banners) && data.promo_banners.length > 0) {
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
-            setPromoBanners(data.promo_banners)
           } else if (data.presets && Array.isArray(data.presets)) {
             const bItem = data.presets.find((p: any) => p && p.id === '_PROMO_BANNERS_')
             if (bItem?.data && Array.isArray(bItem.data) && bItem.data.length > 0) {
               localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(bItem.data))
               localStorage.setItem('alphaPro_promoBanners', JSON.stringify(bItem.data))
-              setPromoBanners(bItem.data)
             }
           }
           
@@ -1034,7 +1032,7 @@ const MainApp: React.FC<MainAppProps> = ({
     } catch(e) {}
 
     const uploadPayload: any = {
-      store_id: targetId,
+      store_id: targetStoreId,
       cashiers: kasirList,
       presets: combinedPresets,
       running_texts: runningTexts,
