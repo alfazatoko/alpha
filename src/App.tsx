@@ -1102,6 +1102,24 @@ const MainApp: React.FC<MainAppProps> = ({
       localStorage.setItem('alphaPro_name', updatedAccount.name)
     }
 
+    // Jika yang diperbarui adalah akun Owner dan memuat PIN, sinkronkan ke gate PIN & tabel owner_security
+    if (targetUsername === 'owner' && updatedAccount.pin) {
+      if (googleUid) {
+        localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, updatedAccount.pin)
+        try {
+          supabase.from('owner_security').upsert({
+            user_id: googleUid,
+            email: googleEmail || '',
+            owner_name: updatedAccount.name || 'Owner',
+            pin: updatedAccount.pin,
+            updated_at: new Date().toISOString()
+          }).then(() => {})
+        } catch (secErr) {
+          console.warn('Sync owner_security fallback:', secErr)
+        }
+      }
+    }
+
     // Sync directly to cloud
     const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
     const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')

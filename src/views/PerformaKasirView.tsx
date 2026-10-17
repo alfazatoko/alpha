@@ -224,6 +224,29 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     return true
   }
 
+  /**
+   * isServiceCategory — digunakan KHUSUS di halaman Performa Kasir untuk menghitung
+   * keuntungan / admin fee toko secara menyeluruh.
+   *
+   * Perbedaan dengan isSalesCategory (yang dipakai di halaman Laporan & POS):
+   * - isSalesCategory: membuang Tarik Tunai & tag [NON_TUNAI]/[ADMIN_DALAM]
+   *   → tujuannya menjaga akurasi uang fisik di laci kasir.
+   * - isServiceCategory: menerima SEMUA transaksi jasa konsumen (termasuk Tarik Tunai,
+   *   Non-Tunai, dan Potong Dalam) → tujuannya menghitung laba/fee toko yang sesungguhnya.
+   *
+   * Yang dikecualikan hanya:
+   * - Transaksi mutasi modal (isIsiCategory) → bukan pendapatan, hanya perpindahan modal.
+   * - Transaksi [KHUSUS] → biasanya koreksi / penyesuaian internal yang tidak mewakili jasa.
+   */
+  const isServiceCategory = (cat: string, ket?: string) => {
+    const k = (ket || '').toUpperCase()
+    // Transaksi [KHUSUS] tidak dihitung sebagai layanan konsumen
+    if (k.includes('[KHUSUS]')) return false
+    // Transaksi modal toko bukan pendapatan
+    if (isIsiCategory(cat)) return false
+    return true
+  }
+
   // Deduplikasi monthlyPerforma agar tidak terjadi sum ganda jika ada row duplikat di DB
   const deduplicatedMonthlyPerforma = useMemo(() => {
     const uniqueMap = new Map<string, any>()
@@ -320,13 +343,15 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
   // --- KALKULASI FITUR PROFIT ---
   // 1. Profit Hari Ini (Live dari props.transactions & closing snapshot hari ini)
+  //    Menggunakan isServiceCategory agar fee dari Tarik Tunai, Non-Tunai, dan
+  //    Potong Dalam ikut terhitung sebagai keuntungan toko hari ini.
   const profitHariIni = useMemo(() => {
     const todayTxs = props.transactions.filter(t => t.timestamp.startsWith(todayStr))
     let adminFeeTotal = 0
     let countTx = 0
 
     todayTxs.forEach(t => {
-      if (isSalesCategory(t.kategori, t.keterangan)) {
+      if (isServiceCategory(t.kategori, t.keterangan)) {
         adminFeeTotal += Number(t.adminFee) || 0
         countTx++
       }
@@ -375,7 +400,9 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       map.set(dStr, { tambahSaldo: 0, omset: 0, labaAdmin: 0, labaVoucher: 0, totalLaba: 0, totalTx: 0, isClosed: false })
     }
 
-    // Akumulasi raw transaksi dari props.transactions untuk SELURUH tanggal di bulan terpilih (tgl 1 - skrg)
+    // Akumulasi raw transaksi dari props.transactions untuk SELURUH tanggal di bulan terpilih (tgl 1 - skrg).
+    // Menggunakan isServiceCategory agar fee dari Tarik Tunai, Non-Tunai, dan Potong Dalam
+    // ikut terakumulasi sebagai laba admin toko (berbeda dengan halaman Laporan yang fokus uang fisik).
     const rawDataMap = new Map<string, { tambahSaldo: number, omset: number, labaAdmin: number, countTx: number }>()
     props.transactions.forEach(t => {
       if (t.timestamp.startsWith(selectedMonth)) {
@@ -386,11 +413,17 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         }
         const cur = rawDataMap.get(dStr)!
         if (isIsiCategory(t.kategori)) {
+          // Transaksi modal: hanya catat sebagai penambahan saldo, bukan omset/laba
           cur.tambahSaldo += Number(t.nominal) || 0
-        } else if (isSalesCategory(t.kategori, t.keterangan)) {
+        } else if (isServiceCategory(t.kategori, t.keterangan)) {
+          // Semua transaksi jasa konsumen (Transfer, Tarik Tunai, Non-Tunai, Potong Dalam, dll)
+          // → fee-nya adalah keuntungan riil toko tanpa memandang metode bayar
           cur.countTx += 1
           cur.labaAdmin += Number(t.adminFee) || 0
-          cur.omset += Number(t.nominal) || 0
+          // Nominal omset: Tarik Tunai tidak masuk omset (uang diserahkan ke nasabah)
+          if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+            cur.omset += Number(t.nominal) || 0
+          }
         }
       }
     })
@@ -507,15 +540,20 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
           count = Number(dbData.total_transaksi) || 0
           tambah = Number(dbData.tambah_saldo) || 0
         } else {
+          // Fallback: hitung langsung dari raw transactions (snapshot DB belum ada).
+          // Gunakan isServiceCategory agar fee Tarik Tunai & Non-Tunai ikut terhitung.
           let rawOmset = 0, rawLaba = 0, rawCount = 0, rawTambah = 0
           props.transactions.forEach(t => {
              if (t.timestamp.startsWith(dStr) && (t.kasir_id || 'Unknown') === kId) {
                if (isIsiCategory(t.kategori)) {
                  rawTambah += Number(t.nominal) || 0
-               } else if (isSalesCategory(t.kategori, t.keterangan)) {
+               } else if (isServiceCategory(t.kategori, t.keterangan)) {
                  rawCount++
                  rawLaba += Number(t.adminFee) || 0
-                 rawOmset += Number(t.nominal) || 0
+                 // Nominal omset: Tarik Tunai tidak masuk omset (uang diserahkan ke nasabah)
+                 if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                   rawOmset += Number(t.nominal) || 0
+                 }
                }
              }
           })
@@ -609,15 +647,23 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         }
         const current = map.get(key)!
         if (isIsiCategory(t.kategori)) {
+          // Transaksi modal: hanya tambah saldo, bukan laba
           current.tambah_saldo += Number(t.nominal) || 0
-        } else if (isSalesCategory(t.kategori, t.keterangan)) {
+        } else if (isServiceCategory(t.kategori, t.keterangan)) {
+          // Semua transaksi jasa konsumen (Transfer, Tarik Tunai, Non-Tunai, Potong Dalam, dll)
+          // → fee-nya adalah laba riil toko, disimpan ke performa_harian
           current.total_transaksi += 1
           const adminFee = Number(t.admin_fee) || 0
           current.laba_admin += adminFee
           current.laba += adminFee
-          current.omset += Number(t.nominal) || 0
-        } else if (t.kategori === 'Tarik Tunai') {
-          current.pengeluaran += Number(t.nominal) || 0
+          if ((t.kategori || '').toLowerCase() === 'tarik tunai') {
+            // Tarik Tunai: nominal uang yang diserahkan ke nasabah → pengeluaran kas
+            // Fee-nya tetap masuk laba di atas
+            current.pengeluaran += Number(t.nominal) || 0
+          } else {
+            // Transaksi jasa lain → nominal masuk omset toko
+            current.omset += Number(t.nominal) || 0
+          }
         }
       })
 

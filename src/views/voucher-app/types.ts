@@ -123,3 +123,26 @@ export interface LiveNotification {
     subReason?: 'penjualan' | 'audit' | 'restock';
   };
 }
+
+export interface DailySummaryRecord {
+  date: string; // YYYY-MM-DD
+  omzet: number;
+  profit: number;
+  tunai: number;
+  nonTunai: number;
+  quantity: number;
+  shiftCount: number;
+}
+
+export interface MonthlySummaryRecord {
+  monthKey: string; // YYYY-MM
+  monthLabel: string; // e.g. "Oktober 2026"
+  totalOmzet: number;
+  totalProfit: number;
+  totalTunai: number;
+  totalNonTunai: number;
+  totalQuantity: number;
+  daysActive: number;
+  avgDailySales: number;
+  isClosed?: boolean;
+}

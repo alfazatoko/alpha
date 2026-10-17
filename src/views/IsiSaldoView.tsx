@@ -574,17 +574,23 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
             <div className="grid grid-cols-2 gap-2">
               <button 
                 onClick={() => props.setIsiJenis('Saldo Bank')}
-                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all", props.isiJenis === 'Saldo Bank' ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
+                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all", props.isiJenis === 'Saldo Bank' ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
               >
                 <i className="fa-solid fa-building-columns text-sm"></i> 
-                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">SALDO BANK</span>
+                <div className="flex flex-col items-center leading-tight">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-center">SALDO BANK</span>
+                  <span className="text-[7px] font-bold opacity-80 uppercase tracking-tight text-center mt-0.5 whitespace-nowrap">(SALDO APLIKASI DIGITAL)</span>
+                </div>
               </button>
               <button 
                 onClick={() => props.setIsiJenis('Modal Tunai Kasir')}
-                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all", props.isiJenis === 'Modal Tunai Kasir' ? "bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
+                className={cn("py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all", props.isiJenis === 'Modal Tunai Kasir' ? "bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-gray-50 border-gray-200 text-gray-600")}
               >
                 <i className="fa-solid fa-money-bill-wave text-sm"></i> 
-                <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">TUNAI (KASIR)</span>
+                <div className="flex flex-col items-center leading-tight">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-center">SALDO TUNAI</span>
+                  <span className="text-[7.5px] font-bold opacity-80 uppercase tracking-wider text-center mt-0.5">(LACI KASIR)</span>
+                </div>
               </button>
             </div>
           </div>

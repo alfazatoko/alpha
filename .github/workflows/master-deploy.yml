@@ -102,14 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.3.6
-          name: "ALFAZA ALPHA POS v1.3.6"
+          tag_name: v1.3.7
+          name: "ALFAZA ALPHA POS v1.3.7"
           body: |
-            ### Pembaruan Aplikasi v1.3.6
-            - **Rincian Keuangan Laci Kasir:** Menambahkan baris Admin Dalam/Non Tunai pada arus kas hari ini di Beranda, selaras dengan halaman Kas Masuk & Keluar / Laporan.
-            - **Kustomisasi Tombol Kasir (Owner):** Fitur kustomisasi nama tombol dan opsi sembunyikan tombol untuk owner secara realtime.
-            - **Perbaikan Fatal Crash & Autocomplete:** Pengamanan filter pencarian keterangan order kuota.
-            - **Pemisahan Kolom Database:** Pemisahan resmi kolom promo_banners dan presets di Supabase.
+            ### Pembaruan Aplikasi v1.3.7
+            - **Keamanan Pintu Masuk Owner (Owner Gate):** Alur pemulihan Lupa PIN Owner aman via verifikasi Google OAuth dan sinkronisasi cloud Supabase. Menghapus form ubah PIN terbuka di pintu masuk.
+            - **Laporan POS Kasir (Tab Semua):** Pengelompokan transaksi otomatis per-bulan kalender dengan indikator tren perbandingan omzet vs bulan sebelumnya (Naik/Turun/Bulan Pembuka), rincian Tunai/QRIS, serta Top 5 Produk terlaris.
+            - **Pembaruan Laporan Voucher & Performa Kasir:** Optimasi ringkasan rekapitulasi penjualan harian/bulanan voucher dan performa kasir.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

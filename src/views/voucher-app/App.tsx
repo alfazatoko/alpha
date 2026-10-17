@@ -2053,6 +2053,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                       nextCashierName={nextCashier.name}
                       allCashiers={cashiers}
                       userRole={currentUserRole}
+                      activeStoreId={activeStoreId}
                       onOpenHandoverModal={() => setShowHandoverModal(true)}
                     />
                   )}

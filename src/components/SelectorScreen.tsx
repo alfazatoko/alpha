@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Store } from '../types'
+import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 
 interface SelectorScreenProps {
   googleUid: string
@@ -25,16 +27,48 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
 
   // Owner PIN Gate state
   const [showPinModal, setShowPinModal] = useState(false)
+  const [modalStep, setModalStep] = useState<'pin' | 'verify-google' | 'reset-new-pin'>('pin')
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
-  const [showEditOwner, setShowEditOwner] = useState(false)
-  const [editOwnerName, setEditOwnerName] = useState('')
-  const [editOwnerPin, setEditOwnerPin] = useState('')
   const [showPin, setShowPin] = useState(false)
 
-  // Load owner settings from localStorage
+  // Verification & Reset States
+  const [isVerifyingGoogle, setIsVerifyingGoogle] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [showPasswordInput, setShowPasswordInput] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [showNewPin, setShowNewPin] = useState(false)
+  const [isSubmittingNewPin, setIsSubmittingNewPin] = useState(false)
+
+  // Load owner settings from localStorage with fallback
   const getOwnerPin = () => localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000'
   const getOwnerName = () => localStorage.getItem(`alphaPro_${googleUid}_ownerName`) || 'Owner'
+
+  // Fetch owner security data from Supabase
+  const fetchOwnerSecurity = async () => {
+    if (!googleUid) return
+    try {
+      const { data, error: secError } = await supabase
+        .from('owner_security')
+        .select('*')
+        .eq('user_id', googleUid)
+        .maybeSingle()
+
+      if (!secError && data) {
+        if (data.pin) {
+          localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, data.pin)
+        }
+        if (data.owner_name) {
+          localStorage.setItem(`alphaPro_${googleUid}_ownerName`, data.owner_name)
+        }
+      }
+    } catch (e) {
+      // Graceful fallback to localStorage
+      console.warn('owner_security sync fallback to local:', e)
+    }
+  }
 
   // Fetch stores from Supabase
   const fetchStores = async () => {
@@ -59,6 +93,20 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   useEffect(() => {
     if (googleUid) {
       fetchStores()
+      fetchOwnerSecurity()
+
+      // Deteksi jika baru kembali dari verifikasi Google OAuth untuk reset PIN
+      const isResetPending = sessionStorage.getItem('alphaPro_pending_owner_pin_reset') === 'true'
+      const resetUid = sessionStorage.getItem('alphaPro_reset_owner_uid')
+      if (isResetPending && resetUid === googleUid) {
+        sessionStorage.removeItem('alphaPro_pending_owner_pin_reset')
+        sessionStorage.removeItem('alphaPro_reset_owner_uid')
+        setNewPin('')
+        setConfirmPin('')
+        setPinError('')
+        setModalStep('reset-new-pin')
+        setShowPinModal(true)
+      }
     }
   }, [googleUid])
 
@@ -124,7 +172,7 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   const handleOwnerClick = () => {
     setPinInput('')
     setPinError('')
-    setShowEditOwner(false)
+    setModalStep('pin')
     setShowPin(false)
     setShowPinModal(true)
   }
@@ -145,30 +193,135 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
     }
   }
 
-  const handleSaveOwnerSettings = () => {
-    if (!editOwnerPin || editOwnerPin.length === 0) {
-      setPinError('PIN tidak boleh kosong!')
+  // Verifikasi ulang identitas via Google OAuth
+  const handleGoogleVerify = async () => {
+    try {
+      setIsVerifyingGoogle(true)
+      setPinError('')
+      
+      sessionStorage.setItem('alphaPro_pending_owner_pin_reset', 'true')
+      sessionStorage.setItem('alphaPro_reset_owner_uid', googleUid)
+
+      const redirectTo = Capacitor.isNativePlatform() 
+        ? 'com.alfazacell.alpha://login' 
+        : window.location.origin
+
+      const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          skipBrowserRedirect: Capacitor.isNativePlatform(),
+          queryParams: {
+            prompt: 'select_account'
+          }
+        }
+      })
+
+      if (oauthErr) throw oauthErr
+
+      if (Capacitor.isNativePlatform() && data?.url) {
+        await Browser.open({ url: data.url })
+      }
+    } catch (err: any) {
+      console.error('Error Google OAuth verify:', err)
+      setPinError(err.message || 'Gagal memverifikasi akun Google')
+      sessionStorage.removeItem('alphaPro_pending_owner_pin_reset')
+      sessionStorage.removeItem('alphaPro_reset_owner_uid')
+    } finally {
+      setIsVerifyingGoogle(false)
+    }
+  }
+
+  // Verifikasi alternatif instan via Password Email akun jika tersedia
+  const handlePasswordVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!passwordInput.trim()) {
+      setPinError('Password tidak boleh kosong')
       return
     }
-    if (editOwnerPin.length < 4) {
+    if (!googleEmail) {
+      setPinError('Email terdaftar tidak ditemukan')
+      return
+    }
+
+    try {
+      setPasswordLoading(true)
+      setPinError('')
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: googleEmail,
+        password: passwordInput.trim(),
+      })
+
+      if (authErr) {
+        throw new Error('Password akun tidak cocok. Silakan coba lagi atau gunakan tombol Verifikasi Akun Google.')
+      }
+
+      // Password cocok! Masuk ke pembuatan PIN baru
+      setPasswordInput('')
+      setShowPasswordInput(false)
+      setNewPin('')
+      setConfirmPin('')
+      setPinError('')
+      setModalStep('reset-new-pin')
+    } catch (err: any) {
+      setPinError(err.message || 'Verifikasi password gagal')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
+  // Simpan PIN baru setelah terverifikasi
+  const handleSaveNewPin = async () => {
+    if (!newPin || newPin.length === 0) {
+      setPinError('PIN baru tidak boleh kosong!')
+      return
+    }
+    if (newPin.length < 4) {
       setPinError('PIN minimal 4 digit!')
       return
     }
-    if (editOwnerPin.length > 8) {
+    if (newPin.length > 8) {
       setPinError('PIN maksimal 8 digit!')
       return
     }
-    localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, editOwnerPin)
-    localStorage.setItem(`alphaPro_${googleUid}_ownerName`, editOwnerName.trim() || 'Owner')
-    setPinError('')
-    setShowEditOwner(false)
-  }
+    if (newPin !== confirmPin) {
+      setPinError('Konfirmasi PIN tidak cocok!')
+      return
+    }
 
-  const handleOpenEditOwner = () => {
-    setEditOwnerName(getOwnerName())
-    setEditOwnerPin(getOwnerPin())
-    setPinError('')
-    setShowEditOwner(true)
+    try {
+      setIsSubmittingNewPin(true)
+      setPinError('')
+
+      const currentName = getOwnerName()
+
+      // 1. Simpan ke local cache
+      localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, newPin)
+
+      // 2. Simpan ke Supabase table owner_security
+      try {
+        await supabase.from('owner_security').upsert({
+          user_id: googleUid,
+          email: googleEmail || '',
+          owner_name: currentName,
+          pin: newPin,
+          updated_at: new Date().toISOString()
+        })
+      } catch (cloudErr) {
+        console.warn('Gagal sync owner_security ke cloud, tersimpan lokal:', cloudErr)
+      }
+
+      // 3. Masuk ke Panel Owner
+      setShowPinModal(false)
+      setModalStep('pin')
+      setNewPin('')
+      setConfirmPin('')
+      onSelectRole('owner', 'all')
+    } catch (err: any) {
+      setPinError(err.message || 'Gagal menyimpan PIN baru')
+    } finally {
+      setIsSubmittingNewPin(false)
+    }
   }
 
   return (
@@ -385,19 +538,19 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
         </p>
       </div>
 
-      {/* ===== PIN MODAL OVERLAY ===== */}
+      {/* ===== PIN MODAL OVERLAY (SECURE 3-STEP OWNER GATE) ===== */}
       {showPinModal && (
         <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-start md:items-center justify-center p-4 pt-16 md:pt-4 overflow-y-auto pb-40 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] p-6 w-full max-w-[320px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300 border border-gray-100 m-auto mt-4 md:m-auto">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-[340px] shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300 border border-gray-100 m-auto mt-4 md:m-auto">
             
-            {!showEditOwner ? (
-              /* --- PIN Entry Mode --- */
+            {/* STEP 1: NORMAL PIN ENTRY */}
+            {modalStep === 'pin' && (
               <>
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
                   <i className="fa-solid fa-lock text-white text-xl"></i>
                 </div>
-                <h3 className="font-black text-[12px] uppercase tracking-widest text-gray-900 mb-1">Masuk Panel Owner</h3>
-                <p className="text-[9px] font-bold text-gray-400 mb-5 uppercase tracking-tight">
+                <h3 className="font-black text-[13px] uppercase tracking-widest text-gray-900 mb-1">Masuk Panel Owner</h3>
+                <p className="text-[10px] font-bold text-gray-400 mb-5 uppercase tracking-tight">
                   Halo, {getOwnerName()}! Masukkan PIN Anda.
                 </p>
                 
@@ -418,7 +571,7 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowPin(!showPin)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
                     >
                       <i className={showPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
                     </button>
@@ -430,65 +583,196 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
                   )}
                 </div>
 
-                <div className="flex gap-2 w-full mb-3">
+                <div className="flex gap-2 w-full mb-2">
                   <button 
                     onClick={() => setShowPinModal(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all border border-gray-200/50"
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all border border-gray-200/50 cursor-pointer"
                   >
                     Batal
                   </button>
                   <button 
                     onClick={handlePinSubmit}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer"
                     style={{ color: '#ffffff' }}
                   >
                     Masuk
                   </button>
                 </div>
 
+                {/* Tombol Lupa PIN (Bukan edit PIN bebas) */}
                 <button
-                  onClick={handleOpenEditOwner}
-                  className="text-[8px] font-bold text-gray-400 hover:text-blue-600 uppercase tracking-widest transition-colors flex items-center gap-1"
+                  type="button"
+                  onClick={() => {
+                    setModalStep('verify-google')
+                    setPinError('')
+                    setPasswordInput('')
+                    setShowPasswordInput(false)
+                  }}
+                  className="text-[9px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors flex items-center gap-1.5 cursor-pointer mt-2"
                 >
-                  <i className="fa-solid fa-gear text-[7px]"></i> Edit Nama / PIN Owner
+                  <i className="fa-solid fa-shield-halved text-[9px] text-blue-500"></i>
+                  Lupa PIN Owner?
                 </button>
               </>
-            ) : (
-              /* --- Edit Owner Mode --- */
+            )}
+
+            {/* STEP 2: VERIFIKASI IDENTITAS VIA GOOGLE OWNER */}
+            {modalStep === 'verify-google' && (
               <>
-                <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mb-3 shadow-inner border border-amber-100">
-                  <i className="fa-solid fa-user-pen text-lg"></i>
+                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3 shadow-inner border border-blue-100">
+                  <i className="fa-brands fa-google text-2xl text-blue-600"></i>
                 </div>
-                <h3 className="font-black text-[11px] uppercase tracking-widest text-gray-900 mb-1">Edit Owner</h3>
-                <p className="text-[9px] font-bold text-gray-400 mb-4 uppercase tracking-tight">Ubah nama dan PIN panel owner</p>
+                <h3 className="font-black text-[12px] uppercase tracking-widest text-gray-900 mb-1">
+                  Verifikasi Identitas Owner
+                </h3>
+                <p className="text-[9px] font-bold text-gray-400 mb-4 uppercase tracking-tight">
+                  Untuk keamanan toko, lakukan verifikasi menggunakan Akun Google Owner terdaftar:
+                </p>
+
+                {/* Email Info Card */}
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 mb-3 text-left flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-blue-600 shadow-xs shrink-0">
+                    <i className="fa-solid fa-envelope text-xs"></i>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Akun Terdaftar</p>
+                    <p className="text-[11px] font-black text-slate-800 truncate">{googleEmail || 'Owner Google Account'}</p>
+                  </div>
+                  <span className="text-[8px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full shrink-0">
+                    Owner
+                  </span>
+                </div>
+
+                {/* Peringatan Akses */}
+                <div className="w-full bg-amber-50/80 border border-amber-200/60 p-2.5 rounded-xl text-left mb-4">
+                  <p className="text-[8.5px] font-semibold text-amber-800 leading-relaxed flex items-start gap-1.5">
+                    <i className="fa-solid fa-triangle-exclamation text-amber-600 text-[10px] mt-0.5 shrink-0"></i>
+                    <span>Hanya pemilik akun Google ini yang dapat mereset PIN. Kasir tidak memiliki izin untuk membuka panel ini.</span>
+                  </p>
+                </div>
+
+                {pinError && (
+                  <p className="text-[9px] font-black text-rose-500 mb-3 flex items-center justify-center gap-1 animate-shake">
+                    <i className="fa-solid fa-circle-xmark"></i> {pinError}
+                  </p>
+                )}
+
+                {/* Tombol Utama: Verifikasi Google OAuth */}
+                <button
+                  type="button"
+                  onClick={handleGoogleVerify}
+                  disabled={isVerifyingGoogle}
+                  className="w-full bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 hover:border-blue-500 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer mb-3"
+                >
+                  {isVerifyingGoogle ? (
+                    <i className="fa-solid fa-circle-notch fa-spin text-blue-600 text-xs"></i>
+                  ) : (
+                    <i className="fa-brands fa-google text-red-500 text-xs"></i>
+                  )}
+                  <span>{isVerifyingGoogle ? 'Menghubungkan ke Google...' : 'Verifikasi Akun Google'}</span>
+                </button>
+
+                {/* Alternatif: Verifikasi Password Akun (jika ada) */}
+                <div className="w-full mb-3">
+                  {!showPasswordInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordInput(true)}
+                      className="text-[8.5px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Atau verifikasi dengan password email &rsaquo;
+                    </button>
+                  ) : (
+                    <form onSubmit={handlePasswordVerify} className="space-y-2 pt-2 border-t border-slate-100 animate-in fade-in">
+                      <input
+                        type="password"
+                        value={passwordInput}
+                        onChange={e => setPasswordInput(e.target.value)}
+                        placeholder="Masukkan Password Akun"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-blue-500 text-center"
+                      />
+                      <button
+                        type="submit"
+                        disabled={passwordLoading}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm active:scale-95 cursor-pointer"
+                      >
+                        {passwordLoading ? 'Memeriksa...' : 'Konfirmasi Password'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+                {/* Tombol Kembali */}
+                <button
+                  type="button"
+                  onClick={() => { setModalStep('pin'); setPinError(''); setShowPasswordInput(false); }}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all cursor-pointer"
+                >
+                  Kembali ke Input PIN
+                </button>
+              </>
+            )}
+
+            {/* STEP 3: BUAT PIN BARU SETELAH TERVERIFIKASI */}
+            {modalStep === 'reset-new-pin' && (
+              <>
+                <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3 shadow-inner border border-emerald-100">
+                  <i className="fa-solid fa-key text-xl text-emerald-600"></i>
+                </div>
+                <h3 className="font-black text-[12px] uppercase tracking-widest text-gray-900 mb-1">
+                  Atur PIN Baru Owner
+                </h3>
+                
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[9px] font-bold px-3 py-1.5 rounded-xl mb-3 flex items-center justify-center gap-1.5 w-full">
+                  <i className="fa-solid fa-circle-check text-emerald-600 text-xs"></i>
+                  <span>Identitas Google Berhasil Diverifikasi!</span>
+                </div>
+
+                <p className="text-[9px] font-bold text-gray-400 mb-4 uppercase tracking-tight">
+                  Silakan buat PIN baru (4 - 8 digit) untuk akses Panel Owner:
+                </p>
 
                 <div className="w-full space-y-3 mb-4">
                   <div>
-                    <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1 text-left ml-1">Nama Owner</label>
-                    <input
-                      type="text"
-                      value={editOwnerName}
-                      onChange={e => setEditOwnerName(e.target.value)}
-                      placeholder="Contoh: Admin Utama"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:border-blue-500 transition-all"
-                      style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
-                    />
+                    <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1 text-left ml-1">PIN Baru (4-8 Digit)</label>
+                    <div className="relative">
+                      <input
+                        type={showNewPin ? "text" : "password"}
+                        inputMode="numeric"
+                        maxLength={8}
+                        value={newPin}
+                        onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                        placeholder="••••"
+                        autoFocus
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold tracking-widest text-center outline-none focus:border-blue-500 transition-all"
+                        style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPin(!showNewPin)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+                      >
+                        <i className={showNewPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
+                      </button>
+                    </div>
                   </div>
+
                   <div>
-                    <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1 text-left ml-1">PIN Baru (min 4 digit)</label>
+                    <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1 text-left ml-1">Konfirmasi PIN Baru</label>
                     <input
-                      type="text"
+                      type={showNewPin ? "text" : "password"}
                       inputMode="numeric"
                       maxLength={8}
-                      value={editOwnerPin}
-                      onChange={e => setEditOwnerPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="0000"
+                      value={confirmPin}
+                      onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="••••"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold tracking-widest text-center outline-none focus:border-blue-500 transition-all"
                       style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                     />
                   </div>
+
                   {pinError && (
-                    <p className="text-[9px] font-black text-rose-500 flex items-center justify-center gap-1">
+                    <p className="text-[9px] font-black text-rose-500 flex items-center justify-center gap-1 animate-shake">
                       <i className="fa-solid fa-circle-xmark"></i> {pinError}
                     </p>
                   )}
@@ -496,21 +780,28 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
 
                 <div className="flex gap-2 w-full">
                   <button 
-                    onClick={() => { setShowEditOwner(false); setPinError('') }}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all border border-gray-200/50"
+                    onClick={() => { setShowPinModal(false); setModalStep('pin'); setPinError(''); }}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all border border-gray-200/50 cursor-pointer"
                   >
-                    Kembali
+                    Batal
                   </button>
                   <button 
-                    onClick={handleSaveOwnerSettings}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all"
+                    onClick={handleSaveNewPin}
+                    disabled={isSubmittingNewPin}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     style={{ color: '#ffffff' }}
                   >
-                    Simpan
+                    {isSubmittingNewPin ? (
+                      <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
+                    ) : (
+                      <i className="fa-solid fa-check text-xs"></i>
+                    )}
+                    <span>{isSubmittingNewPin ? 'Menyimpan...' : 'Simpan & Masuk'}</span>
                   </button>
                 </div>
               </>
             )}
+
           </div>
         </div>
       )}
