@@ -102,14 +102,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.3.8
-          name: "ALFAZA ALPHA POS v1.3.8"
+          tag_name: v1.3.9
+          name: "ALFAZA ALPHA POS v1.3.9"
           body: |
-            ### Pembaruan Aplikasi v1.3.8
+            ### Pembaruan Aplikasi v1.3.9
+            - **Perbesaran Form Login Kasir:** Kolom pilihan pengguna, input PIN, tombol MASUK, dan item nama kasir diperbesar signifikan (tinggi h-14, font tebal, garis pemisah jelas) untuk kenyamanan dan kemudahan akses.
             - **Sistem Stok Terpusat Voucher (1 Toko = 1 Pembukuan):** Seluruh kasir berbagi stok fisik terpusat tanpa reset ke 0 saat pergantian shift. Hitungan murni voucher terjual & uang tunai hasil penjualan (modal laci dipisah fisik).
             - **Validasi Silang Pagi & Malam:** Pencegahan selisih gaib dengan validasi stok fisik buka toko pagi terhadap closing semalam, disertai modal peringatan wajib jika ada selisih.
             - **Privasi Data Kasir:** Kasir reguler hanya melihat riwayat transaksi dan rekap shift miliknya sendiri, akses multi-shift toko khusus untuk Owner.
-            - **Optimalisasi Layar & Tombol Navigasi:** Perbaikan safe padding laporan bulanan agar tidak tertutup tombol navigasi melayang, serta perbesaran input login kedua dan garis pemisah nama kasir.
+            - **Optimalisasi Layar & Tombol Navigasi:** Perbaikan safe padding laporan bulanan agar tidak tertutup tombol navigasi melayang.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

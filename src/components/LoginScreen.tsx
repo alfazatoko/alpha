@@ -442,20 +442,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 } ${
                   isAbsenShowing 
                     ? '!h-9 !py-2 !px-3 !rounded-xl !text-xs' 
-                    : '!h-12 !py-2.5 !px-4 !rounded-2xl !text-sm sm:!text-base'
+                    : '!h-14 !py-3 !px-4 !rounded-2xl !text-base sm:!text-lg font-bold border-slate-300 shadow-sm'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className={`rounded-full flex items-center justify-center shrink-0 ${
                     selectedUser 
                       ? 'bg-blue-100 text-blue-600' 
                       : 'bg-slate-200 text-slate-400'
-                  } ${isAbsenShowing ? 'w-5 h-5 text-[10px]' : 'w-7 h-7 text-xs'}`}>
+                  } ${isAbsenShowing ? 'w-5 h-5 text-[10px]' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
                     <i className="fa-solid fa-user"></i>
                   </div>
-                  <span className={`font-bold truncate ${
-                    selectedUser && kasirList[selectedUser] ? 'text-slate-800' : 'text-slate-400 font-medium'
-                  }`}>
+                  <span className={`truncate ${
+                    selectedUser && kasirList[selectedUser] ? 'text-slate-900 font-black' : 'text-slate-400 font-medium'
+                  } ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}>
                     {selectedUser && kasirList[selectedUser] ? kasirList[selectedUser].name : 'Pilih Pengguna'}
                   </span>
                   {selectedUser && kasirList[selectedUser] && (
@@ -509,23 +509,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                               setIsDropdownOpen(false)
                               setError('')
                             }}
-                            className={`w-full text-left flex items-center justify-between transition-colors cursor-pointer border-b border-slate-200/80 last:border-b-0 ${
-                              isAbsenShowing ? 'px-3 py-2.5' : 'px-4 py-3'
+                            className={`w-full text-left flex items-center justify-between transition-colors cursor-pointer border-b border-slate-200/90 last:border-b-0 ${
+                              isAbsenShowing ? 'px-3 py-2' : 'px-4 py-3.5 sm:py-4'
                             } ${
-                              isSelected ? 'bg-blue-50/80' : 'bg-white hover:bg-slate-50 active:bg-blue-50/40'
+                              isSelected ? 'bg-blue-50/90' : 'bg-white hover:bg-slate-50 active:bg-blue-50/50'
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-3.5 min-w-0">
                               <div className={`rounded-full flex items-center justify-center font-bold shrink-0 shadow-sm ${
                                 isSelected 
                                   ? 'bg-blue-600 text-white' 
                                   : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 border border-blue-200/60'
-                              } ${isAbsenShowing ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
+                              } ${isAbsenShowing ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-xs sm:w-10 sm:h-10 sm:text-sm'}`}>
                                 <i className="fa-solid fa-user"></i>
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className={`block font-bold text-slate-800 truncate ${
+                                  <span className={`block font-extrabold text-slate-900 truncate ${
                                     isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'
                                   }`}>
                                     {acc.name}
@@ -671,7 +671,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               </label>
               <div className="relative">
                 <i className={`fa-solid fa-lock absolute text-gray-400 pointer-events-none transition-all duration-300 ${
-                  isAbsenShowing ? 'left-3 top-1/2 -translate-y-1/2 text-xs' : 'left-3.5 top-1/2 -translate-y-1/2 text-sm'
+                  isAbsenShowing ? 'left-3 top-1/2 -translate-y-1/2 text-xs' : 'left-4 top-1/2 -translate-y-1/2 text-sm sm:text-base'
                 }`}></i>
                 <input
                   type={showPin ? "text" : "password"}
@@ -682,7 +682,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                   className={`login-input tracking-wider transition-all duration-300 ${
                     isAbsenShowing 
                       ? '!py-2 !pl-8 !pr-9 !text-xs !rounded-xl !h-9' 
-                      : '!py-3 !pl-10 !pr-10 !text-sm sm:!text-base !rounded-2xl !h-12 tracking-widest font-bold'
+                      : '!py-3.5 !pl-11 !pr-11 !text-base sm:!text-lg !rounded-2xl !h-14 tracking-widest font-black border-slate-300 shadow-sm'
                   }`}
                   inputMode="numeric"
                 />
@@ -690,11 +690,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                   type="button"
                   onClick={() => setShowPin(!showPin)}
                   className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer ${
-                    isAbsenShowing ? 'right-2.5' : 'right-3'
+                    isAbsenShowing ? 'right-2.5' : 'right-3.5'
                   }`}
                   title={showPin ? "Sembunyikan PIN" : "Tampilkan PIN"}
                 >
-                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} ${isAbsenShowing ? 'text-xs' : 'text-sm'}`}></i>
+                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
                 </button>
               </div>
             </div>
@@ -720,10 +720,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* Submit Button */}
           <button 
             type="submit" 
-            className={`login-btn flex items-center justify-center gap-2 transition-all duration-300 ${
+            className={`login-btn flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer ${
               isAbsenShowing 
                 ? '!py-2 sm:!py-2.5 !text-xs !rounded-xl !mt-1' 
-                : '!py-3 sm:!py-3.5 !text-sm sm:!text-base !rounded-2xl !mt-2 font-black tracking-wider shadow-lg shadow-blue-500/25'
+                : '!py-3.5 sm:!py-4 !text-base sm:!text-lg !rounded-2xl !mt-3 font-black tracking-widest shadow-xl shadow-blue-500/30 active:scale-98'
             }`}
           >
             <i className={`fa-solid fa-arrow-right-to-bracket ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
