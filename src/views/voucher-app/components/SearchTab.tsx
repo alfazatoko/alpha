@@ -66,7 +66,7 @@ export default function SearchTab({
   };
 
   return (
-    <div className="space-y-4 pb-8" id="search-tab-container">
+    <div className="space-y-4 pb-32 sm:pb-36" id="search-tab-container">
       {/* Search Input Box */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 dark:text-slate-400" />

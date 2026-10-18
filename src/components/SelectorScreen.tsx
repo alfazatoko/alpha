@@ -41,6 +41,7 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   const [confirmPin, setConfirmPin] = useState('')
   const [showNewPin, setShowNewPin] = useState(false)
   const [isSubmittingNewPin, setIsSubmittingNewPin] = useState(false)
+  const [isCheckingPin, setIsCheckingPin] = useState(false)
 
   // Load owner settings from localStorage with fallback
   const getOwnerPin = () => localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000'
@@ -93,7 +94,6 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
   useEffect(() => {
     if (googleUid) {
       fetchStores()
-      fetchOwnerSecurity()
 
       // Deteksi jika baru kembali dari verifikasi Google OAuth untuk reset PIN
       const isResetPending = sessionStorage.getItem('alphaPro_pending_owner_pin_reset') === 'true'
@@ -107,6 +107,55 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
         setModalStep('reset-new-pin')
         setShowPinModal(true)
       }
+    }
+  }, [googleUid])
+
+  // Realtime PIN Sync: fetch PIN saat mount + pantau perubahan dari HP lain secara instan
+  useEffect(() => {
+    if (!googleUid) return
+
+    // Fetch PIN terbaru dari cloud saat komponen pertama dibuka
+    fetchOwnerSecurity()
+
+    // Daftarkan Realtime listener — jika PIN diubah di HP lain, HP ini langsung update
+    const ownerPinChannel = supabase
+      .channel(`owner_security_pin_${googleUid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'owner_security',
+          filter: `user_id=eq.${googleUid}`
+        },
+        (payload: any) => {
+          const newData = payload.new
+          if (newData) {
+            if (newData.pin) {
+              localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, newData.pin)
+              console.log('[PIN Sync] PIN Owner diperbarui dari perangkat lain secara real-time.')
+            }
+            if (newData.owner_name) {
+              localStorage.setItem(`alphaPro_${googleUid}_ownerName`, newData.owner_name)
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    // Listener saat pengguna kembali ke aplikasi / layar dinyalakan
+    const handleAppFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOwnerSecurity()
+      }
+    }
+    window.addEventListener('focus', handleAppFocus)
+    document.addEventListener('visibilitychange', handleAppFocus)
+
+    return () => {
+      supabase.removeChannel(ownerPinChannel)
+      window.removeEventListener('focus', handleAppFocus)
+      document.removeEventListener('visibilitychange', handleAppFocus)
     }
   }, [googleUid])
 
@@ -175,22 +224,56 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
     setModalStep('pin')
     setShowPin(false)
     setShowPinModal(true)
+    fetchOwnerSecurity() // Segarkan PIN terbaru dari cloud saat modal dibuka
   }
 
-  const handlePinSubmit = () => {
+  const handlePinSubmit = async () => {
     if (!pinInput || pinInput.length === 0) {
       setPinError('PIN tidak boleh kosong!')
       return
     }
-    const correctPin = getOwnerPin()
-    if (pinInput === correctPin) {
+
+    // 1. Cek dari local cache (sangat cepat 0ms)
+    const localPin = getOwnerPin()
+    if (pinInput === localPin) {
       setShowPinModal(false)
       setPinInput('')
       onSelectRole('owner', 'all')
-    } else {
-      setPinError('PIN salah! Coba lagi.')
-      setPinInput('')
+      return
     }
+
+    // 2. Jika local cache tidak cocok, verifikasi langsung ke database cloud
+    // (Penting: jika HP 2 baru dinyalakan atau ada jeda realtime, PIN baru tetap langsung diterima)
+    if (googleUid) {
+      try {
+        setIsCheckingPin(true)
+        const { data, error: cloudErr } = await supabase
+          .from('owner_security')
+          .select('pin, owner_name')
+          .eq('user_id', googleUid)
+          .maybeSingle()
+
+        if (!cloudErr && data?.pin) {
+          localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, data.pin)
+          if (data.owner_name) {
+            localStorage.setItem(`alphaPro_${googleUid}_ownerName`, data.owner_name)
+          }
+          if (pinInput === data.pin) {
+            setShowPinModal(false)
+            setPinInput('')
+            onSelectRole('owner', 'all')
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('Verifikasi online PIN fallback error:', e)
+      } finally {
+        setIsCheckingPin(false)
+      }
+    }
+
+    setPinError('PIN salah! Coba lagi.')
+    setPinInput('')
   }
 
   // Verifikasi ulang identitas via Google OAuth
@@ -592,10 +675,18 @@ export const SelectorScreen: React.FC<SelectorScreenProps> = ({
                   </button>
                   <button 
                     onClick={handlePinSubmit}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer"
+                    disabled={isCheckingPin}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     style={{ color: '#ffffff' }}
                   >
-                    Masuk
+                    {isCheckingPin ? (
+                      <>
+                        <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
+                        <span>Memeriksa...</span>
+                      </>
+                    ) : (
+                      'Masuk'
+                    )}
                   </button>
                 </div>
 

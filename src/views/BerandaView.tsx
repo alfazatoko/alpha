@@ -1094,8 +1094,9 @@ const PengaturanPanel: React.FC<{
   onConfirm: (t: string, m: string, c: () => void) => void,
   activeStoreId: string,
   onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>,
-  kasirList?: Record<string, KasirAccount>
-}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId, onSaveCashierSelf, kasirList }) => {
+  kasirList?: Record<string, KasirAccount>,
+  userId?: string
+}> = ({ transactions, absensiList, storeName, showToast, onConfirm, activeStoreId, onSaveCashierSelf, kasirList, userId }) => {
   if (activeStoreId === 'all') {
     return (
       <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
@@ -1158,8 +1159,11 @@ const PengaturanPanel: React.FC<{
     if (!ownerPinNew || ownerPinNew.length < 4) return showToast('PIN baru minimal 4 digit!');
     if (ownerPinNew !== ownerPinConfirm) return showToast('Konfirmasi PIN tidak cocok!');
     
+    // Verifikasi PIN lama: coba dari kasirList, fallback ke localStorage
     const ownerAcc = kasirList?.['owner'];
-    if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return showToast('PIN lama tidak sesuai!');
+    const localPin = userId ? localStorage.getItem(`alphaPro_${userId}_ownerPin`) || '0000' : '0000'
+    const correctOldPin = (ownerAcc?.pin) || localPin
+    if (correctOldPin && correctOldPin !== ownerPinOld) return showToast('PIN lama tidak sesuai!');
     
     if (onSaveCashierSelf) {
       await onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
@@ -5091,6 +5095,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
                     onSaveCashierSelf={props.onSaveCashierSelf}
                     kasirList={props.kasirList}
+                    userId={props.userId}
                   />
                 </div>
               )}
@@ -6377,6 +6382,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all')}
               onSaveCashierSelf={props.onSaveCashierSelf}
               kasirList={props.kasirList}
+              userId={props.userId}
             />
           )}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { getLocalDateString, getShiftInfo, getActiveShifts, checkShiftLateness, APP_VERSION, isVersionSupported } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
@@ -55,7 +55,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   kasirListOverride, 
   financialSettings: propFinancialSettings 
 }) => {
-  const [selectedUser, setSelectedUser] = useState('')
+  const [selectedUser, setSelectedUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storeId && storeId !== 'all' ? `alphaPro_${storeId}_last_selected_user` : 'alphaPro_last_selected_user')
+      return saved || ''
+    } catch {
+      return ''
+    }
+  })
   const [pin, setPin] = useState('')
   const [showPin, setShowPin] = useState(true)
   const [error, setError] = useState('')
@@ -68,6 +75,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [currentTimeStr, setCurrentTimeStr] = useState(() => 
     new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   )
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [searchCashier, setSearchCashier] = useState('')
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Live financial & shift settings synced with Supabase Realtime
   const [liveFinancialSettings, setLiveFinancialSettings] = useState<Record<string, string>>(() => {
@@ -227,6 +237,33 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   }, [kasirListOverride])
 
+  // Save last selected cashier for fast repeat login
+  useEffect(() => {
+    if (selectedUser) {
+      try {
+        if (storeId && storeId !== 'all') {
+          localStorage.setItem(`alphaPro_${storeId}_last_selected_user`, selectedUser)
+        }
+        localStorage.setItem('alphaPro_last_selected_user', selectedUser)
+      } catch (e) {}
+    }
+  }, [selectedUser, storeId])
+
+  // Close custom dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isDropdownOpen])
+
   // Check if PIN is enabled from localStorage
   useEffect(() => {
     const enabled = localStorage.getItem('alphaPro_isPinEnabled')
@@ -234,6 +271,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       setIsPinEnabled(false)
     }
   }, [])
+
+  // Check if specific cashier has already clocked in today
+  const isCashierAbsenToday = (userId: string) => {
+    const today = getLocalDateString()
+    const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
+    try {
+      const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
+      const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+      return Boolean(storeAbsens[userId]?.date === today || legacyAbsens[userId]?.date === today)
+    } catch {
+      return false
+    }
+  }
+
+  // Filter non-owner cashiers
+  const cashierEntries = useMemo(() => {
+    return Object.entries(kasirList).filter(([_id, acc]) => acc.role !== 'owner')
+  }, [kasirList])
+
+  // Filtered cashier list for dropdown
+  const filteredCashiers = useMemo(() => {
+    if (!searchCashier.trim()) return cashierEntries
+    const q = searchCashier.toLowerCase()
+    return cashierEntries.filter(([_id, acc]) => (acc.name || '').toLowerCase().includes(q))
+  }, [cashierEntries, searchCashier])
+
+  // Is attendance actively shown on screen?
+  // When active (login 1 / belum absen): compact layout so everything fits on screen.
+  // When inactive (login 2 / sudah absen): enlarged layout for comfortable viewing and faster selection.
+  const isAbsenShowing = Boolean(
+    selectedUser && 
+    kasirList[selectedUser]?.role !== 'owner' && 
+    isAbsenFeatureActive && 
+    !hasAbsenToday
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -316,47 +388,183 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const effectiveStorePhoto = storePhoto || (storeId && storeId !== 'all' ? localStorage.getItem(`alphaPro_${storeId}_store_photo`) : null) || localStorage.getItem('alphaPro_store_photo') || null
 
   return (
-    <div className="login-screen !py-2 !px-3 sm:!py-4 sm:!px-4 min-h-[100dvh]">
-      <div className={`login-card ${isShaking ? 'shake' : ''} !py-3.5 !px-4 sm:!py-4 sm:!px-6 !max-w-[390px] shadow-xl`}>
+    <div className="login-screen !py-2 !px-3 sm:!py-4 sm:!px-4 min-h-[100dvh] flex items-center justify-center">
+      <div 
+        className={`login-card ${isShaking ? 'shake' : ''} shadow-xl transition-all duration-300 ease-in-out ${
+          isAbsenShowing 
+            ? '!py-3.5 !px-4 sm:!py-4 sm:!px-6 !max-w-[390px] !rounded-2xl' 
+            : '!py-6 !px-6 sm:!py-7 sm:!px-8 !max-w-[425px] !rounded-3xl'
+        }`}
+      >
         {/* Logo Toko & Header */}
-        <div className="login-header !mb-2">
-          <div className="w-11 h-11 mx-auto mb-1 flex items-center justify-center">
+        <div className={`login-header transition-all duration-300 ${isAbsenShowing ? '!mb-2' : '!mb-4'}`}>
+          <div className={`mx-auto mb-1.5 flex items-center justify-center transition-all duration-300 ${isAbsenShowing ? 'w-11 h-11' : 'w-14 h-14'}`}>
             <img 
               src={effectiveStorePhoto || "/logo_icon.png"} 
               onError={(e) => { (e.currentTarget.src = '/logo_icon.png') }} 
               alt={storeName || "Logo Toko"} 
-              className="w-11 h-11 rounded-xl object-cover shadow-sm border border-slate-100" 
+              className={`object-cover shadow-sm border border-slate-100 transition-all duration-300 ${
+                isAbsenShowing ? 'w-11 h-11 rounded-xl' : 'w-14 h-14 rounded-2xl shadow-md'
+              }`} 
             />
           </div>
-          <h1 className="login-title !text-base sm:!text-lg !leading-tight font-black tracking-tight">
+          <h1 className={`login-title font-black tracking-tight leading-tight transition-all duration-300 ${
+            isAbsenShowing ? '!text-base sm:!text-lg' : '!text-xl sm:!text-2xl'
+          }`}>
             {storeName ? storeName.toUpperCase() : 'ALPHA'} <span className="login-title-accent">{storeName ? '' : 'Pro'}</span>
           </h1>
-          <p className="login-subtitle !text-[11px] !mt-0.5 text-slate-500 font-semibold leading-tight">
+          <p className={`login-subtitle text-slate-500 font-semibold leading-tight transition-all duration-300 ${
+            isAbsenShowing ? '!text-[11px] !mt-0.5' : '!text-xs sm:!text-[13px] !mt-1'
+          }`}>
             {storeName ? 'Login Kasir' : 'Pembukuan Agen brilink & Konter'}
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="login-form !gap-2 sm:!gap-2.5">
-          {/* User Select */}
-          <div className="login-field">
-            <label className="login-label !text-[11px] !mb-1 font-bold text-slate-700">Pilih Pengguna</label>
-            <div className="login-select-wrapper">
-              <select
-                value={selectedUser}
-                onChange={(e) => { setSelectedUser(e.target.value); setError('') }}
-                className="login-select !py-2 !px-3 !text-xs !rounded-xl !h-9"
+        <form onSubmit={handleSubmit} className={`login-form transition-all duration-300 ${isAbsenShowing ? '!gap-2 sm:!gap-2.5' : '!gap-3.5 sm:!gap-4'}`}>
+          {/* User Select (Custom Dropdown with borders and larger text) */}
+          <div className="login-field relative" ref={dropdownRef}>
+            <label className={`login-label font-bold text-slate-700 transition-all duration-300 ${
+              isAbsenShowing ? '!text-[11px] !mb-1' : '!text-xs sm:!text-[13px] !mb-1.5'
+            }`}>
+              Pilih Pengguna
+            </label>
+            
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDropdownOpen(prev => !prev)
+                  setError('')
+                }}
+                className={`w-full flex items-center justify-between text-left transition-all duration-200 border bg-slate-50/70 hover:bg-white focus:bg-white outline-none cursor-pointer ${
+                  isDropdownOpen ? 'border-blue-500 ring-2 ring-blue-100 bg-white' : 'border-slate-200 hover:border-blue-300'
+                } ${
+                  isAbsenShowing 
+                    ? '!h-9 !py-2 !px-3 !rounded-xl !text-xs' 
+                    : '!h-12 !py-2.5 !px-4 !rounded-2xl !text-sm sm:!text-base'
+                }`}
               >
-                <option value="" disabled>Pilih Pengguna</option>
-                {Object.entries(kasirList)
-                  .filter(([_id, acc]) => acc.role !== 'owner')
-                  .map(([id, acc]) => (
-                  <option key={id} value={id}>
-                    {acc.name} (Kasir)
-                  </option>
-                ))}
-              </select>
-              <i className="fa-solid fa-chevron-down login-select-icon !text-xs !right-3"></i>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`rounded-full flex items-center justify-center shrink-0 ${
+                    selectedUser 
+                      ? 'bg-blue-100 text-blue-600' 
+                      : 'bg-slate-200 text-slate-400'
+                  } ${isAbsenShowing ? 'w-5 h-5 text-[10px]' : 'w-7 h-7 text-xs'}`}>
+                    <i className="fa-solid fa-user"></i>
+                  </div>
+                  <span className={`font-bold truncate ${
+                    selectedUser && kasirList[selectedUser] ? 'text-slate-800' : 'text-slate-400 font-medium'
+                  }`}>
+                    {selectedUser && kasirList[selectedUser] ? kasirList[selectedUser].name : 'Pilih Pengguna'}
+                  </span>
+                  {selectedUser && kasirList[selectedUser] && (
+                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                      Kasir
+                    </span>
+                  )}
+                </div>
+                
+                <i className={`fa-solid fa-chevron-down text-slate-400 text-xs shrink-0 transition-transform duration-200 ${
+                  isDropdownOpen ? 'rotate-180 text-blue-600' : ''
+                }`}></i>
+              </button>
+
+              {/* DROPDOWN MENU WITH DIVIDERS & LARGER CASHIER NAMES */}
+              {isDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  {/* Search bar if there are more than 3 cashiers */}
+                  {cashierEntries.length > 3 && (
+                    <div className="p-2 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-10">
+                      <div className="relative">
+                        <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                        <input
+                          type="text"
+                          value={searchCashier}
+                          onChange={(e) => setSearchCashier(e.target.value)}
+                          placeholder="Cari nama kasir..."
+                          className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-medium"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cashiers List */}
+                  <div className="max-h-56 sm:max-h-64 overflow-y-auto">
+                    {filteredCashiers.length === 0 ? (
+                      <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                        Tidak ada kasir yang cocok
+                      </div>
+                    ) : (
+                      filteredCashiers.map(([id, acc]) => {
+                        const isSelected = selectedUser === id
+                        const alreadyAbsen = isCashierAbsenToday(id)
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUser(id)
+                              setIsDropdownOpen(false)
+                              setError('')
+                            }}
+                            className={`w-full text-left flex items-center justify-between transition-colors cursor-pointer border-b border-slate-200/80 last:border-b-0 ${
+                              isAbsenShowing ? 'px-3 py-2.5' : 'px-4 py-3'
+                            } ${
+                              isSelected ? 'bg-blue-50/80' : 'bg-white hover:bg-slate-50 active:bg-blue-50/40'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`rounded-full flex items-center justify-center font-bold shrink-0 shadow-sm ${
+                                isSelected 
+                                  ? 'bg-blue-600 text-white' 
+                                  : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 border border-blue-200/60'
+                              } ${isAbsenShowing ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
+                                <i className="fa-solid fa-user"></i>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`block font-bold text-slate-800 truncate ${
+                                    isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'
+                                  }`}>
+                                    {acc.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shrink-0 uppercase tracking-wide">
+                                    Kasir
+                                  </span>
+                                </div>
+                                {isAbsenFeatureActive && (
+                                  <p className="text-[10px] mt-0.5 font-medium flex items-center gap-1">
+                                    {alreadyAbsen ? (
+                                      <span className="text-emerald-600 flex items-center gap-1 font-semibold">
+                                        <i className="fa-solid fa-circle-check text-[9px]"></i> Sudah Absen Hari Ini
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-600 flex items-center gap-1 font-semibold">
+                                        <i className="fa-solid fa-clock text-[9px]"></i> Belum Absen
+                                      </span>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 ml-2">
+                              {isSelected ? (
+                                <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow-sm">
+                                  <i className="fa-solid fa-check font-bold"></i>
+                                </span>
+                              ) : (
+                                <i className="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -456,24 +664,37 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* PIN Input (Hidden if PIN is disabled) */}
           {isPinEnabled && (
             <div className="login-field">
+              <label className={`login-label font-bold text-slate-700 transition-all duration-300 ${
+                isAbsenShowing ? '!text-[11px] !mb-1' : '!text-xs sm:!text-[13px] !mb-1.5'
+              }`}>
+                Masukkan PIN
+              </label>
               <div className="relative">
-                <i className="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                <i className={`fa-solid fa-lock absolute text-gray-400 pointer-events-none transition-all duration-300 ${
+                  isAbsenShowing ? 'left-3 top-1/2 -translate-y-1/2 text-xs' : 'left-3.5 top-1/2 -translate-y-1/2 text-sm'
+                }`}></i>
                 <input
                   type={showPin ? "text" : "password"}
                   value={pin}
                   onChange={(e) => { setPin(e.target.value.replace(/[^0-9]/g, '')); setError('') }}
                   placeholder="MASUKKAN PIN"
                   maxLength={6}
-                  className="login-input !py-2 !pl-8 !pr-9 !text-xs !rounded-xl !h-9 tracking-wider"
+                  className={`login-input tracking-wider transition-all duration-300 ${
+                    isAbsenShowing 
+                      ? '!py-2 !pl-8 !pr-9 !text-xs !rounded-xl !h-9' 
+                      : '!py-3 !pl-10 !pr-10 !text-sm sm:!text-base !rounded-2xl !h-12 tracking-widest font-bold'
+                  }`}
                   inputMode="numeric"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer"
+                  className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer ${
+                    isAbsenShowing ? 'right-2.5' : 'right-3'
+                  }`}
                   title={showPin ? "Sembunyikan PIN" : "Tampilkan PIN"}
                 >
-                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} text-xs`}></i>
+                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} ${isAbsenShowing ? 'text-xs' : 'text-sm'}`}></i>
                 </button>
               </div>
             </div>
@@ -488,21 +709,34 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
           {/* Error Message */}
           {error && (
-            <div className="login-error !py-1.5 !px-2.5 !text-xs !rounded-xl !gap-1.5">
+            <div className={`login-error transition-all duration-300 ${
+              isAbsenShowing ? '!py-1.5 !px-2.5 !text-xs !rounded-xl !gap-1.5' : '!py-2.5 !px-3.5 !text-xs sm:!text-sm !rounded-2xl !gap-2 font-bold'
+            }`}>
               <i className="fa-solid fa-circle-exclamation text-xs"></i>
               <span>{error}</span>
             </div>
           )}
 
           {/* Submit Button */}
-          <button type="submit" className="login-btn !py-2 sm:!py-2.5 !text-xs !rounded-xl !mt-1 flex items-center justify-center gap-2">
-            <i className="fa-solid fa-arrow-right-to-bracket text-xs"></i>
+          <button 
+            type="submit" 
+            className={`login-btn flex items-center justify-center gap-2 transition-all duration-300 ${
+              isAbsenShowing 
+                ? '!py-2 sm:!py-2.5 !text-xs !rounded-xl !mt-1' 
+                : '!py-3 sm:!py-3.5 !text-sm sm:!text-base !rounded-2xl !mt-2 font-black tracking-wider shadow-lg shadow-blue-500/25'
+            }`}
+          >
+            <i className={`fa-solid fa-arrow-right-to-bracket ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
             MASUK
           </button>
         </form>
 
         {/* Footer */}
-        <p className="login-footer !text-[10px] !mt-1.5 text-slate-400 font-medium">ALPHA Pro v{APP_VERSION}</p>
+        <p className={`login-footer text-slate-400 font-medium transition-all duration-300 ${
+          isAbsenShowing ? '!text-[10px] !mt-1.5' : '!text-xs !mt-3'
+        }`}>
+          ALPHA Pro v{APP_VERSION}
+        </p>
       </div>
     </div>
   )

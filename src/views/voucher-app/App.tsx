@@ -683,8 +683,10 @@ export default function App({ onExit, externalRole, externalCashierName, externa
     // Key: v_${storeKey}_all_detailed_handovers
     // Semua kasir dalam satu toko berbagi riwayat serah terima yang sama
     const globalDetailedHandoversKey = `v_${storeKey}_all_detailed_handovers`;
+    const sharedProductsKey = `v_${storeKey}_products`;
 
-    const cachedProducts = localStorage.getItem(`${prefix}_products`);
+    // 1 Toko 1 Pembukuan: Baca stok bersama toko terlebih dahulu
+    const cachedProducts = localStorage.getItem(sharedProductsKey) || localStorage.getItem(`${prefix}_products`);
     const cachedTransactions = localStorage.getItem(`${prefix}_transactions`);
     const cachedNotifications = localStorage.getItem(`${prefix}_notifications`);
     const cachedHandovers = localStorage.getItem(`${prefix}_handovers`);
@@ -839,6 +841,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
     const savedAt = new Date().toISOString();
 
     // Save locally per-store & per-cashier
+    localStorage.setItem(`v_${storeKey}_products`, JSON.stringify(products));
     localStorage.setItem(`${prefix}_products`, JSON.stringify(products));
     localStorage.setItem(`${prefix}_transactions`, JSON.stringify(transactions));
     localStorage.setItem(`${prefix}_notifications`, JSON.stringify(notifications));
@@ -1094,7 +1097,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
   const activeShiftCashierName = activeShiftCashierObj?.name || (kasirList && activeShiftCashierId ? (kasirList[activeShiftCashierId.replace(/^c_/, '')]?.name || activeShiftCashierId) : (activeCashier?.name || 'Kasir Aktif'));
 
   // Manual & quick stock modifier
-  const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
+  const handleAdjustStock = (productId: string, quantity: number, type: 'RESTOCK' | 'PENJUALAN', note: string, skipStockUpdate: boolean = false, subReason?: 'penjualan' | 'audit' | 'restock', paymentMethod: 'TUNAI' | 'QRIS' | 'TRANSFER' | 'NON_TUNAI' = 'TUNAI') => {
     let updatedNotifs = [...notifications];
     const targetProduct = products.find(p => p.id === productId);
     
@@ -1461,13 +1464,14 @@ export default function App({ onExit, externalRole, externalCashierName, externa
   };
 
   // Tutup Shift / Serah Terima — TIDAK mengganti kasir aktif
-  // Hanya mencatat handover record ke riwayat & localStorage
+  // Menyimpan stok akhir fisik sebagai stok bersama toko (TIDAK di-nol-kan)
   const handleExecuteShiftHandover = (
     customNotes: string,
     toCashierIdOverride?: string,
     toCashierNameOverride?: string,
     finalProductsOverride?: VoucherProduct[],
-    isSelfHandover?: boolean
+    isSelfHandover?: boolean,
+    closingType: 'shift1' | 'shift2' = 'shift1'
   ) => {
     const storeKey = activeStoreId || 'default';
     const finalProducts = finalProductsOverride || products;
@@ -1476,24 +1480,25 @@ export default function App({ onExit, externalRole, externalCashierName, externa
     const inventoryValue = finalProducts.reduce((acc, p) => acc + (p.currentStock * p.costPrice), 0);
 
     const fromCashierName = activeCashier.name;
+    const isNight = closingType === 'shift2';
 
     const newHandover: ShiftHandover = {
       id: `handover-${Date.now()}`,
       timestamp: new Date().toISOString(),
       fromCashierId: activeCashier.id,
       fromCashierName,
-      toCashierId: 'NONE',
-      toCashierName: 'Tutup Toko',
+      toCashierId: isNight ? 'NONE' : (toCashierIdOverride || 'NEXT'),
+      toCashierName: isNight ? 'Tutup Toko (Malam)' : (toCashierNameOverride || 'Kasir Shift 2'),
       totalProductsCount,
       totalStockTransferred,
       inventoryValue,
-      status: 'Tutup Toko (Closing)',
-      notes: customNotes || 'Tutup shift toko - stok direkap'
+      status: isNight ? 'Tutup Toko (Closing)' : 'Berhasil Diserahterimakan',
+      notes: customNotes || (isNight ? 'Tutup toko malam - stok direkap' : `Selesai Shift 1 oleh ${fromCashierName}`)
     };
 
     const updatedHandovers = [newHandover, ...shiftHandovers];
     
-    // OVERWRITE STOCKS ON HANDOVER (SQL SYNC)
+    // OVERWRITE STOCKS ON HANDOVER (SQL SYNC TO GLOBAL STORE STOCK)
     if (activeStoreId) {
       const handoverUpserts = finalProducts.map(p => ({
         store_id: activeStoreId,
@@ -1511,30 +1516,50 @@ export default function App({ onExit, externalRole, externalCashierName, externa
       amount: inventoryValue,
       cashierName: fromCashierName,
       timestamp: new Date().toISOString(),
-      notes: customNotes || `Tutup shift ${fromCashierName}`
+      notes: customNotes || (isNight ? `Closing malam ${fromCashierName}` : `Serah terima Shift 1 ${fromCashierName}`)
     };
 
     const updatedTrx = [newTrx, ...transactions];
 
     const updatedNotifs = pushNotification(
       'transfer',
-      'Tutup Toko Berhasil!',
-      `${fromCashierName} telah menutup toko. Siap untuk shift berikutnya.`,
+      isNight ? 'Closing Malam Berhasil!' : 'Shift 1 Selesai!',
+      isNight 
+        ? `${fromCashierName} telah menutup toko malam ini. Sisa fisik ${totalStockTransferred} pcs tersimpan untuk esok pagi.`
+        : `${fromCashierName} telah menyelesaikan Shift 1. Sisa fisik ${totalStockTransferred} pcs langsung siap untuk Shift 2.`,
       notifications
     );
 
-    // KOSONGKAN STOK LOKAL AGAR KASIR BERIKUTNYA BISA MULAI DARI 0 SEBELUM REKAP ONLINE
-    const zeroedProducts: VoucherProduct[] = products.map(p => ({ ...p, currentStock: 0 }));
+    // 1 TOKO 1 PEMBUKUAN: SISA STOK FISIK LANGSUNG MENJADI STOK TOKO BERSAMA (JANGAN DI-NOL-KAN!)
+    const storeProductsKey = `v_${storeKey}_products`;
     const fromPrefix = `v_${storeKey}_${activeCashier.id}`;
-    localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(zeroedProducts));
-    setProducts(sortVoucherProducts(zeroedProducts));
+    localStorage.setItem(storeProductsKey, JSON.stringify(finalProducts));
+    localStorage.setItem(`${fromPrefix}_products`, JSON.stringify(finalProducts));
+    setProducts(sortVoucherProducts(finalProducts));
+
+    // Jika closing malam (Shift 2), simpan snapshot sisa malam untuk validasi buka toko esok pagi
+    if (isNight) {
+      const nowDate = new Date();
+      const dateStr = new Date(nowDate.getTime() - nowDate.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      const lastClosingData = {
+        date: dateStr,
+        timestamp: nowDate.toISOString(),
+        closingCashierName: fromCashierName,
+        totalStock: totalStockTransferred,
+        items: finalProducts.map(p => ({
+          productId: p.id,
+          productName: p.name,
+          finalStock: p.currentStock
+        }))
+      };
+      localStorage.setItem(`v_${storeKey}_last_closing_night`, JSON.stringify(lastClosingData));
+    }
 
     setShiftHandovers(updatedHandovers);
     setTransactions(updatedTrx);
     setNotifications(updatedNotifs);
 
-    // RESET SESI ONLINE (AGAR TIDAK ADA KASIR YANG AKTIF MENJAGA TOKO)
-    // Gunakan fungsi clearActiveShift agar tidak ada race condition di Supabase
+    // RESET SESI ONLINE (AGAR KASIR BERIKUTNYA BISA MASUK FRESH)
     clearActiveShift();
 
     setHandoverSuccessSummary(newHandover);
@@ -1848,7 +1873,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
         </AnimatePresence>
 
         {/* CORE APP TAB VIEW CONTENT (Encapsulated screen) */}
-        <div className={`flex-1 overflow-y-auto ${activeTab === 'stok' ? 'p-4 sm:p-6' : 'p-4 sm:p-6'} pb-20 z-10`} id="main-scroll-pane">
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'stok' ? 'p-4 sm:p-6' : 'p-4 sm:p-6'} pb-32 sm:pb-36 z-10`} id="main-scroll-pane">
           <AnimatePresence mode="wait">
             <motion.div
               key={selectedProduct ? 'details' : activeTab}
@@ -2116,28 +2141,29 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                         }
                       }}
                       onBulkUpdateProductStock={handleBulkUpdateProductStock}
+                      onRecordRestock={(productId, qty) => {
+                        handleAdjustStock(productId, qty, 'RESTOCK', 'Stok Masuk dari Owner', true, 'restock');
+                      }}
                       onRecordHandover={(handoverData) => {
                         // ====================================================
-                        // SERAH TERIMA — LOGIKA BARU:
-                        // 1. Catat riwayat handover di Riwayat tab
-                        // 2. Salin stok akhir ke storage kasir penerima
-                        // 3. Kasir yang login TIDAK BERUBAH
+                        // 1 TOKO 1 PEMBUKUAN — REKAP SHIFT & CLOSING:
+                        // 1. Shift 1 (Pagi) atau Shift 2 (Malam)
+                        // 2. Stok akhir fisik tetap tersimpan sebagai stok toko
                         // ====================================================
                         const now = new Date();
                         const dateStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                        const closingType: 'shift1' | 'shift2' = handoverData.closingType || 'shift1';
 
-                        // Cari kasir penerima dari daftar cashiers berdasarkan id
+                        // Tentukan shiftNum dan label judul
+                        const shiftNum = closingType === 'shift1' ? 1 : 2;
+                        const shiftTitle = closingType === 'shift1' ? 'Shift 1 (Pagi)' : 'Shift 2 (Sore/Malam)';
+
+                        // Cari kasir penerima jika shift 1
                         const toCashier = cashiers.find(c => c.id === handoverData.toCashierId) || cashiers.find(c => c.name === handoverData.toCashierName);
-                        const toCashierId = toCashier?.id || handoverData.toCashierId || 'unknown';
-                        const toCashierName = toCashier?.name || handoverData.toCashierName || 'Kasir Berikutnya';
+                        const toCashierId = closingType === 'shift2' ? 'NONE' : (toCashier?.id || handoverData.toCashierId || 'shift2');
+                        const toCashierName = closingType === 'shift2' ? 'Closing Toko' : (toCashier?.name || handoverData.toCashierName || 'Kasir Shift 2');
 
-                        // Hitung shiftNumber berdasarkan urutan di hari ini
-                        const todayRecords = detailedHandovers.filter(r => r.date === dateStr);
-                        const shiftNum = todayRecords.length + 1;
-                        const shiftTitle = `Shift ${shiftNum} (${activeCashier.name})`;
-
-                        // Bangun daftar produk dengan stok = finalStock dari audit
-                        // Ini yang akan disalin ke storage kasir penerima
+                        // Bangun daftar produk dengan stok = finalStock dari audit fisik
                         const finalProductsForReceiver: VoucherProduct[] = products.map(p => {
                           const auditItem = (handoverData.items || []).find((i: any) => i.productId === p.id);
                           const finalStock = auditItem ? auditItem.finalStock : p.currentStock;
@@ -2164,7 +2190,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                           cashExpected: handoverData.cashExpected,
                           cashPhysical: handoverData.cashPhysical || 0,
                           cashDifference: handoverData.cashDiff || 0,
-                          note: handoverData.note || 'Serah terima kasir reguler',
+                          note: handoverData.note || (closingType === 'shift2' ? 'Closing Toko Malam' : 'Selesai Shift 1 (Ganti Kasir)'),
                           isLocked: true,
                           productsSummary: handoverData.items || []
                         };
@@ -2193,7 +2219,7 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                               cashierName: activeCashier.name,
                               timestamp: now.toISOString(),
                               notes: '[TUNAI] [PASCA-CLOSING]',
-                              paymentMethod: 'TUNAI' // Default asumsi tunai jika tidak tercatat qris per item
+                              paymentMethod: 'TUNAI'
                             });
                           }
                         });
@@ -2203,24 +2229,24 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                           setTransactions(updatedTransactions);
                         }
 
-                        // Jalankan handover — menyalin stok ke kasir penerima
-                        // Kasir yang login TIDAK DIGANTI
+                        // Jalankan handover — stok toko diperbarui dengan sisa fisik
                         handleExecuteShiftHandover(
-                          `Serah terima: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`,
+                          closingType === 'shift2'
+                            ? `Closing Malam: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`
+                            : `Selesai Shift 1: Stok fisik ${handoverData.finalStock} PCS, Kas Rp${handoverData.cashPhysical?.toLocaleString('id-ID')}`,
                           toCashierId,
                           toCashierName,
                           finalProductsForReceiver,
-                          handoverData.isSelfHandover
+                          handoverData.isSelfHandover,
+                          closingType
                         );
-                        saveState(products, updatedTransactions, notifications, shiftHandovers, updatedDetailed);
+                        saveState(finalProductsForReceiver, updatedTransactions, notifications, shiftHandovers, updatedDetailed);
                       }}
                       onSwitchCashier={() => {
-                        // ✅ Tidak ganti kasir — hanya notifikasi saja
-                        // Kasir penerima harus login sendiri
                         const updatedNotifs = pushNotification(
                           'success',
                           'Serah Terima Selesai',
-                          `Stok telah diserahkan. Anda masih login sebagai ${activeCashier.name}. Kasir penerima silakan login sendiri.`,
+                          `Stok fisik telah direkap. Anda masih login sebagai ${activeCashier.name}. Kasir berikutnya silakan login sendiri.`,
                           notifications
                         );
                         setNotifications(updatedNotifs);
@@ -2234,6 +2260,8 @@ export default function App({ onExit, externalRole, externalCashierName, externa
                       handoverRecords={detailedHandovers}
                       transactions={transactions}
                       allCashiers={cashiers}
+                      userRole={currentUserRole}
+                      activeCashierName={activeCashier.name}
                       onBackToDashboard={() => setActiveTab('beranda')}
                     />
                   )}

@@ -81,6 +81,12 @@ export default function LaporanTab({
     userRole === 'owner' ? 'SEMUA' : activeCashierName
   );
 
+  useEffect(() => {
+    if (userRole !== 'owner') {
+      setSelectedCashierFilter(activeCashierName);
+    }
+  }, [userRole, activeCashierName]);
+
   // Expanded accordion month in Tab 2
   const [expandedMonthKey, setExpandedMonthKey] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -590,7 +596,7 @@ export default function LaporanTab({
   }, [dailySummaries, currentMonthKey]);
 
   return (
-    <div className="space-y-3 pb-8" id="laporan-tab-container">
+    <div className="space-y-3 pb-36 sm:pb-44" id="laporan-tab-container">
       
       {/* ── HEADER SUB-TAB SWITCHER (Halaman 1 vs Halaman 2) ── */}
       <div className="bg-slate-100 dark:bg-slate-900/80 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-1 shadow-sm">
@@ -1345,6 +1351,8 @@ export default function LaporanTab({
         </div>
       )}
 
+      {/* Spacer ekstra agar seluruh konten tabel/accordion paling bawah dapat di-scroll jauh ke atas dan tidak tertutup navbar */}
+      <div className="h-16 w-full pointer-events-none" aria-hidden="true" />
     </div>
   );
 }

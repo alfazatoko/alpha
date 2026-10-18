@@ -60,6 +60,7 @@ interface AturStokTabProps {
   onUpdateProductStock: (productId: string, newStock: number, subReason?: 'penjualan' | 'audit' | 'restock') => void;
   onBulkUpdateProductStock: (updates: { productId: string; newStock: number; subReason?: 'penjualan' | 'audit' }[]) => void;
   onRecordHandover: (handoverData: any) => void;
+  onRecordRestock?: (productId: string, qty: number) => void;
   onSwitchCashier: () => void;
   onBackToDashboard: () => void;
   onTakeoverStock?: () => void;
@@ -149,6 +150,7 @@ export default function AturStokTab({
   onUpdateProductStock,
   onBulkUpdateProductStock,
   onRecordHandover,
+  onRecordRestock,
   onSwitchCashier,
   onBackToDashboard,
   onTakeoverStock,
@@ -157,6 +159,32 @@ export default function AturStokTab({
   onSyncSession
 }: AturStokTabProps) {
   const [forcePantau, setForcePantau] = useState(false);
+
+  // ─── 1 TOKO 1 PEMBUKUAN: BACA DATA PENUTUPAN SEMALAM (JAM 22.00) ───────────
+  const storeKey = useMemo(() => {
+    const parts = (sessionKey || '').split('_');
+    return parts.length >= 2 ? parts[1] : 'default';
+  }, [sessionKey]);
+
+  const [lastClosingNight, setLastClosingNight] = useState<{
+    date: string;
+    timestamp: string;
+    closingCashierName: string;
+    totalStock: number;
+    items?: { productId: string; productName?: string; finalStock: number }[];
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem(`v_${storeKey}_last_closing_night`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [showMorningDiffModal, setShowMorningDiffModal] = useState(false);
+  const [morningDiffNote, setMorningDiffNote] = useState('');
+  const [morningDiffAcknowledged, setMorningDiffAcknowledged] = useState(false);
+  const [handoverClosingType, setHandoverClosingType] = useState<'shift1' | 'shift2'>('shift1');
 
   // ─── SESSION PERSISTENCE KEY ───────────────────────────────────────────────
   const isOwnerMode = userRole === 'owner';
@@ -478,6 +506,9 @@ export default function AturStokTab({
       }
       return item;
     }));
+    if (delta > 0 && onRecordRestock) {
+      onRecordRestock(productId, delta);
+    }
   };
 
   const handleSetIncomingDirect = (productId: string, val: number) => {
@@ -485,6 +516,9 @@ export default function AturStokTab({
       if (item.productId === productId) {
         const newIncoming = Math.max(0, val);
         const delta = newIncoming - item.incomingStock;
+        if (delta > 0 && onRecordRestock) {
+          onRecordRestock(productId, delta);
+        }
         return { 
           ...item, 
           incomingStock: newIncoming,
@@ -535,7 +569,14 @@ export default function AturStokTab({
     }));
   };
 
+  const expectedMorningStock = lastClosingNight ? lastClosingNight.totalStock : totalPreviousStock;
+  const morningDiff = totalInitialStock - expectedMorningStock;
+
   const handleLockInitialStock = () => {
+    if (morningDiff !== 0 && !morningDiffAcknowledged) {
+      setShowMorningDiffModal(true);
+      return;
+    }
     setIsInitialLocked(true);
     setCurrentStep(2);
     // Push updates to parent state
@@ -546,11 +587,22 @@ export default function AturStokTab({
     });
   };
 
-  // Takeover function removed — semua kasir kini bisa jaga toko secara langsung
+  const handleConfirmMorningDiff = () => {
+    setMorningDiffAcknowledged(true);
+    setShowMorningDiffModal(false);
+    setIsInitialLocked(true);
+    setCurrentStep(2);
+    items.forEach(item => {
+      if (item.initialStock !== item.previousStock) {
+        onUpdateProductStock(item.productId, item.initialStock, (morningDiffNote || item.auditReason || 'audit') as any);
+      }
+    });
+  };
 
-  const handleCompleteHandover = () => {
+  const handleCompleteHandover = (closingType: 'shift1' | 'shift2' = 'shift1') => {
     if (onSyncSession) onSyncSession(null);
     setIsHandoverSuccess(true);
+    setHandoverClosingType(closingType);
     onRecordHandover({
       initialStock: totalInitialStock,
       incomingStock: totalIncomingStock,
@@ -562,9 +614,10 @@ export default function AturStokTab({
       cashExpected: totalCashExpected,
       cashPhysical: physicalCashValue,
       cashDiff: cashDifference,
-      note: catatanSelisih,
-      toCashierId: 'NONE',
-      toCashierName: 'Tutup Toko',
+      note: catatanSelisih || (closingType === 'shift2' ? 'Closing Toko Malam' : 'Selesai Shift 1 (Ganti Kasir)'),
+      toCashierId: closingType === 'shift2' ? 'NONE' : (selectedToCashier?.id || 'NEXT'),
+      toCashierName: closingType === 'shift2' ? 'Closing Toko' : (selectedToCashier?.name || 'Kasir Shift 2'),
+      closingType,
       isSelfHandover: true,
       items: items.map(i => ({
         ...i
@@ -1069,7 +1122,7 @@ export default function AturStokTab({
             }`}>
               <div className="flex items-center justify-between gap-0.5">
                 <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
-                  Stok Awal
+                  Fisik Pagi
                 </span>
                 <button
                   type="button"
@@ -1097,18 +1150,18 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {/* 2. Stok Shift Lalu */}
+            {/* 2. Stok Closing Semalam */}
             <div className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs ${
               isLight 
                 ? 'bg-white border-slate-200 text-slate-800' 
                 : 'bg-white dark:bg-slate-800 border-blue-500/30 text-slate-900 dark:text-white'
             }`}>
               <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                Shift Lalu
+                {lastClosingNight ? 'Closing Semalam' : 'Shift Lalu'}
               </span>
               <div className="flex items-baseline gap-0.5 mt-0.5">
                 <span className={`text-sm sm:text-lg font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-slate-900 dark:text-white'}`}>
-                  {totalPreviousStock}
+                  {expectedMorningStock}
                 </span>
                 <span className={`text-[8px] sm:text-[9px] font-semibold ${isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`}>
                   Pcs
@@ -1116,33 +1169,64 @@ export default function AturStokTab({
               </div>
             </div>
 
-            {/* 3. Filter / Kolom Status */}
+            {/* 3. Status Selisih Pagi */}
             <button 
               type="button"
-              onClick={() => setShowStatusColumn(!showStatusColumn)}
+              onClick={() => {
+                if (morningDiff !== 0) {
+                  setShowMorningDiffModal(true);
+                } else {
+                  setShowStatusColumn(!showStatusColumn);
+                }
+              }}
               className={`rounded-xl p-2 flex flex-col justify-between min-w-0 border shadow-xs transition cursor-pointer text-left ${
-                showStatusColumn 
-                  ? (isLight ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-amber-500 bg-amber-950/50 text-amber-300')
-                  : (isLight ? 'bg-white border-slate-200 hover:border-amber-400 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/30 hover:border-amber-500/60 text-slate-900 dark:text-white')
+                morningDiff !== 0
+                  ? (isLight ? 'border-rose-400 bg-rose-50 text-rose-800' : 'border-rose-500/80 bg-rose-950/50 text-rose-300')
+                  : showStatusColumn 
+                    ? (isLight ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-amber-500 bg-amber-950/50 text-amber-300')
+                    : (isLight ? 'bg-white border-slate-200 hover:border-amber-400 text-slate-800' : 'bg-white dark:bg-slate-800 border-blue-500/30 hover:border-amber-500/60 text-slate-900 dark:text-white')
               }`}
             >
               <div className="flex items-center justify-between w-full">
                 <span className={`text-[8px] sm:text-[9.5px] font-bold uppercase truncate ${
-                  showStatusColumn ? 'text-amber-700 dark:text-amber-300' : (isLight ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400')
+                  morningDiff !== 0 ? 'text-rose-600 dark:text-rose-400 font-black' : (showStatusColumn ? 'text-amber-700 dark:text-amber-300' : 'text-slate-600 dark:text-slate-400')
                 }`}>
-                  Status
+                  {morningDiff !== 0 ? 'Selisih Pagi' : 'Status'}
                 </span>
-                <ListFilter className="w-3 h-3 shrink-0" />
+                {morningDiff !== 0 ? <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" /> : <ListFilter className="w-3 h-3 shrink-0" />}
               </div>
               <div className="flex items-baseline gap-0.5 mt-0.5">
                 <span className={`text-[10px] sm:text-xs font-black tracking-tight ${
-                  showStatusColumn ? (isLight ? 'text-amber-700' : 'text-amber-300') : (isLight ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300')
+                  morningDiff !== 0 
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : showStatusColumn ? (isLight ? 'text-amber-700' : 'text-amber-300') : (isLight ? 'text-emerald-700' : 'text-emerald-400')
                 }`}>
-                  {showStatusColumn ? 'Aktif' : 'Ringkas'}
+                  {morningDiff !== 0 ? `${morningDiff > 0 ? `+${morningDiff}` : morningDiff} Pcs` : 'PAS (0)'}
                 </span>
               </div>
             </button>
           </div>
+
+          {/* Banner Peringatan Selisih Buka Toko (Jika Ada Beda dari Closing Malam) */}
+          {morningDiff !== 0 && (
+            <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-sm ${
+              isLight ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-rose-950/60 border-rose-500/50 text-rose-200'
+            }`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                <div className="text-[10px] leading-tight">
+                  <span className="font-black text-rose-600 dark:text-rose-400">PERINGATAN SELISIH BUKA TOKO:</span> Sisa closing semalam tercatat <span className="font-mono font-bold">{expectedMorningStock} pcs</span>, sedangkan fisik pagi ini dihitung <span className="font-mono font-bold">{totalInitialStock} pcs</span> (Selisih: <span className="font-mono font-black">{morningDiff > 0 ? `+${morningDiff}` : morningDiff} pcs</span>).
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMorningDiffModal(true)}
+                className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[9px] font-black rounded-lg shrink-0 cursor-pointer shadow-xs"
+              >
+                Catat Selisih
+              </button>
+            </div>
+          )}
 
           {/* Operator Filter Chips */}
           <div className="flex gap-1 overflow-x-auto pb-1.5 pt-1 px-0.5 custom-scrollbar">
@@ -2082,8 +2166,13 @@ export default function AturStokTab({
 
               <div className="col-span-3 border-t-2 border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
 
-              {/* Uang Tunai Seharusnya */}
-              <div className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Laci Seharusnya</div>
+              {/* Uang Tunai Penjualan Kasir */}
+              <div className="flex flex-col">
+                <span className={`font-bold tracking-tight ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>Uang Tunai Penjualan Kasir</span>
+                <span className={`text-[8.5px] font-medium leading-tight ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  (Murni hasil jual voucher tunai — modal laci dipisah mandiri)
+                </span>
+              </div>
               <div className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>:</div>
               <div className={`text-right font-mono font-black text-sm sm:text-base ${
                 totalCashExpected < 0 
@@ -2418,13 +2507,24 @@ export default function AturStokTab({
             >
               <ArrowLeft className={`w-3.5 h-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} /> <span className="whitespace-nowrap">Cek Uang</span>
             </button>
-            <button
-              type="button"
-              onClick={handleCompleteHandover}
-                className="px-4 py-2.5 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400"
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleCompleteHandover('shift1')}
+                className="px-3.5 py-2.5 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
+                title="Selesaikan Shift 1 - Sisa fisik langsung menjadi stok awal Kasir 2"
               >
-                <LogOut className="w-3.5 h-3.5 shrink-0" /> SELESAI & TUTUP TOKO
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" /> Selesai Shift 1
               </button>
+              <button
+                type="button"
+                onClick={() => handleCompleteHandover('shift2')}
+                className="px-3.5 py-2.5 text-white text-[10px] sm:text-xs font-black rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400"
+                title="Tutup Toko Malam - Rekap hari ini & simpan sisa stok untuk esok pagi"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" /> Closing Malam
+              </button>
+            </div>
             </div>
           </div>
           )}
@@ -2451,10 +2551,12 @@ export default function AturStokTab({
           </div>
           <div className="space-y-1">
             <h3 className={`text-sm sm:text-base font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
-              Tutup Toko Berhasil!
+              {handoverClosingType === 'shift1' ? 'Shift 1 Selesai & Stok Diserahkan!' : 'Closing Toko Malam Berhasil!'}
             </h3>
             <p className={`text-[10px] sm:text-[11px] max-w-sm mx-auto ${isLight ? 'text-slate-600' : 'text-slate-600 dark:text-slate-400'}`}>
-              Shift {activeCashier.name} telah selesai ditutup. Semua sisa stok fisik ({totalFinalStock} Pcs) dan laporan tersimpan aman. Toko sekarang siap dibuka kembali oleh kasir manapun.
+              {handoverClosingType === 'shift1'
+                ? `Shift ${activeCashier.name} telah selesai. Sisa stok fisik (${totalFinalStock} Pcs) dan laporan uang tunai telah tersimpan. Kasir Shift 2 siap login dan menggunakan stok ini.`
+                : `Shift malam ${activeCashier.name} telah selesai. Seluruh pembukuan hari ini terkunci dan sisa fisik (${totalFinalStock} Pcs) tersimpan sebagai acuan buka toko esok pagi.`}
             </p>
           </div>
 
@@ -2469,6 +2571,96 @@ export default function AturStokTab({
           </div>
         </motion.div>
       )}
+
+      {/* MODAL PERINGATAN SELISIH BUKA TOKO (JAM 07.00) */}
+      <AnimatePresence>
+        {showMorningDiffModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowMorningDiffModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 10 }}
+              className={`w-full max-w-sm rounded-2xl p-5 shadow-2xl border space-y-3.5 ${
+                isLight ? 'bg-white border-rose-300 text-slate-800' : 'bg-slate-900 border-rose-500/50 text-white'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 shrink-0">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-rose-600 dark:text-rose-400 uppercase tracking-tight">
+                    Peringatan Selisih Pagi
+                  </h3>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Validasi sisa closing semalam vs fisik pagi
+                  </p>
+                </div>
+              </div>
+
+              <div className={`p-3 rounded-xl border space-y-1.5 text-xs font-semibold ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/60 border-slate-700/80'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Closing Semalam ({lastClosingNight?.closingCashierName || 'Kasir Kemarin'}):</span>
+                  <span className="font-mono font-bold">{expectedMorningStock} pcs</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Fisik Dihitung Pagi Ini:</span>
+                  <span className="font-mono font-bold">{totalInitialStock} pcs</span>
+                </div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 flex justify-between items-center">
+                  <span className="font-bold text-rose-600 dark:text-rose-400">Selisih Fisik:</span>
+                  <span className="font-mono font-black text-rose-600 dark:text-rose-400">
+                    {morningDiff > 0 ? `+${morningDiff}` : morningDiff} pcs
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block">
+                  Keterangan / Alasan Selisih:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: 1 pcs rusak / salah hitung semalam"
+                  value={morningDiffNote}
+                  onChange={(e) => setMorningDiffNote(e.target.value)}
+                  className={`w-full text-xs rounded-xl px-3 py-2 border outline-none font-medium transition ${
+                    isLight ? 'bg-slate-50 border-slate-300 focus:border-rose-500' : 'bg-slate-950 border-slate-700 text-white focus:border-rose-500'
+                  }`}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowMorningDiffModal(false)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-100' : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  Hitung Ulang
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmMorningDiff}
+                  className="flex-1 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-black rounded-xl shadow-md transition cursor-pointer"
+                >
+                  Konfirmasi &amp; Lanjut
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* FLOATING FOCUS EDIT CARD (1 BARIS MELAYANG DENGAN LATAR SEDIKIT BLUR) */}
       <AnimatePresence>

@@ -956,6 +956,37 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [activeStoreId, pantauStoreId, activeRole, isLoggedIn, activeStore?.id])
 
+  // Realtime subscription: sinkronisasi PIN Owner ke localStorage secara instan saat diubah dari perangkat lain
+  useEffect(() => {
+    if (!googleUid) return
+
+    const ownerSecChannel = supabase
+      .channel(`rt_owner_security_main_${googleUid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'owner_security',
+          filter: `user_id=eq.${googleUid}`
+        },
+        (payload: any) => {
+          if (payload.new?.pin) {
+            localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, payload.new.pin)
+            console.log('[App PIN Sync] PIN Owner diperbarui dari perangkat lain secara real-time.')
+          }
+          if (payload.new?.owner_name) {
+            localStorage.setItem(`alphaPro_${googleUid}_ownerName`, payload.new.owner_name)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ownerSecChannel)
+    }
+  }, [googleUid])
+
   const handleUploadToCloud = async () => {
     if (!googleUid || targetStoreId === 'all') return
     
@@ -1084,8 +1115,28 @@ const MainApp: React.FC<MainAppProps> = ({
   }
 
   const handleSaveCashierSelf = async (targetUsername: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
+    // ── LANGKAH 1: Jika ini adalah update PIN Owner, SELALU sync ke owner_security cloud
+    // SEBELUM pengecekan storeId, sehingga PIN tersimpan meski mode 'Semua Toko'
+    if (targetUsername === 'owner' && updatedAccount.pin && googleUid) {
+      localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, updatedAccount.pin)
+      try {
+        await supabase.from('owner_security').upsert({
+          user_id: googleUid,
+          email: googleEmail || '',
+          owner_name: updatedAccount.name || 'Owner',
+          pin: updatedAccount.pin,
+          updated_at: new Date().toISOString()
+        })
+        console.log('[PIN Sync] PIN Owner berhasil disimpan ke cloud owner_security.')
+      } catch (secErr) {
+        console.warn('[PIN Sync] Gagal sync owner_security ke cloud, tersimpan lokal:', secErr)
+      }
+    }
+
+    // ── LANGKAH 2: Sisanya (store_settings) hanya jika ada storeId yang valid
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
+
     const updatedList = {
       ...kasirList,
       [targetUsername]: {
@@ -1100,24 +1151,6 @@ const MainApp: React.FC<MainAppProps> = ({
     if (targetUsername === username) {
       onUpdateActiveCashier(targetUsername, updatedList[targetUsername])
       localStorage.setItem('alphaPro_name', updatedAccount.name)
-    }
-
-    // Jika yang diperbarui adalah akun Owner dan memuat PIN, sinkronkan ke gate PIN & tabel owner_security
-    if (targetUsername === 'owner' && updatedAccount.pin) {
-      if (googleUid) {
-        localStorage.setItem(`alphaPro_${googleUid}_ownerPin`, updatedAccount.pin)
-        try {
-          supabase.from('owner_security').upsert({
-            user_id: googleUid,
-            email: googleEmail || '',
-            owner_name: updatedAccount.name || 'Owner',
-            pin: updatedAccount.pin,
-            updated_at: new Date().toISOString()
-          }).then(() => {})
-        } catch (secErr) {
-          console.warn('Sync owner_security fallback:', secErr)
-        }
-      }
     }
 
     // Sync directly to cloud

@@ -27,12 +27,14 @@ import {
   Sparkles,
   Receipt
 } from 'lucide-react';
-import type { DetailedHandoverRecord, Cashier } from '../types';
+import type { DetailedHandoverRecord, Cashier, UserRole } from '../types';
 
 interface RiwayatTabProps {
   handoverRecords: DetailedHandoverRecord[];
   transactions?: any[];
   allCashiers?: Cashier[];
+  userRole?: UserRole;
+  activeCashierName?: string;
   onSelectRecord?: (record: DetailedHandoverRecord) => void;
   onNavigateToStock?: () => void;
   onBackToDashboard?: () => void;
@@ -42,10 +44,14 @@ export default function RiwayatTab({
   handoverRecords,
   transactions = [],
   allCashiers = [],
+  userRole = 'kasir',
+  activeCashierName = '',
   onSelectRecord,
   onNavigateToStock,
   onBackToDashboard
 }: RiwayatTabProps) {
+  const isOwner = userRole === 'owner';
+
   // Today's date string in YYYY-MM-DD
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -59,14 +65,21 @@ export default function RiwayatTab({
   const [viewMode, setViewMode] = useState<'daily' | 'archive'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'all' | '1' | '2'>('all');
-  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('all');
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(
+    isOwner ? 'all' : (activeCashierName || 'all')
+  );
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [searchVoucherQuery, setSearchVoucherQuery] = useState<string>('');
 
-  // Group records by date for archive view
+  // Group records by date for archive view (filtered by role if kasir)
+  const accessibleRecords = useMemo(() => {
+    if (isOwner || !activeCashierName) return handoverRecords;
+    return handoverRecords.filter(rec => rec.cashierFromName === activeCashierName);
+  }, [handoverRecords, isOwner, activeCashierName]);
+
   const archivedDates = useMemo(() => {
     const dates: Record<string, { count: number; sales: number }> = {};
-    handoverRecords.forEach(rec => {
+    accessibleRecords.forEach(rec => {
       if (!dates[rec.date]) {
         dates[rec.date] = { count: 0, sales: 0 };
       }
@@ -74,17 +87,19 @@ export default function RiwayatTab({
       dates[rec.date].sales += rec.totalSalesAmount;
     });
     return Object.entries(dates).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [handoverRecords]);
+  }, [accessibleRecords]);
 
-  // Filtered records based on selected date, shift & cashier
+  // Filtered records based on selected date, shift & cashier (Strict data privacy)
   const filteredRecords = useMemo(() => {
-    return handoverRecords.filter((rec) => {
+    return accessibleRecords.filter((rec) => {
       const matchDate = selectedDate ? rec.date === selectedDate : true;
       const matchShift = selectedShiftFilter === 'all' ? true : String(rec.shiftNumber) === selectedShiftFilter;
-      const matchCashier = selectedCashierFilter === 'all' ? true : (rec.cashierFromName === selectedCashierFilter || rec.cashierToName === selectedCashierFilter);
+      const matchCashier = isOwner
+        ? (selectedCashierFilter === 'all' ? true : (rec.cashierFromName === selectedCashierFilter || rec.cashierToName === selectedCashierFilter))
+        : (rec.cashierFromName === activeCashierName);
       return matchDate && matchShift && matchCashier;
     });
-  }, [handoverRecords, selectedDate, selectedShiftFilter, selectedCashierFilter]);
+  }, [accessibleRecords, selectedDate, selectedShiftFilter, selectedCashierFilter, isOwner, activeCashierName]);
 
   // Aggregate totals for the selected date
   const daySummary = useMemo(() => {
@@ -226,24 +241,31 @@ export default function RiwayatTab({
 
             {/* Row 2: Shift & Cashier Filters */}
             <div className="grid grid-cols-2 gap-0.5 pt-1 border-t border-slate-200 dark:border-slate-800/40">
-              {/* Cashier Filter Dropdown */}
+              {/* Cashier Filter Dropdown / Locked Badge */}
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                  <User className="w-2.5 h-2.5"/> Filter Kasir
+                  <User className="w-2.5 h-2.5"/> Kasir
                 </span>
-                <div className="relative w-full">
-                  <select
-                    value={selectedCashierFilter}
-                    onChange={(e) => setSelectedCashierFilter(e.target.value)}
-                    className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-800 dark:text-white rounded-xl pl-2 pr-6 py-1 focus:outline-none focus:border-indigo-500 transition cursor-pointer shadow-sm"
-                  >
-                    <option value="all">Semua Kasir</option>
-                    {allCashiers.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                </div>
+                {isOwner ? (
+                  <div className="relative w-full">
+                    <select
+                      value={selectedCashierFilter}
+                      onChange={(e) => setSelectedCashierFilter(e.target.value)}
+                      className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-800 dark:text-white rounded-xl pl-2 pr-6 py-1 focus:outline-none focus:border-indigo-500 transition cursor-pointer shadow-sm"
+                    >
+                      <option value="all">Semua Kasir</option>
+                      {allCashiers.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                ) : (
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl px-2 py-1 text-[10px] font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="truncate">{activeCashierName || 'Shift Anda'}</span>
+                  </div>
+                )}
               </div>
 
               {/* Shift Filter Pills */}

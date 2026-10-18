@@ -142,7 +142,7 @@ export default function ProfileTab({
   };
 
   return (
-    <div className="space-y-4 pb-8" id="profile-tab-container">
+    <div className="space-y-4 pb-32 sm:pb-36" id="profile-tab-container">
       
       {/* Profil Header Card */}
       <div className="bg-white border border-slate-200 shadow-sm dark:bg-white/5 dark:border-transparent backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden flex items-center gap-4 shadow-xl" id="profile-header-card">

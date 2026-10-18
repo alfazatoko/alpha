@@ -471,7 +471,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const orderKuotaLabel = customLabels['ORDER KUOTA'] || 'Order Kuota';
     const danaLabel = customLabels['DANA'] || 'DANA';
     const tarikLabel = customLabels['TARIK'] || 'Tarik Tunai';
-    const tarikSubLabel = selectedSumber === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[selectedSumber] || selectedSumber);
+    const tarikSubLabel = selectedSumber === 'DANA' 
+      ? (customLabels['TARIK_DANA'] || 'DANA') 
+      : (selectedSumber === 'BANK' || selectedSumber === 'TRANSFER')
+      ? 'Bank'
+      : (customLabels[selectedSumber] || selectedSumber);
 
     if (activeMode === 'DIGITAL') {
       if (activeTheme === 'TEMA_1') {
@@ -1158,7 +1162,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <span className={cn(
                       "text-[8px] font-black uppercase text-center leading-tight",
                       isSelected ? "text-[#0c1f44]" : "text-gray-500"
-                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[item.id] || item.name)}</span>
+                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (item.id === 'TRANSFER BANK' || item.name === 'TRANSFER') ? 'BANK' : (customLabels[item.id] || item.name)}</span>
                   </button>
                 )
               })}
@@ -1692,7 +1696,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <span className={cn(
                       "text-[8px] font-black uppercase text-center leading-tight",
                       isSelected ? "text-[#0c1f44]" : "text-gray-500"
-                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (customLabels[item.id] || item.name)}</span>
+                    )}>{item.id === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : (item.id === 'TRANSFER BANK' || item.name === 'TRANSFER') ? 'BANK' : (customLabels[item.id] || item.name)}</span>
                   </button>
                 )
               })}
@@ -2470,7 +2474,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <p className="text-[14px] font-black text-black leading-none">{(lastTx.nominal || 0).toLocaleString('id-ID')}</p>
               {(lastTx.adminFee || 0) > 0 && (
                 <p className="text-[10px] font-black text-teal-600 mt-1 uppercase tracking-tighter">
-                  {(lastTx.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]') ? 'POTONG DALAM:' : 'ADMIN:'} {(lastTx.adminFee || 0).toLocaleString('id-ID')}
+                  {(lastTx.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]') ? 'POTONG DALAM:' : 'ADMIN (TUNAI):'} {(lastTx.adminFee || 0).toLocaleString('id-ID')}
                 </p>
               )}
             </div>
@@ -2714,7 +2718,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           </div>
                           <span className={cn("text-[12px] font-black uppercase tracking-widest transition-colors", 
                             isSelected ? "text-white" : "text-slate-700 group-hover:text-white group-focus:text-white"
-                          )}>{s === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : s === 'ATM' ? (customLabels['EDC / ATM'] || 'ATM') : (customLabels[s] || s)}</span>
+                          )}>{s === 'DANA' ? (customLabels['TARIK_DANA'] || 'DANA') : s === 'ATM' ? (customLabels['EDC / ATM'] || 'ATM') : (s === 'BANK' || s === 'TRANSFER') ? 'BANK' : (customLabels[s] || s)}</span>
                         </button>
                       );
                     })}

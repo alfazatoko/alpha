@@ -1447,9 +1447,12 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         onClick={() => {
                           if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
                           if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
-                          // Verifikasi PIN lama dari kasirList
+                          // Verifikasi PIN lama: coba dari kasirList, fallback ke localStorage
                           const ownerAcc = props.kasirList?.['owner']
-                          if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                          const googleUid = props.googleUid
+                          const localPin = googleUid ? localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000' : null
+                          const correctOldPin = (ownerAcc?.pin) || localPin
+                          if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
                           // Simpan PIN baru
                           if (props.onSaveCashierSelf) {
                             props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
@@ -1461,8 +1464,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
                           }
                         }}
-                        disabled={props.activeStoreId === 'all'}
-                        className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
                         style={{ color: '#ffffff' }}
                       >
                         <i className="fa-solid fa-shield-halved"></i>
@@ -3831,7 +3833,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                   if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
                                   if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
                                   const ownerAcc = props.kasirList?.['owner'];
-                                  if (ownerAcc && ownerAcc.pin && ownerAcc.pin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                                  const googleUid = props.googleUid
+                                  const localPin = googleUid ? localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000' : null
+                                  const correctOldPin = (ownerAcc?.pin) || localPin
+                                  if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
                                   if (props.onSaveCashierSelf) {
                                     props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
                                       .then(() => {

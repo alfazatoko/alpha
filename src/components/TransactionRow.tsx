@@ -58,7 +58,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
   let listKeterangan = formattedKeterangan;
   let modalKeterangan = formattedKeterangan;
   let modalTransaksiLabel = displayKategori;
-  let adminFeeLabel = "Biaya Admin:";
+  const hasAdminDalam = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
+  let adminFeeLabel = hasAdminDalam ? "Biaya admin ( Potong Dalam ) :" : "Biaya Admin (Tunai):";
 
   let appFee = 0;
   if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && t.keterangan?.includes('[FEE_APP:')) {
@@ -89,11 +90,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
     if (metodeRaw.toUpperCase() === 'QRIS') metodeRaw = 'QRIS';
     else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC';
     else if (metodeRaw.toUpperCase() === 'ATM') metodeRaw = 'ATM';
+    else if (metodeRaw.toUpperCase().includes('BANK')) metodeRaw = 'BANK';
     else metodeRaw = metodeRaw.charAt(0).toUpperCase() + metodeRaw.slice(1).toLowerCase();
 
     const adm = t.adminFee;
     const nom = t.nominal;
-    const adminPotong = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
+    const adminPotong = hasAdminDalam;
 
     modalTransaksiLabel = `TARIK TUNAI > ${metodeRaw.toUpperCase()}`;
 
@@ -104,6 +106,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
 
     if (adminPotong) {
       adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
+    } else {
+      adminFeeLabel = "Biaya Admin (Tunai):";
     }
   } else {
     // Fallback penghapusan label Admin Dalam secara umum jika tidak tercover di atas
@@ -211,7 +215,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
                   <span className="text-emerald-600 font-black flex items-center gap-1.5">
                     <i className="fa-solid fa-arrow-down-left text-[10px]"></i> Sumber Uang Masuk:
                   </span>
-                  <span className="text-emerald-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? (t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').trim() || 'EDC / Bank') : 'Laci Kasir'}</span>
+                  <span className="text-emerald-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? (t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').replace(/bank uob/ig, 'Bank').trim() || 'EDC / Bank') : 'Laci Kasir'}</span>
                 </div>
               </div>
 
