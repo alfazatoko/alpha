@@ -303,9 +303,13 @@ const App: React.FC = () => {
         if (data) {
           const cList = data.cashiers || {}
           
-          // Migrate old cashiers that are not in SQL yet
+          // Migrate old cashiers that are not in SQL yet (skip owner)
           const upserts = [];
           for (const username in cList) {
+            if (username.toLowerCase() === 'owner') {
+              sqlCashiers[username] = { ...cList[username], role: 'owner' };
+              continue;
+            }
             if (!sqlCashiers[username]) {
               const acct = cList[username];
               upserts.push({
@@ -314,10 +318,10 @@ const App: React.FC = () => {
                 username: username,
                 name: acct.name,
                 password: acct.password,
-                role: acct.role || 'KASIR',
+                role: acct.role || 'kasir',
                 pin: acct.pin || ''
               });
-              sqlCashiers[username] = { ...acct };
+              sqlCashiers[username] = { ...acct, role: acct.role || 'kasir' };
               migratedAny = true;
             }
           }
@@ -1044,29 +1048,31 @@ const MainApp: React.FC<MainAppProps> = ({
       error = retry.error
     }
     
-    // Sync to store_cashiers SQL
+    // Sync to store_cashiers SQL (Hanya kasir non-owner)
     try {
-      const cashierUpserts = Object.keys(kasirList).map(username => {
-        const cAcct = kasirList[username];
-        return {
-          id: `${targetStoreId}_${username}`,
-          store_id: targetStoreId,
-          username: username,
-          name: cAcct.name,
-          password: cAcct.password,
-          role: cAcct.role,
-          pin: cAcct.pin || ''
-        };
-      });
+      const cashierUpserts = Object.keys(kasirList)
+        .filter(username => username.toLowerCase() !== 'owner' && (kasirList[username]?.role || '').toLowerCase() !== 'owner')
+        .map(username => {
+          const cAcct = kasirList[username];
+          return {
+            id: `${targetStoreId}_${username}`,
+            store_id: targetStoreId,
+            username: username,
+            name: cAcct.name,
+            password: cAcct.password,
+            role: cAcct.role,
+            pin: cAcct.pin || ''
+          };
+        });
       if (cashierUpserts.length > 0) {
         await supabase.from('store_cashiers').upsert(cashierUpserts);
       }
       
-      // Hapus kasir yang sudah tidak ada di kasirList dari store_cashiers
+      // Hapus kasir yang sudah tidak ada di kasirList dari store_cashiers (termasuk bersihkan record 'owner' jika pernah masuk)
       const { data: existingCashiers } = await supabase.from('store_cashiers').select('id, username').eq('store_id', targetStoreId);
       if (existingCashiers) {
-        const currentUsernames = new Set(Object.keys(kasirList));
-        const toDeleteIds = existingCashiers.filter(c => !currentUsernames.has(c.username)).map(c => c.id);
+        const currentUsernames = new Set(Object.keys(kasirList).filter(u => u.toLowerCase() !== 'owner' && (kasirList[u]?.role || '').toLowerCase() !== 'owner'));
+        const toDeleteIds = existingCashiers.filter(c => !currentUsernames.has(c.username) || c.username.toLowerCase() === 'owner').map(c => c.id);
         if (toDeleteIds.length > 0) {
           await supabase.from('store_cashiers').delete().in('id', toDeleteIds);
         }
@@ -1137,11 +1143,16 @@ const MainApp: React.FC<MainAppProps> = ({
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
 
+    // Pastikan jika targetUsername === 'owner', role selalu dipertahankan sebagai 'owner'
+    const accountToSave = targetUsername.toLowerCase() === 'owner'
+      ? { ...updatedAccount, role: 'owner' as const }
+      : updatedAccount
+
     const updatedList = {
       ...kasirList,
       [targetUsername]: {
         ...kasirList[targetUsername],
-        ...updatedAccount
+        ...accountToSave
       }
     }
     setKasirList(updatedList)
@@ -1176,19 +1187,21 @@ const MainApp: React.FC<MainAppProps> = ({
       throw new Error("Gagal menyimpan ke Cloud, namun data lokal terupdate.")
     }
 
-    // Sync to store_cashiers SQL
+    // Sync to store_cashiers SQL (Hanya untuk kasir non-owner)
     try {
-      const cAcct = updatedList[targetUsername];
-      if (cAcct) {
-        await supabase.from('store_cashiers').upsert({
-          id: `${effectiveStoreId}_${targetUsername}`,
-          store_id: effectiveStoreId,
-          username: targetUsername,
-          name: cAcct.name,
-          password: cAcct.password,
-          role: cAcct.role,
-          pin: cAcct.pin || ''
-        });
+      if (targetUsername.toLowerCase() !== 'owner') {
+        const cAcct = updatedList[targetUsername];
+        if (cAcct) {
+          await supabase.from('store_cashiers').upsert({
+            id: `${effectiveStoreId}_${targetUsername}`,
+            store_id: effectiveStoreId,
+            username: targetUsername,
+            name: cAcct.name,
+            password: cAcct.password,
+            role: cAcct.role,
+            pin: cAcct.pin || ''
+          });
+        }
       }
     } catch(e) {}
 

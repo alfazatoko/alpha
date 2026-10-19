@@ -1455,7 +1455,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
                           // Simpan PIN baru
                           if (props.onSaveCashierSelf) {
-                            props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+                            props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew, role: 'owner' })
                               .then(() => {
                                 setSavedStatus(true);
                                 setTimeout(() => setSavedStatus(false), 2000);
@@ -3838,7 +3838,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                   const correctOldPin = (ownerAcc?.pin) || localPin
                                   if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
                                   if (props.onSaveCashierSelf) {
-                                    props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew })
+                                    props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew, role: 'owner' })
                                       .then(() => {
                                         setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
                                         alert('PIN Owner berhasil diubah!');

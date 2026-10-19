@@ -8,10 +8,24 @@ interface TransactionRowProps {
   onEdit: (tx: Transaction) => void
   onDelete?: (tx: Transaction) => void
   kasirRole?: string
+  storeName?: string
+  storeSubtext?: string
+  kasirName?: string
 }
 
-const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDelete, kasirRole }) => {
+const TransactionRow: React.FC<TransactionRowProps> = ({ 
+  t, 
+  index, 
+  onEdit, 
+  onDelete, 
+  kasirRole,
+  storeName,
+  storeSubtext,
+  kasirName 
+}) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [showStrukPreview, setShowStrukPreview] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
   
   useEffect(() => {
     const handleOpen = (e: any) => {
@@ -120,6 +134,180 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
       modalKeterangan = modalKeterangan.replace(/\[admin_dalam\]/ig, '').replace(/\s+/g, ' ').trim();
     }
   }
+
+  const effectiveStoreName = storeName || (() => {
+    try {
+      const savedStore = localStorage.getItem('alphaPro_active_store')
+      if (savedStore) return JSON.parse(savedStore).name || 'ALFAZA CELL'
+    } catch {}
+    return 'ALFAZA CELL'
+  })()
+
+  const effectiveStoreSubtext = storeSubtext || (() => {
+    try {
+      const savedStore = localStorage.getItem('alphaPro_active_store')
+      if (savedStore) return JSON.parse(savedStore).subtext || ''
+    } catch {}
+    return ''
+  })()
+
+  const effectiveKasirName = (() => {
+    if (t.kasir_id) return t.kasir_id
+    if (kasirName) return kasirName
+    return localStorage.getItem('alphaPro_name') || 'Kasir'
+  })()
+
+  const generateReceiptText = () => {
+    const w = 32;
+    const center = (s: string) => {
+      const txt = (s || '').substring(0, w);
+      return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
+    };
+    const right = (left: string, rightStr: string) => {
+      const l = (left || '').substring(0, 18);
+      const r = (rightStr || '');
+      const space = w - l.length - r.length;
+      return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+    };
+
+    let text = center(effectiveStoreName.toUpperCase()) + '\n';
+    if (effectiveStoreSubtext) {
+      text += center(effectiveStoreSubtext) + '\n';
+    }
+    text += '='.repeat(w) + '\n';
+    text += `Waktu : ${dateObj.toLocaleDateString('id-ID')} ${jam}\n`;
+    text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
+    text += `Kasir : ${effectiveKasirName}\n`;
+    text += '-'.repeat(w) + '\n';
+    text += `Jenis : ${modalTransaksiLabel.substring(0, 24)}\n`;
+    if (modalKeterangan && modalKeterangan !== '-') {
+      text += `Ket   : ${modalKeterangan.substring(0, 24)}\n`;
+    }
+    text += '-'.repeat(w) + '\n';
+
+    if (appFee > 0) {
+      text += right('Harga Modal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += right('Fee Aplikasi', 'Rp ' + formatRp(appFee)) + '\n';
+      text += right('Total Modal', 'Rp ' + formatRp(t.nominal + appFee)) + '\n';
+      text += right(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
+      text += '-'.repeat(w) + '\n';
+      text += right('TOTAL', 'Rp ' + formatRp(t.nominal + appFee + displayAdminFee)) + '\n';
+    } else if (t.kategori === 'Tarik Tunai') {
+      const totalTarik = t.nominal + (!hasAdminDalam ? t.adminFee : 0);
+      text += right('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
+      text += right(hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += '-'.repeat(w) + '\n';
+      text += right('TOTAL', 'Rp ' + formatRp(totalTarik)) + '\n';
+    } else {
+      text += right('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += right('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += '-'.repeat(w) + '\n';
+      text += right('TOTAL', 'Rp ' + formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))) + '\n';
+    }
+
+    text += '='.repeat(w) + '\n';
+    text += center('Terima Kasih Atas') + '\n';
+    text += center('Kepercayaan Anda') + '\n';
+    text += '\n\n\n'; // Feed lines for paper tear
+    return text;
+  };
+
+  const handleExecutePrint = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsPrinting(true);
+
+    const receiptText = generateReceiptText();
+    const btMac = localStorage.getItem('bluetooth_printer_mac');
+
+    const tryRawBtPrint = () => {
+      const tryPrint = (scheme: string) => {
+        const a = document.createElement('a');
+        a.href = scheme;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+
+      try {
+        tryPrint(`rawbt:${encodeURIComponent(receiptText)}`);
+        setShowStrukPreview(false);
+      } catch (e) {
+        try {
+          tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
+          setShowStrukPreview(false);
+        } catch (e2) {
+          alert('Gagal membuka printer RawBT. Pastikan printer menyala dan bluetooth aktif.');
+        }
+      } finally {
+        setTimeout(() => setIsPrinting(false), 500);
+      }
+    };
+
+    // 1. Eksekusi via Bluetooth Serial (Capacitor / Android Native)
+    if ((window as any).bluetoothSerial) {
+      if (!btMac) {
+        setIsPrinting(false);
+        alert('Printer Bluetooth belum diatur.\nSilakan hubungkan printer di menu Akun > Printer & Hardware terlebih dahulu.');
+        return;
+      }
+
+      // Coba tulis langsung jika sudah terhubung
+      (window as any).bluetoothSerial.write(
+        receiptText,
+        () => {
+          setIsPrinting(false);
+          setShowStrukPreview(false);
+        },
+        () => {
+          // Jika belum tersambung, coba auto-connect ke printer yang tersimpan
+          (window as any).bluetoothSerial.connect(
+            btMac,
+            () => {
+              (window as any).bluetoothSerial.write(
+                receiptText,
+                () => {
+                  setIsPrinting(false);
+                  setShowStrukPreview(false);
+                },
+                (errWrite: any) => {
+                  setIsPrinting(false);
+                  alert('Gagal cetak ke Printer: ' + errWrite);
+                }
+              );
+            },
+            () => {
+              // Coba mode Insecure jika mode normal ditolak
+              (window as any).bluetoothSerial.connectInsecure(
+                btMac,
+                () => {
+                  (window as any).bluetoothSerial.write(
+                    receiptText,
+                    () => {
+                      setIsPrinting(false);
+                      setShowStrukPreview(false);
+                    },
+                    (errInsec: any) => {
+                      setIsPrinting(false);
+                      alert('Gagal cetak via Bluetooth Insecure: ' + errInsec);
+                    }
+                  );
+                },
+                () => {
+                  setIsPrinting(false);
+                  // Fallback ke RawBT
+                  tryRawBtPrint();
+                }
+              );
+            }
+          );
+        }
+      );
+    } else {
+      // 2. Web / Browser / Fallback RawBT
+      tryRawBtPrint();
+    }
+  };
 
   return (
     <div className="flex flex-col group transaction-row-container border-b border-slate-200/60 last:border-b-0 pb-1.5 mb-1.5">
@@ -265,6 +453,18 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
                 {t.isEdited && <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-black tracking-widest">EDITED</span>}
                 {!t.isEdited && <div></div>}
                 <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowStrukPreview(true);
+                    }}
+                    className="bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white px-3.5 py-2 rounded-xl text-[10px] font-black flex items-center gap-1.5 transition-all border border-emerald-200/80 shadow-xs cursor-pointer active:scale-95"
+                    title="Review & Cetak Struk"
+                  >
+                    <i className="fa-solid fa-print text-[10px]"></i>
+                    PRINT
+                  </button>
                   {canEdit ? (
                     <button 
                       onClick={(e) => { setIsOpen(false); handleEditClick(e); }}
@@ -286,6 +486,179 @@ const TransactionRow: React.FC<TransactionRowProps> = ({ t, index, onEdit, onDel
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REVIEW STRUK TRANSAKSI SEBELUM DICETAK */}
+      {showStrukPreview && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 animate-in fade-in duration-150"
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            if (!isPrinting) setShowStrukPreview(false); 
+          }}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[320px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center bg-slate-800/90 border-b border-slate-700 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
+                  <i className="fa-solid fa-receipt"></i>
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-white uppercase tracking-wider">Review Struk</h4>
+                  <p className="text-[9px] text-slate-400 font-medium">Ringkasan sebelum dicetak</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                disabled={isPrinting}
+                onClick={() => setShowStrukPreview(false)}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-700/60 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-xs"></i>
+              </button>
+            </div>
+
+            {/* Modal Body: Thermal Paper Simulation */}
+            <div className="p-3 overflow-y-auto flex-1 bg-slate-950/40">
+              <div className="bg-white text-slate-800 rounded-xl p-3.5 shadow-md font-mono text-[11px] leading-relaxed border border-slate-200 select-none">
+                {/* Store Header */}
+                <div className="text-center font-black text-[12px] text-slate-900 tracking-wider uppercase">
+                  {effectiveStoreName}
+                </div>
+                {effectiveStoreSubtext && (
+                  <div className="text-center text-[10px] text-slate-500 font-sans mt-0.5 leading-tight">
+                    {effectiveStoreSubtext}
+                  </div>
+                )}
+
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>Waktu :</span>
+                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID')} {jam}</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>No    :</span>
+                  <span className="font-semibold text-slate-800 truncate max-w-[140px]">{t.id ? t.id.slice(0, 16) : '-'}</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>Kasir :</span>
+                  <span className="font-semibold text-slate-800">{effectiveKasirName}</span>
+                </div>
+
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex justify-between items-start text-[10px]">
+                    <span className="text-slate-500 font-sans font-bold">Jenis:</span>
+                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{modalTransaksiLabel}</span>
+                  </div>
+                  {modalKeterangan && modalKeterangan !== '-' && (
+                    <div className="flex justify-between items-start text-[10px]">
+                      <span className="text-slate-500 font-sans font-bold">Ket  :</span>
+                      <span className="text-slate-700 text-right flex-1 ml-2 break-words">{modalKeterangan}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+                {/* Pricing Breakdown */}
+                <div className="flex flex-col gap-1 text-[11px]">
+                  {appFee > 0 ? (
+                    <>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">Harga Modal</span>
+                        <span>Rp {formatRp(t.nominal)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-rose-600">
+                        <span>Fee Aplikasi</span>
+                        <span>Rp {formatRp(appFee)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] font-bold pt-0.5 border-t border-dotted border-slate-200">
+                        <span>Total Modal</span>
+                        <span>Rp {formatRp(t.nominal + appFee)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-emerald-700">
+                        <span>{adminFeeLabel.replace(' :', '').replace(':', '')}</span>
+                        <span>Rp {formatRp(displayAdminFee)}</span>
+                      </div>
+                      <div className="border-b border-dashed border-slate-300 my-1"></div>
+                      <div className="flex justify-between font-black text-[12px] text-slate-900">
+                        <span>TOTAL</span>
+                        <span>Rp {formatRp(t.nominal + appFee + displayAdminFee)}</span>
+                      </div>
+                    </>
+                  ) : t.kategori === 'Tarik Tunai' ? (
+                    <>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">Nominal Tarik</span>
+                        <span>Rp {formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">{hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)'}</span>
+                        <span>Rp {formatRp(t.adminFee)}</span>
+                      </div>
+                      <div className="border-b border-dashed border-slate-300 my-1"></div>
+                      <div className="flex justify-between font-black text-[12px] text-slate-900">
+                        <span>TOTAL</span>
+                        <span>Rp {formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">Nominal</span>
+                        <span>Rp {formatRp(t.nominal)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">Biaya Admin</span>
+                        <span>Rp {formatRp(t.adminFee)}</span>
+                      </div>
+                      <div className="border-b border-dashed border-slate-300 my-1"></div>
+                      <div className="flex justify-between font-black text-[12px] text-slate-900">
+                        <span>TOTAL</span>
+                        <span>Rp {formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+                <div className="text-center text-[9px] text-slate-500 font-sans">
+                  <div>Terima Kasih Atas</div>
+                  <div>Kepercayaan Anda</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
+              <button
+                type="button"
+                disabled={isPrinting}
+                onClick={() => setShowStrukPreview(false)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all border border-slate-700 cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isPrinting}
+                onClick={handleExecutePrint}
+                className="flex-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-950/40 cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                <i className={cn("fa-solid", isPrinting ? "fa-circle-notch fa-spin" : "fa-print")}></i>
+                {isPrinting ? 'Mencetak...' : 'Cetak Struk'}
+              </button>
             </div>
           </div>
         </div>

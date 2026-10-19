@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { getLocalDateString, getShiftInfo, getActiveShifts, checkShiftLateness, APP_VERSION, isVersionSupported } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
@@ -58,7 +58,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [selectedUser, setSelectedUser] = useState(() => {
     try {
       const saved = localStorage.getItem(storeId && storeId !== 'all' ? `alphaPro_${storeId}_last_selected_user` : 'alphaPro_last_selected_user')
-      return saved || ''
+      return (saved && saved.toLowerCase() !== 'owner') ? saved : ''
     } catch {
       return ''
     }
@@ -75,9 +75,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [currentTimeStr, setCurrentTimeStr] = useState(() => 
     new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   )
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [searchCashier, setSearchCashier] = useState('')
-  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Live financial & shift settings synced with Supabase Realtime
   const [liveFinancialSettings, setLiveFinancialSettings] = useState<Record<string, string>>(() => {
@@ -184,7 +183,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Check if cashier has already clocked in today for this store
   useEffect(() => {
-    if (selectedUser && kasirList[selectedUser]?.role !== 'owner') {
+    if (selectedUser && selectedUser.toLowerCase() !== 'owner' && (kasirList[selectedUser]?.role || '').toLowerCase() !== 'owner') {
       const today = getLocalDateString()
       const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
       let alreadyAbsen = false
@@ -239,7 +238,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Save last selected cashier for fast repeat login
   useEffect(() => {
-    if (selectedUser) {
+    if (selectedUser && selectedUser.toLowerCase() !== 'owner') {
       try {
         if (storeId && storeId !== 'all') {
           localStorage.setItem(`alphaPro_${storeId}_last_selected_user`, selectedUser)
@@ -249,20 +248,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   }, [selectedUser, storeId])
 
-  // Close custom dropdown on outside click
+  // Close popup modal on Escape key
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isUserModalOpen) {
+        setIsUserModalOpen(false)
       }
     }
-    if (isDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
+    if (isUserModalOpen) {
+      window.addEventListener('keydown', handleKeyDown)
     }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isDropdownOpen])
+  }, [isUserModalOpen])
 
   // Check if PIN is enabled from localStorage
   useEffect(() => {
@@ -285,9 +284,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   }
 
-  // Filter non-owner cashiers
+  // Filter non-owner cashiers (pastikan akun ID 'owner' dan role 'owner' tidak pernah muncul)
   const cashierEntries = useMemo(() => {
-    return Object.entries(kasirList).filter(([_id, acc]) => acc.role !== 'owner')
+    return Object.entries(kasirList).filter(([id, acc]) => 
+      id.toLowerCase() !== 'owner' && 
+      (acc.role || '').toLowerCase() !== 'owner'
+    )
   }, [kasirList])
 
   // Filtered cashier list for dropdown
@@ -302,7 +304,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   // When inactive (login 2 / sudah absen): enlarged layout for comfortable viewing and faster selection.
   const isAbsenShowing = Boolean(
     selectedUser && 
-    kasirList[selectedUser]?.role !== 'owner' && 
+    selectedUser.toLowerCase() !== 'owner' && 
+    (kasirList[selectedUser]?.role || '').toLowerCase() !== 'owner' && 
     isAbsenFeatureActive && 
     !hasAbsenToday
   )
@@ -311,15 +314,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     e.preventDefault()
     setError('')
 
-    if (!selectedUser) {
-      setError('Silakan pilih pengguna.')
+    if (!selectedUser || selectedUser.toLowerCase() === 'owner') {
+      setError('Silakan pilih kasir.')
       triggerShake()
       return
     }
 
     const account = kasirList[selectedUser]
-    if (!account) {
-      setError('Akun tidak valid.')
+    if (!account || (account.role || '').toLowerCase() === 'owner') {
+      setError('Akun tidak valid untuk login kasir.')
       triggerShake()
       return
     }
@@ -421,158 +424,83 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className={`login-form transition-all duration-300 ${isAbsenShowing ? '!gap-2 sm:!gap-2.5' : '!gap-3.5 sm:!gap-4'}`}>
-          {/* User Select (Custom Dropdown with borders and larger text) */}
-          <div className="login-field relative" ref={dropdownRef}>
-            <label className={`login-label font-bold text-slate-700 transition-all duration-300 ${
-              isAbsenShowing ? '!text-[11px] !mb-1' : '!text-xs sm:!text-[13px] !mb-1.5'
-            }`}>
-              Pilih Pengguna
-            </label>
+        <form onSubmit={handleSubmit} className={`login-form transition-all duration-300 ${isAbsenShowing ? '!gap-1.5' : '!gap-3.5 sm:!gap-4'}`}>
+          {/* User Select Trigger (Opens Popup Modal) */}
+          <div className="login-field">
+            <div className="flex items-center justify-between mb-1">
+              <label className={`login-label !mb-0 font-bold text-slate-700 transition-all duration-300 ${
+                isAbsenShowing ? '!text-[11px]' : '!text-xs sm:!text-[13px]'
+              }`}>
+                Pilih Kasir
+              </label>
+              {selectedUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserModalOpen(true)
+                    setError('')
+                  }}
+                  className="text-[10px] sm:text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                >
+                  Ganti Kasir
+                </button>
+              )}
+            </div>
             
-            <div className="relative">
+            <div>
               <button
                 type="button"
                 onClick={() => {
-                  setIsDropdownOpen(prev => !prev)
+                  setIsUserModalOpen(true)
                   setError('')
                 }}
-                className={`w-full flex items-center justify-between text-left transition-all duration-200 border bg-slate-50/70 hover:bg-white focus:bg-white outline-none cursor-pointer ${
-                  isDropdownOpen ? 'border-blue-500 ring-2 ring-blue-100 bg-white' : 'border-slate-200 hover:border-blue-300'
-                } ${
+                className={`w-full flex items-center justify-between text-left transition-all duration-200 border bg-slate-50/70 hover:bg-white focus:bg-white hover:border-blue-400 outline-none cursor-pointer group shadow-xs ${
                   isAbsenShowing 
-                    ? '!h-9 !py-2 !px-3 !rounded-xl !text-xs' 
-                    : '!h-14 !py-3 !px-4 !rounded-2xl !text-base sm:!text-lg font-bold border-slate-300 shadow-sm'
+                    ? '!h-9 sm:!h-10 !py-1.5 !px-3 !rounded-xl !text-xs border-slate-200' 
+                    : '!h-14 !py-3 !px-4 !rounded-2xl !text-base sm:!text-lg font-bold border-slate-300 hover:shadow-md'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`rounded-full flex items-center justify-center shrink-0 ${
+                  <div className={`rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
                     selectedUser 
-                      ? 'bg-blue-100 text-blue-600' 
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-xs' 
                       : 'bg-slate-200 text-slate-400'
-                  } ${isAbsenShowing ? 'w-5 h-5 text-[10px]' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
+                  } ${isAbsenShowing ? 'w-6 h-6 text-[10px] !rounded-lg' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
                     <i className="fa-solid fa-user"></i>
                   </div>
-                  <span className={`truncate ${
-                    selectedUser && kasirList[selectedUser] ? 'text-slate-900 font-black' : 'text-slate-400 font-medium'
-                  } ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}>
-                    {selectedUser && kasirList[selectedUser] ? kasirList[selectedUser].name : 'Pilih Pengguna'}
-                  </span>
-                  {selectedUser && kasirList[selectedUser] && (
-                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
-                      Kasir
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span className={`truncate ${
+                      selectedUser && kasirList[selectedUser] ? 'text-slate-900 font-black' : 'text-slate-400 font-medium'
+                    } ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}>
+                      {selectedUser && kasirList[selectedUser] ? kasirList[selectedUser].name : 'Pilih Kasir...'}
                     </span>
-                  )}
-                </div>
-                
-                <i className={`fa-solid fa-chevron-down text-slate-400 text-xs shrink-0 transition-transform duration-200 ${
-                  isDropdownOpen ? 'rotate-180 text-blue-600' : ''
-                }`}></i>
-              </button>
-
-              {/* DROPDOWN MENU WITH DIVIDERS & LARGER CASHIER NAMES */}
-              {isDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                  {/* Search bar if there are more than 3 cashiers */}
-                  {cashierEntries.length > 3 && (
-                    <div className="p-2 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-10">
-                      <div className="relative">
-                        <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                        <input
-                          type="text"
-                          value={searchCashier}
-                          onChange={(e) => setSearchCashier(e.target.value)}
-                          placeholder="Cari nama kasir..."
-                          className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-medium"
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Cashiers List */}
-                  <div className="max-h-56 sm:max-h-64 overflow-y-auto">
-                    {filteredCashiers.length === 0 ? (
-                      <div className="py-4 text-center text-xs text-slate-400 font-medium">
-                        Tidak ada kasir yang cocok
-                      </div>
-                    ) : (
-                      filteredCashiers.map(([id, acc]) => {
-                        const isSelected = selectedUser === id
-                        const alreadyAbsen = isCashierAbsenToday(id)
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedUser(id)
-                              setIsDropdownOpen(false)
-                              setError('')
-                            }}
-                            className={`w-full text-left flex items-center justify-between transition-colors cursor-pointer border-b border-slate-200/90 last:border-b-0 ${
-                              isAbsenShowing ? 'px-3 py-2' : 'px-4 py-3.5 sm:py-4'
-                            } ${
-                              isSelected ? 'bg-blue-50/90' : 'bg-white hover:bg-slate-50 active:bg-blue-50/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className={`rounded-full flex items-center justify-center font-bold shrink-0 shadow-sm ${
-                                isSelected 
-                                  ? 'bg-blue-600 text-white' 
-                                  : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 border border-blue-200/60'
-                              } ${isAbsenShowing ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-xs sm:w-10 sm:h-10 sm:text-sm'}`}>
-                                <i className="fa-solid fa-user"></i>
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className={`block font-extrabold text-slate-900 truncate ${
-                                    isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'
-                                  }`}>
-                                    {acc.name}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shrink-0 uppercase tracking-wide">
-                                    Kasir
-                                  </span>
-                                </div>
-                                {isAbsenFeatureActive && (
-                                  <p className="text-[10px] mt-0.5 font-medium flex items-center gap-1">
-                                    {alreadyAbsen ? (
-                                      <span className="text-emerald-600 flex items-center gap-1 font-semibold">
-                                        <i className="fa-solid fa-circle-check text-[9px]"></i> Sudah Absen Hari Ini
-                                      </span>
-                                    ) : (
-                                      <span className="text-amber-600 flex items-center gap-1 font-semibold">
-                                        <i className="fa-solid fa-clock text-[9px]"></i> Belum Absen
-                                      </span>
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="shrink-0 ml-2">
-                              {isSelected ? (
-                                <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow-sm">
-                                  <i className="fa-solid fa-check font-bold"></i>
-                                </span>
-                              ) : (
-                                <i className="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
-                              )}
-                            </div>
-                          </button>
-                        )
-                      })
+                    {selectedUser && kasirList[selectedUser] && (
+                      <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 border border-blue-100">
+                        Kasir
+                      </span>
                     )}
                   </div>
                 </div>
-              )}
+                
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <span className={`font-bold rounded-lg transition-all ${
+                    selectedUser 
+                      ? 'text-[11px] text-blue-600 bg-blue-50/90 group-hover:bg-blue-100 px-2 py-0.5 border border-blue-200/60' 
+                      : 'text-xs text-white bg-blue-600 px-2.5 py-1 shadow-xs group-hover:bg-blue-700'
+                  }`}>
+                    {selectedUser ? 'Ganti' : 'Pilih'}
+                  </span>
+                  <i className="fa-solid fa-chevron-right text-slate-400 text-xs group-hover:text-blue-600 transition-colors"></i>
+                </div>
+              </button>
             </div>
           </div>
 
           {/* ABSEN KEHADIRAN CARD (Muncul hanya jika belum absen hari ini dan fitur aktif) */}
           {selectedUser && kasirList[selectedUser]?.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday && (
-            <div className="bg-slate-50/80 border border-blue-100 rounded-xl p-2.5 shadow-sm space-y-2 animate-in fade-in slide-in-from-top-1">
+            <div className="bg-slate-50/80 border border-blue-100 rounded-xl px-2.5 pt-2 pb-0.5 shadow-xs space-y-1 animate-in fade-in slide-in-from-top-1">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs shadow-sm shrink-0">
+                <div className="w-5 h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] shadow-xs shrink-0">
                   <i className="fa-solid fa-calendar-check"></i>
                 </div>
                 <div className="min-w-0">
@@ -582,7 +510,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
 
               {/* Grid Shift */}
-              <div className={`grid gap-1.5 ${activeShifts.length === 1 ? 'grid-cols-1' : activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              <div className={`grid gap-1 ${activeShifts.length === 1 ? 'grid-cols-1' : activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 {activeShifts.map((shift) => {
                   const isSelected = selectedShift === shift.id
                   
@@ -618,7 +546,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                       key={shift.id}
                       type="button"
                       onClick={() => { setSelectedShift(shift.id); setError(''); }}
-                      className={`relative rounded-xl py-2 px-1 text-white transition-all flex flex-col items-center justify-center text-center cursor-pointer border select-none ${bgClasses}`}
+                      className={`relative rounded-xl py-1.5 px-1 text-white transition-all flex flex-col items-center justify-center text-center cursor-pointer border select-none ${bgClasses}`}
                     >
                       {isSelected && (
                         <span className="absolute top-1 right-1 w-4 h-4 bg-white text-emerald-600 rounded-full flex items-center justify-center text-[8px] font-black shadow ring-1 ring-emerald-500">
@@ -639,18 +567,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
               {/* Keterangan Terlambat Absen (muncul jika terlambat) */}
               {shiftLateness.isLate && (
-                <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl p-2 animate-in fade-in slide-in-from-top-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-black text-purple-900 flex items-center gap-1">
-                      <i className="fa-solid fa-pen-to-square text-purple-600 text-[10px]"></i>
+                <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl px-2 pt-1 pb-0.5 animate-in fade-in slide-in-from-top-1">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-[9px] font-black text-purple-900 flex items-center gap-1">
+                      <i className="fa-solid fa-pen-to-square text-purple-600 text-[8.5px]"></i>
                       Keterangan Terlambat Absen
                     </label>
-                    <span className="text-[8.5px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200 flex items-center gap-0.5">
-                      <i className="fa-solid fa-clock text-[7px]"></i> Telat {shiftLateness.lateMins} Menit
+                    <span className="text-[7.5px] font-black text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-200 flex items-center gap-0.5">
+                      <i className="fa-solid fa-clock text-[6.5px]"></i> Telat {shiftLateness.lateMins} Menit
                     </span>
                   </div>
                   <textarea
-                    className="w-full text-xs p-1.5 rounded-lg border border-purple-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-tight h-10"
+                    className="w-full text-xs px-2 py-1 rounded-lg border border-purple-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-tight h-7 sm:h-7.5"
                     placeholder="Tulis alasan keterlambatan absen di sini..."
                     rows={1}
                     value={alasanTelat}
@@ -663,9 +591,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
           {/* PIN Input (Hidden if PIN is disabled) */}
           {isPinEnabled && (
-            <div className="login-field">
+            <div className={`login-field ${isAbsenShowing ? '!mt-0' : ''}`}>
               <label className={`login-label font-bold text-slate-700 transition-all duration-300 ${
-                isAbsenShowing ? '!text-[11px] !mb-1' : '!text-xs sm:!text-[13px] !mb-1.5'
+                isAbsenShowing ? '!text-[10.5px] !mb-0 !leading-tight' : '!text-xs sm:!text-[13px] !mb-1.5'
               }`}>
                 Masukkan PIN
               </label>
@@ -681,7 +609,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                   maxLength={6}
                   className={`login-input tracking-wider transition-all duration-300 ${
                     isAbsenShowing 
-                      ? '!py-2 !pl-8 !pr-9 !text-xs !rounded-xl !h-9' 
+                      ? '!py-1.5 !pl-8 !pr-8 !text-xs !rounded-xl !h-8 sm:!h-8.5' 
                       : '!py-3.5 !pl-11 !pr-11 !text-base sm:!text-lg !rounded-2xl !h-14 tracking-widest font-black border-slate-300 shadow-sm'
                   }`}
                   inputMode="numeric"
@@ -690,7 +618,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                   type="button"
                   onClick={() => setShowPin(!showPin)}
                   className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer ${
-                    isAbsenShowing ? 'right-2.5' : 'right-3.5'
+                    isAbsenShowing ? 'right-2' : 'right-3.5'
                   }`}
                   title={showPin ? "Sembunyikan PIN" : "Tampilkan PIN"}
                 >
@@ -738,6 +666,162 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           ALPHA Pro v{APP_VERSION}
         </p>
       </div>
+
+      {/* POPUP MODAL PILIH PENGGUNA / KASIR */}
+      {isUserModalOpen && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setIsUserModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[88vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-base border border-blue-100 shadow-xs">
+                  <i className="fa-solid fa-users"></i>
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base leading-tight">Pilih Kasir</h3>
+                  <p className="text-xs text-slate-500 font-medium">Silakan pilih nama kasir untuk login</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUserModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                title="Tutup Popup"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Search Bar (jika kasir lebih dari 2) */}
+            {cashierEntries.length > 2 && (
+              <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                <div className="relative">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                  <input
+                    type="text"
+                    value={searchCashier}
+                    onChange={(e) => setSearchCashier(e.target.value)}
+                    placeholder="Cari nama kasir..."
+                    className="w-full pl-8 pr-8 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-medium transition-all shadow-xs"
+                    autoFocus
+                  />
+                  {searchCashier && (
+                    <button 
+                      type="button" 
+                      onClick={() => setSearchCashier('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                      title="Hapus pencarian"
+                    >
+                      <i className="fa-solid fa-circle-xmark"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Cashier List */}
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-2.5 max-h-[55vh] flex-1">
+              {filteredCashiers.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2 text-xl">
+                    <i className="fa-solid fa-user-slash"></i>
+                  </div>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-600">Tidak ada kasir yang cocok</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Coba kata kunci pencarian yang lain</p>
+                </div>
+              ) : (
+                filteredCashiers.map(([id, acc]) => {
+                  const isSelected = selectedUser === id
+                  const alreadyAbsen = isCashierAbsenToday(id)
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(id)
+                        setIsUserModalOpen(false)
+                        setError('')
+                      }}
+                      className={`w-full text-left p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/70 ring-2 ring-blue-100 shadow-sm'
+                          : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50/80 bg-white shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm shrink-0 transition-transform group-hover:scale-105 ${
+                          isSelected
+                            ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+                            : 'bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 border border-blue-200/60'
+                        }`}>
+                          <i className="fa-solid fa-user text-base"></i>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`block font-extrabold truncate text-sm sm:text-base ${
+                              isSelected ? 'text-blue-950' : 'text-slate-800'
+                            }`}>
+                              {acc.name}
+                            </span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100 shrink-0 uppercase tracking-wide">
+                              Kasir
+                            </span>
+                          </div>
+                          {isAbsenFeatureActive && (
+                            <p className="text-[11px] mt-1 font-medium flex items-center gap-1.5">
+                              {alreadyAbsen ? (
+                                <span className="text-emerald-600 flex items-center gap-1 font-semibold">
+                                  <i className="fa-solid fa-circle-check text-[10px]"></i> Sudah Absen Hari Ini
+                                </span>
+                              ) : (
+                                <span className="text-amber-600 flex items-center gap-1 font-semibold">
+                                  <i className="fa-solid fa-clock text-[10px]"></i> Belum Absen
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 ml-2">
+                        {isSelected ? (
+                          <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow-md shadow-blue-500/30">
+                            <i className="fa-solid fa-check font-black"></i>
+                          </div>
+                        ) : (
+                          <div className="w-7 h-7 rounded-full border border-slate-200 group-hover:border-blue-400 group-hover:bg-blue-50 flex items-center justify-center text-slate-300 group-hover:text-blue-600 transition-colors">
+                            <i className="fa-solid fa-chevron-right text-xs"></i>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
+              <span className="text-[11px] font-medium text-slate-500">
+                Total: <strong className="text-slate-700">{cashierEntries.length}</strong> Kasir terdaftar
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsUserModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

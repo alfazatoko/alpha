@@ -1028,7 +1028,17 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               </div>
             ) : (
               paginatedTransactions.map((t, i) => (
-                <TransactionRow key={t.id} t={t} index={startIndex + i} onEdit={props.onEdit} onDelete={props.onDelete} kasirRole={props.kasirRole} />
+                <TransactionRow 
+                  key={t.id} 
+                  t={t} 
+                  index={startIndex + i} 
+                  onEdit={props.onEdit} 
+                  onDelete={props.onDelete} 
+                  kasirRole={props.kasirRole}
+                  storeName={props.storeName}
+                  storeSubtext={props.storeSubtext}
+                  kasirName={props.kasirName}
+                />
               ))
             )}
           </div>
