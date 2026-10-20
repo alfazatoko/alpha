@@ -102,15 +102,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.3.9
-          name: "ALFAZA ALPHA POS v1.3.9"
+          tag_name: v1.4.0
+          name: "ALFAZA ALPHA POS v1.4.0"
           body: |
-            ### Pembaruan Aplikasi v1.3.9
-            - **Perbesaran Form Login Kasir:** Kolom pilihan pengguna, input PIN, tombol MASUK, dan item nama kasir diperbesar signifikan (tinggi h-14, font tebal, garis pemisah jelas) untuk kenyamanan dan kemudahan akses.
-            - **Sistem Stok Terpusat Voucher (1 Toko = 1 Pembukuan):** Seluruh kasir berbagi stok fisik terpusat tanpa reset ke 0 saat pergantian shift. Hitungan murni voucher terjual & uang tunai hasil penjualan (modal laci dipisah fisik).
-            - **Validasi Silang Pagi & Malam:** Pencegahan selisih gaib dengan validasi stok fisik buka toko pagi terhadap closing semalam, disertai modal peringatan wajib jika ada selisih.
-            - **Privasi Data Kasir:** Kasir reguler hanya melihat riwayat transaksi dan rekap shift miliknya sendiri, akses multi-shift toko khusus untuk Owner.
-            - **Optimalisasi Layar & Tombol Navigasi:** Perbaikan safe padding laporan bulanan agar tidak tertutup tombol navigasi melayang.
+            ### Pembaruan Aplikasi v1.4.0
+            - **Halaman Profit & Laba Admin Fee (Khusus Mode Owner):** Penggantian menu Ringkasan Harian dengan pembukuan murni laba admin fee dari seluruh riwayat transaksi kasir (tunai maupun non-tunai/admin dalam).
+            - **3 Sub-View Analisis Lengkap:**
+              1. *Bulan Berjalan (1-31):* Rincian laba admin harian, rata-rata laba per hari, hari rekor tertinggi, serta komposisi fee tunai vs non-tunai.
+              2. *Rekap Pertahun (Januari-Desember):* Tampilan daftar vertikal responsif mode HP per bulan, perbandingan performa terhadap puncak rekor tahunan, dan drill-down ke rincian harian 1-31.
+              3. *Papan Rekor Profit (The Best):* Papan peringkat bulan, tahun, hari puncak, dan kasir dengan perolehan keuntungan admin fee tertinggi sepanjang masa.
+            - **Optimalisasi Layar HP (Mobile-First):** Ukuran teks dan kartu disesuaikan presisi untuk smartphone tanpa terpotong (bebas truncation), badge transaksi diletakkan sejajar nama bulan, dan rekap menurun ke bawah rapi.
+            - **Sinkronisasi Otomatis Cloud Supabase:** Terhubung dengan tabel database `profit_harian` dan `profit_bulanan` di latar belakang secara otomatis (*silent auto-sync*).
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

@@ -2292,6 +2292,13 @@ const MainApp: React.FC<MainAppProps> = ({
   const [filterKategori, setFilterKategori] = useState<string[]>(['Semua'])
   const [activeSaldoFilter, setActiveSaldoFilter] = useState('Semua')
   const [filterKasir, setFilterKasir] = useState('Semua')
+
+  // Pastikan filter kasir tidak pernah terkunci di 'owner' karena owner bukan kasir
+  useEffect(() => {
+    if (filterKasir && filterKasir.toLowerCase() === 'owner') {
+      setFilterKasir('Semua')
+    }
+  }, [filterKasir])
   
   // Laporan Date Filter
   const [filterTanggalLaporan, setFilterTanggalLaporan] = useState(getLocalDateString())
@@ -3101,14 +3108,14 @@ const MainApp: React.FC<MainAppProps> = ({
       let count = 0
 
       todayTxs.forEach(t => {
-        const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]')
+        const isKhusus = (t.keterangan || '').includes('[KHUSUS]')
         const isIsi = String(t.kategori).startsWith('Isi')
 
         if (isIsi) {
           if (t.kasir_id === kasirUsername || kasirUsername === 'all') {
             tambahSaldo += Number(t.nominal) || 0
           }
-        } else if (!isKhususAtauNonTunai) {
+        } else if (!isKhusus) {
           if (t.kasir_id === kasirUsername || kasirUsername === 'all') {
             count++
             adminFee += Number(t.adminFee) || 0
@@ -3430,7 +3437,7 @@ const MainApp: React.FC<MainAppProps> = ({
                     'view-nota': 'Nota',
                     'view-otomatis': 'Otomatis',
                     'view-owner-monitor': 'Monitor Toko',
-                    'view-owner-laporan': 'Laporan Owner',
+                    'view-owner-laporan': 'Profit & Laba Admin',
                     'view-owner-grafik': 'Grafik Penjualan',
                     'view-owner-performa': 'Performa Kasir',
                     'view-owner-absen': 'Absensi Karyawan',

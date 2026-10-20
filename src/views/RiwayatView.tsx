@@ -471,9 +471,11 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer appearance-none"
                     >
                       <option value="Semua">Semua Kasir</option>
-                      {Object.entries(props.kasirList).map(([id, acc]) => (
-                        <option key={id} value={id}>{acc.name}</option>
-                      ))}
+                      {Object.entries(props.kasirList)
+                        .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
+                        .map(([id, acc]) => (
+                          <option key={id} value={id}>{acc.name}</option>
+                        ))}
                     </select>
                     <i className="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 pointer-events-none"></i>
                   </div>
@@ -811,9 +813,11 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
                     >
                       <option value="Semua" className="text-slate-800">Semua Kasir</option>
-                      {Object.entries(props.kasirList).map(([id, acc]) => (
-                        <option key={id} value={id} className="text-slate-800">{acc.name}</option>
-                      ))}
+                      {Object.entries(props.kasirList)
+                        .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
+                        .map(([id, acc]) => (
+                          <option key={id} value={id} className="text-slate-800">{acc.name}</option>
+                        ))}
                     </select>
                     <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
                   </div>

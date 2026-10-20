@@ -719,7 +719,7 @@ export default function LaporanTab({
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-2 pr-7 py-1 text-[10px] font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 appearance-none transition cursor-pointer"
                   >
                     <option value="SEMUA">Semua Kasir</option>
-                    {allCashiers?.map(c => (
+                    {allCashiers?.filter(c => c.name.toLowerCase() !== 'owner' && (c.role || '').toLowerCase() !== 'owner').map(c => (
                       <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>

@@ -344,8 +344,12 @@ export default function AturStokTab({
   // ── SELF-HANDOVER: Kasir bisa serah terima ke diri sendiri (untuk toko 1 kasir / rotasi jadwal) ──
   // Buat virtual entry "diri sendiri" yang selalu tersedia
   const selfCashierOption = { ...activeCashier, name: activeCashier.name + ' (Tutup Shift)', id: activeCashier.id + '__self' };
-  // Daftar kasir lain (exclude diri sendiri)
-  const otherCashiers = (allCashiers || [nextCashier]).filter(c => c.id !== activeCashier.id);
+  // Daftar kasir lain (exclude diri sendiri dan exclude owner)
+  const otherCashiers = (allCashiers || [nextCashier]).filter(c => 
+    c.id !== activeCashier.id && 
+    c.name.toLowerCase() !== 'owner' && 
+    (c.role || '').toLowerCase() !== 'owner'
+  );
   // Gabungkan: kasir lain DULU, lalu opsi diri sendiri di bawah
   const availableToCashiers = [...otherCashiers, selfCashierOption];
   // Resolve kasir terpilih — jika self, gunakan selfCashierOption

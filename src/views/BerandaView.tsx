@@ -8,6 +8,7 @@ import SummaryCards from '../components/SummaryCards'
 import PosKasirView from './PosKasirView'
 import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
+import ProfitOwnerView from './ProfitOwnerView'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -2382,7 +2383,7 @@ const DEFAULT_OWNER_MENU = [
   { id: 'view-owner-saldo', title: 'Saldo', desc: 'Atur modal kasir', icon: 'fa-wallet', color: 'bg-emerald-600' },
   { id: 'view-owner-backup', title: 'Pengaturan', desc: 'Sistem & Backup', icon: 'fa-gear', color: 'bg-slate-600' },
   { id: 'view-owner-grafik', title: 'Grafik', desc: 'Grafik transaksi', icon: 'fa-chart-simple', color: 'bg-emerald-500' },
-  { id: 'view-owner-laporan', title: 'Ringkasan', desc: 'Ringkasan harian', icon: 'fa-file-lines', color: 'bg-indigo-600' },
+  { id: 'view-owner-laporan', title: 'Profit', desc: 'Laba admin fee', icon: 'fa-hand-holding-dollar', color: 'bg-emerald-600' },
 ];
 
 function calculateTenure(joinDateStr: string) {
@@ -2981,10 +2982,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         
         props.transactions.forEach(t => {
           if (t.kasir_id === props.username && t.timestamp.startsWith(todayStr)) {
-            const isKhususAtauNonTunai = (t.keterangan || '').includes('[KHUSUS]') || (t.keterangan || '').includes('[NON_TUNAI]');
+            const isKhusus = (t.keterangan || '').includes('[KHUSUS]');
             const isIsi = String(t.kategori).startsWith('Isi');
             
-            if (!isIsi && !isKhususAtauNonTunai) {
+            if (!isIsi && !isKhusus) {
               count++;
               laba += Number(t.adminFee) || 0;
               if (t.kategori === 'Tarik Tunai') {
@@ -3014,6 +3015,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           tanggal: todayStr,
           omset,
           laba,
+          laba_admin: laba,
           pengeluaran,
           total_transaksi: count,
           timestamp: new Date().toISOString()
@@ -4217,7 +4219,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     )}
                   >
                     <option value="Semua" className="text-slate-800">SEMUA KASIR</option>
-                    {props.kasirList && Object.entries(props.kasirList).filter(([id]) => id !== 'owner').map(([id, acc]) => (
+                    {props.kasirList && Object.entries(props.kasirList).filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner').map(([id, acc]) => (
                       <option key={id} value={id} className="text-slate-800">{acc.name}</option>
                     ))}
                   </select>
@@ -4455,7 +4457,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         const getSubViewDetails = () => {
           switch(activeOwnerSubView) {
             case 'monitor': return { title: 'KELOLA KASIR', color: 'from-blue-600 to-blue-800', icon: 'fa-users', desc: 'Pantau aktivitas dan kelola akun kasir Anda.' }
-            case 'laporan': return { title: 'RINGKASAN HARIAN', color: 'from-indigo-600 to-indigo-800', icon: 'fa-file-lines', desc: 'Lihat ringkasan transaksi dan pergerakan saldo.' }
+            case 'laporan': return { title: 'PROFIT & LABA ADMIN', color: 'from-emerald-700 to-teal-900', icon: 'fa-hand-holding-dollar', desc: 'Laba admin fee riwayat transaksi harian & tahunan.' }
             case 'grafik': return { title: 'GRAFIK TRANSAKSI', color: 'from-emerald-500 to-emerald-700', icon: 'fa-chart-simple', desc: 'Visualisasi data transaksi harian dan bulanan.' }
             case 'performa': return { title: 'PERFORMA KASIR', color: 'from-purple-600 to-purple-800', icon: 'fa-chart-line', desc: 'Analisis kecepatan dan volume transaksi per kasir.' }
             case 'absen': return { title: 'ABSENSI KASIR', color: 'from-teal-500 to-teal-700', icon: 'fa-fingerprint', desc: 'Rekapitulasi kehadiran dan jam kerja kasir.' }
@@ -4658,57 +4660,21 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
               </div>
             )}
 
-              {activeOwnerSubView === 'laporan' && (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
-                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest pl-2">Filter Data Kasir</p>
-                    <div className="relative">
-                      <select
-                        value={props.filterKasir || 'Semua'}
-                        onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                        className="bg-white border border-gray-200 text-blue-800 text-xs font-black py-1.5 pl-3 pr-8 rounded-lg outline-none cursor-pointer appearance-none"
-                      >
-                        <option value="Semua">Semua Kasir</option>
-                        {Object.entries(props.kasirList).map(([id, acc]) => (
-                          <option key={id} value={id}>{acc.name}</option>
-                        ))}
-                      </select>
-                      <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-blue-400 pointer-events-none"></i>
-                    </div>
-                  </div>
-
-                  {/* SALDO BANK */}
-                  <div className="space-y-2.5 mb-4 pb-4 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-[10px]">
-                        <i className="fa-solid fa-building-columns"></i>
-                      </div>
-                      <h4 className="text-[13px] font-black text-blue-700 uppercase tracking-widest">SALDO BANK</h4>
-                    </div>
-                    <div className="space-y-2 pl-7">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-gray-500">Total Saldo Bank</p>
-                        <span className="text-xs font-black text-blue-700">{formatRupiah(ownerSaldoBank)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <KasSummary 
-                    kasModal={ownerKasModal}
-                    penjualanDigital={ownerPenjualanDigital}
-                    penjualanAksesoris={ownerTotalAksesoris}
-                    totalAdminFee={ownerTotalAdmin}
-                    penjualanVoucherTunai={props.penjualanVoucherTunai}
-                    tarikTunaiNasabah={ownerTotalTarik}
-                    adminDalamNonTunai={ownerAdminDalam}
-                    transaksiKhusus={ownerKhusus}
-                    transaksiNonTunai={ownerNonTunai}
-                  />
-                  <button className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
-                    <i className="fa-solid fa-file-excel text-xs"></i> EXPORT LAPORAN EXCEL
-                  </button>
-                </div>
-              )}               {activeOwnerSubView === 'audit' && (
+            {activeOwnerSubView === 'laporan' && (
+              <ProfitOwnerView
+                transactions={props.transactions}
+                allTransactions={props.allTransactions}
+                kasirList={props.kasirList}
+                filterKasir={props.filterKasir}
+                setFilterKasir={props.setFilterKasir}
+                activeStoreId={props.activeStoreId}
+                pantauStoreId={props.pantauStoreId}
+                userId={props.userId}
+                showToast={props.showToast}
+                isPc={props.isPc}
+              />
+            )}
+               {activeOwnerSubView === 'audit' && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
                     <div>

@@ -129,7 +129,7 @@ const SidebarPC: React.FC<SidebarPCProps> = ({
             </span>
             {[
               { id: 'view-owner-monitor', label: 'Monitor Kasir', icon: 'fa-users' },
-              { id: 'view-owner-laporan', label: 'Laporan Owner', icon: 'fa-file-lines' },
+              { id: 'view-owner-laporan', label: 'Profit & Laba', icon: 'fa-hand-holding-dollar' },
               { id: 'view-owner-grafik', label: 'Grafik Penjualan', icon: 'fa-chart-simple' },
               { id: 'view-owner-performa', label: 'Performa Kasir', icon: 'fa-chart-line' },
               { id: 'view-owner-absen', label: 'Absensi Karyawan', icon: 'fa-fingerprint' },

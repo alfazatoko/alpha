@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
-import { GlobalHeader } from '../components/GlobalHeader';
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { GlobalHeader } from '../components/GlobalHeader'
 import { jsPDF } from 'jspdf'
 import { formatRupiah, cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
@@ -20,45 +20,285 @@ interface PerformaKasirViewProps {
   targetStoreId?: string
 }
 
+interface DayKasirStat {
+  tambahSaldo: number
+  omset: number
+  labaAdmin: number
+  countTx: number
+}
+
+const INDO_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+const INDO_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+]
+
 const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
-  const [mainTab, setMainTab] = useState<'profit' | 'performa_kasir'>('profit')
+  // Navigation tabs: 'harian' (Tgl 1 - 31), 'kasir' (Leaderboard), 'tahunan' (Rekap 12 Bulan)
+  const [activeTab, setActiveTab] = useState<'harian' | 'kasir' | 'tahunan'>('harian')
   const [filterKasir, setFilterKasir] = useState<string>('Semua')
-  const [subTabKasir, setSubTabKasir] = useState<'rekap' | 'tambah_saldo'>('rekap')
-  
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc') // Default terbaru di atas
+  const [showModalSaldo, setShowModalSaldo] = useState(false)
+
+  // Pastikan filter kasir tidak terkunci di 'owner'
+  useEffect(() => {
+    if (filterKasir && filterKasir.toLowerCase() === 'owner') {
+      setFilterKasir('Semua')
+    }
+  }, [filterKasir])
+
+  // Sinkronisasi data kasir langsung dari Cloud store_settings jika kasirList lokal belum lengkap
+  const [fetchedCashiers, setFetchedCashiers] = useState<Record<string, any>>({})
+
+  useEffect(() => {
+    if (!props.googleUid) return
+    const loadCloudCashiers = async () => {
+      try {
+        if (props.targetStoreId && props.targetStoreId !== 'all') {
+          const { data } = await supabase
+            .from('store_settings')
+            .select('cashiers')
+            .eq('store_id', props.targetStoreId)
+            .maybeSingle()
+          if (data?.cashiers) {
+            setFetchedCashiers(data.cashiers)
+          }
+        }
+      } catch (e) {
+        console.warn('Gagal memuat kasir dari cloud:', e)
+      }
+    }
+    loadCloudCashiers()
+  }, [props.googleUid, props.targetStoreId])
+
+  // Gabungan kasir dari localStorage, props.kasirList, dan cloud store_settings
+  const effectiveKasirList = useMemo(() => {
+    const merged: Record<string, any> = {}
+    if (props.targetStoreId) {
+      try {
+        const local = localStorage.getItem(`alphaPro_${props.targetStoreId}_kasir_list`)
+        if (local) Object.assign(merged, JSON.parse(local))
+      } catch (e) {}
+    }
+    if (props.kasirList) {
+      Object.assign(merged, props.kasirList)
+    }
+    if (fetchedCashiers) {
+      Object.assign(merged, fetchedCashiers)
+    }
+    return merged
+  }, [props.kasirList, props.targetStoreId, fetchedCashiers])
+
+  // Helper pemeta kasir_id riil dari transaksi ke kasir terdaftar (mengatasi typo/alias toko1 -> toko1_01 / Aulia)
+  const resolveCashierKey = useCallback((rawId: string): string => {
+    if (!rawId) return 'Unknown'
+    const clean = rawId.trim()
+    if (clean.toLowerCase() === 'owner') return 'owner'
+
+    // 1. Direct match
+    if (effectiveKasirList[clean]) return clean
+
+    // 2. Case-insensitive key match
+    const caseMatch = Object.keys(effectiveKasirList).find(
+      k => k.toLowerCase() === clean.toLowerCase()
+    )
+    if (caseMatch) return caseMatch
+
+    // 3. Match against account name
+    const nameMatch = Object.keys(effectiveKasirList).find(
+      k => (effectiveKasirList[k]?.name || '').trim().toLowerCase() === clean.toLowerCase()
+    )
+    if (nameMatch) return nameMatch
+
+    // 4. Normalized comparison (ignore _, -, spaces)
+    const normClean = clean.toLowerCase().replace(/[-_\s]/g, '')
+    
+    // Store aliases: toko1 or toko-01 -> toko1_01 (Aulia)
+    if (normClean === 'toko1' || normClean === 'toko01' || normClean === 'toko101') {
+      const auliaKey = Object.keys(effectiveKasirList).find(k => {
+        const nk = k.toLowerCase().replace(/[-_\s]/g, '')
+        const name = (effectiveKasirList[k]?.name || '').toLowerCase()
+        return nk === 'toko101' || nk === 'toko1_01' || name.includes('aulia')
+      })
+      if (auliaKey) return auliaKey
+    }
+
+    if (normClean === 'toko2' || normClean === 'toko02' || normClean === 'toko102') {
+      const toko2Key = Object.keys(effectiveKasirList).find(k => {
+        const nk = k.toLowerCase().replace(/[-_\s]/g, '')
+        return nk === 'toko102' || nk === 'toko201' || nk === 'toko02'
+      })
+      if (toko2Key) return toko2Key
+    }
+
+    // General prefix / contains match
+    const prefixMatch = Object.keys(effectiveKasirList).find(k => {
+      const nk = k.toLowerCase().replace(/[-_\s]/g, '')
+      return nk === normClean || nk.startsWith(normClean) || normClean.startsWith(nk)
+    })
+    if (prefixMatch) return prefixMatch
+
+    return clean
+  }, [effectiveKasirList])
+
+  // Helper mendapatkan Nama Lengkap Kasir (menampilkan nama asli seperti AULIA HESTY daripada username teknis)
+  const getKasirDisplayName = useCallback((rawId: string): string => {
+    if (!rawId) return 'Kasir'
+    if (rawId.toLowerCase() === 'owner') return 'Owner'
+
+    const resolvedKey = resolveCashierKey(rawId)
+    const acc = effectiveKasirList[resolvedKey] || effectiveKasirList[rawId]
+    
+    if (acc?.name && acc.name.trim().length > 0 && acc.name.toLowerCase() !== resolvedKey.toLowerCase()) {
+      return acc.name
+    }
+
+    const norm = rawId.toLowerCase().replace(/[-_\s]/g, '')
+    if (norm === 'toko1' || norm === 'toko01' || norm === 'toko101') {
+      return 'AULIA HESTY'
+    }
+    if (norm === 'toko2' || norm === 'toko02' || norm === 'toko102') {
+      return 'toko1_02'
+    }
+
+    return acc?.name || rawId
+  }, [effectiveKasirList, resolveCashierKey])
+
   // Date states
-  const today = new Date()
-  const todayStr = today.toLocaleDateString('en-CA')
+  const today = useMemo(() => new Date(), [])
+  const todayStr = useMemo(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [])
+
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
 
-  // State Data Monthly Snapshot dari DB
-  const [monthlyPerforma, setMonthlyPerforma] = useState<any[]>([])
-  const [isLoadingMonth, setIsLoadingMonth] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
-  // State untuk raw tambah saldo langsung dari tabel transactions Supabase (per hari)
-  const [rawTambahSaldoMap, setRawTambahSaldoMap] = useState<Map<string, number>>(new Map())
+  // State Raw Data dari Supabase transactions
+  const [monthlyRawDataMap, setMonthlyRawDataMap] = useState<Map<string, DayKasirStat>>(new Map())
+  const [yearlyRawDataMap, setYearlyRawDataMap] = useState<Map<string, DayKasirStat>>(new Map())
+  const [isLoading, setIsLoading] = useState(false)
+  const [expandedYearMonth, setExpandedYearMonth] = useState<string | null>(null)
 
-  // New States for Yearly View
-  const [subTabToko, setSubTabToko] = useState<'harian' | 'bulanan'>('harian')
-  const [yearlyPerforma, setYearlyPerforma] = useState<any[]>([])
-  const [yearlyRawTambahSaldoMap, setYearlyRawTambahSaldoMap] = useState<Map<string, number>>(new Map())
-  const [isLoadingYear, setIsLoadingYear] = useState(false)
-  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
+  // Helper Kategori
+  const isIsiCategory = useCallback((cat: string) => {
+    const c = (cat || '').trim().toLowerCase()
+    if (c.includes('pulsa') || c.includes('kuota') || c.includes('token') || c.includes('voucher') || c.includes('paket') || c.includes('data')) {
+      return false
+    }
+    return c === 'isi saldo bank' || c === 'isi modal tunai kasir' || c.includes('isi saldo bank') || c.includes('setor modal') || c.includes('tambah saldo bank') || c.includes('topup saldo') || c.includes('isi modal')
+  }, [])
 
-  // Fetch tambah saldo langsung dari raw transactions per hari (bukan dari snapshot)
-  const fetchRawTambahSaldo = async (startDate: string, endDate: string) => {
+  const isServiceCategory = useCallback((cat: string, ket?: string) => {
+    const k = (ket || '').toUpperCase()
+    // Transaksi [KHUSUS] tidak dihitung sebagai layanan konsumen
+    if (k.includes('[KHUSUS]')) return false
+    // Transaksi modal toko bukan pendapatan jasa
+    if (isIsiCategory(cat)) return false
+    return true
+  }, [isIsiCategory])
+
+  // =========================================================================
+  // 1. FETCH DATA BULANAN LANGSUNG DARI TABEL TRANSACTIONS (SUMBER DATA RIIL)
+  // =========================================================================
+  const fetchMonthlyData = useCallback(async () => {
     if (!props.googleUid) return
+    setIsLoading(true)
     try {
+      const [year, month] = selectedMonth.split('-').map(Number)
+      const startDate = `${selectedMonth}-01`
+      let nextYear = year
+      let nextMonth = month + 1
+      if (nextMonth > 12) {
+        nextMonth = 1
+        nextYear++
+      }
+      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+
       let from = 0
       const step = 1000
       let hasMore = true
-      const tmpMap = new Map<string, number>()
+      const tmpMap = new Map<string, DayKasirStat>()
 
       while (hasMore) {
         let query = supabase
           .from('transactions')
-          .select('nominal, kategori, timestamp, kasir_id')
+          .select('nominal, admin_fee, kategori, keterangan, timestamp, kasir_id')
+          .eq('user_id', props.googleUid)
+          .gte('timestamp', startDate)
+          .lt('timestamp', endDate)
+          .range(from, from + step - 1)
+
+        if (props.targetStoreId && props.targetStoreId !== 'all') {
+          query = query.eq('store_id', props.targetStoreId)
+        }
+
+        const { data: chunk, error } = await query
+        if (error) {
+          console.error('Error fetchMonthlyData:', error)
+          break
+        }
+
+        if (chunk && chunk.length > 0) {
+          chunk.forEach((t: any) => {
+            const dStr = (t.timestamp || '').substring(0, 10)
+            const kId = (t.kasir_id || 'Unknown').trim()
+            const key = `${dStr}_${kId}`
+
+            if (!tmpMap.has(key)) {
+              tmpMap.set(key, { tambahSaldo: 0, omset: 0, labaAdmin: 0, countTx: 0 })
+            }
+            const cur = tmpMap.get(key)!
+
+            if (isIsiCategory(t.kategori)) {
+              cur.tambahSaldo += Number(t.nominal) || 0
+            } else if (isServiceCategory(t.kategori, t.keterangan)) {
+              cur.countTx += 1
+              cur.labaAdmin += Number(t.admin_fee ?? t.adminFee ?? 0)
+              if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                cur.omset += Number(t.nominal) || 0
+              }
+            }
+          })
+
+          from += step
+          if (chunk.length < step) hasMore = false
+        } else {
+          hasMore = false
+        }
+        if (from >= 50000) hasMore = false
+      }
+
+      setMonthlyRawDataMap(tmpMap)
+    } catch (err) {
+      console.error('fetchMonthlyData error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [props.googleUid, props.targetStoreId, selectedMonth, isIsiCategory, isServiceCategory])
+
+  // =========================================================================
+  // 2. FETCH DATA TAHUNAN LANGSUNG DARI TABEL TRANSACTIONS
+  // =========================================================================
+  const fetchYearlyData = useCallback(async () => {
+    if (!props.googleUid) return
+    setIsLoading(true)
+    try {
+      const year = selectedMonth.split('-')[0]
+      const startDate = `${year}-01-01`
+      const endDate = `${Number(year) + 1}-01-01`
+
+      let from = 0
+      const step = 1000
+      let hasMore = true
+      const tmpMap = new Map<string, DayKasirStat>()
+
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('nominal, admin_fee, kategori, keterangan, timestamp, kasir_id')
           .eq('user_id', props.googleUid)
           .gte('timestamp', startDate)
           .lt('timestamp', endDate)
@@ -73,117 +313,23 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
 
         if (chunk && chunk.length > 0) {
           chunk.forEach((t: any) => {
-            if (isIsiCategory(t.kategori)) {
-              const dStr = t.timestamp.substring(0, 10)
-              const kId = t.kasir_id || 'Unknown'
-              const key = `${dStr}_${kId}`
-              tmpMap.set(key, (tmpMap.get(key) || 0) + (Number(t.nominal) || 0))
+            const mStr = (t.timestamp || '').substring(0, 7) // YYYY-MM
+            const kId = (t.kasir_id || 'Unknown').trim()
+            const key = `${mStr}_${kId}`
+
+            if (!tmpMap.has(key)) {
+              tmpMap.set(key, { tambahSaldo: 0, omset: 0, labaAdmin: 0, countTx: 0 })
             }
-          })
-          from += step
-          if (chunk.length < step) hasMore = false
-        } else {
-          hasMore = false
-        }
-        if (from >= 50000) hasMore = false
-      }
+            const cur = tmpMap.get(key)!
 
-      setRawTambahSaldoMap(tmpMap)
-    } catch (err) {
-      console.error('fetchRawTambahSaldo error:', err)
-    }
-  }
-
-  // Fetch data agregat dari performa_harian
-  const fetchMonthly = async () => {
-    if (!props.googleUid) return
-    setIsLoadingMonth(true)
-    try {
-      const [year, month] = selectedMonth.split('-').map(Number)
-      const startDate = `${selectedMonth}-01`
-      let nextYear = year
-      let nextMonth = month + 1
-      if (nextMonth > 12) {
-        nextMonth = 1
-        nextYear++
-      }
-      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
-
-      let query = supabase
-        .from('performa_harian')
-        .select('*')
-        .eq('user_id', props.googleUid)
-        .gte('tanggal', startDate)
-        .lt('tanggal', endDate)
-
-      if (props.targetStoreId && props.targetStoreId !== 'all') {
-        query = query.eq('store_id', props.targetStoreId)
-      }
-
-      const { data, error } = await query
-      if (!error && data) {
-        setMonthlyPerforma(data)
-      }
-
-      // Fetch raw tambah_saldo langsung dari tabel transactions agar kolom terisi untuk semua hari
-      await fetchRawTambahSaldo(startDate, endDate)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setIsLoadingMonth(false)
-    }
-  }
-
-  // Fetch data agregat dari performa_harian TAHUNAN
-  const fetchYearly = async () => {
-    if (!props.googleUid) return
-    setIsLoadingYear(true)
-    try {
-      const year = selectedMonth.split('-')[0]
-      const startDate = `${year}-01-01`
-      const endDate = `${Number(year) + 1}-01-01`
-
-      let query = supabase
-        .from('performa_harian')
-        .select('*')
-        .eq('user_id', props.googleUid)
-        .gte('tanggal', startDate)
-        .lt('tanggal', endDate)
-
-      if (props.targetStoreId && props.targetStoreId !== 'all') {
-        query = query.eq('store_id', props.targetStoreId)
-      }
-
-      const { data, error } = await query
-      if (!error && data) {
-        setYearlyPerforma(data)
-      }
-
-      let from = 0
-      const step = 1000
-      let hasMore = true
-      const tmpMap = new Map<string, number>()
-
-      while (hasMore) {
-        let q = supabase
-          .from('transactions')
-          .select('nominal, kategori, timestamp, kasir_id')
-          .eq('user_id', props.googleUid)
-          .gte('timestamp', startDate)
-          .lt('timestamp', endDate)
-          .range(from, from + step - 1)
-        if (props.targetStoreId && props.targetStoreId !== 'all') {
-          q = q.eq('store_id', props.targetStoreId)
-        }
-        const { data: chunk, error: err } = await q
-        if (err) break
-        if (chunk && chunk.length > 0) {
-          chunk.forEach((t: any) => {
             if (isIsiCategory(t.kategori)) {
-              const dStr = t.timestamp.substring(0, 7) // YYYY-MM
-              const kId = t.kasir_id || 'Unknown'
-              const key = `${dStr}_${kId}`
-              tmpMap.set(key, (tmpMap.get(key) || 0) + (Number(t.nominal) || 0))
+              cur.tambahSaldo += Number(t.nominal) || 0
+            } else if (isServiceCategory(t.kategori, t.keterangan)) {
+              cur.countTx += 1
+              cur.labaAdmin += Number(t.admin_fee ?? t.adminFee ?? 0)
+              if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                cur.omset += Number(t.nominal) || 0
+              }
             }
           })
           from += step
@@ -193,198 +339,28 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         }
         if (from >= 100000) hasMore = false
       }
-      setYearlyRawTambahSaldoMap(tmpMap)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsLoadingYear(false)
-    }
-  }
 
+      setYearlyRawDataMap(tmpMap)
+    } catch (err) {
+      console.error('fetchYearlyData error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [props.googleUid, props.targetStoreId, selectedMonth, isIsiCategory, isServiceCategory])
+
+  // Trigger fetch saat tab aktif atau bulan berubah
   useEffect(() => {
     if (!props.active || !props.googleUid) return
-    if (subTabToko === 'harian') fetchMonthly()
-    if (subTabToko === 'bulanan') fetchYearly()
-  }, [props.active, props.googleUid, props.targetStoreId, selectedMonth, subTabToko])
-
-  // Helper kategori
-  const isIsiCategory = (cat: string) => {
-    const c = (cat || '').trim().toLowerCase()
-    if (c.includes('pulsa') || c.includes('kuota') || c.includes('token') || c.includes('voucher') || c.includes('paket') || c.includes('data')) {
-      return false
+    if (activeTab === 'tahunan') {
+      fetchYearlyData()
+    } else {
+      fetchMonthlyData()
     }
-    return c === 'isi saldo bank' || c === 'isi modal tunai kasir' || c.includes('isi saldo bank') || c.includes('setor modal') || c.includes('tambah saldo bank') || c.includes('topup saldo') || c.includes('isi modal')
-  }
+  }, [props.active, props.googleUid, props.targetStoreId, selectedMonth, activeTab, fetchMonthlyData, fetchYearlyData])
 
-  const isSalesCategory = (cat: string, ket?: string) => {
-    const c = (cat || '').toLowerCase()
-    const k = (ket || '').toUpperCase()
-    if (k.includes('[KHUSUS]') || k.includes('[NON_TUNAI]') || k.includes('[ADMIN_DALAM]')) return false
-    if (isIsiCategory(cat) || c.includes('tarik tunai')) return false
-    return true
-  }
-
-  /**
-   * isServiceCategory — digunakan KHUSUS di halaman Performa Kasir untuk menghitung
-   * keuntungan / admin fee toko secara menyeluruh.
-   *
-   * Perbedaan dengan isSalesCategory (yang dipakai di halaman Laporan & POS):
-   * - isSalesCategory: membuang Tarik Tunai & tag [NON_TUNAI]/[ADMIN_DALAM]
-   *   → tujuannya menjaga akurasi uang fisik di laci kasir.
-   * - isServiceCategory: menerima SEMUA transaksi jasa konsumen (termasuk Tarik Tunai,
-   *   Non-Tunai, dan Potong Dalam) → tujuannya menghitung laba/fee toko yang sesungguhnya.
-   *
-   * Yang dikecualikan hanya:
-   * - Transaksi mutasi modal (isIsiCategory) → bukan pendapatan, hanya perpindahan modal.
-   * - Transaksi [KHUSUS] → biasanya koreksi / penyesuaian internal yang tidak mewakili jasa.
-   */
-  const isServiceCategory = (cat: string, ket?: string) => {
-    const k = (ket || '').toUpperCase()
-    // Transaksi [KHUSUS] tidak dihitung sebagai layanan konsumen
-    if (k.includes('[KHUSUS]')) return false
-    // Transaksi modal toko bukan pendapatan
-    if (isIsiCategory(cat)) return false
-    return true
-  }
-
-  // Deduplikasi monthlyPerforma agar tidak terjadi sum ganda jika ada row duplikat di DB
-  const deduplicatedMonthlyPerforma = useMemo(() => {
-    const uniqueMap = new Map<string, any>()
-    monthlyPerforma.forEach(p => {
-      // Filter per kasir jika filterKasir != 'Semua'
-      if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
-      const key = `${p.tanggal}_${p.kasir_id}_${p.store_id || ''}`
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, p)
-      } else {
-        const existing = uniqueMap.get(key)
-        if ((p.id && existing.id && p.id > existing.id) || (p.timestamp && existing.timestamp && p.timestamp > existing.timestamp)) {
-          uniqueMap.set(key, p)
-        }
-      }
-    })
-    return Array.from(uniqueMap.values())
-  }, [monthlyPerforma, filterKasir])
-
-  // Deduplikasi yearlyPerforma agar tidak terjadi sum ganda jika ada row duplikat di DB
-  const deduplicatedYearlyPerforma = useMemo(() => {
-    const uniqueMap = new Map<string, any>()
-    yearlyPerforma.forEach(p => {
-      if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
-      const key = `${p.tanggal}_${p.kasir_id}_${p.store_id || ''}`
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, p)
-      } else {
-        const existing = uniqueMap.get(key)
-        if ((p.id && existing.id && p.id > existing.id) || (p.timestamp && existing.timestamp && p.timestamp > existing.timestamp)) {
-          uniqueMap.set(key, p)
-        }
-      }
-    })
-    return Array.from(uniqueMap.values())
-  }, [yearlyPerforma, filterKasir])
-
-  // Agregasi Tahunan
-  const yearlySummaryData = useMemo(() => {
-    const year = selectedMonth.split('-')[0]
-    const result = []
-    const months = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER']
-
-    for (let i = 1; i <= 12; i++) {
-      const mStr = `${year}-${String(i).padStart(2, '0')}`
-      const mLabel = `${months[i-1]}`
-
-      const kasirMap = new Map<string, { omset: number, laba: number, tambahSaldo: number }>()
-
-      deduplicatedYearlyPerforma.forEach(p => {
-        if (p.tanggal.startsWith(mStr)) {
-          if (filterKasir !== 'Semua' && p.kasir_id !== filterKasir) return
-          const kId = p.kasir_id || 'Unknown'
-          const current = kasirMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0 }
-          current.omset += Number(p.omset) || 0
-          current.laba += Number(p.laba) || Number(p.laba_admin) || 0
-          current.tambahSaldo += Number(p.tambah_saldo) || 0
-          kasirMap.set(kId, current)
-        }
-      })
-
-      yearlyRawTambahSaldoMap.forEach((val, key) => {
-        if (key.startsWith(mStr + '_')) {
-          const kId = key.split('_')[1]
-          if (filterKasir !== 'Semua' && kId !== filterKasir) return
-          const current = kasirMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0 }
-          if (val > current.tambahSaldo) {
-            current.tambahSaldo = val
-          }
-          kasirMap.set(kId, current)
-        }
-      })
-
-      let totalOmset = 0, totalLaba = 0, totalTambahSaldo = 0
-      const kasirBreakdown = Array.from(kasirMap.entries()).map(([kasirId, data]) => {
-        totalOmset += data.omset
-        totalLaba += data.laba
-        totalTambahSaldo += data.tambahSaldo
-        return { kasirId, ...data }
-      }).sort((a, b) => b.omset - a.omset)
-
-      result.push({
-        monthStr: mStr,
-        label: mLabel,
-        totalOmset,
-        totalLaba,
-        totalTambahSaldo,
-        kasirBreakdown,
-        hasData: totalOmset > 0 || totalLaba > 0 || totalTambahSaldo > 0
-      })
-    }
-    return result
-  }, [deduplicatedYearlyPerforma, yearlyRawTambahSaldoMap, selectedMonth, filterKasir])
-
-  // --- KALKULASI FITUR PROFIT ---
-  // 1. Profit Hari Ini (Live dari props.transactions & closing snapshot hari ini)
-  //    Menggunakan isServiceCategory agar fee dari Tarik Tunai, Non-Tunai, dan
-  //    Potong Dalam ikut terhitung sebagai keuntungan toko hari ini.
-  const profitHariIni = useMemo(() => {
-    const todayTxs = props.transactions.filter(t => t.timestamp.startsWith(todayStr))
-    let adminFeeTotal = 0
-    let countTx = 0
-
-    todayTxs.forEach(t => {
-      if (isServiceCategory(t.kategori, t.keterangan)) {
-        adminFeeTotal += Number(t.adminFee) || 0
-        countTx++
-      }
-    })
-
-    // Voucher profit hari ini dari localStorage (jika toko spesifik)
-    let voucherProfit = 0
-    if (props.targetStoreId && props.targetStoreId !== 'all') {
-      const savedV = localStorage.getItem(`alphaPro_${props.targetStoreId}_stok_voucher_${todayStr}`)
-      if (savedV) {
-        try {
-          const dataVoucher = JSON.parse(savedV)
-          Object.values(dataVoucher).forEach((items: any) => {
-            items.forEach((item: any) => {
-              const laku = Math.max(0, (item.awal || 0) - (item.akhir || 0))
-              if (item.modal && laku > 0) {
-                voucherProfit += laku * ((item.price || 0) - item.modal)
-              }
-            })
-          })
-        } catch (e) {}
-      }
-    }
-
-    return {
-      adminFee: adminFeeTotal,
-      voucherProfit: voucherProfit,
-      totalProfit: adminFeeTotal + voucherProfit,
-      countTx
-    }
-  }, [props.transactions, todayStr, props.targetStoreId])
-
-  // 2. Profit Bulanan (Dari deduplicatedMonthlyPerforma + merge raw transactions untuk seluruh tgl 1 s/d skrg)
+  // =========================================================================
+  // 3. KALKULASI DATA HARIAN (TANGGAL 1 s/d AKHIR BULAN)
+  // =========================================================================
   const profitBulananData = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number)
     const daysInMonth = new Date(year, month, 0).getDate()
@@ -393,314 +369,176 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       maxDay = today.getDate()
     }
 
-    const map = new Map<string, { tambahSaldo: number, omset: number, labaAdmin: number, labaVoucher: number, totalLaba: number, totalTx: number, isClosed: boolean }>()
+    const map = new Map<string, { tambahSaldo: number; omset: number; labaAdmin: number; totalTx: number }>()
 
     for (let i = 1; i <= maxDay; i++) {
       const dStr = `${selectedMonth}-${String(i).padStart(2, '0')}`
-      map.set(dStr, { tambahSaldo: 0, omset: 0, labaAdmin: 0, labaVoucher: 0, totalLaba: 0, totalTx: 0, isClosed: false })
+      map.set(dStr, { tambahSaldo: 0, omset: 0, labaAdmin: 0, totalTx: 0 })
     }
 
-    // Akumulasi raw transaksi dari props.transactions untuk SELURUH tanggal di bulan terpilih (tgl 1 - skrg).
-    // Menggunakan isServiceCategory agar fee dari Tarik Tunai, Non-Tunai, dan Potong Dalam
-    // ikut terakumulasi sebagai laba admin toko (berbeda dengan halaman Laporan yang fokus uang fisik).
-    const rawDataMap = new Map<string, { tambahSaldo: number, omset: number, labaAdmin: number, countTx: number }>()
-    props.transactions.forEach(t => {
-      if (t.timestamp.startsWith(selectedMonth)) {
-        if (filterKasir !== 'Semua' && t.kasir_id && t.kasir_id !== filterKasir) return
-        const dStr = t.timestamp.substring(0, 10)
-        if (!rawDataMap.has(dStr)) {
-          rawDataMap.set(dStr, { tambahSaldo: 0, omset: 0, labaAdmin: 0, countTx: 0 })
-        }
-        const cur = rawDataMap.get(dStr)!
-        if (isIsiCategory(t.kategori)) {
-          // Transaksi modal: hanya catat sebagai penambahan saldo, bukan omset/laba
-          cur.tambahSaldo += Number(t.nominal) || 0
-        } else if (isServiceCategory(t.kategori, t.keterangan)) {
-          // Semua transaksi jasa konsumen (Transfer, Tarik Tunai, Non-Tunai, Potong Dalam, dll)
-          // → fee-nya adalah keuntungan riil toko tanpa memandang metode bayar
-          cur.countTx += 1
-          cur.labaAdmin += Number(t.adminFee) || 0
-          // Nominal omset: Tarik Tunai tidak masuk omset (uang diserahkan ke nasabah)
-          if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
-            cur.omset += Number(t.nominal) || 0
-          }
-        }
-      }
-    })
+    // 1. Agregasi dari monthlyRawDataMap
+    for (const [key, stat] of monthlyRawDataMap.entries()) {
+      const [dStr, rawKId] = key.split('_')
+      if (!map.has(dStr)) continue
+      if (rawKId.toLowerCase() === 'owner') continue
 
-    deduplicatedMonthlyPerforma.forEach(p => {
-      const date = p.tanggal
-      if (map.has(date)) {
-        const current = map.get(date)!
-        const labaAdmin = Number(p.laba_admin) || Number(p.laba) || 0
-        const labaVoucher = Number(p.laba_voucher) || 0
-        current.tambahSaldo += (Number(p.tambah_saldo) || 0)
-        current.omset += (Number(p.omset) || 0)
-        current.labaAdmin += labaAdmin
-        current.labaVoucher += labaVoucher
-        current.totalLaba += (Number(p.laba) || (labaAdmin + labaVoucher))
-        current.totalTx += (Number(p.total_transaksi) || 0)
-        current.isClosed = true
-      }
-    })
-
-    // Garansi sempurna: Gabungkan / fallback ke rawDataMap untuk SEMUA tanggal (tgl 1 - skrg)
-    map.forEach((current, dateStr) => {
-      const raw = rawDataMap.get(dateStr)
-      if (raw) {
-        if (raw.tambahSaldo > current.tambahSaldo) current.tambahSaldo = raw.tambahSaldo
-        if (raw.omset > current.omset) current.omset = raw.omset
-        if (raw.labaAdmin > current.labaAdmin) current.labaAdmin = raw.labaAdmin
-        if (raw.countTx > current.totalTx) current.totalTx = raw.countTx
-      }
-      // Prioritas tertinggi: data tambahSaldo dari raw transactions Supabase
-      // Ini menjamin semua hari terisi meski performa_harian belum di-sync
-      let supabaseTambah = 0
-      if (filterKasir === 'Semua') {
-        for (const [k, v] of rawTambahSaldoMap.entries()) {
-          if (k.startsWith(dateStr + '_')) {
-            supabaseTambah += v
-          }
-        }
-      } else {
-        supabaseTambah = rawTambahSaldoMap.get(`${dateStr}_${filterKasir}`) || 0
+      const resolvedKId = resolveCashierKey(rawKId)
+      if (filterKasir !== 'Semua' && resolvedKId !== filterKasir && rawKId !== filterKasir) {
+        continue
       }
 
-      if (supabaseTambah > current.tambahSaldo) {
-        current.tambahSaldo = supabaseTambah
-      }
-    })
+      const dayItem = map.get(dStr)!
+      dayItem.tambahSaldo += stat.tambahSaldo
+      dayItem.omset += stat.omset
+      dayItem.labaAdmin += stat.labaAdmin
+      dayItem.totalTx += stat.countTx
+    }
 
-    // Merge data hari ini jika ada voucher profit
+    // 2. Live merge hari ini dari memori props.transactions
     if (year === today.getFullYear() && month === today.getMonth() + 1) {
-      const todayData = map.get(todayStr)
-      if (todayData) {
-        todayData.labaVoucher = Math.max(todayData.labaVoucher, profitHariIni.voucherProfit)
-        todayData.totalLaba = todayData.labaAdmin + todayData.labaVoucher
+      const todayItem = map.get(todayStr)
+      if (todayItem) {
+        let liveTambah = 0
+        let liveOmset = 0
+        let liveAdmin = 0
+        let liveCount = 0
+
+        props.transactions.forEach(t => {
+          if (t.timestamp.startsWith(todayStr)) {
+            const rawKId = (t.kasir_id || '').trim()
+            if (rawKId.toLowerCase() === 'owner') return
+            const resolvedKId = resolveCashierKey(rawKId)
+            if (filterKasir !== 'Semua' && resolvedKId !== filterKasir && rawKId !== filterKasir) {
+              return
+            }
+
+            if (isIsiCategory(t.kategori)) {
+              liveTambah += Number(t.nominal) || 0
+            } else if (isServiceCategory(t.kategori, t.keterangan)) {
+              liveCount += 1
+              liveAdmin += Number(t.adminFee ?? (t as any).admin_fee ?? 0)
+              if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                liveOmset += Number(t.nominal) || 0
+              }
+            }
+          }
+        })
+
+        if (liveTambah > todayItem.tambahSaldo) todayItem.tambahSaldo = liveTambah
+        if (liveOmset > todayItem.omset) todayItem.omset = liveOmset
+        if (liveAdmin > todayItem.labaAdmin) todayItem.labaAdmin = liveAdmin
+        if (liveCount > todayItem.totalTx) todayItem.totalTx = liveCount
       }
     }
 
-    return Array.from(map.entries())
-  }, [deduplicatedMonthlyPerforma, selectedMonth, props.transactions, todayStr, profitHariIni, filterKasir, rawTambahSaldoMap])
+    const arr = Array.from(map.entries())
+    if (sortOrder === 'desc') {
+      arr.reverse()
+    }
+    return arr
+  }, [monthlyRawDataMap, selectedMonth, filterKasir, props.transactions, todayStr, today, isIsiCategory, isServiceCategory, sortOrder, resolveCashierKey])
 
+  // Total summary bulanan
   const totalBulananSummary = useMemo(() => {
     return profitBulananData.reduce((acc, [_, data]) => {
       acc.tambahSaldo += data.tambahSaldo
       acc.omset += data.omset
       acc.labaAdmin += data.labaAdmin
-      acc.labaVoucher += data.labaVoucher
-      acc.totalLaba += data.totalLaba
       acc.totalTx += data.totalTx
       return acc
-    }, { tambahSaldo: 0, omset: 0, labaAdmin: 0, labaVoucher: 0, totalLaba: 0, totalTx: 0 })
+    }, { tambahSaldo: 0, omset: 0, labaAdmin: 0, totalTx: 0 })
   }, [profitBulananData])
 
-  // --- KALKULASI FITUR PERFORMA KASIR ---
-  // Gunakan totalBulananSummary agar merefleksikan filter bulan & kasir
-  const totalTambahSaldoKasir = totalBulananSummary.tambahSaldo;
-  const kpiKasir = useMemo(() => ({
-    omset: totalBulananSummary.omset,
-    profitAdmin: totalBulananSummary.labaAdmin,
-    count: totalBulananSummary.totalTx
-  }), [totalBulananSummary]);
-
-  // Performa Kasir Leaderboard
+  // =========================================================================
+  // 4. LEADERBOARD & PERFORMA MASING-MASING KASIR (TAMPILKAN SEMUA KASIR)
+  // =========================================================================
   const kasirLeaderboard = useMemo(() => {
-    const kMap = new Map<string, { omset: number, laba: number, tambahSaldo: number, count: number }>()
-    const [year, month] = selectedMonth.split('-').map(Number)
-    const daysInMonth = new Date(year, month, 0).getDate()
-    let maxDay = daysInMonth
-    if (year === today.getFullYear() && month === today.getMonth() + 1) {
-      maxDay = today.getDate()
+    const kMap = new Map<string, { omset: number; laba: number; tambahSaldo: number; count: number; name: string }>()
+
+    // Daftarkan SEMUA kasir dari effectiveKasirList (exclude owner)
+    Object.entries(effectiveKasirList).forEach(([kId, data]: [string, any]) => {
+      if (kId.toLowerCase() !== 'owner' && (data?.role || '').toLowerCase() !== 'owner') {
+        kMap.set(kId, {
+          omset: 0,
+          laba: 0,
+          tambahSaldo: 0,
+          count: 0,
+          name: getKasirDisplayName(kId)
+        })
+      }
+    })
+
+    // Agregasi dari monthlyRawDataMap
+    for (const [key, stat] of monthlyRawDataMap.entries()) {
+      const [_, rawKId] = key.split('_')
+      if (!rawKId || rawKId.toLowerCase() === 'owner') continue
+
+      const resolvedKId = resolveCashierKey(rawKId)
+      if (!kMap.has(resolvedKId)) {
+        kMap.set(resolvedKId, {
+          omset: 0,
+          laba: 0,
+          tambahSaldo: 0,
+          count: 0,
+          name: getKasirDisplayName(resolvedKId)
+        })
+      }
+      const cur = kMap.get(resolvedKId)!
+      cur.omset += stat.omset
+      cur.laba += stat.labaAdmin
+      cur.count += stat.countTx
+      cur.tambahSaldo += stat.tambahSaldo
     }
 
-    for (let i = 1; i <= maxDay; i++) {
-      const dStr = `${selectedMonth}-${String(i).padStart(2, '0')}`
-      const kasirsOnDate = new Set<string>()
-      
-      deduplicatedMonthlyPerforma.forEach(p => {
-        if (p.tanggal === dStr) kasirsOnDate.add(p.kasir_id || 'Unknown')
-      })
-      props.transactions.forEach(t => {
-        if (t.timestamp.startsWith(dStr)) kasirsOnDate.add(t.kasir_id || 'Unknown')
-      })
-      rawTambahSaldoMap.forEach((_, k) => {
-        if (k.startsWith(dStr + '_')) kasirsOnDate.add(k.split('_')[1])
-      })
-
-      kasirsOnDate.forEach(kId => {
-        const current = kMap.get(kId) || { omset: 0, laba: 0, tambahSaldo: 0, count: 0 }
-        
-        const dbData = deduplicatedMonthlyPerforma.find(p => p.tanggal === dStr && p.kasir_id === kId)
-        let omset = 0, laba = 0, count = 0, tambah = 0
-
-        if (dbData) {
-          omset = Number(dbData.omset) || 0
-          laba = Number(dbData.laba) || Number(dbData.laba_admin) || 0
-          count = Number(dbData.total_transaksi) || 0
-          tambah = Number(dbData.tambah_saldo) || 0
-        } else {
-          // Fallback: hitung langsung dari raw transactions (snapshot DB belum ada).
-          // Gunakan isServiceCategory agar fee Tarik Tunai & Non-Tunai ikut terhitung.
-          let rawOmset = 0, rawLaba = 0, rawCount = 0, rawTambah = 0
-          props.transactions.forEach(t => {
-             if (t.timestamp.startsWith(dStr) && (t.kasir_id || 'Unknown') === kId) {
-               if (isIsiCategory(t.kategori)) {
-                 rawTambah += Number(t.nominal) || 0
-               } else if (isServiceCategory(t.kategori, t.keterangan)) {
-                 rawCount++
-                 rawLaba += Number(t.adminFee) || 0
-                 // Nominal omset: Tarik Tunai tidak masuk omset (uang diserahkan ke nasabah)
-                 if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
-                   rawOmset += Number(t.nominal) || 0
-                 }
-               }
-             }
-          })
-          omset = rawOmset
-          laba = rawLaba
-          count = rawCount
-          tambah = rawTambah
-        }
-
-        const supabaseTambah = rawTambahSaldoMap.get(`${dStr}_${kId}`)
-        if (supabaseTambah !== undefined && supabaseTambah > tambah) {
-          tambah = supabaseTambah
-        }
-
-        current.omset += omset
-        current.laba += laba
-        current.count += count
-        current.tambahSaldo += tambah
-
-        kMap.set(kId, current)
-      })
-    }
-    
+    // Tampilkan SEMUA kasir terdaftar walaupun penjualan belum lengkap atau masih 0 transaksi
     return Array.from(kMap.entries())
-      .filter(([_, data]) => data.omset > 0 || data.count > 0 || data.laba > 0)
-      .sort((a, b) => b[1].omset - a[1].omset)
-  }, [deduplicatedMonthlyPerforma, props.transactions, rawTambahSaldoMap, selectedMonth, todayStr, today])
+      .filter(([kId]) => kId.toLowerCase() !== 'owner' && (effectiveKasirList[kId]?.role || '').toLowerCase() !== 'owner')
+      .sort((a, b) => b[1].laba - a[1].laba || b[1].count - a[1].count)
+  }, [monthlyRawDataMap, effectiveKasirList, resolveCashierKey, getKasirDisplayName])
 
-  // --- SINKRONISASI DATA TRANSAKSI LAMA (PULL HISTORY) ---
-  const handleSyncHistory = async () => {
-    if (!confirm('Tarik data dari tanggal 1 sampai hari ini ke tabel pembukuan harian? Proses ini membutuhkan waktu beberapa detik.')) return
-    setIsSyncing(true)
-    try {
-      const [year, month] = selectedMonth.split('-').map(Number)
-      const startDate = `${selectedMonth}-01`
-      let nextYear = year
-      let nextMonth = month + 1
-      if (nextMonth > 12) {
-        nextMonth = 1
-        nextYear++
-      }
-      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+  // =========================================================================
+  // 5. DATA TAHUNAN (12 BULAN)
+  // =========================================================================
+  const yearlySummaryData = useMemo(() => {
+    const year = selectedMonth.split('-')[0]
+    const result = []
 
-      let allRawData: any[] = []
-      let from = 0
-      const step = 1000
-      let hasMore = true
+    for (let i = 1; i <= 12; i++) {
+      const mStr = `${year}-${String(i).padStart(2, '0')}`
+      const mLabel = INDO_MONTHS[i - 1]
 
-      while (hasMore) {
-        let query = supabase
-          .from('transactions')
-          .select('nominal, admin_fee, kategori, keterangan, timestamp, kasir_id, store_id')
-          .eq('user_id', props.googleUid)
-          .gte('timestamp', startDate)
-          .lt('timestamp', endDate)
-          .range(from, from + step - 1)
-        
-        if (props.targetStoreId && props.targetStoreId !== 'all') {
-          query = query.eq('store_id', props.targetStoreId)
-        }
+      let totalOmset = 0
+      let totalLaba = 0
+      let totalTambahSaldo = 0
+      let totalTx = 0
 
-        const { data: chunk, error } = await query
-        if (error) throw error
-
-        if (chunk && chunk.length > 0) {
-          allRawData = [...allRawData, ...chunk]
-          from += step
-          if (chunk.length < step) hasMore = false
-        } else {
-          hasMore = false
-        }
-        if (from >= 50000) hasMore = false
-      }
-
-      if (allRawData.length === 0) throw new Error('Tidak ada data transaksi di bulan ini.')
-
-      const map = new Map<string, any>()
-      allRawData.forEach((t: any) => {
-        const dateStr = t.timestamp.substring(0, 10)
-        const key = `${dateStr}_${t.kasir_id}`
-
-        if (!map.has(key)) {
-          map.set(key, { 
-            user_id: props.googleUid, 
-            store_id: t.store_id || null, 
-            kasir_id: t.kasir_id, 
-            tanggal: dateStr, 
-            omset: 0, laba: 0, laba_admin: 0, laba_voucher: 0, pengeluaran: 0, tambah_saldo: 0, total_transaksi: 0,
-            timestamp: t.timestamp
-          })
-        }
-        const current = map.get(key)!
-        if (isIsiCategory(t.kategori)) {
-          // Transaksi modal: hanya tambah saldo, bukan laba
-          current.tambah_saldo += Number(t.nominal) || 0
-        } else if (isServiceCategory(t.kategori, t.keterangan)) {
-          // Semua transaksi jasa konsumen (Transfer, Tarik Tunai, Non-Tunai, Potong Dalam, dll)
-          // → fee-nya adalah laba riil toko, disimpan ke performa_harian
-          current.total_transaksi += 1
-          const adminFee = Number(t.admin_fee) || 0
-          current.laba_admin += adminFee
-          current.laba += adminFee
-          if ((t.kategori || '').toLowerCase() === 'tarik tunai') {
-            // Tarik Tunai: nominal uang yang diserahkan ke nasabah → pengeluaran kas
-            // Fee-nya tetap masuk laba di atas
-            current.pengeluaran += Number(t.nominal) || 0
-          } else {
-            // Transaksi jasa lain → nominal masuk omset toko
-            current.omset += Number(t.nominal) || 0
+      for (const [key, stat] of yearlyRawDataMap.entries()) {
+        if (key.startsWith(mStr + '_')) {
+          const rawKId = key.split('_')[1]
+          if (rawKId.toLowerCase() === 'owner') continue
+          const resolvedKId = resolveCashierKey(rawKId)
+          if (filterKasir !== 'Semua' && resolvedKId !== filterKasir && rawKId !== filterKasir) {
+            continue
           }
+
+          totalOmset += stat.omset
+          totalLaba += stat.labaAdmin
+          totalTambahSaldo += stat.tambahSaldo
+          totalTx += stat.countTx
         }
+      }
+
+      result.push({
+        monthStr: mStr,
+        label: mLabel,
+        totalOmset,
+        totalLaba,
+        totalTambahSaldo,
+        totalTx
       })
-
-      const records = Array.from(map.values())
-      for (const rec of records) {
-        let q = supabase
-          .from('performa_harian')
-          .select('id')
-          .eq('user_id', props.googleUid)
-          .eq('kasir_id', rec.kasir_id)
-          .eq('tanggal', rec.tanggal)
-        if (rec.store_id) {
-          q = q.eq('store_id', rec.store_id)
-        }
-        const { data: existingRows } = await q
-
-        if (existingRows && existingRows.length > 0) {
-          await supabase.from('performa_harian').update(rec).eq('id', existingRows[0].id)
-          if (existingRows.length > 1) {
-            const extraIds = existingRows.slice(1).map(r => r.id)
-            await supabase.from('performa_harian').delete().in('id', extraIds)
-          }
-        } else {
-          await supabase.from('performa_harian').insert([rec])
-        }
-      }
-      
-      await fetchMonthly()
-      await fetchYearly()
-      alert('Berhasil sinkronisasi riwayat transaksi ke pembukuan harian!')
-    } catch (err: any) {
-      console.error(err)
-      alert('Gagal sinkronisasi: ' + err.message)
-    } finally {
-      setIsSyncing(false)
     }
-  }
+    return result
+  }, [yearlyRawDataMap, selectedMonth, filterKasir, resolveCashierKey])
 
   // PDF Export
   const handleDownloadPDF = () => {
@@ -708,40 +546,39 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(16)
     pdf.setTextColor(30, 41, 59)
-    pdf.text(mainTab === 'profit' ? 'LAPORAN PEMBUKUAN TOKO' : 'LAPORAN PERFORMA KASIR', 105, 20, { align: 'center' })
-    
+    pdf.text('LAPORAN PERFORMA TRANSAKSI TOKO', 105, 20, { align: 'center' })
+
     pdf.setFontSize(10)
     pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(100, 116, 139)
-    pdf.text(`Periode: ${selectedMonth}   |   Kasir: ${filterKasir === 'Semua' ? 'Semua Kasir' : filterKasir}`, 105, 28, { align: 'center' })
-    
+    const kasirLabel = filterKasir === 'Semua' ? 'Semua Kasir' : getKasirDisplayName(filterKasir)
+    pdf.text(`Periode: ${selectedMonth}   |   Kasir: ${kasirLabel}`, 105, 28, { align: 'center' })
+
     let y = 42
     pdf.setFillColor(241, 245, 249)
-    pdf.rect(15, y-7, 180, 10, 'F')
+    pdf.rect(15, y - 7, 180, 10, 'F')
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(9)
     pdf.setTextColor(71, 85, 105)
     pdf.text('TANGGAL', 20, y)
-    pdf.text('TAMBAH SALDO BANK (Rp)', 80, y, { align: 'right' })
-    pdf.text('OMSET PENJUALAN (Rp)', 140, y, { align: 'right' })
+    pdf.text('JUMLAH TRANSAKSI', 70, y)
+    pdf.text('OMSET (Rp)', 135, y, { align: 'right' })
     pdf.text('FEE ADMIN (Rp)', 190, y, { align: 'right' })
-    
+
     y += 9
-    
+
     profitBulananData.forEach(([date, data]) => {
       const dayNum = date.split('-')[2]
-      if (data.tambahSaldo > 0 || data.omset > 0 || data.labaAdmin > 0) {
+      if (data.totalTx > 0 || data.omset > 0 || data.labaAdmin > 0) {
         pdf.setTextColor(51, 65, 85)
         pdf.text(dayNum, 20, y)
-        pdf.setTextColor(37, 99, 235)
-        pdf.text(formatRupiah(data.tambahSaldo).replace(',00',''), 80, y, { align: 'right' })
-        pdf.setTextColor(51, 65, 85)
-        pdf.text(formatRupiah(data.omset).replace(',00',''), 140, y, { align: 'right' })
+        pdf.text(`${data.totalTx} Transaksi`, 70, y)
+        pdf.text(formatRupiah(data.omset).replace(',00', ''), 135, y, { align: 'right' })
         pdf.setTextColor(16, 185, 129)
-        pdf.text(formatRupiah(data.labaAdmin).replace(',00',''), 190, y, { align: 'right' })
-        
+        pdf.text(formatRupiah(data.labaAdmin).replace(',00', ''), 190, y, { align: 'right' })
+
         pdf.setDrawColor(241, 245, 249)
-        pdf.line(15, y+3, 195, y+3)
+        pdf.line(15, y + 3, 195, y + 3)
         y += 8
         if (y > 275) {
           pdf.addPage()
@@ -749,27 +586,34 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         }
       }
     })
-    
+
     y += 4
     pdf.setFillColor(15, 23, 42)
-    pdf.rect(15, y-7, 180, 12, 'F')
+    pdf.rect(15, y - 7, 180, 12, 'F')
     pdf.setFont('helvetica', 'bold')
     pdf.setTextColor(255, 255, 255)
-    pdf.text('TOTAL BULAN INI', 20, y+1)
-    pdf.setTextColor(147, 197, 253)
-    pdf.text(formatRupiah(totalBulananSummary.tambahSaldo).replace(',00',''), 80, y+1, { align: 'right' })
+    pdf.text('TOTAL BULAN INI', 20, y + 1)
+    pdf.text(`${totalBulananSummary.totalTx} Trx`, 70, y + 1)
     pdf.setTextColor(226, 232, 240)
-    pdf.text(formatRupiah(totalBulananSummary.omset).replace(',00',''), 140, y+1, { align: 'right' })
+    pdf.text(formatRupiah(totalBulananSummary.omset).replace(',00', ''), 135, y + 1, { align: 'right' })
     pdf.setTextColor(52, 211, 153)
-    pdf.text(formatRupiah(totalBulananSummary.labaAdmin).replace(',00',''), 190, y+1, { align: 'right' })
-    
-    pdf.save(`Laporan_${mainTab.toUpperCase()}_${selectedMonth}.pdf`)
+    pdf.text(formatRupiah(totalBulananSummary.labaAdmin).replace(',00', ''), 190, y + 1, { align: 'right' })
+
+    pdf.save(`Performa_Transaksi_${selectedMonth}.pdf`)
   }
 
   if (!props.active) return null
 
+  // Kasir dropdown options (bersih dari Owner, menampilkan nama asli kasir)
+  const kasirOptions = Object.entries(effectiveKasirList)
+    .filter(([username, data]: [string, any]) => username.toLowerCase() !== 'owner' && (data?.role || '').toLowerCase() !== 'owner')
+    .map(([username, data]: [string, any]) => ({
+      username,
+      displayName: getKasirDisplayName(username)
+    }))
+
   return (
-    <div className={cn("page-view hide-scrollbar bg-slate-50", props.active && "active")}>
+    <div className={cn("page-view hide-scrollbar bg-slate-50 min-h-screen", props.active && "active")}>
       <GlobalHeader 
         storePhoto={props.storePhoto}
         storeName={props.storeName}
@@ -778,489 +622,730 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
         kasirRole={props.kasirRole}
       />
 
-      <div className="px-4 -mt-8 relative z-10 space-y-4 pb-24">
+      <div className="max-w-5xl mx-auto px-1 sm:px-5 -mt-8 relative z-10 space-y-3 sm:space-y-4 pb-44">
         
-        {/* MAIN TAB SWITCHER: PROFIT vs PERFORMA KASIR */}
-        <div className="bg-white rounded-[2rem] p-2 shadow-lg border border-slate-100 flex gap-2">
-          <button
-            onClick={() => setMainTab('profit')}
-            className={cn(
-              "flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-              mainTab === 'profit' ? "bg-emerald-600 text-white shadow-md shadow-emerald-200" : "bg-transparent text-slate-500 hover:bg-slate-50"
-            )}
-          >
-            <i className="fa-solid fa-chart-line text-sm"></i> Pembukuan Toko
-          </button>
-          <button
-            onClick={() => setMainTab('performa_kasir')}
-            className={cn(
-              "flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-              mainTab === 'performa_kasir' ? "bg-purple-600 text-white shadow-md shadow-purple-200" : "bg-transparent text-slate-500 hover:bg-slate-50"
-            )}
-          >
-            <i className="fa-solid fa-user-gear text-sm"></i> Performa Kasir
-          </button>
+        {/* ================================================================= */}
+        {/* TOP CONTROLS CARD: BULAN, KASIR & ACTIONS                         */}
+        {/* ================================================================= */}
+        <div className="bg-white rounded-3xl p-3 sm:p-4 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 min-w-[260px]">
+            {/* Periode Bulan */}
+            <div className="relative">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                Bulan
+              </label>
+              <div className="relative">
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-black rounded-xl pl-3 pr-8 py-2 outline-none focus:border-emerald-500 cursor-pointer shadow-2xs"
+                />
+                <i className="fa-solid fa-calendar text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              </div>
+            </div>
+
+            {/* Filter Kasir */}
+            <div className="flex-1 min-w-[140px] max-w-[220px]">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                Pilih Kasir
+              </label>
+              <div className="relative">
+                <select
+                  value={filterKasir}
+                  onChange={(e) => setFilterKasir(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-black rounded-xl pl-3 pr-8 py-2 outline-none focus:border-emerald-500 cursor-pointer appearance-none shadow-2xs"
+                >
+                  <option value="Semua">Semua Kasir ({kasirOptions.length} Kasir)</option>
+                  {kasirOptions.map(opt => (
+                    <option key={opt.username} value={opt.username}>
+                      {opt.displayName} ({opt.username})
+                    </option>
+                  ))}
+                </select>
+                <i className="fa-solid fa-chevron-down text-[9px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (activeTab === 'tahunan') fetchYearlyData()
+                else fetchMonthlyData()
+              }}
+              disabled={isLoading}
+              title="Perbarui Data Langsung dari Server"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center gap-1.5 shadow-2xs"
+            >
+              <i className={cn("fa-solid fa-rotate", isLoading && "fa-spin text-emerald-600")}></i>
+              <span className="hidden sm:inline">Segarkan</span>
+            </button>
+
+            <button
+              onClick={handleDownloadPDF}
+              className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-rose-500/20 transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <i className="fa-solid fa-file-pdf"></i>
+              <span>PDF</span>
+            </button>
+          </div>
         </div>
 
-        {/* ==================================== TAB 1: PROFIT / PEMBUKUAN TOKO ==================================== */}
-        {mainTab === 'profit' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            
-            {/* Cards Ringkasan Profit Hari Ini */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-coins text-[10px]"></i>
-                  </div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Admin Fee Hari Ini</p>
+        {/* ================================================================= */}
+        {/* HERO KPI CARDS: RESPONSIF HP & TABLET/PC (TIDAK KEPOTONG DI HP)   */}
+        {/* ================================================================= */}
+        {props.isPc ? (
+          /* PC / WIDE LAYOUT (4 Kolom Rapi) */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Card 1: Profit Admin Fee */}
+            <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-3xl p-5 text-white shadow-lg shadow-emerald-700/20 relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+                    Profit Admin Fee Toko
+                  </span>
+                  <span className="text-[9px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white">
+                    Laba Bersih
+                  </span>
                 </div>
-                <p className="text-base font-black text-emerald-600">{formatRupiah(profitHariIni.adminFee).replace(',00', '')}</p>
-                <div className="flex gap-2 text-[8px] font-bold text-slate-400 mt-1">
-                  <span>{profitHariIni.countTx} Transaksi</span>
-                </div>
+                <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-white">
+                  +{formatRupiah(totalBulananSummary.labaAdmin).replace(',00', '')}
+                </h2>
               </div>
-
-              <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-3xl shadow-sm text-white">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-calendar-check text-[10px] text-amber-400"></i>
-                  </div>
-                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Total Fee Admin {selectedMonth}</p>
-                </div>
-                <p className="text-base font-black text-amber-400">{formatRupiah(totalBulananSummary.labaAdmin).replace(',00', '')}</p>
-                <p className="text-[8px] font-bold text-slate-400 mt-1">Akumulasi Pembukuan Harian</p>
-              </div>
+              <p className="text-[10px] text-emerald-100 font-semibold mt-3 pt-2.5 border-t border-emerald-500/30 flex items-center justify-between">
+                <span>Periode {selectedMonth}</span>
+                <span>100% Real Transaksi</span>
+              </p>
             </div>
 
-            {/* Filter Periode, Filter Kasir & Action Buttons */}
-            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div>
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                    {subTabToko === 'harian' ? 'Periode Bulan' : 'Periode Tahun'}
-                  </label>
-                  {subTabToko === 'harian' ? (
-                    <input
-                      type="month"
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
-                    />
-                  ) : (
-                    <select
-                      value={selectedMonth.split('-')[0]}
-                      onChange={(e) => setSelectedMonth(`${e.target.value}-01`)}
-                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500 cursor-pointer"
-                    >
-                      {Array.from({length: 5}, (_, i) => today.getFullYear() - 2 + i).map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  )}
+            {/* Card 2: Omset Toko */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-5 text-white shadow-md relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
+                    <i className="fa-solid fa-chart-pie text-blue-400 text-[11px]"></i>
+                    Total Omset Penjualan
+                  </span>
+                  <span className="text-[9px] font-bold bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                    Perputaran
+                  </span>
                 </div>
+                <h2 className="text-xl lg:text-2xl font-black tracking-tight text-white truncate" title={formatRupiah(totalBulananSummary.omset).replace(',00', '')}>
+                  {formatRupiah(totalBulananSummary.omset).replace(',00', '')}
+                </h2>
+              </div>
+              <p className="text-[10px] text-slate-400 font-semibold mt-3 pt-2.5 border-t border-slate-700/60 flex items-center justify-between">
+                <span>Di Luar Tarik Tunai</span>
+                <span className="text-blue-300 font-bold">{totalBulananSummary.totalTx} Trx</span>
+              </p>
+            </div>
 
-                <div>
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Filter Kasir</label>
-                  <select
-                    value={filterKasir}
-                    onChange={(e) => setFilterKasir(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-500 cursor-pointer"
+            {/* Card 3: Transaksi Kasir */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                    <i className="fa-solid fa-receipt text-indigo-500 text-[11px]"></i>
+                    Transaksi Kasir
+                  </span>
+                  <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
+                    Produktivitas
+                  </span>
+                </div>
+                <h2 className="text-2xl font-black text-slate-800">
+                  {totalBulananSummary.totalTx.toLocaleString('id-ID')} <span className="text-xs font-bold text-slate-400">Transaksi</span>
+                </h2>
+              </div>
+              <p className="text-[10px] text-slate-400 font-semibold mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                <span className="truncate">{filterKasir === 'Semua' ? 'Gabungan Seluruh Kasir' : getKasirDisplayName(filterKasir)}</span>
+                <span className="text-emerald-600 font-bold">Aktif</span>
+              </p>
+            </div>
+
+            {/* Card 4: Modal Saldo Bank */}
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-5 text-white shadow-md flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-200 flex items-center gap-1.5">
+                    <i className="fa-solid fa-building-columns text-[11px]"></i>
+                    Tambah Saldo Bank
+                  </span>
+                  <button 
+                    onClick={() => setShowModalSaldo(prev => !prev)}
+                    className="text-[9px] font-bold bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded-full text-white transition-all cursor-pointer"
                   >
-                    <option value="Semua">Semua Kasir</option>
-                    {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
-                      <option key={username} value={username}>{data.name || username}</option>
-                    ))}
-                  </select>
+                    {showModalSaldo ? 'Tutup' : 'Lihat'}
+                  </button>
                 </div>
+                <h2 className="text-xl lg:text-2xl font-black tracking-tight text-white">
+                  +{formatRupiah(totalBulananSummary.tambahSaldo).replace(',00', '')}
+                </h2>
+              </div>
+              <p className="text-[10px] text-blue-200 font-semibold mt-3 pt-2.5 border-t border-blue-500/40 flex items-center justify-between">
+                <span>Setoran Modal Masuk</span>
+                <span className="font-bold">Plafon Toko</span>
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* MOBILE / HP LAYOUT (Tidak Terhimpit / Nyaman Dibaca) */
+          <div className="space-y-2.5">
+            {/* Card 1: Profit Admin Fee Toko (Hero Card - Full Width) */}
+            <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-3xl p-4 text-white shadow-lg shadow-emerald-700/20 relative overflow-hidden">
+              <div className="absolute right-0 top-0 translate-x-3 -translate-y-2 opacity-10 pointer-events-none">
+                <i className="fa-solid fa-coins text-8xl text-white"></i>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+                    Profit Admin Fee Toko
+                  </span>
+                  <span className="text-[9px] font-bold bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full text-white">
+                    Laba Bersih
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  +{formatRupiah(totalBulananSummary.labaAdmin).replace(',00', '')}
+                </h2>
+              </div>
+              <div className="text-[10px] text-emerald-100 font-semibold mt-2.5 pt-2 border-t border-emerald-500/30 flex items-center justify-between">
+                <span>Periode {selectedMonth}</span>
+                <span className="text-emerald-200 font-bold">100% Real Transaksi</span>
+              </div>
+            </div>
+
+            {/* Row 2: 2 Column Grid untuk Omset & Transaksi */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Card 2: Total Omset Penjualan */}
+              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-3 text-white shadow-md flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-300 flex items-center gap-1 mb-1">
+                    <i className="fa-solid fa-chart-pie text-blue-400 text-[10px]"></i>
+                    Omset Toko
+                  </span>
+                  <h3 className="text-sm font-black tracking-tight text-white truncate" title={formatRupiah(totalBulananSummary.omset).replace(',00', '')}>
+                    {formatRupiah(totalBulananSummary.omset).replace(',00', '')}
+                  </h3>
+                </div>
+                <p className="text-[9px] text-slate-400 font-semibold mt-2 pt-1.5 border-t border-slate-700/60">
+                  Di Luar Tarik Tunai
+                </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSyncHistory}
-                  disabled={isSyncing}
-                  title="Tarik Riwayat Riwayat ke Pembukuan"
-                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all active:scale-95 flex items-center gap-1.5"
-                >
-                  {isSyncing ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-rotate"></i>}
-                  <span className="hidden sm:inline">Sinkronkan</span>
-                </button>
-
-                <button
-                  onClick={handleDownloadPDF}
-                  className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all active:scale-95 flex items-center gap-1.5"
-                >
-                  <i className="fa-solid fa-file-pdf"></i>
-                  <span className="hidden sm:inline">PDF</span>
-                </button>
+              {/* Card 3: Total Transaksi Kasir */}
+              <div className="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1">
+                    <i className="fa-solid fa-receipt text-indigo-500 text-[10px]"></i>
+                    Transaksi Kasir
+                  </span>
+                  <h3 className="text-sm font-black text-slate-800">
+                    {totalBulananSummary.totalTx.toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-400">Trx</span>
+                  </h3>
+                </div>
+                <p className="text-[9px] text-slate-400 font-semibold mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                  <span className="truncate">{filterKasir === 'Semua' ? 'Semua Kasir' : getKasirDisplayName(filterKasir)}</span>
+                  <span className="text-emerald-600 font-bold shrink-0 ml-1">Aktif</span>
+                </p>
               </div>
             </div>
 
-            {/* Sub-Tab Pembukuan Toko */}
-            <div className="bg-slate-200/60 rounded-2xl p-1 flex gap-1 mb-4 mt-2">
+            {/* Card 4: Modal Saldo Bank (Isi Saldo) */}
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-2xl p-3 text-white shadow-md flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xs shadow-xs shrink-0">
+                  <i className="fa-solid fa-building-columns text-white"></i>
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-blue-200 block">
+                    Tambah Saldo Bank (Modal)
+                  </span>
+                  <h3 className="text-sm font-black text-white truncate">
+                    +{formatRupiah(totalBulananSummary.tambahSaldo).replace(',00', '')}
+                  </h3>
+                </div>
+              </div>
               <button
-                onClick={() => setSubTabToko('harian')}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                  subTabToko === 'harian' ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
+                onClick={() => setShowModalSaldo(prev => !prev)}
+                className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all flex items-center gap-1 shrink-0 ml-2 cursor-pointer"
               >
-                📅 Rincian Harian
-              </button>
-              <button
-                onClick={() => setSubTabToko('bulanan')}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                  subTabToko === 'bulanan' ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
-              >
-                📊 Rekapitulasi Bulanan
+                <span>{showModalSaldo ? 'Tutup' : 'Rincian'}</span>
+                <i className={cn("fa-solid text-[9px] transition-transform", showModalSaldo ? "fa-chevron-up" : "fa-chevron-down")}></i>
               </button>
             </div>
 
-            {/* Tabel Profit Tanggal 1 s/d 31 */}
-            {subTabToko === 'harian' && (
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[320px] animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                  <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Riwayat Pembukuan Tanggal 1 - 31</h3>
-                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md uppercase">Singkron Riwayat</span>
+            {/* Rincian Dropdown Isi Saldo Bank */}
+            {showModalSaldo && (
+              <div className="bg-white rounded-2xl p-3 border border-blue-100 shadow-sm space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600">Rincian Pengisian Saldo Modal</span>
+                  <span className="text-[9px] font-bold text-slate-400">Total: {formatRupiah(totalBulananSummary.tambahSaldo).replace(',00', '')}</span>
                 </div>
-
-              {isLoadingMonth ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-10 text-slate-400">
-                  <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-emerald-500"></i>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Memuat Pembukuan Toko...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="max-h-[350px] overflow-y-auto custom-scrollbar flex-1">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-10 shadow-sm">
-                        <tr>
-                          <th className="py-2.5 px-3 text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">Tgl</th>
-                          <th className="py-2.5 px-3 text-[9px] font-black text-purple-600 uppercase tracking-widest border-b border-slate-200">Kasir</th>
-                          <th className="py-2.5 px-3 text-[9px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-200 text-right">Tambah Saldo Bank</th>
-                          <th className="py-2.5 px-3 text-[9px] font-black text-slate-600 uppercase tracking-widest border-b border-slate-200 text-right">Omset Penjualan</th>
-                          <th className="py-2.5 px-3 text-[9px] font-black text-emerald-600 uppercase tracking-widest border-b border-slate-200 text-right">Admin Fee</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {profitBulananData.map(([date, data]) => {
-                          const dayNum = date.split('-')[2]
-                          const hasData = data.tambahSaldo > 0 || data.omset > 0 || data.labaAdmin > 0
-                          return (
-                            <tr key={date} className={cn("transition-colors hover:bg-slate-50", !hasData && "opacity-40 grayscale")}>
-                              <td className="py-3 px-3 flex items-center gap-1.5">
-                                <span className={cn("text-[11px] font-black", hasData ? "text-slate-800" : "text-slate-400")}>{dayNum}</span>
-                                {data.isClosed && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Sudah Closing"></span>}
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">
-                                  {filterKasir === 'Semua' ? 'Gabungan' : (props.kasirList?.[filterKasir]?.name || filterKasir)}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                <span className={cn("text-[10px] font-black", hasData ? "text-blue-600" : "text-slate-300")}>{formatRupiah(data.tambahSaldo).replace(',00', '')}</span>
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                <span className={cn("text-[10px] font-bold", hasData ? "text-slate-700" : "text-slate-300")}>{formatRupiah(data.omset).replace(',00', '')}</span>
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                <span className={cn("text-[10px] font-black text-emerald-600", !hasData && "text-slate-300")}>+{formatRupiah(data.labaAdmin).replace(',00', '')}</span>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-4 mt-auto text-white shrink-0 grid grid-cols-3 gap-2 text-center border-t border-slate-700">
-                    <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">TOTAL SALDO BANK</p>
-                      <p className="text-xs font-black text-blue-400">{formatRupiah(totalBulananSummary.tambahSaldo).replace(',00', '')}</p>
+                {profitBulananData
+                  .filter(([_, d]) => d.tambahSaldo > 0)
+                  .map(([date, d]) => (
+                    <div key={date} className="flex justify-between items-center py-1.5 px-2 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                      <span className="font-bold text-slate-700">Tanggal {date}</span>
+                      <span className="font-black text-blue-600">+{formatRupiah(d.tambahSaldo).replace(',00', '')}</span>
                     </div>
-                    <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">TOTAL OMSET</p>
-                      <p className="text-xs font-black text-slate-200">{formatRupiah(totalBulananSummary.omset).replace(',00', '')}</p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">TOTAL ADMIN FEE</p>
-                      <p className="text-xs font-black text-emerald-400">+{formatRupiah(totalBulananSummary.labaAdmin).replace(',00', '')}</p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            )}
-
-            {/* Rekapitulasi Bulanan (Jan-Des) */}
-            {subTabToko === 'bulanan' && (
-              <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                {isLoadingYear ? (
-                  <div className="flex flex-col items-center justify-center p-10 bg-white rounded-3xl border border-slate-100 shadow-sm text-slate-400">
-                    <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-emerald-500"></i>
-                    <p className="text-[10px] font-black uppercase tracking-widest">Memuat Data Tahunan...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-2 px-1 mb-2">
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Periode</div>
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Tambah Saldo & Omset</div>
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-right mr-4">Profit Bersih</div>
-                    </div>
-                    {yearlySummaryData.map((m) => (
-                      <div key={m.monthStr} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div 
-                          onClick={() => {
-                            if (m.hasData) setExpandedMonth(expandedMonth === m.monthStr ? null : m.monthStr)
-                          }}
-                          className={cn(
-                            "flex items-center justify-between p-4 cursor-pointer transition-colors",
-                            m.hasData ? "hover:bg-slate-50" : "opacity-50 grayscale cursor-not-allowed"
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border",
-                              m.hasData ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-slate-100 border-slate-200 text-slate-400"
-                            )}>
-                              <i className="fa-regular fa-calendar-check text-sm"></i>
-                            </div>
-                            <div>
-                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">{m.label}</h3>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                {m.hasData && expandedMonth !== m.monthStr ? (
-                                  <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md"><i className="fa-solid fa-users text-[8px]"></i> {m.kasirBreakdown.length} Kasir</span>
-                                ) : (
-                                  <span className="text-[9px] font-bold text-slate-400">{m.hasData ? 'Klik untuk tutup rincian' : 'Belum ada data'}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="text-right">
-                            <p className="text-[10px] font-black text-blue-600 tracking-wider">TS: {formatRupiah(m.totalTambahSaldo).replace(',00', '')}</p>
-                            <p className="text-[10px] font-bold text-slate-600">OM: {formatRupiah(m.totalOmset).replace(',00', '')}</p>
-                          </div>
-                          
-                          <div className="text-right flex items-center gap-4">
-                            <div>
-                              <p className="text-xs font-black text-emerald-600">+{formatRupiah(m.totalLaba).replace(',00', '')}</p>
-                            </div>
-                            <div className="w-6 flex justify-end">
-                              {m.hasData && (
-                                <i className={cn("fa-solid text-slate-400 transition-transform", expandedMonth === m.monthStr ? "fa-chevron-up" : "fa-chevron-down")}></i>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {expandedMonth === m.monthStr && m.kasirBreakdown.length > 0 && (
-                          <div className="bg-slate-50 border-t border-slate-100 p-4 animate-in fade-in slide-in-from-top-2">
-                            <div className="space-y-3">
-                              {m.kasirBreakdown.map((kb, idx) => (
-                                <div key={kb.kasirId} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200/60 shadow-sm relative group">
-                                  <div className="absolute -left-2 -top-2 w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-black border-2 border-white shadow-sm">
-                                    {idx + 1}
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-wider">{props.kasirList?.[kb.kasirId]?.name || kb.kasirId}</p>
-                                    <div className="flex gap-3 mt-1">
-                                      <p className="text-[9px] font-bold text-slate-500">Omset: <span className="text-slate-800">{formatRupiah(kb.omset).replace(',00', '')}</span></p>
-                                      <p className="text-[9px] font-bold text-slate-500">TS Bank: <span className="text-blue-600">{formatRupiah(kb.tambahSaldo).replace(',00', '')}</span></p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">+{formatRupiah(kb.laba).replace(',00', '')}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    <div className="bg-gradient-to-r from-emerald-800 to-teal-900 rounded-3xl p-5 text-white shadow-lg flex justify-between items-center mt-2">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300/80 mb-1">TOTAL {selectedMonth.split('-')[0]}</p>
-                        <h3 className="text-xl font-black text-white">{formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalLaba, 0)).replace(',00', '')}</h3>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[9px] font-bold text-emerald-100 mb-0.5">Total Omset: {formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalOmset, 0)).replace(',00', '')}</p>
-                        <p className="text-[9px] font-bold text-emerald-100">Total Tambah Saldo: {formatRupiah(yearlySummaryData.reduce((acc, m) => acc + m.totalTambahSaldo, 0)).replace(',00', '')}</p>
-                      </div>
-                    </div>
-                  </>
+                  ))}
+                {profitBulananData.every(([_, d]) => d.tambahSaldo <= 0) && (
+                  <p className="text-xs text-slate-400 text-center py-2.5">Belum ada transaksi pengisian modal bank di bulan ini</p>
                 )}
               </div>
             )}
           </div>
         )}
 
-        {/* ==================================== TAB 2: PERFORMA KASIR ==================================== */}
-        {mainTab === 'performa_kasir' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            
-            {/* Filter Pilih Kasir */}
-            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Pilih Kasir</label>
-              <div className="relative">
-                <select 
-                  value={filterKasir}
-                  onChange={(e) => setFilterKasir(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-4 py-3 appearance-none outline-none focus:border-purple-400 cursor-pointer"
-                >
-                  <option value="Semua">Semua Kasir (Gabungan)</option>
-                  {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => (
-                    <option key={username} value={username}>{data.name || username}</option>
-                  ))}
-                </select>
-                <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
-              </div>
-            </div>
-
-            {/* KPI Cards Kasir */}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider mb-1">Tambah Saldo</p>
-                <p className="text-xs font-black text-blue-600 truncate">{formatRupiah(totalTambahSaldoKasir).replace(',00', '')}</p>
-              </div>
-
-              <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider mb-1">Omset Penjualan</p>
-                <p className="text-xs font-black text-slate-800 truncate">{formatRupiah(kpiKasir.omset).replace(',00', '')}</p>
-              </div>
-
-              <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider mb-1">Profit Admin Fee</p>
-                <p className="text-xs font-black text-emerald-600 truncate">+{formatRupiah(kpiKasir.profitAdmin).replace(',00', '')}</p>
-              </div>
-            </div>
-
-            {/* Sub-Tab Switcher Kasir */}
-            <div className="bg-slate-200/60 rounded-2xl p-1 flex gap-1">
-              <button
-                onClick={() => setSubTabKasir('rekap')}
-                className={cn(
-                  "flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                  subTabKasir === 'rekap' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
-              >
-                Leaderboard & Rekap
-              </button>
-              <button
-                onClick={() => setSubTabKasir('tambah_saldo')}
-                className={cn(
-                  "flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                  subTabKasir === 'tambah_saldo' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
-              >
-                Total Tambah Saldo Bank
-              </button>
-            </div>
-
-            {/* Sub-Tab 1: Leaderboard & Rekap */}
-            {subTabKasir === 'rekap' && (
-              <div className="space-y-4">
-                {filterKasir === 'Semua' && kasirLeaderboard.length > 0 && (
-                  <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-                    <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-3">Ringkasan Performa Masing-Masing Kasir</h3>
-                    <div className="space-y-2.5">
-                      {kasirLeaderboard.map(([kId, data], idx) => {
-                        const kName = props.kasirList[kId]?.name || kId
-                        return (
-                          <div key={kId} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center font-black text-xs", idx === 0 ? "bg-amber-100 text-amber-600" : "bg-slate-200 text-slate-600")}>
-                                  {idx + 1}
-                                </div>
-                                <p className="text-xs font-black text-slate-800 uppercase">{kName}</p>
-                              </div>
-                              <span className="text-[9px] font-bold text-slate-400">{data.count} Transaksi</span>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 text-[9px]">
-                              <div>
-                                <span className="text-slate-400 font-bold block">Tambah Saldo</span>
-                                <span className="font-bold text-blue-600">{formatRupiah(data.tambahSaldo).replace(',00', '')}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 font-bold block">Omset</span>
-                                <span className="font-bold text-slate-700">{formatRupiah(data.omset).replace(',00', '')}</span>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-slate-400 font-bold block">Profit Fee</span>
-                                <span className="font-black text-emerald-600">+{formatRupiah(data.laba).replace(',00', '')}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+        {/* ================================================================= */}
+        {/* TAB NAVIGATION: SEGMENTED SWITCHER                                */}
+        {/* ================================================================= */}
+        <div className="bg-slate-200/70 p-1.5 rounded-2xl flex gap-1 shadow-inner">
+          <button
+            onClick={() => setActiveTab('harian')}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+              activeTab === 'harian' 
+                ? "bg-white text-emerald-700 shadow-sm" 
+                : "text-slate-500 hover:text-slate-800"
             )}
+          >
+            <i className="fa-regular fa-calendar-days"></i>
+            <span>Rincian Harian</span>
+          </button>
 
-            {/* Sub-Tab 2: Mutasi Tambah Saldo Kasir (Total Isi Saldo Bank Tanggal 1-31 Singkron Laporan) */}
-            {subTabKasir === 'tambah_saldo' && (
-              <div className="space-y-3">
-                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-4 rounded-3xl text-white shadow-md">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-blue-100">TOTAL TAMBAH SALDO BANK ({selectedMonth})</p>
-                      <p className="text-xl font-black mt-1">{formatRupiah(totalTambahSaldoKasir).replace(',00', '')}</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
-                      <i className="fa-solid fa-building-columns text-lg"></i>
-                    </div>
-                  </div>
-                  <p className="text-[9px] font-bold text-blue-200 mt-2 italic flex items-center gap-1.5">
-                    <i className="fa-solid fa-circle-check text-emerald-400"></i> Singkron dengan "1. Modal Saldo Bank (Isi)" di Halaman Laporan
+          <button
+            onClick={() => setActiveTab('kasir')}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+              activeTab === 'kasir' 
+                ? "bg-white text-purple-700 shadow-sm" 
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            <i className="fa-solid fa-trophy text-amber-500"></i>
+            <span>Kinerja Kasir</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tahunan')}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+              activeTab === 'tahunan' 
+                ? "bg-white text-blue-700 shadow-sm" 
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            <i className="fa-solid fa-chart-column"></i>
+            <span>Rekap Tahunan</span>
+          </button>
+        </div>
+
+        {/* ================================================================= */}
+        {/* TAB 1: RINCIAN HARIAN (TABEL 3 KOLOM BERSIH & TIDAK CAMPUR BAUR)   */}
+        {/* ================================================================= */}
+        {activeTab === 'harian' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              
+              {/* Header Tabel & Sort Toggle */}
+              <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                    <span>Laporan Keuntungan Harian</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                    Otomatis dari catatan transaksi kasir ({selectedMonth})
                   </p>
                 </div>
 
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Akumulasi Tambah Saldo Per Tanggal</h3>
-                    <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">Singkron Laporan</span>
-                  </div>
+                <button
+                  onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs hover:bg-slate-50 active:scale-95 transition-all"
+                >
+                  <i className="fa-solid fa-arrow-down-wide-short text-emerald-600"></i>
+                  <span>{sortOrder === 'desc' ? 'Terbaru' : 'Terlama'}</span>
+                </button>
+              </div>
 
-                  <div className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto custom-scrollbar">
-                    {profitBulananData.map(([date, data]) => {
-                      const dayNum = date.split('-')[2]
-                      if (data.tambahSaldo <= 0) return null
-                      return (
-                        <div key={date} className="p-3.5 hover:bg-slate-50 transition-colors flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 font-black text-xs flex items-center justify-center border border-blue-100">
+              {/* Body Tabel */}
+              {isLoading ? (
+                <div className="p-16 flex flex-col items-center justify-center text-slate-400">
+                  <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-emerald-500"></i>
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-500">Memuat Transaksi...</p>
+                </div>
+              ) : (
+                <div className="p-1 sm:p-4 space-y-2">
+                  {profitBulananData.map(([date, data]) => {
+                    const dateObj = new Date(date)
+                    const dayName = !isNaN(dateObj.getTime()) ? INDO_DAYS[dateObj.getDay()] : ''
+                    const dayNum = date.split('-')[2]
+                    const monthNum = Number(date.split('-')[1])
+                    const monthShort = INDO_MONTHS[monthNum - 1]?.substring(0, 3) || ''
+                    const isToday = date === todayStr
+                    const hasActivity = data.totalTx > 0 || data.labaAdmin > 0 || data.omset > 0 || data.tambahSaldo > 0
+
+                    return (
+                      <div 
+                        key={date} 
+                        className={cn(
+                          "p-1.5 sm:p-3 rounded-2xl border transition-all",
+                          isToday 
+                            ? "bg-white border-emerald-300 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-400/40" 
+                            : hasActivity 
+                              ? "bg-white border-slate-200/80 shadow-2xs hover:border-slate-300" 
+                              : "bg-white/60 border-slate-100 opacity-60 hover:opacity-100"
+                        )}
+                      >
+                        <div className="flex items-center gap-1 sm:gap-2.5">
+                          {/* Sisi Kiri: Kolom Tanggal Super Ramping */}
+                          <div className="w-8 sm:w-12 shrink-0 flex flex-col items-center text-center">
+                            <div className={cn(
+                              "w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-black text-[11px] sm:text-sm shadow-xs",
+                              isToday 
+                                ? "bg-emerald-600 text-white shadow-emerald-600/30 ring-2 ring-emerald-300" 
+                                : hasActivity 
+                                  ? "bg-slate-100 text-slate-800 border border-slate-300/80" 
+                                  : "bg-slate-50 text-slate-400 border border-slate-200"
+                            )}>
                               {dayNum}
                             </div>
-                            <div>
-                              <p className="text-xs font-black text-slate-800">Tanggal {date}</p>
-                              <p className="text-[9px] font-bold text-slate-400">Total Pengisian/Setoran Saldo Bank</p>
+                            <div className="mt-0.5 w-full">
+                              <p className={cn("text-[9px] sm:text-[10px] font-black truncate leading-tight", isToday ? "text-emerald-700" : hasActivity ? "text-slate-800" : "text-slate-400")}>
+                                {dayName}
+                              </p>
+                              <p className="text-[7.5px] sm:text-[8.5px] font-semibold text-slate-400 leading-tight">
+                                {dayNum} {monthShort}
+                              </p>
+                              {isToday && (
+                                <span className="inline-block text-[6px] sm:text-[7px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded-full mt-0.5 shadow-2xs">
+                                  HARI INI
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs font-black text-blue-600">+{formatRupiah(data.tambahSaldo).replace(',00', '')}</span>
+
+                          {/* Sisi Kanan: 4 Kotak Melebar Penuh, Rapat Hampir Bersentuhan (grid-cols-2, gap-1) */}
+                          <div className="grid grid-cols-2 gap-1 sm:gap-1.5 flex-1 min-w-0">
+                            {/* Kotak 1: Omset Toko (Kiri Atas) */}
+                            <div className="bg-slate-50/90 border border-slate-200/80 rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 shadow-2xs">
+                              <span className="text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-0.5 truncate">
+                                <i className="fa-solid fa-chart-line text-[7.5px] sm:text-[8.5px] text-blue-500"></i>
+                                <span>Omset</span>
+                              </span>
+                              <p className="text-[10px] sm:text-xs font-black text-slate-800 tracking-tighter leading-tight whitespace-nowrap" title={formatRupiah(data.omset).replace(',00', '')}>
+                                {data.omset > 0 ? formatRupiah(data.omset).replace(',00', '') : 'Rp 0'}
+                              </p>
+                            </div>
+
+                            {/* Kotak 2: Total Transaksi (Kanan Atas) */}
+                            <div className="bg-indigo-50/70 border border-indigo-100/90 rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 shadow-2xs">
+                              <span className="text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider text-indigo-500 flex items-center gap-1 mb-0.5 truncate">
+                                <i className="fa-solid fa-receipt text-[7.5px] sm:text-[8.5px] text-indigo-500"></i>
+                                <span>Transaksi</span>
+                              </span>
+                              <p className="text-[10px] sm:text-xs font-black text-indigo-950 tracking-tighter leading-tight whitespace-nowrap">
+                                {data.totalTx} <span className="text-[8px] sm:text-[9px] font-bold text-indigo-400">Trx</span>
+                              </p>
+                            </div>
+
+                            {/* Kotak 3: Isi Saldo Modal Bank (Kiri Bawah) */}
+                            <div className={cn(
+                              "rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 border transition-colors shadow-2xs",
+                              data.tambahSaldo > 0 
+                                ? "bg-blue-50/90 border-blue-200/90" 
+                                : "bg-slate-50/50 border-slate-100"
+                            )}>
+                              <span className={cn(
+                                "text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider flex items-center gap-1 mb-0.5 truncate",
+                                data.tambahSaldo > 0 ? "text-blue-600" : "text-slate-400"
+                              )}>
+                                <i className="fa-solid fa-building-columns text-[7.5px] sm:text-[8.5px] text-blue-500"></i>
+                                <span>Isi Saldo</span>
+                              </span>
+                              <p className={cn(
+                                "text-[10px] sm:text-xs font-black tracking-tighter leading-tight whitespace-nowrap",
+                                data.tambahSaldo > 0 ? "text-blue-700" : "text-slate-400"
+                              )} title={formatRupiah(data.tambahSaldo).replace(',00', '')}>
+                                {data.tambahSaldo > 0 ? `+${formatRupiah(data.tambahSaldo).replace(',00', '')}` : 'Rp 0'}
+                              </p>
+                            </div>
+
+                            {/* Kotak 4: Laba Bersih Admin (Kanan Bawah) */}
+                            <div className={cn(
+                              "rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 border transition-colors shadow-2xs",
+                              data.labaAdmin > 0 
+                                ? "bg-emerald-50/90 border-emerald-200/90" 
+                                : "bg-slate-50/50 border-slate-100"
+                            )}>
+                              <span className={cn(
+                                "text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider flex items-center gap-1 mb-0.5 truncate",
+                                data.labaAdmin > 0 ? "text-emerald-700" : "text-slate-400"
+                              )}>
+                                <i className="fa-solid fa-coins text-[7.5px] sm:text-[8.5px] text-emerald-500"></i>
+                                <span>Laba Bersih</span>
+                              </span>
+                              <p className={cn(
+                                "text-[10px] sm:text-xs font-black tracking-tighter leading-tight whitespace-nowrap",
+                                data.labaAdmin > 0 ? "text-emerald-600" : "text-slate-400"
+                              )} title={formatRupiah(data.labaAdmin).replace(',00', '')}>
+                                {data.labaAdmin > 0 ? `+${formatRupiah(data.labaAdmin).replace(',00', '')}` : 'Rp 0'}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      )
-                    })}
-                    {profitBulananData.every(([_, data]) => data.tambahSaldo <= 0) && (
-                      <div className="p-8 text-center text-slate-400">
-                        <i className="fa-solid fa-building-columns text-3xl mb-2 text-slate-300"></i>
-                        <p className="text-[10px] font-black uppercase tracking-widest">Belum ada transaksi tambah saldo bank di bulan ini</p>
                       </div>
-                    )}
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* KARTU MUTASI MODAL SALDO BANK (DIPISAHKAN AGAR TIDAK BERCAMPUR) */}
+            <div className="bg-white rounded-3xl border border-blue-100 shadow-sm overflow-hidden">
+              <div 
+                onClick={() => setShowModalSaldo(prev => !prev)}
+                className="p-4 bg-gradient-to-r from-blue-50/60 to-indigo-50/60 flex items-center justify-between cursor-pointer hover:opacity-95 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-md shadow-blue-500/20">
+                    <i className="fa-solid fa-building-columns"></i>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 block">
+                      Arus Modal Bank (Plafon Toko)
+                    </span>
+                    <h4 className="text-sm font-black text-slate-800">
+                      Total Setoran Saldo: {formatRupiah(totalBulananSummary.tambahSaldo).replace(',00', '')}
+                    </h4>
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 hidden sm:inline">
+                    {showModalSaldo ? 'Sembunyikan' : 'Buka Rincian'}
+                  </span>
+                  <i className={cn("fa-solid text-slate-400 text-xs transition-transform", showModalSaldo ? "fa-chevron-up" : "fa-chevron-down")}></i>
+                </div>
               </div>
-            )}
 
+              {showModalSaldo && (
+                <div className="p-4 border-t border-blue-50 space-y-2 max-h-72 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2 duration-200">
+                  <p className="text-[10px] font-bold text-slate-400 italic mb-2">
+                    Rincian pengisian/setoran modal saldo bank dari Owner/Agen untuk operasional kasir:
+                  </p>
+                  {profitBulananData
+                    .filter(([_, d]) => d.tambahSaldo > 0)
+                    .map(([date, d]) => (
+                      <div key={date} className="flex justify-between items-center py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                        <span className="font-bold text-slate-700">Tanggal {date}</span>
+                        <span className="font-black text-blue-600">+{formatRupiah(d.tambahSaldo).replace(',00', '')}</span>
+                      </div>
+                    ))}
+                  {profitBulananData.every(([_, d]) => d.tambahSaldo <= 0) && (
+                    <p className="text-xs text-slate-400 text-center py-4">Belum ada transaksi pengisian modal bank di bulan ini</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 2: KINERJA & RANKING KASIR (LEADERBOARD BERSIH DARI OWNER)    */}
+        {/* ================================================================= */}
+        {activeTab === 'kasir' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                    <span>Ranking Produktivitas Kasir</span>
+                    <i className="fa-solid fa-medal text-amber-500"></i>
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                    Diurutkan berdasarkan kontribusi keuntungan Admin Fee toko ({selectedMonth})
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 text-[10px] font-black uppercase">
+                  {kasirLeaderboard.length} Kasir Aktif
+                </span>
+              </div>
+
+              {kasirLeaderboard.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <i className="fa-solid fa-users-slash text-3xl mb-2 text-slate-300"></i>
+                  <p className="text-xs font-black uppercase tracking-wider">Belum Ada Transaksi Kasir di Bulan Ini</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {kasirLeaderboard.map(([kId, data], idx) => {
+                    const displayName = data.name || getKasirDisplayName(kId)
+                    const totalProfit = totalBulananSummary.labaAdmin || 1
+                    const percent = data.laba > 0 ? Math.min(100, Math.round((data.laba / totalProfit) * 100)) : 0
+                    const hasSales = data.count > 0 || data.omset > 0 || data.laba > 0
+
+                    return (
+                      <div 
+                        key={kId} 
+                        className={cn(
+                          "p-3.5 sm:p-4 rounded-2xl border transition-all space-y-2.5",
+                          hasSales 
+                            ? "bg-slate-50/80 border-slate-100 hover:border-purple-200 hover:bg-purple-50/20" 
+                            : "bg-white border-slate-100 opacity-75"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                            <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 shadow-xs",
+                              hasSales && idx === 0 ? "bg-amber-100 text-amber-700 border border-amber-300" :
+                              hasSales && idx === 1 ? "bg-slate-200 text-slate-700 border border-slate-300" :
+                              hasSales && idx === 2 ? "bg-orange-100 text-orange-700 border border-orange-300" :
+                              "bg-slate-100 text-slate-500"
+                            )}>
+                              {hasSales ? (idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1) : '-'}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide truncate">
+                                {displayName}
+                              </h4>
+                              <p className="text-[10px] text-slate-400 font-semibold truncate">
+                                User: <span className="font-mono text-slate-600 font-bold">{kId}</span> • {data.count} Transaksi
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className={cn(
+                              "text-xs sm:text-sm font-black block tracking-tight",
+                              data.laba > 0 ? "text-emerald-600" : "text-slate-400"
+                            )}>
+                              {data.laba > 0 ? `+${formatRupiah(data.laba).replace(',00', '')}` : 'Rp 0'}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {hasSales ? `Kontribusi ${percent}%` : 'Belum Ada Penjualan'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar Kontribusi */}
+                        <div className="w-full bg-slate-200/80 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              percent > 0 ? "bg-emerald-500" : "bg-transparent"
+                            )}
+                            style={{ width: `${Math.max(percent, percent > 0 ? 3 : 0)}%` }}
+                          ></div>
+                        </div>
+
+                        {/* Detail Kaki Card */}
+                        <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-slate-200/50">
+                          <span>Omset: <strong className="text-slate-700">{formatRupiah(data.omset).replace(',00', '')}</strong></span>
+                          <button
+                            onClick={() => {
+                              setFilterKasir(kId)
+                              setActiveTab('harian')
+                            }}
+                            className="text-purple-600 hover:text-purple-700 font-black flex items-center gap-1 active:scale-95 cursor-pointer"
+                          >
+                            <span>Lihat Rincian Harian</span>
+                            <i className="fa-solid fa-arrow-right text-[8px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 3: REKAP TAHUNAN (12 BULAN LENGKAP)                            */}
+        {/* ================================================================= */}
+        {activeTab === 'tahunan' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                    <span>Rekapitulasi Transaksi Tahunan</span>
+                    <i className="fa-solid fa-chart-line text-blue-500"></i>
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                    Ringkasan performa 12 bulan di tahun {selectedMonth.split('-')[0]}
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase">
+                  Tahun {selectedMonth.split('-')[0]}
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="p-16 flex flex-col items-center justify-center text-slate-400">
+                  <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-blue-500"></i>
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-500">Memuat Rekap Tahunan...</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {yearlySummaryData.map((m) => {
+                    const isSelected = m.monthStr === selectedMonth
+                    const hasData = m.totalTx > 0 || m.totalLaba > 0 || m.totalOmset > 0
+
+                    return (
+                      <div 
+                        key={m.monthStr}
+                        onClick={() => {
+                          setSelectedMonth(m.monthStr)
+                          setActiveTab('harian')
+                        }}
+                        className={cn(
+                          "p-3.5 rounded-2xl border transition-all cursor-pointer flex justify-between items-center",
+                          isSelected 
+                            ? "bg-blue-50/50 border-blue-200 shadow-xs" 
+                            : hasData 
+                              ? "bg-slate-50/80 border-slate-100 hover:bg-slate-100/80" 
+                              : "bg-white border-slate-100 opacity-40 hover:opacity-100"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("text-xs font-black", isSelected ? "text-blue-700" : "text-slate-800")}>
+                              {m.label}
+                            </span>
+                            {hasData && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                {m.totalTx} Trx
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                            Omset: {formatRupiah(m.totalOmset).replace(',00', '')}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <span className={cn("text-xs sm:text-sm font-black block", hasData ? "text-emerald-600" : "text-slate-300")}>
+                            +{formatRupiah(m.totalLaba).replace(',00', '')}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-400 flex items-center justify-end gap-1">
+                            <span>Buka Bulan</span>
+                            <i className="fa-solid fa-chevron-right text-[8px]"></i>
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

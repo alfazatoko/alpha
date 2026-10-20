@@ -449,14 +449,14 @@ export default function App({ onExit, externalRole, externalCashierName, externa
     if (externalRole) setCurrentUserRole(externalRole);
     if (kasirList && Object.keys(kasirList).length > 0) {
       const newCashiers: Cashier[] = Object.entries(kasirList)
+        .filter(([uname, data]) => uname.toLowerCase() !== 'owner' && (data.role || '').toLowerCase() !== 'owner')
         .map(([uname, data]) => {
-          const isOwner = data.role === 'owner';
           // Nama display selalu pakai nama asli dari profil — tidak hardcode 'Owner'
           const displayName = data.name || uname;
           return {
             id: `c_${uname}`,            // ID internal = c_ + username unik
             name: displayName,            // Nama tampilan = nama asli
-            role: isOwner ? 'Owner' : 'Kasir Shift',
+            role: 'Kasir Shift',
             email: `${uname.toLowerCase().replace(/\s/g, '')}@alfazacell.com`,
             avatar: data.avatar || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(displayName)),
             isOnline: true,

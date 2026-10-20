@@ -1186,9 +1186,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer"
                 >
                   <option value="Semua">Semua Kasir</option>
-                  {Object.entries(props.kasirList).map(([id, acc]) => (
-                    <option key={id} value={id}>{acc.name}</option>
-                  ))}
+                  {Object.entries(props.kasirList)
+                    .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
+                    .map(([id, acc]) => (
+                      <option key={id} value={id}>{acc.name}</option>
+                    ))}
                 </select>
               </div>
             )}
@@ -2037,9 +2039,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 className="bg-gray-50 text-blue-700 text-[10px] font-black rounded-lg pl-3 pr-7 py-1.5 outline-none border border-gray-100 appearance-none cursor-pointer shadow-sm"
               >
                 <option value="Semua">Semua Kasir</option>
-                {Object.entries(props.kasirList).map(([id, acc]) => (
-                  <option key={id} value={id}>{acc.name}</option>
-                ))}
+                {Object.entries(props.kasirList)
+                  .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
+                  .map(([id, acc]) => (
+                    <option key={id} value={id}>{acc.name}</option>
+                  ))}
               </select>
               <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
             </div>
@@ -2968,7 +2972,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             
             {/* Body / List */}
             <div className="p-4 pb-12 sm:pb-4 max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar">
-              {Object.entries(props.kasirList || {}).map(([username, data]: [string, any]) => {
+              {Object.entries(props.kasirList || {})
+                .filter(([username, data]: [string, any]) => username.toLowerCase() !== 'owner' && (data.role || '').toLowerCase() !== 'owner')
+                .map(([username, data]: [string, any]) => {
                 const isSelected = targetKasirId === username;
                 const kasirName = data.name || username;
                 const initial = kasirName.charAt(0).toUpperCase();

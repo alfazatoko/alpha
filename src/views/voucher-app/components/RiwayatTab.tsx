@@ -254,9 +254,11 @@ export default function RiwayatTab({
                       className="w-full appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-800 dark:text-white rounded-xl pl-2 pr-6 py-1 focus:outline-none focus:border-indigo-500 transition cursor-pointer shadow-sm"
                     >
                       <option value="all">Semua Kasir</option>
-                      {allCashiers.map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
+                      {allCashiers
+                        .filter(c => c.name.toLowerCase() !== 'owner' && (c.role || '').toLowerCase() !== 'owner')
+                        .map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
                     </select>
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
