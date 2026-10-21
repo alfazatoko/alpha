@@ -5652,11 +5652,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               </span>
                             </div>
                             
-                            {/* Sub-Header Kolom Rapi */}
-                            <div className="flex items-center bg-slate-50 border-b border-slate-200/80 text-[8px] font-black text-slate-400 uppercase tracking-wider select-none">
-                              <div className="w-[38%] py-1.5 px-3 border-r border-slate-200/60">Kasir</div>
-                              <div className="flex-1 py-1.5 px-2 border-r border-slate-200/60 text-center">Shift & Status</div>
-                              <div className="w-[28%] py-1.5 px-3 text-right">Jam Masuk</div>
+                            {/* Sub-Header Kolom Buku Tulis (Garis Horizontal Bersih) */}
+                            <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200/80 text-[8px] font-black text-slate-400 uppercase tracking-wider select-none px-3.5 py-1.5">
+                              <div className="flex-1 pr-3 flex items-center">
+                                <span className="w-[48%] text-left">Kasir</span>
+                                <span className="flex-1 text-center">Shift & Status</span>
+                              </div>
+                              <div className="shrink-0 text-right min-w-[70px]">Jam Masuk</div>
                             </div>
 
                             <div>
@@ -5683,62 +5685,66 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 return (
                                   <div 
                                     key={`today-${id}`} 
-                                    className="flex items-stretch border-b border-slate-100 last:border-b-0 bg-white hover:bg-slate-50/70 transition-colors"
+                                    className="flex items-center justify-between py-2.5 px-3.5 border-b border-slate-100 last:border-b-0 bg-white hover:bg-slate-50/70 transition-colors"
                                   >
-                                    {/* Kolom 1: Nama Kasir & Badge Status */}
-                                    <div className="w-[38%] min-w-0 py-2.5 px-3 border-r border-slate-100 flex flex-col justify-center">
-                                      <p className="text-[10px] sm:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate leading-tight" title={acc.name}>
-                                        {acc.name}
-                                      </p>
-                                      {entry?.status === 'Lembur' && (
-                                        <div className="mt-1">
-                                          <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                            <i className="fa-solid fa-bolt text-[7.5px] text-yellow-300"></i> Lembur
-                                          </span>
-                                        </div>
-                                      )}
-                                      {entry?.status === 'Libur' && (
-                                        <div className="mt-1">
-                                          <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-amber-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                            <i className="fa-solid fa-mug-hot text-[7.5px] text-white"></i> Libur
-                                          </span>
-                                        </div>
-                                      )}
-                                      {entry?.status === 'Izin' && (
-                                        <div className="mt-1">
-                                          <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-blue-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                            <i className="fa-solid fa-envelope-open-text text-[7.5px] text-white"></i> Izin
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Kolom 2: Shift & Keterangan Telat */}
-                                    <div className="flex-1 py-2.5 px-2 border-r border-slate-100 flex flex-col items-center justify-center text-center">
-                                      {entry?.status === 'Libur' ? (
-                                        <span className="inline-block px-2.5 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
-                                          LIBUR / OFF
-                                        </span>
-                                      ) : entry?.status === 'Izin' ? (
-                                        <span className="inline-block px-2.5 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-xs">
-                                          IZIN / SAKIT
-                                        </span>
-                                      ) : (
-                                        <>
-                                          <span className={cn("px-2 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider inline-block", shiftColor)}>
-                                            {shiftLabel}
-                                          </span>
-                                          {entry?.alasan_telat && (
-                                            <p className="text-[7.5px] text-red-600 font-bold mt-1 max-w-[130px] mx-auto leading-tight line-clamp-2 bg-red-50 px-1.5 py-0.5 rounded border border-red-200/70" title={entry.alasan_telat}>
-                                              "{entry.alasan_telat}"
-                                            </p>
+                                    {/* Area Kiri & Tengah: Kasir, Shift, dan Keterangan Telat (Lebar Penuh Tanpa Garis Berdiri) */}
+                                    <div className="flex-1 min-w-0 pr-3 flex flex-col justify-center">
+                                      {/* Baris 1: Nama Kasir (Kiri) & Shift / Status (Tengah) */}
+                                      <div className="flex items-center">
+                                        <div className="w-[48%] min-w-0 pr-2 flex items-center gap-1.5 flex-wrap">
+                                          <p className="text-[10px] sm:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate leading-tight" title={acc.name}>
+                                            {acc.name}
+                                          </p>
+                                          {entry?.status === 'Lembur' && (
+                                            <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-emerald-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                              <i className="fa-solid fa-bolt text-[7px] text-yellow-300"></i> Lembur
+                                            </span>
                                           )}
-                                        </>
+                                          {entry?.status === 'Libur' && (
+                                            <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-amber-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                              <i className="fa-solid fa-mug-hot text-[7px] text-white"></i> Libur
+                                            </span>
+                                          )}
+                                          {entry?.status === 'Izin' && (
+                                            <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-blue-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                              <i className="fa-solid fa-envelope-open-text text-[7px] text-white"></i> Izin
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex-1 text-center shrink-0">
+                                          {entry?.status === 'Libur' ? (
+                                            <span className="inline-block px-2 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
+                                              LIBUR / OFF
+                                            </span>
+                                          ) : entry?.status === 'Izin' ? (
+                                            <span className="inline-block px-2 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-xs">
+                                              IZIN / SAKIT
+                                            </span>
+                                          ) : (
+                                            <span className={cn("px-2 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider inline-block", shiftColor)}>
+                                              {shiftLabel}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Baris 2: Keterangan Telat (1 Baris Saja, Melebar dari Bawah Kasir sampai Bawah Shift) */}
+                                      {entry?.alasan_telat && (
+                                        <div className="mt-1 flex items-center gap-1.5 min-w-0">
+                                          <i className="fa-regular fa-comment-dots text-[8px] text-red-500 shrink-0"></i>
+                                          <p 
+                                            className="text-[8px] sm:text-[8.5px] text-red-600 font-bold truncate whitespace-nowrap leading-tight bg-red-50/90 px-2 py-0.5 rounded border border-red-200/70 flex-1 min-w-0" 
+                                            title={entry.alasan_telat}
+                                          >
+                                            "{entry.alasan_telat}"
+                                          </p>
+                                        </div>
                                       )}
                                     </div>
-                                    
-                                    {/* Kolom 3: Tombol Edit & Jam Masuk */}
-                                    <div className="w-[28%] py-2.5 px-3 flex flex-col items-end justify-center text-right pl-1 relative">
+
+                                    {/* Area Kanan: Jam Masuk & Tombol Edit */}
+                                    <div className="shrink-0 text-right pl-2 flex flex-col items-end justify-center relative min-w-[70px]">
                                       {props.kasirRole === 'owner' && (
                                         <button 
                                           type="button"
@@ -5827,11 +5833,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                   )}
                                 </div>
                                 
-                                {/* Sub-Header Kolom Rapi */}
-                                <div className="flex items-center bg-slate-50 border-b border-slate-200/80 text-[8px] font-black text-slate-400 uppercase tracking-wider select-none">
-                                  <div className="w-[38%] py-1.5 px-3 border-r border-slate-200/60">Kasir</div>
-                                  <div className="flex-1 py-1.5 px-2 border-r border-slate-200/60 text-center">Shift & Status</div>
-                                  <div className="w-[28%] py-1.5 px-3 text-right">Jam Masuk</div>
+                                {/* Sub-Header Kolom Buku Tulis (Garis Horizontal Bersih) */}
+                                <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200/80 text-[8px] font-black text-slate-400 uppercase tracking-wider select-none px-3.5 py-1.5">
+                                  <div className="flex-1 pr-3 flex items-center">
+                                    <span className="w-[48%] text-left">Kasir</span>
+                                    <span className="flex-1 text-center">Shift & Status</span>
+                                  </div>
+                                  <div className="shrink-0 text-right min-w-[70px]">Jam Masuk</div>
                                 </div>
 
                                 <div>
@@ -5856,62 +5864,66 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                     return (
                                       <div 
                                         key={id} 
-                                        className="flex items-stretch border-b border-slate-100 last:border-b-0 bg-white hover:bg-slate-50/70 transition-colors"
+                                        className="flex items-center justify-between py-2.5 px-3.5 border-b border-slate-100 last:border-b-0 bg-white hover:bg-slate-50/70 transition-colors"
                                       >
-                                        {/* Kolom 1: Nama Kasir & Badge Status */}
-                                        <div className="w-[38%] min-w-0 py-2.5 px-3 border-r border-slate-100 flex flex-col justify-center">
-                                          <p className="text-[10px] sm:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate leading-tight" title={acc.name}>
-                                            {acc.name}
-                                          </p>
-                                          {entry?.status === 'Lembur' && (
-                                            <div className="mt-1">
-                                              <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                                <i className="fa-solid fa-bolt text-[7.5px] text-yellow-300"></i> Lembur
-                                              </span>
-                                            </div>
-                                          )}
-                                          {entry?.status === 'Libur' && (
-                                            <div className="mt-1">
-                                              <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-amber-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                                <i className="fa-solid fa-mug-hot text-[7.5px] text-white"></i> Libur
-                                              </span>
-                                            </div>
-                                          )}
-                                          {entry?.status === 'Izin' && (
-                                            <div className="mt-1">
-                                              <span className="inline-flex items-center gap-1.5 text-[8px] sm:text-[8.5px] font-black text-white bg-blue-500 px-2 py-0.5 rounded shadow-xs uppercase tracking-wide">
-                                                <i className="fa-solid fa-envelope-open-text text-[7.5px] text-white"></i> Izin
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                        
-                                        {/* Kolom 2: Shift & Keterangan Telat */}
-                                        <div className="flex-1 py-2.5 px-2 border-r border-slate-100 flex flex-col items-center justify-center text-center">
-                                          {entry?.status === 'Libur' ? (
-                                            <span className="inline-block px-2.5 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
-                                              LIBUR / OFF
-                                            </span>
-                                          ) : entry?.status === 'Izin' ? (
-                                            <span className="inline-block px-2.5 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-xs">
-                                              IZIN / SAKIT
-                                            </span>
-                                          ) : (
-                                            <>
-                                              <p className={cn("text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider", shiftColor)}>
-                                                {shiftLabel}
+                                        {/* Area Kiri & Tengah: Kasir, Shift, dan Keterangan Telat (Lebar Penuh Tanpa Garis Berdiri) */}
+                                        <div className="flex-1 min-w-0 pr-3 flex flex-col justify-center">
+                                          {/* Baris 1: Nama Kasir (Kiri) & Shift / Status (Tengah) */}
+                                          <div className="flex items-center">
+                                            <div className="w-[48%] min-w-0 pr-2 flex items-center gap-1.5 flex-wrap">
+                                              <p className="text-[10px] sm:text-[11px] font-black text-slate-900 uppercase tracking-tight truncate leading-tight" title={acc.name}>
+                                                {acc.name}
                                               </p>
-                                              {entry?.alasan_telat && (
-                                                <p className="text-[7.5px] text-red-600 font-bold mt-1 max-w-[130px] mx-auto leading-tight line-clamp-2 bg-red-50 px-1.5 py-0.5 rounded border border-red-200/70" title={entry.alasan_telat}>
-                                                  "{entry.alasan_telat}"
+                                              {entry?.status === 'Lembur' && (
+                                                <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-emerald-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                                  <i className="fa-solid fa-bolt text-[7px] text-yellow-300"></i> Lembur
+                                                </span>
+                                              )}
+                                              {entry?.status === 'Libur' && (
+                                                <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-amber-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                                  <i className="fa-solid fa-mug-hot text-[7px] text-white"></i> Libur
+                                                </span>
+                                              )}
+                                              {entry?.status === 'Izin' && (
+                                                <span className="inline-flex items-center gap-1 text-[7.5px] font-black text-white bg-blue-500 px-1.5 py-0.2 rounded shadow-xs uppercase tracking-wide shrink-0">
+                                                  <i className="fa-solid fa-envelope-open-text text-[7px] text-white"></i> Izin
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            <div className="flex-1 text-center shrink-0">
+                                              {entry?.status === 'Libur' ? (
+                                                <span className="inline-block px-2 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
+                                                  LIBUR / OFF
+                                                </span>
+                                              ) : entry?.status === 'Izin' ? (
+                                                <span className="inline-block px-2 py-0.5 rounded text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-xs">
+                                                  IZIN / SAKIT
+                                                </span>
+                                              ) : (
+                                                <p className={cn("text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider", shiftColor)}>
+                                                  {shiftLabel}
                                                 </p>
                                               )}
-                                            </>
+                                            </div>
+                                          </div>
+
+                                          {/* Baris 2: Keterangan Telat (1 Baris Saja, Melebar dari Bawah Kasir sampai Bawah Shift) */}
+                                          {entry?.alasan_telat && (
+                                            <div className="mt-1 flex items-center gap-1.5 min-w-0">
+                                              <i className="fa-regular fa-comment-dots text-[8px] text-red-500 shrink-0"></i>
+                                              <p 
+                                                className="text-[8px] sm:text-[8.5px] text-red-600 font-bold truncate whitespace-nowrap leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200/70 flex-1 min-w-0" 
+                                                title={entry.alasan_telat}
+                                              >
+                                                "{entry.alasan_telat}"
+                                              </p>
+                                            </div>
                                           )}
                                         </div>
-                                        
-                                        {/* Kolom 3: Tombol Edit & Jam Masuk */}
-                                        <div className="w-[28%] py-2.5 px-3 flex flex-col items-end justify-center text-right pl-1 relative">
+
+                                        {/* Area Kanan: Jam Masuk & Tombol Edit */}
+                                        <div className="shrink-0 text-right pl-2 flex flex-col items-end justify-center relative min-w-[70px]">
                                           {props.kasirRole === 'owner' && (
                                             <button 
                                               type="button"

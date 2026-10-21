@@ -102,14 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.2
-          name: "ALFAZA ALPHA POS v1.4.2"
+          tag_name: v1.4.3
+          name: "ALFAZA ALPHA POS v1.4.3"
           body: |
-            ### Pembaruan Aplikasi v1.4.2
-            - **Detail Riwayat Transaksi:** Menambahkan hari dan tanggal lengkap serta nama kasir pencatat transaksi tepat di bawah tanggal pada popup rincian transaksi.
-            - **Tampilan Popup Rapat & Rapi:** Penataan ulang spasi dan kerapatan kolom Ket. Tambahan, Sumber Uang Keluar, dan Sumber Uang Masuk agar lebih ringkas dan pas di layar HP.
-            - **Sinkronisasi Struk Print Kasir:** Nama kasir yang mencatat transaksi dipetakan otomatis ke struk cetak print thermal (Bluetooth / RawBT) dan preview struk.
-            - **Pembersihan Beranda Owner:** Menghapus notifikasi otomatis chatbot Executive Briefing dari beranda owner.
+            ### Pembaruan Aplikasi v1.4.3
+            - **Desain Tabel Absensi Kasir (Gaya Buku Tulis):** Menghilangkan garis sekat vertikal di tengah kolom absensi kasir mode owner, berganti garis horizontal rapi seperti lembaran buku tulis.
+            - **Kolom Keterangan Telat Lebih Lebar:** Keterangan telat kini dibuat 1 baris melebar penuh tepat di bawah nama kasir hingga bawah badge shift sehingga teks panjang tidak bertumpuk atau terpotong.
+            - **Detail Riwayat Transaksi & Print Struk:** Hari dan tanggal lengkap serta nama kasir pencatat transaksi pada popup detail riwayat transaksi dan struk thermal print.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
