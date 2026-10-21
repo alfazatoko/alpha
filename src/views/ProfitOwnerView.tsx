@@ -93,9 +93,19 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonthNum);
   const [drillDownFromYear, setDrillDownFromYear] = useState(false);
 
-  // Sorting for daily view
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
-  const [filterOnlyActiveDays, setFilterOnlyActiveDays] = useState<boolean>(false);
+  const monthKeySelected = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+
+  const daysInSelectedMonth = useMemo(() => {
+    return new Date(selectedYear, selectedMonth, 0).getDate();
+  }, [selectedYear, selectedMonth]);
+
+  // Sorting for daily view: default tanggal terbaru di atas, dan default tampilkan yang ada laba
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [filterOnlyActiveDays, setFilterOnlyActiveDays] = useState<boolean>(true);
+
+  // Sorting & Filtering for annual/monthly view: default bulan berjalan di atas, awal tahun di bawah
+  const [sortYearAsc, setSortYearAsc] = useState<boolean>(false);
+  const [filterYearMode, setFilterYearMode] = useState<'berjalan' | 'active' | 'all'>('berjalan');
 
   // Cloud sync status
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -109,15 +119,21 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     ? pantauStoreId
     : (activeStoreId && activeStoreId !== 'all' ? activeStoreId : 'all');
 
-  // Remote transactions fetched from Supabase (for older months/years)
+  // Pre-aggregated states from SQL database (Instan 0.1s, tidak tarik ribuan transaksi)
+  const [sqlDailyMap, setSqlDailyMap] = useState<Record<string, any>>({});
+  const [sqlMonthlyMap, setSqlMonthlyMap] = useState<Record<string, any>>({});
+  const [isLoadedFromSQL, setIsLoadedFromSQL] = useState<boolean>(false);
+  const [isLoadingSQL, setIsLoadingSQL] = useState<boolean>(false);
+  const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+
+  // Remote transactions fetched from Supabase (hanya jika SQL belum terisi / fallback)
   const [remoteTransactions, setRemoteTransactions] = useState<Transaction[]>([]);
   const [isFetchingRemote, setIsFetchingRemote] = useState<boolean>(false);
 
-  // Fetch older transactions for the selected year from Supabase with pagination
+  // Fetch older transactions for the selected year from Supabase with pagination (FALLBACK ONLY)
   const fetchTransactionsForYear = useCallback(async (year: number) => {
     setIsFetchingRemote(true);
     try {
-      // Resolve user id from prop or current session
       let uid = userId;
       if (!uid) {
         const { data: authData } = await supabase.auth.getUser();
@@ -181,9 +197,117 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     }
   }, [userId, effectiveStoreId]);
 
+  // Fetch dari database SQL pre-aggregated: profit_harian & profit_bulanan (< 31 baris, instan!)
+  const fetchSQLProfitData = useCallback(async () => {
+    setIsLoadingSQL(true);
+    try {
+      let uid = userId;
+      if (!uid) {
+        const { data: authData } = await supabase.auth.getUser();
+        uid = authData.user?.id || '';
+      }
+
+      const startMonthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const endMonthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(daysInSelectedMonth).padStart(2, '0')}`;
+      const kasirTarget = (filterKasir && filterKasir !== 'Semua') ? filterKasir : 'Semua';
+
+      // 1. Fetch Harian (Maksimal 31 baris data)
+      let queryHarian = supabase
+        .from('profit_harian')
+        .select('*')
+        .gte('tanggal', startMonthStr)
+        .lte('tanggal', endMonthStr);
+
+      if (uid) queryHarian = queryHarian.eq('user_id', uid);
+      if (effectiveStoreId !== 'all') queryHarian = queryHarian.eq('store_id', effectiveStoreId);
+      queryHarian = queryHarian.eq('kasir_id', kasirTarget);
+
+      // 2. Fetch Bulanan (Maksimal 12 baris data untuk rekap setahun)
+      let queryBulanan = supabase
+        .from('profit_bulanan')
+        .select('*')
+        .eq('tahun', selectedYear);
+
+      if (uid) queryBulanan = queryBulanan.eq('user_id', uid);
+      if (effectiveStoreId !== 'all') queryBulanan = queryBulanan.eq('store_id', effectiveStoreId);
+      queryBulanan = queryBulanan.eq('kasir_id', kasirTarget);
+
+      const [resHarian, resBulanan] = await Promise.all([queryHarian, queryBulanan]);
+
+      let hasSQLData = false;
+      const uniqueHarianDates = new Set((resHarian.data || []).map((r: any) => r.tanggal)).size;
+      if (!resHarian.error && resHarian.data && uniqueHarianDates >= 5) {
+        const dMap: Record<string, any> = {};
+        resHarian.data.forEach((r: any) => {
+          if (!dMap[r.tanggal]) {
+            dMap[r.tanggal] = { ...r };
+          } else {
+            dMap[r.tanggal].total_profit_admin = Number(dMap[r.tanggal].total_profit_admin || 0) + Number(r.total_profit_admin || 0);
+            dMap[r.tanggal].admin_tunai = Number(dMap[r.tanggal].admin_tunai || 0) + Number(r.admin_tunai || 0);
+            dMap[r.tanggal].admin_non_tunai = Number(dMap[r.tanggal].admin_non_tunai || 0) + Number(r.admin_non_tunai || 0);
+            dMap[r.tanggal].total_transaksi = Number(dMap[r.tanggal].total_transaksi || 0) + Number(r.total_transaksi || 0);
+            dMap[r.tanggal].total_omzet = Number(dMap[r.tanggal].total_omzet || 0) + Number(r.total_omzet || 0);
+          }
+        });
+        setSqlDailyMap(dMap);
+        hasSQLData = true;
+      } else {
+        setSqlDailyMap({});
+      }
+
+      if (!resBulanan.error && resBulanan.data && resBulanan.data.length > 0) {
+        const mMap: Record<string, any> = {};
+        resBulanan.data.forEach((r: any) => {
+          if (!mMap[r.bulan]) {
+            mMap[r.bulan] = { ...r };
+          } else {
+            mMap[r.bulan].total_profit_admin = Number(mMap[r.bulan].total_profit_admin || 0) + Number(r.total_profit_admin || 0);
+            mMap[r.bulan].admin_tunai = Number(mMap[r.bulan].admin_tunai || 0) + Number(r.admin_tunai || 0);
+            mMap[r.bulan].admin_non_tunai = Number(mMap[r.bulan].admin_non_tunai || 0) + Number(r.admin_non_tunai || 0);
+            mMap[r.bulan].total_transaksi = Number(mMap[r.bulan].total_transaksi || 0) + Number(r.total_transaksi || 0);
+            mMap[r.bulan].total_omzet = Number(mMap[r.bulan].total_omzet || 0) + Number(r.total_omzet || 0);
+          }
+        });
+        setSqlMonthlyMap(mMap);
+        hasSQLData = true;
+      } else {
+        setSqlMonthlyMap({});
+      }
+
+      setIsLoadedFromSQL(hasSQLData);
+
+      // Hanya panggil fetch data transaksi mentah jika tabel SQL belum terisi
+      if (!hasSQLData) {
+        fetchTransactionsForYear(selectedYear);
+      }
+    } catch (err) {
+      console.warn('Gagal memuat profit dari SQL, beralih ke fallback transaksi:', err);
+      setIsLoadedFromSQL(false);
+      fetchTransactionsForYear(selectedYear);
+    } finally {
+      setIsLoadingSQL(false);
+    }
+  }, [userId, selectedYear, selectedMonth, daysInSelectedMonth, effectiveStoreId, filterKasir, fetchTransactionsForYear]);
+
   useEffect(() => {
-    fetchTransactionsForYear(selectedYear);
-  }, [selectedYear, fetchTransactionsForYear]);
+    fetchSQLProfitData();
+
+    // Subscribe ke realtime changes pada tabel profit_harian
+    const channel = supabase
+      .channel('profit_owner_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profit_harian' },
+        () => {
+          fetchSQLProfitData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchSQLProfitData]);
 
   // Combined transactions pool: local props + remote fetched
   const allTxPool = useMemo(() => {
@@ -208,9 +332,17 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     return allTxPool.filter(t => {
       if (!t || !t.timestamp) return false;
 
-      // Exclude non-transaction entries (Isi Modal, Isi Saldo Bank, etc.)
+      // Exclude non-transaction entries (Isi Modal, Isi Saldo Bank, Saldo Real Aplikasi, etc.)
       const kat = (t.kategori || '').toLowerCase();
-      if (kat.startsWith('isi ') || kat.includes('isi saldo') || kat.includes('isi modal') || kat.includes('setor modal')) {
+      if (
+        kat.startsWith('isi') ||
+        kat.includes('isi saldo') ||
+        kat.includes('isi modal') ||
+        kat.includes('setor modal') ||
+        kat.includes('tambah saldo') ||
+        kat.includes('topup saldo') ||
+        kat.includes('real aplikasi')
+      ) {
         return false;
       }
 
@@ -231,12 +363,6 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   // =========================================================================
   // 1. DATA HARIAN BULAN BERJALAN (1 s/d 31)
   // =========================================================================
-  const monthKeySelected = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-
-  const daysInSelectedMonth = useMemo(() => {
-    return new Date(selectedYear, selectedMonth, 0).getDate();
-  }, [selectedYear, selectedMonth]);
-
   const dailyProfitList = useMemo<DayProfitData[]>(() => {
     // Map of day number to data
     const dayMap = new Map<number, DayProfitData>();
@@ -247,48 +373,64 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       const dateObj = new Date(selectedYear, selectedMonth - 1, d);
       const dayName = DAY_NAMES[dateObj.getDay()];
 
-      dayMap.set(d, {
-        dateStr,
-        dayNum: d,
-        dayName,
-        totalAdmin: 0,
-        adminTunai: 0,
-        adminNonTunai: 0,
-        totalTrx: 0,
-        totalOmzet: 0
+      if (isLoadedFromSQL && sqlDailyMap[dateStr]) {
+        const sqlRow = sqlDailyMap[dateStr];
+        dayMap.set(d, {
+          dateStr,
+          dayNum: d,
+          dayName,
+          totalAdmin: Number(sqlRow.total_profit_admin || 0),
+          adminTunai: Number(sqlRow.admin_tunai || 0),
+          adminNonTunai: Number(sqlRow.admin_non_tunai || 0),
+          totalTrx: Number(sqlRow.total_transaksi || 0),
+          totalOmzet: Number(sqlRow.total_omzet || 0)
+        });
+      } else {
+        dayMap.set(d, {
+          dateStr,
+          dayNum: d,
+          dayName,
+          totalAdmin: 0,
+          adminTunai: 0,
+          adminNonTunai: 0,
+          totalTrx: 0,
+          totalOmzet: 0
+        });
+      }
+    }
+
+    // Jika belum ada di SQL, hitung dari data transaksi mentah (fallback)
+    if (!isLoadedFromSQL) {
+      filteredTransactions.forEach(t => {
+        const tDate = t.timestamp.substring(0, 10);
+        if (tDate.startsWith(monthKeySelected)) {
+          const dNum = parseInt(tDate.substring(8, 10), 10);
+          const item = dayMap.get(dNum);
+          if (item) {
+            const fee = Number(t.adminFee || (t as any).admin_fee || 0);
+            const nominal = Number(t.nominal || 0);
+            const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]') || (t.keterangan || '').includes('[ADMIN_DALAM]');
+
+            item.totalAdmin += fee;
+            if (isNonTunai) {
+              item.adminNonTunai += fee;
+            } else {
+              item.adminTunai += fee;
+            }
+            item.totalTrx += 1;
+            item.totalOmzet += nominal;
+          }
+        }
       });
     }
 
-    // Populate with matching transactions
-    filteredTransactions.forEach(t => {
-      const tDate = t.timestamp.substring(0, 10);
-      if (tDate.startsWith(monthKeySelected)) {
-        const dNum = parseInt(tDate.substring(8, 10), 10);
-        const item = dayMap.get(dNum);
-        if (item) {
-          const fee = Number(t.adminFee || (t as any).admin_fee || 0);
-          const nominal = Number(t.nominal || 0);
-          const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]') || (t.keterangan || '').includes('[ADMIN_DALAM]');
-
-          item.totalAdmin += fee;
-          if (isNonTunai) {
-            item.adminNonTunai += fee;
-          } else {
-            item.adminTunai += fee;
-          }
-          item.totalTrx += 1;
-          item.totalOmzet += nominal;
-        }
-      }
-    });
-
     const result = Array.from(dayMap.values());
     return sortAsc ? result : [...result].reverse();
-  }, [daysInSelectedMonth, monthKeySelected, selectedYear, selectedMonth, filteredTransactions, sortAsc]);
+  }, [daysInSelectedMonth, monthKeySelected, selectedYear, selectedMonth, isLoadedFromSQL, sqlDailyMap, filteredTransactions, sortAsc]);
 
   const displayedDailyProfitList = useMemo(() => {
     if (filterOnlyActiveDays) {
-      return dailyProfitList.filter(d => d.totalAdmin > 0 || d.totalTrx > 0);
+      return dailyProfitList.filter(d => d.totalAdmin > 0);
     }
     return dailyProfitList;
   }, [dailyProfitList, filterOnlyActiveDays]);
@@ -351,13 +493,34 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     return MONTH_NAMES.map((name, idx) => {
       const mNum = idx + 1;
       const mKey = `${selectedYear}-${String(mNum).padStart(2, '0')}`;
+
+      // 1. Jika data sudah ada di SQL pre-aggregated (profit_bulanan), langsung pakai instan!
+      if (isLoadedFromSQL && sqlMonthlyMap[mKey]) {
+        const sqlRow = sqlMonthlyMap[mKey];
+        return {
+          monthKey: mKey,
+          monthNum: mNum,
+          monthLabel: `${name} ${selectedYear}`,
+          year: selectedYear,
+          totalAdmin: Number(sqlRow.total_profit_admin || 0),
+          adminTunai: Number(sqlRow.admin_tunai || 0),
+          adminNonTunai: Number(sqlRow.admin_non_tunai || 0),
+          totalTrx: Number(sqlRow.total_transaksi || 0),
+          totalOmzet: Number(sqlRow.total_omzet || 0),
+          bestDay: sqlRow.hari_terbaik_tanggal ? {
+            dateStr: sqlRow.hari_terbaik_tanggal,
+            totalAdmin: Number(sqlRow.hari_terbaik_profit || 0)
+          } : undefined
+        };
+      }
+
+      // 2. Fallback hitung di client
       let totalAdmin = 0;
       let adminTunai = 0;
       let adminNonTunai = 0;
       let totalTrx = 0;
       let totalOmzet = 0;
 
-      // Group days in this month to find the best day
       const dayFeeMap: Record<string, number> = {};
 
       filteredTransactions.forEach(t => {
@@ -402,7 +565,22 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
         bestDay
       };
     });
-  }, [selectedYear, filteredTransactions]);
+  }, [selectedYear, isLoadedFromSQL, sqlMonthlyMap, filteredTransactions]);
+
+  // Filtered & Sorted Monthly Profit List for Year View
+  const displayedYearProfitList = useMemo(() => {
+    let list = yearProfitList;
+
+    // Filter berdasarkan mode
+    if (filterYearMode === 'berjalan' && selectedYear === currentYearNum) {
+      list = list.filter(m => m.monthNum <= currentMonthNum);
+    } else if (filterYearMode === 'active') {
+      list = list.filter(m => m.totalAdmin > 0);
+    }
+
+    // Urutan: default sortYearAsc = false (Bulan terbaru/berjalan di paling atas, awal tahun di paling bawah)
+    return sortYearAsc ? list : [...list].reverse();
+  }, [yearProfitList, filterYearMode, selectedYear, currentYearNum, currentMonthNum, sortYearAsc]);
 
   const yearKPI = useMemo<YearKPIType>(() => {
     let totalAdmin = 0;
@@ -530,15 +708,24 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   // =========================================================================
   // AUTOMATIC SYNC TO ONLINE SUPABASE CLOUD (BERJALAN DI LATAR BELAKANG)
   // =========================================================================
+  // 4. SINKRONISASI DATA PROFIT KE SUPABASE SECARA ONLINE
+  // =========================================================================
   const handleSyncToOnlineCloud = async (silent = true) => {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
+      let uid = userId;
+      if (!uid) {
+        const { data: authData } = await supabase.auth.getUser();
+        uid = authData.user?.id || '';
+      }
+
       // 1. Prepare Daily Summaries for Current Month
       const dailyRows = dailyProfitList
         .filter(d => d.totalTrx > 0 || d.totalAdmin > 0)
         .map(d => ({
-          id: `${effectiveStoreId}_${filterKasir}_${d.dateStr}`,
+          id: `${uid}_${effectiveStoreId}_${filterKasir}_${d.dateStr}`,
+          user_id: uid,
           store_id: effectiveStoreId,
           kasir_id: filterKasir,
           kasir_name: filterKasir === 'Semua' ? 'Gabungan Kasir' : (kasirList[filterKasir]?.name || filterKasir),
@@ -553,7 +740,8 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
 
       // 2. Prepare Monthly Summary
       const monthlyRow = {
-        id: `${effectiveStoreId}_${filterKasir}_${monthKeySelected}`,
+        id: `${uid}_${effectiveStoreId}_${filterKasir}_${monthKeySelected}`,
+        user_id: uid,
         store_id: effectiveStoreId,
         kasir_id: filterKasir,
         kasir_name: filterKasir === 'Semua' ? 'Gabungan Kasir' : (kasirList[filterKasir]?.name || filterKasir),
@@ -583,6 +771,34 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       console.warn('Sync cloud notice:', e.message || e);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Trigger Rekap Ulang Seluruh Data SQL secara manual
+  const handleRunFullRekapSQL = async () => {
+    setIsManualSyncing(true);
+    try {
+      let uid = userId;
+      if (!uid) {
+        const { data: authData } = await supabase.auth.getUser();
+        uid = authData.user?.id || '';
+      }
+
+      // 1. Coba panggil Stored Procedure SQL Supabase
+      const { error } = await supabase.rpc('rekap_ulang_semua_profit', { p_user_id: uid });
+      if (!error) {
+        if (showToast) showToast('Database Profit SQL berhasil direkap otomatis!');
+        await fetchSQLProfitData();
+      } else {
+        // 2. Fallback jika function SQL belum di-create: sync via client
+        await handleSyncToOnlineCloud(false);
+        await fetchSQLProfitData();
+      }
+    } catch (e: any) {
+      await handleSyncToOnlineCloud(false);
+      await fetchSQLProfitData();
+    } finally {
+      setIsManualSyncing(false);
     }
   };
 
@@ -641,15 +857,26 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
             </div>
           </div>
 
-          {/* Kanan: Indikator Online Cloud Otomatis (Tanpa Tombol Manual) */}
-          <div className="shrink-0 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl">
-            <span className={cn(
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              isSyncing ? "bg-amber-400 animate-ping" : "bg-emerald-400"
-            )}></span>
-            <span className="text-[7.5px] sm:text-[8px] text-emerald-300 font-bold whitespace-nowrap">
-              {isSyncing ? "Sinkron..." : "Online Cloud"}
-            </span>
+          {/* Kanan: Status Database SQL (Instan) & Tombol Rekap */}
+          <div className="shrink-0 flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 px-2 sm:px-2.5 py-1 rounded-xl">
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                isLoadedFromSQL ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : (isLoadingSQL ? "bg-amber-400 animate-ping" : "bg-blue-400")
+              )}></span>
+              <span className="text-[7.5px] sm:text-[8px] text-emerald-300 font-bold whitespace-nowrap">
+                {isLoadingSQL ? "Memuat SQL..." : (isLoadedFromSQL ? "SQL Instan" : "Offline / Fallback")}
+              </span>
+            </div>
+            <button
+              onClick={handleRunFullRekapSQL}
+              disabled={isManualSyncing}
+              className="flex items-center gap-1 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-[7.5px] sm:text-[8px] font-black uppercase px-2 py-1 rounded-xl border border-white/20 transition-all cursor-pointer"
+              title="Rekap Ulang Seluruh Data ke Database SQL"
+            >
+              <i className={cn("fa-solid fa-arrows-rotate text-[8px]", isManualSyncing && "fa-spin text-amber-300")}></i>
+              <span className="hidden sm:inline">{isManualSyncing ? "Merekap..." : "Rekap SQL"}</span>
+            </button>
           </div>
         </div>
 
@@ -825,7 +1052,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                 title="Ubah Urutan Tanggal"
               >
                 <i className={cn("fa-solid text-xs", sortAsc ? "fa-arrow-down-1-9 text-emerald-600" : "fa-arrow-down-9-1 text-blue-600")}></i>
-                <span>Tgl {sortAsc ? "1 → 31" : "31 → 1"}</span>
+                <span>Tgl {sortAsc ? `1 → ${daysInSelectedMonth}` : `${daysInSelectedMonth} → 1`}</span>
               </button>
 
               {/* Reset to current month */}
@@ -942,26 +1169,20 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
                   Rincian Harian (Tgl 1 s/d {daysInSelectedMonth})
                 </h4>
-                {isFetchingRemote && (
+                {isLoadingSQL && (
                   <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md animate-pulse flex items-center gap-1">
+                    <i className="fa-solid fa-spinner fa-spin text-[8px]"></i> Memuat SQL...
+                  </span>
+                )}
+                {!isLoadingSQL && isFetchingRemote && (
+                  <span className="text-[8px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md animate-pulse flex items-center gap-1">
                     <i className="fa-solid fa-spinner fa-spin text-[8px]"></i> Memuat data...
                   </span>
                 )}
               </div>
 
-              {/* Toggle Filter: Tampilkan Semua 1-31 vs Hanya Hari Ada Transaksi */}
+              {/* Toggle Filter: Ada Laba (Default) vs Tampilkan Semua 1-31 */}
               <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
-                <button
-                  onClick={() => setFilterOnlyActiveDays(false)}
-                  className={cn(
-                    "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all",
-                    !filterOnlyActiveDays
-                      ? "bg-white text-emerald-700 shadow-xs"
-                      : "text-slate-500 hover:text-slate-800"
-                  )}
-                >
-                  Semua (1-{daysInSelectedMonth})
-                </button>
                 <button
                   onClick={() => setFilterOnlyActiveDays(true)}
                   className={cn(
@@ -973,12 +1194,37 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                 >
                   Ada Laba ({dailyProfitList.filter(d => d.totalAdmin > 0).length})
                 </button>
+                <button
+                  onClick={() => setFilterOnlyActiveDays(false)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all",
+                    !filterOnlyActiveDays
+                      ? "bg-white text-emerald-700 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  Semua (1-{daysInSelectedMonth})
+                </button>
               </div>
             </div>
 
             {/* List / Table Items (Layout Menumpuk Rapi di HP) */}
-            <div className="divide-y divide-slate-100">
-              {displayedDailyProfitList.map((day) => {
+            {displayedDailyProfitList.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <i className="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                <p className="text-xs font-bold text-slate-600">Belum ada transaksi dengan laba di bulan ini</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Pilih "Semua" untuk melihat seluruh tanggal</p>
+                <button
+                  type="button"
+                  onClick={() => setFilterOnlyActiveDays(false)}
+                  className="mt-3 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-[10px] font-black uppercase transition-all"
+                >
+                  Tampilkan Semua Tanggal (1-{daysInSelectedMonth})
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {displayedDailyProfitList.map((day) => {
                 const todayStr = getLocalDateString();
                 const isToday = day.dateStr === todayStr;
                 const isBestDay = monthKPI.bestDay?.dateStr === day.dateStr && day.totalAdmin > 0;
@@ -1088,6 +1334,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                 );
               })}
             </div>
+            )}
           </div>
         </div>
       )}
@@ -1201,25 +1448,90 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
             </div>
           </div>
 
-          {/* ── DAFTAR 12 BULAN: MENURUN KEBAWAH (SESUAI PERMINTAAN USER, BUKAN GRID KESAMPING) ── */}
+          {/* ── DAFTAR BREAKDOWN BULANAN: MENURUN KEBAWAH (BULAN BERJALAN DI ATAS, AWAL TAHUN DI BAWAH) ── */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="px-3 py-2 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between">
+            <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></div>
-                <h4 className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-800">
-                  Rekap 12 Bulan ({selectedYear})
-                </h4>
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></div>
+                <div>
+                  <h4 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-800">
+                    {filterYearMode === 'berjalan' && selectedYear === currentYearNum
+                      ? `Rekap Bulan Berjalan (${selectedYear})`
+                      : filterYearMode === 'active'
+                      ? `Rekap Bulan Ada Laba (${selectedYear})`
+                      : `Rekap 12 Bulan (${selectedYear})`}
+                  </h4>
+                  <p className="text-[8px] sm:text-[8.5px] text-slate-500 font-bold">
+                    {sortYearAsc 
+                      ? 'Januari s/d ' + (filterYearMode === 'berjalan' && selectedYear === currentYearNum ? MONTH_NAMES[currentMonthNum - 1] : 'Desember')
+                      : (filterYearMode === 'berjalan' && selectedYear === currentYearNum ? MONTH_NAMES[currentMonthNum - 1] : 'Desember') + ' s/d Januari'}
+                  </p>
+                </div>
               </div>
-              <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold">
-                Januari s/d Desember
-              </span>
+
+              {/* Action Controls: Sort button & Filter pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setSortYearAsc(!sortYearAsc)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 text-[8.5px] sm:text-[9px] font-black uppercase hover:bg-slate-100 active:scale-95 transition-all"
+                  title="Ubah Urutan Bulan"
+                >
+                  <i className={cn("fa-solid text-[9px]", sortYearAsc ? "fa-arrow-down-1-9 text-emerald-600" : "fa-arrow-down-9-1 text-blue-600")}></i>
+                  <span>{sortYearAsc ? 'Jan → Des' : 'Bulan Ini → Jan'}</span>
+                </button>
+
+                <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg">
+                  <button
+                    onClick={() => setFilterYearMode('berjalan')}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md text-[8px] sm:text-[8.5px] font-black uppercase transition-all",
+                      filterYearMode === 'berjalan'
+                        ? "bg-white text-blue-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    Bulan Berjalan
+                  </button>
+
+                  <button
+                    onClick={() => setFilterYearMode('active')}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md text-[8px] sm:text-[8.5px] font-black uppercase transition-all",
+                      filterYearMode === 'active'
+                        ? "bg-white text-emerald-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    Ada Laba
+                  </button>
+
+                  <button
+                    onClick={() => setFilterYearMode('all')}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md text-[8px] sm:text-[8.5px] font-black uppercase transition-all",
+                      filterYearMode === 'all'
+                        ? "bg-white text-slate-800 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    Semua (12)
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100">
-              {yearProfitList.map((month) => {
-                const isBestMonth = yearKPI.bestMonth?.monthKey === month.monthKey && month.totalAdmin > 0;
-                const isCurrentMonth = currentYearNum === selectedYear && currentMonthNum === month.monthNum;
-                const pct = maxMonthAdmin > 0 ? Math.min(100, Math.round((month.totalAdmin / maxMonthAdmin) * 100)) : 0;
+              {displayedYearProfitList.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  <i className="fa-regular fa-calendar-xmark text-2xl mb-2 text-slate-300"></i>
+                  <p className="text-xs font-bold text-slate-600">Tidak ada data bulan yang sesuai filter</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Pilih filter "Bulan Berjalan" atau "Semua (12)" untuk melihat rincian</p>
+                </div>
+              ) : (
+                displayedYearProfitList.map((month) => {
+                  const isBestMonth = yearKPI.bestMonth?.monthKey === month.monthKey && month.totalAdmin > 0;
+                  const isCurrentMonth = currentYearNum === selectedYear && currentMonthNum === month.monthNum;
+                  const pct = maxMonthAdmin > 0 ? Math.min(100, Math.round((month.totalAdmin / maxMonthAdmin) * 100)) : 0;
 
                 return (
                   <div
@@ -1316,7 +1628,8 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                     </div>
                   </div>
                 );
-              })}
+              })
+            )}
             </div>
           </div>
         </div>

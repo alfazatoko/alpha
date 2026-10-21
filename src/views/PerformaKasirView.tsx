@@ -185,6 +185,10 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
   // Helper Kategori
   const isIsiCategory = useCallback((cat: string) => {
     const c = (cat || '').trim().toLowerCase()
+    // Saldo real aplikasi bukan setoran modal bank/kasir
+    if (c.includes('real aplikasi')) {
+      return false
+    }
     if (c.includes('pulsa') || c.includes('kuota') || c.includes('token') || c.includes('voucher') || c.includes('paket') || c.includes('data')) {
       return false
     }
@@ -192,13 +196,24 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
   }, [])
 
   const isServiceCategory = useCallback((cat: string, ket?: string) => {
+    const c = (cat || '').trim().toLowerCase()
+    // Murni transaksi penjualan konsumen: kecualikan seluruh riwayat isi saldo, tambah modal, & saldo real aplikasi
+    if (
+      c.startsWith('isi') ||
+      c.includes('isi saldo') ||
+      c.includes('isi modal') ||
+      c.includes('setor modal') ||
+      c.includes('tambah saldo') ||
+      c.includes('topup saldo') ||
+      c.includes('real aplikasi')
+    ) {
+      return false
+    }
     const k = (ket || '').toUpperCase()
     // Transaksi [KHUSUS] tidak dihitung sebagai layanan konsumen
     if (k.includes('[KHUSUS]')) return false
-    // Transaksi modal toko bukan pendapatan jasa
-    if (isIsiCategory(cat)) return false
     return true
-  }, [isIsiCategory])
+  }, [])
 
   // =========================================================================
   // 1. FETCH DATA BULANAN LANGSUNG DARI TABEL TRANSACTIONS (SUMBER DATA RIIL)
@@ -1002,11 +1017,11 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
                               : "bg-white/60 border-slate-100 opacity-60 hover:opacity-100"
                         )}
                       >
-                        <div className="flex items-center gap-1 sm:gap-2.5">
-                          {/* Sisi Kiri: Kolom Tanggal Super Ramping */}
-                          <div className="w-8 sm:w-12 shrink-0 flex flex-col items-center text-center">
+                        <div className="flex items-center gap-1.5 sm:gap-2.5">
+                          {/* Sisi Kiri: Kolom Tanggal & Hari (Lebih Luas, Hari Minggu Terbaca Full) */}
+                          <div className="w-12 sm:w-14 shrink-0 flex flex-col items-center text-center">
                             <div className={cn(
-                              "w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-black text-[11px] sm:text-sm shadow-xs",
+                              "w-7.5 h-7.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-black text-[11px] sm:text-sm shadow-xs",
                               isToday 
                                 ? "bg-emerald-600 text-white shadow-emerald-600/30 ring-2 ring-emerald-300" 
                                 : hasActivity 
@@ -1016,22 +1031,22 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
                               {dayNum}
                             </div>
                             <div className="mt-0.5 w-full">
-                              <p className={cn("text-[9px] sm:text-[10px] font-black truncate leading-tight", isToday ? "text-emerald-700" : hasActivity ? "text-slate-800" : "text-slate-400")}>
+                              <p className={cn("text-[9px] sm:text-[10px] font-black whitespace-nowrap leading-tight", isToday ? "text-emerald-700" : hasActivity ? "text-slate-800" : "text-slate-400")}>
                                 {dayName}
                               </p>
-                              <p className="text-[7.5px] sm:text-[8.5px] font-semibold text-slate-400 leading-tight">
+                              <p className="text-[7.5px] sm:text-[8.5px] font-semibold text-slate-400 leading-tight whitespace-nowrap">
                                 {dayNum} {monthShort}
                               </p>
                               {isToday && (
-                                <span className="inline-block text-[6px] sm:text-[7px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded-full mt-0.5 shadow-2xs">
+                                <span className="inline-block text-[6px] sm:text-[7px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded-full mt-0.5 shadow-2xs whitespace-nowrap">
                                   HARI INI
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          {/* Sisi Kanan: 4 Kotak Melebar Penuh, Rapat Hampir Bersentuhan (grid-cols-2, gap-1) */}
-                          <div className="grid grid-cols-2 gap-1 sm:gap-1.5 flex-1 min-w-0">
+                          {/* Sisi Kanan: 4 Kotak (Kolom Trx & Laba Sedikit Lebih Ramping Kanan-Kiri) */}
+                          <div className="grid grid-cols-[1.12fr_0.88fr] sm:grid-cols-2 gap-1 sm:gap-1.5 flex-1 min-w-0">
                             {/* Kotak 1: Omset Toko (Kiri Atas) */}
                             <div className="bg-slate-50/90 border border-slate-200/80 rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 shadow-2xs">
                               <span className="text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-0.5 truncate">
@@ -1043,8 +1058,8 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
                               </p>
                             </div>
 
-                            {/* Kotak 2: Total Transaksi (Kanan Atas) */}
-                            <div className="bg-indigo-50/70 border border-indigo-100/90 rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 shadow-2xs">
+                            {/* Kotak 2: Total Transaksi (Kanan Atas) - Dikecilkan Kanan Kiri */}
+                            <div className="bg-indigo-50/70 border border-indigo-100/90 rounded-lg sm:rounded-xl py-1.5 px-1 sm:py-2 sm:px-2 flex flex-col justify-between min-w-0 shadow-2xs">
                               <span className="text-[8.5px] sm:text-[9.5px] font-extrabold uppercase tracking-wider text-indigo-500 flex items-center gap-1 mb-0.5 truncate">
                                 <i className="fa-solid fa-receipt text-[7.5px] sm:text-[8.5px] text-indigo-500"></i>
                                 <span>Transaksi</span>
@@ -1076,9 +1091,9 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
                               </p>
                             </div>
 
-                            {/* Kotak 4: Laba Bersih Admin (Kanan Bawah) */}
+                            {/* Kotak 4: Laba Bersih Admin (Kanan Bawah) - Dikecilkan Kanan Kiri */}
                             <div className={cn(
-                              "rounded-lg sm:rounded-xl py-1.5 px-1.5 sm:py-2 sm:px-2.5 flex flex-col justify-between min-w-0 border transition-colors shadow-2xs",
+                              "rounded-lg sm:rounded-xl py-1.5 px-1 sm:py-2 sm:px-2 flex flex-col justify-between min-w-0 border transition-colors shadow-2xs",
                               data.labaAdmin > 0 
                                 ? "bg-emerald-50/90 border-emerald-200/90" 
                                 : "bg-slate-50/50 border-slate-100"

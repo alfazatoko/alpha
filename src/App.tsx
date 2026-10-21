@@ -3821,6 +3821,7 @@ const MainApp: React.FC<MainAppProps> = ({
           <BerandaView 
             active={activeView === 'view-beranda' || activeView === 'view-pos-kasir' || isOwnerView} 
             activeView={activeView}
+            userId={googleUid}
             setIsSidePanelOpen={setIsSidePanelOpen}
             setActiveView={setActiveView}
             saldoBank={saldoBank}

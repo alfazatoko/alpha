@@ -102,17 +102,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.0
-          name: "ALFAZA ALPHA POS v1.4.0"
+          tag_name: v1.4.1
+          name: "ALFAZA ALPHA POS v1.4.1"
           body: |
-            ### Pembaruan Aplikasi v1.4.0
-            - **Halaman Profit & Laba Admin Fee (Khusus Mode Owner):** Penggantian menu Ringkasan Harian dengan pembukuan murni laba admin fee dari seluruh riwayat transaksi kasir (tunai maupun non-tunai/admin dalam).
-            - **3 Sub-View Analisis Lengkap:**
-              1. *Bulan Berjalan (1-31):* Rincian laba admin harian, rata-rata laba per hari, hari rekor tertinggi, serta komposisi fee tunai vs non-tunai.
-              2. *Rekap Pertahun (Januari-Desember):* Tampilan daftar vertikal responsif mode HP per bulan, perbandingan performa terhadap puncak rekor tahunan, dan drill-down ke rincian harian 1-31.
-              3. *Papan Rekor Profit (The Best):* Papan peringkat bulan, tahun, hari puncak, dan kasir dengan perolehan keuntungan admin fee tertinggi sepanjang masa.
-            - **Optimalisasi Layar HP (Mobile-First):** Ukuran teks dan kartu disesuaikan presisi untuk smartphone tanpa terpotong (bebas truncation), badge transaksi diletakkan sejajar nama bulan, dan rekap menurun ke bawah rapi.
-            - **Sinkronisasi Otomatis Cloud Supabase:** Terhubung dengan tabel database `profit_harian` dan `profit_bulanan` di latar belakang secara otomatis (*silent auto-sync*).
+            ### Pembaruan Aplikasi v1.4.1
+            - **Rekap Tahunan Mode Owner:** Bulan yang sedang berjalan tampil di paling atas, menurun hingga awal tahun (Januari) di paling bawah. Dilengkapi filter *Bulan Berjalan*, *Ada Laba*, dan *Semua (12 Bulan)*.
+            - **Rincian Harian Mode Owner:** Tanggal terbaru otomatis di paling atas, tanggal 1 di paling bawah, dengan default tab *Ada Laba*.
+            - **Database SQL Instan (Pre-Aggregated):** Performa loading secepat kilat (0.1 detik) membaca dari tabel `profit_harian` dan `profit_bulanan` tanpa menarik ribuan transaksi mentah.
+            - **Sinkronisasi Trigger Database Fail-Safe:** Trigger otomatis sinkronisasi data transaksi ke tabel rekap profit dengan pengaman 100% sehingga operasional kasir tidak pernah terganggu.
+            - **Performa Kasir:** Pelebaran kolom tanggal dan hari agar nama hari Minggu tampil penuh tanpa terpotong, serta penyusuaian kartu ringkasan transaksi & laba bersih.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

@@ -3075,6 +3075,29 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   // Performa State
   const [performaRange, setPerformaRange] = useState<'harian'|'mingguan'|'bulanan'>('bulanan')
 
+  // Helper filter transaksi penjualan riil (100% identik dengan ProfitOwnerView & PerformaKasirView)
+  const isPureSalesTx = (t: any) => {
+    if (!t) return false;
+    const kat = (t.kategori || '').toLowerCase().trim();
+    if (!kat) return false;
+    if (
+      kat.startsWith('isi') ||
+      kat.includes('isi saldo') ||
+      kat.includes('isi modal') ||
+      kat.includes('setor modal') ||
+      kat.includes('tambah saldo') ||
+      kat.includes('topup saldo') ||
+      kat.includes('real aplikasi')
+    ) {
+      return false;
+    }
+    const ket = (t.keterangan || '').toUpperCase();
+    if (ket.includes('[KHUSUS]')) {
+      return false;
+    }
+    return true;
+  };
+
   // Analytics State
   const [analyticsData, setAnalyticsData] = useState<any[]>([])
   const [analyticsRawData, setAnalyticsRawData] = useState<any[]>([])
@@ -3099,7 +3122,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           } else {
             if (grafikRange === 'harian') days = 7
             else if (grafikRange === 'mingguan') days = 30
-            else days = 185 // 6 Bulan penuh
+            else days = 366 // 1 Tahun penuh (365/366 hari)
           }
 
           const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days)
@@ -3112,7 +3135,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           // Helper to process and aggregate rows safely
           const processTransactions = (rows: any[]) => {
             const valid = rows.filter(r => {
-              if (!r || !r.kategori || String(r.kategori).startsWith('Isi')) return false
+              if (!isPureSalesTx(r)) return false
               if (storeId !== 'all' && r.store_id && r.store_id !== storeId) return false
               const txDay = typeof r.timestamp === 'string' ? r.timestamp.substring(0, 10) : ''
               return !startStr || txDay >= startStr
@@ -3149,28 +3172,209 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             setAnalyticsRawData(localResult.raw)
           }
 
-          // 2. Fetch from Supabase if userId is available
-          if (props.userId) {
-            let query = supabase
-              .from('transactions')
-              .select('id, kasir_id, nominal, admin_fee, timestamp, kategori, store_id')
-              .eq('user_id', props.userId)
-              .gte('timestamp', `${startStr}T00:00:00`)
-              .order('timestamp', { ascending: false })
-              .limit(3000)
+          // 2. Muat langsung dari tabel rekap instan database (profit_harian)
+          let loadedFromDatabase = false;
+          let effectiveUid = props.userId;
+          if (!effectiveUid) {
+            try {
+              const { data: authData } = await supabase.auth.getUser();
+              effectiveUid = authData.user?.id || '';
+            } catch (e) {
+              // fallback
+            }
+          }
 
-            if (storeId !== 'all') {
-              query = query.eq('store_id', storeId)
+          try {
+            // Prioritas 2A: Cek tabel profit_harian (tabel resmi Supabase)
+            let phQuery = supabase
+              .from('profit_harian')
+              .select('*')
+              .neq('kasir_id', 'Semua')
+              .gte('tanggal', startStr)
+              .order('tanggal', { ascending: false });
+
+            if (storeId && storeId !== 'all') {
+              phQuery = phQuery.eq('store_id', storeId);
             }
 
-            const { data, error } = await query
+            const { data: phData, error: phError } = await phQuery;
+            const distinctDates = new Set((phData || []).map((r: any) => typeof r.tanggal === 'string' ? r.tanggal.substring(0, 10) : String(r.tanggal))).size;
+            const minDatesRequired = grafikRange === 'harian' ? 2 : grafikRange === 'mingguan' ? 5 : 10;
 
-            if (error) {
-              console.warn('Analytics remote fetch warning:', error.message || error)
-            } else if (data && isSubscribed) {
+            if (!phError && phData && phData.length > 0 && distinctDates >= minDatesRequired) {
+              loadedFromDatabase = true;
+              const convertedGrouped = phData.map((r: any) => ({
+                kasir_id: r.kasir_id,
+                tanggal: typeof r.tanggal === 'string' ? r.tanggal.substring(0, 10) : String(r.tanggal),
+                total_omzet: Number(r.total_omzet || 0),
+                total_transaksi: Number(r.total_transaksi || 0),
+                total_admin: Number(r.total_profit_admin || 0),
+                omzet_penjualan: Number(r.total_omzet || 0),
+                kategori_breakdown: {}
+              }));
+
+              // Gabungkan live data hari ini dari memory lokal jika ada
+              const todayISO = formatLocalISO(now);
+              const todayLocalTxs = localPool.filter((t: any) => {
+                if (!t || !t.timestamp || !t.timestamp.startsWith(todayISO)) return false;
+                if (!isPureSalesTx(t)) return false;
+                if (storeId !== 'all' && t.store_id && t.store_id !== storeId) return false;
+                return true;
+              });
+
+              if (todayLocalTxs.length > 0) {
+                const todayAggregated: Record<string, any> = {};
+                todayLocalTxs.forEach((t: any) => {
+                  const kId = (t.kasir_id || 'Unknown').trim();
+                  const key = `${todayISO}_${kId}`;
+                  if (!todayAggregated[key]) {
+                    todayAggregated[key] = {
+                      kasir_id: kId,
+                      tanggal: todayISO,
+                      total_omzet: 0,
+                      total_transaksi: 0,
+                      total_admin: 0,
+                      omzet_penjualan: 0,
+                      kategori_breakdown: {}
+                    };
+                  }
+                  todayAggregated[key].total_omzet += Number(t.nominal || 0);
+                  todayAggregated[key].total_transaksi += 1;
+                  todayAggregated[key].total_admin += Number(t.adminFee ?? t.admin_fee ?? 0);
+                  if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                    todayAggregated[key].omzet_penjualan += Number(t.nominal || 0);
+                  }
+                  const cat = t.kategori || 'Lainnya';
+                  todayAggregated[key].kategori_breakdown[cat] = (todayAggregated[key].kategori_breakdown[cat] || 0) + Number(t.nominal || 0);
+                });
+
+                const withoutToday = convertedGrouped.filter((g: any) => g.tanggal !== todayISO);
+                setAnalyticsData([...withoutToday, ...Object.values(todayAggregated)]);
+              } else {
+                setAnalyticsData(convertedGrouped);
+              }
+            }
+          } catch (e) {
+            console.warn('Gagal muat profit_harian:', e);
+          }
+
+          // Prioritas 2B: Cek tabel daily_analytics jika profit_harian belum ada/kosong
+          if (!loadedFromDatabase) {
+            try {
+              let analyticsQuery = supabase
+                .from('daily_analytics')
+                .select('*')
+                .gte('tanggal', startStr)
+                .order('tanggal', { ascending: false });
+
+              if (effectiveUid) analyticsQuery = analyticsQuery.eq('user_id', effectiveUid);
+              if (storeId !== 'all') analyticsQuery = analyticsQuery.eq('store_id', storeId);
+
+              const { data: summaryData, error: summaryError } = await analyticsQuery;
+              const distinctDailyDates = new Set((summaryData || []).map((r: any) => typeof r.tanggal === 'string' ? r.tanggal.substring(0, 10) : String(r.tanggal))).size;
+              const minDatesRequired = grafikRange === 'harian' ? 2 : grafikRange === 'mingguan' ? 5 : 10;
+
+              if (!summaryError && summaryData && summaryData.length > 0 && distinctDailyDates >= minDatesRequired) {
+                loadedFromDatabase = true;
+                const convertedGrouped = summaryData.map((r: any) => ({
+                  kasir_id: r.kasir_id,
+                  tanggal: r.tanggal,
+                  total_omzet: Number(r.total_omzet || 0),
+                  total_transaksi: Number(r.total_transaksi || 0),
+                  total_admin: Number(r.total_laba || 0),
+                  omzet_penjualan: Number(r.omzet_penjualan || 0),
+                  kategori_breakdown: r.kategori_breakdown || {}
+                }));
+
+                const todayISO = formatLocalISO(now);
+                const todayLocalTxs = localPool.filter((t: any) => {
+                  if (!t || !t.timestamp || !t.timestamp.startsWith(todayISO)) return false;
+                  if (!isPureSalesTx(t)) return false;
+                  if (storeId !== 'all' && t.store_id && t.store_id !== storeId) return false;
+                  return true;
+                });
+
+                if (todayLocalTxs.length > 0) {
+                  const todayAggregated: Record<string, any> = {};
+                  todayLocalTxs.forEach((t: any) => {
+                    const kId = (t.kasir_id || 'Unknown').trim();
+                    const key = `${todayISO}_${kId}`;
+                    if (!todayAggregated[key]) {
+                      todayAggregated[key] = {
+                        kasir_id: kId,
+                        tanggal: todayISO,
+                        total_omzet: 0,
+                        total_transaksi: 0,
+                        total_admin: 0,
+                        omzet_penjualan: 0,
+                        kategori_breakdown: {}
+                      };
+                    }
+                    todayAggregated[key].total_omzet += Number(t.nominal || 0);
+                    todayAggregated[key].total_transaksi += 1;
+                    todayAggregated[key].total_admin += Number(t.adminFee ?? t.admin_fee ?? 0);
+                    if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
+                      todayAggregated[key].omzet_penjualan += Number(t.nominal || 0);
+                    }
+                    const cat = t.kategori || 'Lainnya';
+                    todayAggregated[key].kategori_breakdown[cat] = (todayAggregated[key].kategori_breakdown[cat] || 0) + Number(t.nominal || 0);
+                  });
+
+                  const withoutToday = convertedGrouped.filter((g: any) => g.tanggal !== todayISO);
+                  setAnalyticsData([...withoutToday, ...Object.values(todayAggregated)]);
+                } else {
+                  setAnalyticsData(convertedGrouped);
+                }
+              }
+            } catch (e) {
+              console.warn('Gagal muat daily_analytics:', e);
+            }
+          }
+
+          // 3. Muat data transaksi mentah untuk melengkapi rincian kategori & jam sibuk (dan fallback jika SQL cache belum ada)
+          try {
+            const queryLimit = grafikRange === 'bulanan' ? 10000 : grafikRange === 'mingguan' ? 5000 : 2000;
+            const pageSize = 1000;
+            let from = 0;
+            let hasMore = true;
+            let allRemoteRows: any[] = [];
+
+            while (hasMore && isSubscribed) {
+              let query = supabase
+                .from('transactions')
+                .select('id, kasir_id, nominal, admin_fee, timestamp, kategori, store_id, keterangan')
+                .gte('timestamp', `${startStr}T00:00:00`)
+                .order('timestamp', { ascending: false })
+                .range(from, from + pageSize - 1);
+
+              if (effectiveUid) {
+                query = query.eq('user_id', effectiveUid);
+              }
+              if (storeId !== 'all') {
+                query = query.eq('store_id', storeId);
+              }
+
+              const { data, error } = await query;
+
+              if (error) {
+                console.warn('Analytics remote fetch warning:', error.message || error);
+                hasMore = false;
+              } else if (data && data.length > 0) {
+                allRemoteRows.push(...data);
+                if (data.length < pageSize || allRemoteRows.length >= queryLimit) {
+                  hasMore = false;
+                } else {
+                  from += pageSize;
+                }
+              } else {
+                hasMore = false;
+              }
+            }
+
+            if (allRemoteRows.length > 0 && isSubscribed) {
               // Deduplicate remote + local by id
-              const mapById = new Map<string, any>()
-              data.forEach(r => { if (r.id) mapById.set(r.id, r) })
+              const mapById = new Map<string, any>();
+              allRemoteRows.forEach(r => { if (r.id) mapById.set(r.id, r); });
               localPool.forEach(r => {
                 if (r.id && !mapById.has(r.id)) {
                   mapById.set(r.id, {
@@ -3180,15 +3384,21 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     admin_fee: r.adminFee ?? (r as any).admin_fee ?? 0,
                     timestamp: r.timestamp,
                     kategori: r.kategori,
-                    store_id: r.store_id
-                  })
+                    store_id: r.store_id,
+                    keterangan: r.keterangan
+                  });
                 }
-              })
-              const combinedList = Array.from(mapById.values())
-              const remoteResult = processTransactions(combinedList.length > 0 ? combinedList : data)
-              setAnalyticsData(remoteResult.grouped)
-              setAnalyticsRawData(remoteResult.raw)
+              });
+              const combinedList = Array.from(mapById.values());
+              const remoteResult = processTransactions(combinedList.length > 0 ? combinedList : allRemoteRows);
+              // Selalu perbarui analyticsData dengan hasil transaksi mentah agar semua hari terisi 100%
+              if (remoteResult.grouped.length > 0) {
+                setAnalyticsData(remoteResult.grouped);
+              }
+              setAnalyticsRawData(remoteResult.raw);
             }
+          } catch (e) {
+            console.warn('Raw fetch error:', e);
           }
         } catch (err) {
           console.error('Error fetching analytics:', err)
@@ -6281,18 +6491,29 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   );
                 }
 
-                // Helper aggregation functions by date string prefix
-                const sumByPrefix = (prefix: string) => 
-                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
-                                   .reduce((s, r) => s + Number(r.total_omzet || 0), 0);
+                // Helper aggregation functions by date string prefix (mendukung data agregat database & fallback transaksi mentah seperti Halaman Profit)
+                const countByPrefix = (prefix: string) => {
+                  const fromGrouped = filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                                       .reduce((s, r) => s + Number(r.total_transaksi || 0), 0);
+                  if (fromGrouped > 0) return fromGrouped;
+                  return filteredRawTxs.filter(t => isPureSalesTx(t) && t.timestamp && t.timestamp.startsWith(prefix)).length;
+                };
 
-                const countByPrefix = (prefix: string) =>
-                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
-                                   .reduce((s, r) => s + Number(r.total_transaksi || 0), 0);
+                const sumByPrefix = (prefix: string) => {
+                  const fromGrouped = filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                                       .reduce((s, r) => s + Number(r.total_omzet || 0), 0);
+                  if (fromGrouped > 0) return fromGrouped;
+                  return filteredRawTxs.filter(t => isPureSalesTx(t) && t.timestamp && t.timestamp.startsWith(prefix))
+                                       .reduce((s, t) => s + Number(t.nominal || 0), 0);
+                };
 
-                const adminByPrefix = (prefix: string) =>
-                  filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
-                                   .reduce((s, r) => s + Number(r.total_admin || 0), 0);
+                const adminByPrefix = (prefix: string) => {
+                  const fromGrouped = filteredAnalytics.filter(r => r.tanggal && r.tanggal.startsWith(prefix))
+                                                       .reduce((s, r) => s + Number(r.total_admin || 0), 0);
+                  if (fromGrouped > 0) return fromGrouped;
+                  return filteredRawTxs.filter(t => isPureSalesTx(t) && t.timestamp && t.timestamp.startsWith(prefix))
+                                       .reduce((s, t) => s + Number(t.adminFee ?? (t as any).admin_fee ?? 0), 0);
+                };
 
                 // Trend Data generation based on range
                 let trendData: {
@@ -6306,6 +6527,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 }[] = [];
 
                 if (grafikRange === 'harian') {
+                  // 7 Hari Terakhir: Rincian 7 Baris Hari
                   trendData = Array.from({ length: 7 }, (_, i) => {
                     const d = new Date(now);
                     d.setDate(d.getDate() - (6 - i));
@@ -6324,36 +6546,28 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     };
                   });
                 } else if (grafikRange === 'mingguan') {
-                  trendData = Array.from({ length: 4 }, (_, i) => {
-                    const startWeek = new Date(now);
-                    startWeek.setDate(startWeek.getDate() - (21 - i * 7));
-                    let weekVal = 0;
-                    let weekCount = 0;
-                    let weekAdmin = 0;
-                    for (let j = 0; j < 7; j++) {
-                      const wd = new Date(startWeek);
-                      wd.setDate(wd.getDate() + j);
-                      const p = formatLocalISO(wd);
-                      weekVal += sumByPrefix(p);
-                      weekCount += countByPrefix(p);
-                      weekAdmin += adminByPrefix(p);
-                    }
-                    const endWeek = new Date(startWeek);
-                    endWeek.setDate(endWeek.getDate() + 6);
-                    const dateRangeStr = `${startWeek.getDate()}/${startWeek.getMonth() + 1} - ${endWeek.getDate()}/${endWeek.getMonth() + 1}`;
+                  // 30 Hari Terakhir: Rincian 30 Baris Hari
+                  trendData = Array.from({ length: 30 }, (_, i) => {
+                    const d = new Date(now);
+                    d.setDate(d.getDate() - (29 - i));
+                    const prefix = formatLocalISO(d);
+                    const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+                    const dateNum = d.getDate();
+                    const monthName = d.toLocaleDateString('id-ID', { month: 'short' });
                     return {
-                      label: `Minggu ${i + 1} (${dateRangeStr})`,
-                      shortLabel: `M${i + 1}`,
-                      subLabel: dateRangeStr,
-                      dateKey: formatLocalISO(startWeek),
-                      value: weekVal,
-                      count: weekCount,
-                      admin: weekAdmin
+                      label: `${dayName}, ${dateNum} ${monthName}`,
+                      shortLabel: `${dateNum}`,
+                      subLabel: monthName,
+                      dateKey: prefix,
+                      value: sumByPrefix(prefix),
+                      count: countByPrefix(prefix),
+                      admin: adminByPrefix(prefix)
                     };
                   });
                 } else {
-                  trendData = Array.from({ length: 6 }, (_, i) => {
-                    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+                  // 1 Tahun: Rincian 12 Baris Bulan
+                  trendData = Array.from({ length: 12 }, (_, i) => {
+                    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
                     const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                     const monthShort = d.toLocaleDateString('id-ID', { month: 'short' });
                     const monthLong = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -6369,34 +6583,63 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   });
                 }
 
-                // Global KPI totals
-                const totalVolume = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_omzet || 0), 0);
-                const totalItems = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_transaksi || 0), 0);
+                // Global KPI totals - Dihitung murni dari data periode terpilih (100% klop dengan grafik & tabel)
+                const totalVolume = trendData.reduce((sum, d) => sum + d.value, 0);
+                const totalItems = trendData.reduce((sum, d) => sum + d.count, 0);
                 const avgTransaction = totalItems > 0 ? Math.round(totalVolume / totalItems) : 0;
-                const totalAdminLaba = filteredAnalytics.reduce((sum, r) => sum + Number(r.total_admin || 0), 0);
+                const totalAdminLaba = trendData.reduce((sum, d) => sum + d.admin, 0);
                 const maxTrendVal = Math.max(...trendData.map(d => d.value), 1);
                 const peakTrendItem = trendData.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), trendData[0] || { value: 0, label: '-' });
 
-                // Breakdown Kategori Penjualan
+                // Set tanggal aktif untuk membatasi kategori, jam sibuk, dan leaderboard sesuai filter periode
+                const activeDateKeys = new Set(trendData.map(d => d.dateKey));
+                const isDateInActiveRange = (dateStr: string) => {
+                  if (!dateStr) return false;
+                  if (grafikRange === 'bulanan') {
+                    const monthKey = dateStr.substring(0, 7);
+                    return activeDateKeys.has(monthKey);
+                  }
+                  const dayKey = dateStr.substring(0, 10);
+                  return activeDateKeys.has(dayKey);
+                };
+
+                // Breakdown Kategori Penjualan (Hanya transaksi riil pada rentang terpilih)
                 const kategoriMap = new Map<string, { nominal: number; count: number }>();
-                filteredRawTxs.forEach(t => {
-                  if (!t || !t.kategori || String(t.kategori).startsWith('Isi')) return;
-                  const cat = t.kategori || 'Lainnya';
-                  const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
-                  kategoriMap.set(cat, {
-                    nominal: prev.nominal + (Number(t.nominal) || 0),
-                    count: prev.count + 1
+                if (filteredRawTxs && filteredRawTxs.length > 0) {
+                  filteredRawTxs.forEach(t => {
+                    if (!isPureSalesTx(t)) return;
+                    if (!isDateInActiveRange(t.timestamp)) return;
+                    const cat = t.kategori || 'Lainnya';
+                    const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
+                    kategoriMap.set(cat, {
+                      nominal: prev.nominal + (Number(t.nominal) || 0),
+                      count: prev.count + 1
+                    });
                   });
-                });
+                } else {
+                  filteredAnalytics.forEach(r => {
+                    if (!isDateInActiveRange(r.tanggal)) return;
+                    if (r.kategori_breakdown && typeof r.kategori_breakdown === 'object') {
+                      Object.entries(r.kategori_breakdown).forEach(([cat, val]) => {
+                        const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
+                        kategoriMap.set(cat, {
+                          nominal: prev.nominal + Number(val || 0),
+                          count: prev.count + 1
+                        });
+                      });
+                    }
+                  });
+                }
                 const categoryData = Array.from(kategoriMap.entries())
                   .map(([k, v]) => ({ label: k, value: v.nominal, count: v.count }))
                   .sort((a, b) => b.value - a.value);
                 const totalCatNominal = categoryData.reduce((s, d) => s + d.value, 0) || 1;
 
-                // Distribusi Waktu (Jam Sibuk)
+                // Distribusi Waktu (Jam Sibuk - Hanya transaksi riil pada rentang terpilih)
                 const hourMap = new Array(24).fill(0);
                 filteredRawTxs.forEach(t => {
-                  if (!t || !t.timestamp) return;
+                  if (!isPureSalesTx(t)) return;
+                  if (!isDateInActiveRange(t.timestamp)) return;
                   try {
                     let h = 0;
                     if (typeof t.timestamp === 'string' && t.timestamp.includes('T')) {
@@ -6418,18 +6661,32 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 const maxTimeVal = Math.max(...timeBlocks.map(d => d.value), 1);
                 const busiestBlock = timeBlocks.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), timeBlocks[0]);
 
-                // Leaderboard Kasir
+                // Leaderboard Kasir (Hanya transaksi riil pada rentang terpilih)
                 const kasirLeaderboard = (() => {
                   if (grafikFilterKasir !== 'Semua') return [];
                   const map = new Map<string, { omzet: number; count: number }>();
-                  filteredRawTxs.forEach(t => {
-                    const kId = (t.kasir_id || 'Unknown').trim();
-                    const prev = map.get(kId) || { omzet: 0, count: 0 };
-                    map.set(kId, {
-                      omzet: prev.omzet + (Number(t.nominal) || 0),
-                      count: prev.count + 1
+                  if (filteredRawTxs && filteredRawTxs.length > 0) {
+                    filteredRawTxs.forEach(t => {
+                      if (!isPureSalesTx(t)) return;
+                      if (!isDateInActiveRange(t.timestamp)) return;
+                      const kId = (t.kasir_id || 'Unknown').trim();
+                      const prev = map.get(kId) || { omzet: 0, count: 0 };
+                      map.set(kId, {
+                        omzet: prev.omzet + (Number(t.nominal) || 0),
+                        count: prev.count + 1
+                      });
                     });
-                  });
+                  } else {
+                    filteredAnalytics.forEach(r => {
+                      if (!isDateInActiveRange(r.tanggal)) return;
+                      const kId = (r.kasir_id || 'Unknown').trim();
+                      const prev = map.get(kId) || { omzet: 0, count: 0 };
+                      map.set(kId, {
+                        omzet: prev.omzet + (Number(r.total_omzet) || 0),
+                        count: prev.count + (Number(r.total_transaksi) || 0)
+                      });
+                    });
+                  }
                   return Array.from(map.entries())
                     .map(([id, stats]) => {
                       const name = props.kasirList?.[id]?.name || id;
@@ -6491,7 +6748,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 grafikRange === range ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                               )}
                             >
-                              {range === 'harian' ? '7 Hari' : range === 'mingguan' ? '4 Minggu' : '6 Bulan'}
+                              {range === 'harian' ? '7 Hari' : range === 'mingguan' ? '30 Hari' : '1 Tahun'}
                             </button>
                           ))}
                         </div>
@@ -6539,7 +6796,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           Rp {totalVolume.toLocaleString('id-ID')}
                         </h3>
                         <p className="text-[9px] text-emerald-100 mt-1 font-bold">
-                          {trendData.length > 0 ? `Rata-rata Rp ${Math.round(totalVolume / trendData.length).toLocaleString('id-ID')} / ${grafikRange === 'bulanan' ? 'bln' : grafikRange === 'mingguan' ? 'mgg' : 'hari'}` : '-'}
+                          {trendData.length > 0 ? `Rata-rata Rp ${Math.round(totalVolume / trendData.length).toLocaleString('id-ID')} / ${grafikRange === 'bulanan' ? 'bln' : 'hari'}` : '-'}
                         </p>
                       </div>
 
@@ -6573,7 +6830,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           {totalItems.toLocaleString('id-ID')} <span className="text-xs font-normal">Trx</span>
                         </h3>
                         <p className="text-[9px] text-blue-100 mt-1 font-bold">
-                          {trendData.length > 0 ? `${(totalItems / trendData.length).toFixed(1)} trx / ${grafikRange === 'bulanan' ? 'bln' : grafikRange === 'mingguan' ? 'mgg' : 'hari'}` : '-'}
+                          {trendData.length > 0 ? `${(totalItems / trendData.length).toFixed(1)} trx / ${grafikRange === 'bulanan' ? 'bln' : 'hari'}` : '-'}
                         </p>
                       </div>
 
@@ -6606,7 +6863,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                             </h4>
                           </div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-                            Periode: {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '4 Minggu Terakhir' : '6 Bulan Terakhir'} • Filter: {grafikFilterKasir === 'Semua' ? 'Semua Kasir' : (props.kasirList?.[grafikFilterKasir]?.name || grafikFilterKasir)}
+                            Periode: {grafikRange === 'harian' ? '7 Hari Terakhir' : grafikRange === 'mingguan' ? '30 Hari Terakhir' : '1 Tahun Terakhir (12 Bulan)'} • Filter: {grafikFilterKasir === 'Semua' ? 'Semua Kasir' : (props.kasirList?.[grafikFilterKasir]?.name || grafikFilterKasir)}
                           </p>
                         </div>
 
@@ -6626,14 +6883,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           </div>
                           <p className="text-xs font-black text-slate-600 uppercase tracking-wider">Belum Ada Transaksi Pada Periode Ini</p>
                           <p className="text-[10px] text-slate-400 mt-1 max-w-xs">
-                            Tidak ditemukan data transaksi untuk {grafikFilterKasir !== 'Semua' ? `kasir "${grafikFilterKasir}"` : 'toko ini'} dalam rentang {grafikRange}.
+                            Tidak ditemukan data transaksi untuk {grafikFilterKasir !== 'Semua' ? `kasir "${grafikFilterKasir}"` : 'toko ini'} dalam rentang {grafikRange === 'harian' ? '7 Hari' : grafikRange === 'mingguan' ? '30 Hari' : '1 Tahun'}.
                           </p>
                           <div className="flex gap-2 mt-4">
                             <button
                               onClick={() => setGrafikRange('bulanan')}
                               className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-[10px] font-black uppercase transition-all"
                             >
-                              Lihat 6 Bulan
+                              Lihat 1 Tahun
                             </button>
                             {grafikFilterKasir !== 'Semua' && (
                               <button
@@ -6647,8 +6904,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         </div>
                       ) : grafikType === 'bar' ? (
                         /* Modern Bar Chart */
-                        <div className="pt-6">
-                          <div className="h-56 flex items-end justify-between gap-2 sm:gap-4 relative pb-8">
+                        <div className="pt-6 overflow-x-auto scrollbar-thin">
+                          <div className={cn(
+                            "h-56 flex items-end justify-between relative pb-8",
+                            trendData.length > 20 ? "min-w-[620px] sm:min-w-full gap-1" :
+                            trendData.length > 10 ? "min-w-[480px] sm:min-w-full gap-1.5 sm:gap-2.5" :
+                            "gap-2 sm:gap-4"
+                          )}>
                             {/* Horizontal guide lines */}
                             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
                               {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
@@ -6715,8 +6977,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         </div>
                       ) : (
                         /* Smooth Spline Curve Chart (Petir) */
-                        <div className="pt-6">
-                          <div className="h-56 relative pb-8">
+                        <div className="pt-6 overflow-x-auto scrollbar-thin">
+                          <div className={cn(
+                            "h-56 relative pb-8",
+                            trendData.length > 20 ? "min-w-[620px] sm:min-w-full" : "w-full"
+                          )}>
                             {/* Horizontal guide lines */}
                             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
                               {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
@@ -6938,46 +7203,95 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
                     {/* Leaderboard Kasir (Hanya tampil jika filter 'Semua Kasir' & ada lebih dari 1 kasir) */}
                     {kasirLeaderboard.length > 0 && (
-                      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-                        <div className="flex items-center justify-between mb-4">
+                      <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-3.5">
                           <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                             <i className="fa-solid fa-ranking-star text-amber-500"></i> Peringkat Penjualan Kasir
                           </h4>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            Periode {grafikRange}
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-2.5 py-0.5 rounded-full">
+                            Periode {grafikRange === 'harian' ? '7 Hari' : grafikRange === 'mingguan' ? '30 Hari' : '1 Tahun'}
                           </span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {kasirLeaderboard.map((k, idx) => {
-                            const medalColors = [
-                              'bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-amber-200',
-                              'bg-gradient-to-r from-slate-300 to-slate-400 text-white shadow-slate-200',
-                              'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-orange-200'
+                            const medalBadges = [
+                              'bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-amber-200/50',
+                              'bg-gradient-to-r from-slate-300 to-slate-400 text-white shadow-slate-200/50',
+                              'bg-gradient-to-r from-amber-600 to-orange-700 text-white shadow-orange-200/50'
                             ];
                             return (
                               <div
                                 key={k.id}
                                 onClick={() => setGrafikFilterKasir(k.id)}
-                                className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-100/70 transition-all cursor-pointer flex items-center justify-between group active:scale-98"
+                                className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 bg-white hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98] shadow-xs"
                               >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-sm shrink-0",
-                                    idx < 3 ? medalColors[idx] : "bg-white text-slate-600 border border-slate-200"
+                                {/* 1. ATAS: Peringkat (#1) & Nama Kasir */}
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className={cn(
+                                      "w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs",
+                                      idx < 3 ? medalBadges[idx] : "bg-slate-100 text-slate-600 border border-slate-200"
+                                    )}>
+                                      #{idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h5 className="text-xs sm:text-[13px] font-black text-slate-900 uppercase tracking-tight truncate group-hover:text-emerald-700 transition-colors">
+                                        {k.name}
+                                      </h5>
+                                      {k.id !== k.name && (
+                                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block -mt-0.5 truncate">
+                                          ID: {k.id}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className={cn(
+                                    "text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 tabular-nums",
+                                    idx === 0 ? "bg-amber-100 text-amber-800" :
+                                    idx === 1 ? "bg-slate-100 text-slate-700" :
+                                    idx === 2 ? "bg-orange-100 text-orange-800" :
+                                    "bg-emerald-50 text-emerald-700"
                                   )}>
-                                    #{idx + 1}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-black text-slate-800 truncate group-hover:text-emerald-700 transition-colors">
-                                      {k.name}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400 font-bold">{k.count} Transaksi</p>
-                                  </div>
+                                    {k.pct.toFixed(1)}%
+                                  </span>
                                 </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-xs font-black text-slate-900 tabular-nums">Rp {k.omzet.toLocaleString('id-ID')}</p>
-                                  <p className="text-[9px] font-black text-emerald-600">{k.pct.toFixed(1)}%</p>
+
+                                {/* 2. TENGAH: Jumlah Uang (Omzet) */}
+                                <div className="my-1 py-2 px-3 bg-slate-50/90 rounded-xl border border-slate-100 flex items-center justify-between">
+                                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
+                                    Omzet
+                                  </span>
+                                  <span className="text-sm sm:text-base font-black text-slate-900 tracking-tight tabular-nums">
+                                    Rp {k.omzet.toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+
+                                {/* 3. BAWAH: Total Transaksi & Bar % */}
+                                <div className="mt-2 space-y-1.5">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="font-bold text-slate-500 flex items-center gap-1.5">
+                                      <i className="fa-solid fa-receipt text-[9px] text-blue-500"></i>
+                                      <strong className="text-slate-800 font-black">{k.count}</strong> Transaksi
+                                    </span>
+                                    <span className="text-slate-400 font-bold text-[9.5px]">
+                                      Porsi: <strong className="text-emerald-700 font-black">{k.pct.toFixed(1)}%</strong>
+                                    </span>
+                                  </div>
+
+                                  {/* Bar % Visual */}
+                                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-2xs">
+                                    <div 
+                                      className={cn(
+                                        "h-full rounded-full transition-all duration-500",
+                                        idx === 0 ? "bg-gradient-to-r from-amber-400 to-yellow-500" :
+                                        idx === 1 ? "bg-gradient-to-r from-slate-400 to-slate-500" :
+                                        idx === 2 ? "bg-gradient-to-r from-amber-600 to-orange-600" :
+                                        "bg-gradient-to-r from-emerald-500 to-teal-500"
+                                      )}
+                                      style={{ width: `${Math.min(Math.max(k.pct, 2), 100)}%` }}
+                                    />
+                                  </div>
                                 </div>
                               </div>
                             );
