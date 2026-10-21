@@ -1,7 +1,7 @@
 import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
-import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo, APP_VERSION } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo, APP_VERSION, formatLocalISO } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'

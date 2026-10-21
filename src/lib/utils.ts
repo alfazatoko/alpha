@@ -42,6 +42,14 @@ export const getLocalDateString = () => {
   return getLocalISOString().split('T')[0];
 };
 
+// Memformat objek Date ke tanggal lokal string YYYY-MM-DD
+export const formatLocalISO = (d: Date = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Memparsing string ISO lokal kembali menjadi objek Date di timezone lokal
 export const parseLocalISO = (iso: string) => {
   if (!iso) return new Date();

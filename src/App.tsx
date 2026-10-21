@@ -3847,7 +3847,6 @@ const MainApp: React.FC<MainAppProps> = ({
             onLogout={onLogout}
             kasirList={kasirList}
             refreshKasirList={refreshKasirList}
-            userId={googleUid}
             jamAbsen={todayAbsen}
             absensiList={absensi}
             runningTexts={runningTexts}
