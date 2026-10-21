@@ -918,43 +918,49 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
         {/* SUMMARY CARDS — 2x2 grid: TRX | Admin / Uang Masuk | Tarik Tunai */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           {/* Baris 1 kiri: TRX */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-md shadow-blue-200">
-            <div className="text-[9px] font-black text-blue-200 uppercase tracking-widest">TRX Hari Ini</div>
-            <div className="text-3xl font-black text-white leading-none mt-1">{todayCount}</div>
-            <div className="text-[8px] font-bold text-blue-300 mt-1">Jumlah Transaksi</div>
+          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
+              <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest">TRX Hari Ini</div>
+            </div>
+            <div className="text-3xl font-black text-blue-600 leading-none mt-1">{todayCount}</div>
+            <div className="text-[8px] font-bold text-slate-400 mt-1">Jumlah Transaksi</div>
           </div>
 
           {/* Baris 1 kanan: Admin */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
-            <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Admin Fee</div>
-            <div className="text-base font-black text-emerald-700 leading-tight mt-1 truncate">
+          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+              <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Admin Fee</div>
+            </div>
+            <div className="text-base font-black text-emerald-600 leading-tight mt-1 truncate">
               {formatRupiah(todayAdmin).replace(',00', '')}
             </div>
-            <div className="text-[8px] font-bold text-emerald-500 mt-1">Total Admin Fee</div>
+            <div className="text-[8px] font-bold text-slate-400 mt-1">Total Admin Fee</div>
           </div>
 
           {/* Baris 2 kiri: Uang Masuk */}
-          <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-violet-500"></div>
+              <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0"></div>
               <div className="text-[9px] font-black text-violet-600 uppercase tracking-widest">Uang Masuk</div>
             </div>
-            <div className="text-sm font-black text-violet-800 leading-tight mt-1 truncate">
+            <div className="text-sm font-black text-violet-700 leading-tight mt-1 truncate">
               {formatRupiah(todayUangMasuk).replace(',00', '')}
             </div>
-            <div className="text-[8px] font-bold text-violet-400 mt-0.5">Penjualan → Laci</div>
+            <div className="text-[8px] font-bold text-slate-400 mt-0.5">Penjualan → Laci</div>
           </div>
 
           {/* Baris 2 kanan: Tarik Tunai */}
-          <div className="bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
+          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+              <div className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></div>
               <div className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Tarik Tunai</div>
             </div>
-            <div className="text-sm font-black text-rose-700 leading-tight mt-1 truncate">
+            <div className="text-sm font-black text-rose-600 leading-tight mt-1 truncate">
               {formatRupiah(todayTarikTunai).replace(',00', '')}
             </div>
-            <div className="text-[8px] font-bold text-rose-400 mt-0.5">Laci → Pembeli</div>
+            <div className="text-[8px] font-bold text-slate-400 mt-0.5">Laci → Pembeli</div>
           </div>
         </div>
 

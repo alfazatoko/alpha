@@ -102,13 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.3
-          name: "ALFAZA ALPHA POS v1.4.3"
+          tag_name: v1.4.4
+          name: "ALFAZA ALPHA POS v1.4.4"
           body: |
-            ### Pembaruan Aplikasi v1.4.3
-            - **Desain Tabel Absensi Kasir (Gaya Buku Tulis):** Menghilangkan garis sekat vertikal di tengah kolom absensi kasir mode owner, berganti garis horizontal rapi seperti lembaran buku tulis.
-            - **Kolom Keterangan Telat Lebih Lebar:** Keterangan telat kini dibuat 1 baris melebar penuh tepat di bawah nama kasir hingga bawah badge shift sehingga teks panjang tidak bertumpuk atau terpotong.
-            - **Detail Riwayat Transaksi & Print Struk:** Hari dan tanggal lengkap serta nama kasir pencatat transaksi pada popup detail riwayat transaksi dan struk thermal print.
+            ### Pembaruan Aplikasi v1.4.4
+            - **Menu Pengaturan Shift & Absensi Mandiri:** Dipindahkan langsung ke baris luar daftar menu pengaturan toko di halaman akun owner agar cepat dan mudah ditemukan.
+            - **Penyederhanaan Profil Toko:** Profil toko kini lebih fokus dan ringkas khusus untuk identitas toko, logo, slogan, dan pesan kasir.
+            - **Kartu Ringkasan Harian Halaman Riwayat:** Latar belakang kartu ringkasan (TRX Hari Ini, Admin Fee, Uang Masuk, Tarik Tunai) dibuat putih bersih dengan warna teks terkoordinasi rapi sesuai fungsinya.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
