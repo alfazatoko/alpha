@@ -1042,6 +1042,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                   storeName={props.storeName}
                   storeSubtext={props.storeSubtext}
                   kasirName={props.kasirName}
+                  kasirList={props.kasirList}
                 />
               ))
             )}

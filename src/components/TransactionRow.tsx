@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
+import type { KasirAccount } from './LoginScreen'
 
 interface TransactionRowProps {
   t: Transaction
@@ -11,6 +12,7 @@ interface TransactionRowProps {
   storeName?: string
   storeSubtext?: string
   kasirName?: string
+  kasirList?: Record<string, KasirAccount>
 }
 
 const TransactionRow: React.FC<TransactionRowProps> = ({ 
@@ -21,7 +23,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   kasirRole,
   storeName,
   storeSubtext,
-  kasirName 
+  kasirName,
+  kasirList 
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showStrukPreview, setShowStrukPreview] = useState(false)
@@ -152,7 +155,30 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   })()
 
   const effectiveKasirName = (() => {
-    if (t.kasir_id) return t.kasir_id
+    // 1. Cari nama kasir yang mencatat transaksi dari kasirList
+    if (t.kasir_id) {
+      if (kasirList && kasirList[t.kasir_id]?.name) {
+        return kasirList[t.kasir_id].name
+      }
+      try {
+        const savedStore = localStorage.getItem('alphaPro_active_store')
+        const activeStoreId = savedStore ? JSON.parse(savedStore).id : null
+        if (activeStoreId) {
+          const storeKasirs = localStorage.getItem(`alphaPro_${activeStoreId}_kasir_list`)
+          if (storeKasirs) {
+            const parsed = JSON.parse(storeKasirs)
+            if (parsed[t.kasir_id]?.name) return parsed[t.kasir_id].name
+          }
+        }
+        const globalKasirs = localStorage.getItem('alphaPro_kasir_list')
+        if (globalKasirs) {
+          const parsed = JSON.parse(globalKasirs)
+          if (parsed[t.kasir_id]?.name) return parsed[t.kasir_id].name
+        }
+      } catch {}
+      return t.kasir_id
+    }
+    // 2. Fallback jika t.kasir_id belum tercatat di data lama
     if (kasirName) return kasirName
     return localStorage.getItem('alphaPro_name') || 'Kasir'
   })()
@@ -175,7 +201,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += center(effectiveStoreSubtext) + '\n';
     }
     text += '='.repeat(w) + '\n';
-    text += `Waktu : ${dateObj.toLocaleDateString('id-ID')} ${jam}\n`;
+    text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Kasir : ${effectiveKasirName}\n`;
     text += '-'.repeat(w) + '\n';
@@ -372,12 +398,21 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             </div>
             
             {/* Body */}
-            <div className="p-4 flex flex-col gap-3">
-              {/* Waktu & Transaksi */}
-              <div className="flex flex-col gap-1.5">
+            <div className="p-3.5 flex flex-col gap-2.5">
+              {/* Waktu & Kasir & Transaksi */}
+              <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Waktu:</span>
-                  <span className="text-slate-800 font-bold">{dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} {jam}</span>
+                  <span className="text-slate-800 font-bold">
+                    {dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} {jam}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Kasir:</span>
+                  <span className="text-slate-800 font-bold flex items-center gap-1.5">
+                    <i className="fa-solid fa-user-circle text-blue-500 text-[11px]"></i>
+                    {effectiveKasirName}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Transaksi:</span>
@@ -385,30 +420,31 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
               </div>
 
-              {/* Keterangan */}
-              <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2.5 px-3 text-[12px] border border-slate-100">
-                <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
-                <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{modalKeterangan}</span>
-              </div>
+              {/* Kolom Info Transaksi (Ket Tambahan, Sumber Keluar, Sumber Masuk) - Dibuat Rapat & Rapi */}
+              <div className="flex flex-col gap-1.5">
+                {/* Keterangan */}
+                <div className="flex justify-between items-center bg-slate-50/80 rounded-lg py-1.5 px-3 text-[11.5px] border border-slate-100">
+                  <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
+                  <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{modalKeterangan}</span>
+                </div>
 
-              {/* Sumber Uang (Keluar/Masuk) */}
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center bg-rose-50/50 rounded-lg p-2.5 px-3 text-[12px] border border-rose-100">
+                {/* Sumber Uang (Keluar/Masuk) */}
+                <div className="flex justify-between items-center bg-rose-50/50 rounded-lg py-1.5 px-3 text-[11.5px] border border-rose-100">
                   <span className="text-rose-600 font-black flex items-center gap-1.5">
-                    <i className="fa-solid fa-arrow-up-right text-[10px]"></i> Sumber Uang Keluar:
+                    <i className="fa-solid fa-arrow-up-right text-[9px]"></i> Sumber Uang Keluar:
                   </span>
                   <span className="text-rose-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? 'Laci Kasir' : t.kategori}</span>
                 </div>
-                <div className="flex justify-between items-center bg-emerald-50/50 rounded-lg p-2.5 px-3 text-[12px] border border-emerald-100">
+                <div className="flex justify-between items-center bg-emerald-50/50 rounded-lg py-1.5 px-3 text-[11.5px] border border-emerald-100">
                   <span className="text-emerald-600 font-black flex items-center gap-1.5">
-                    <i className="fa-solid fa-arrow-down-left text-[10px]"></i> Sumber Uang Masuk:
+                    <i className="fa-solid fa-arrow-down-left text-[9px]"></i> Sumber Uang Masuk:
                   </span>
                   <span className="text-emerald-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? (t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').replace(/bank uob/ig, 'Bank').trim() || 'EDC / Bank') : 'Laci Kasir'}</span>
                 </div>
               </div>
 
               {/* Nominal & Admin */}
-              <div className="flex flex-col gap-1.5 mt-1">
+              <div className="flex flex-col gap-1 mt-0.5">
                 {appFee > 0 ? (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
@@ -443,13 +479,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               </div>
 
               {/* Total (Dashed Border) */}
-              <div className="flex justify-between items-center pt-3 border-t border-dashed border-slate-300 mt-1">
+              <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-300 mt-0.5">
                 <span className="text-slate-800 font-black text-[13px]">Total:</span>
                 <span className="text-blue-600 font-black text-[14px]">Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
               </div>
 
               {/* Edit / Delete Actions */}
-              <div className="flex justify-between items-center mt-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-between items-center mt-1 pt-2.5 border-t border-slate-100">
                 {t.isEdited && <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-black tracking-widest">EDITED</span>}
                 {!t.isEdited && <div></div>}
                 <div className="flex gap-2">
@@ -542,7 +578,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
                 <div className="flex justify-between text-[10px] text-slate-600">
                   <span>Waktu :</span>
-                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID')} {jam}</span>
+                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}</span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-600">
                   <span>No    :</span>

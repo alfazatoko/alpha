@@ -2111,17 +2111,9 @@ const NotificationLogPanel: React.FC<{
     const nowISO = new Date().toISOString()
     let hasChanges = false
 
-    // 1. Executive Briefing Record
-    const briefingId = `briefing_${todayStr}`
-    if (!items.some(i => i.id === briefingId)) {
-      items.unshift({
-        id: briefingId,
-        title: '🌅 Executive Briefing Pagi',
-        message: 'Rekap Pagi, Forecasting Stok Voucher & Omset Toko.',
-        date: nowISO,
-        type: 'briefing',
-        isRead: false
-      })
+    // Bersihkan notifikasi briefing otomatis agar tidak muncul lagi
+    if (items.some(i => i.type === 'briefing' || i.id.startsWith('briefing_'))) {
+      items = items.filter(i => i.type !== 'briefing' && !i.id.startsWith('briefing_'))
       hasChanges = true
     }
 
@@ -2246,7 +2238,6 @@ const NotificationLogPanel: React.FC<{
             { key: 'unread', label: `Belum Dibaca (${unreadCount})` },
             { key: 'bonus', label: 'Bonus' },
             { key: 'anomaly', label: 'Absen/Telat' },
-            { key: 'briefing', label: 'Briefing' },
             { key: 'audit', label: 'Audit' }
           ].map(f => (
             <button
@@ -2310,12 +2301,10 @@ const NotificationLogPanel: React.FC<{
                 <div className={cn(
                   "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-sm",
                   item.type === 'bonus' ? "bg-emerald-600" :
-                  item.type === 'briefing' ? "bg-indigo-600" :
                   item.type === 'audit' ? "bg-rose-600" : "bg-amber-500"
                 )}>
                   <i className={cn("fa-solid",
                     item.type === 'bonus' ? "fa-gift" :
-                    item.type === 'briefing' ? "fa-square-poll-vertical" :
                     item.type === 'audit' ? "fa-triangle-exclamation" : "fa-bell"
                   )}></i>
                 </div>
@@ -2328,18 +2317,6 @@ const NotificationLogPanel: React.FC<{
                     </span>
                   </div>
                   <p className="text-[10px] font-semibold text-slate-600 leading-snug">{item.message}</p>
-
-                  {item.type === 'briefing' && (
-                    <button
-                      onClick={() => {
-                        const fabBtn = document.getElementById('bot-fab-btn')
-                        if (fabBtn) fabBtn.click()
-                      }}
-                      className="mt-2 text-[9px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                    >
-                      <i className="fa-solid fa-robot text-[9px]"></i> Buka Executive Briefing
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -2574,14 +2551,6 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   })
   const [isBonusDismissed, setIsBonusDismissed] = useState(() => {
     return localStorage.getItem('alphaPro_owner_bonus_dismissed') === 'true'
-  })
-
-  const [isBriefingMinimized, setIsBriefingMinimized] = useState(() => {
-    return localStorage.getItem('alphaPro_owner_briefing_minimized') === 'true'
-  })
-  const [isBriefingDismissed, setIsBriefingDismissed] = useState(() => {
-    const todayStr = new Date().toISOString().split('T')[0]
-    return localStorage.getItem(`alphaPro_owner_briefing_dismissed_${todayStr}`) === 'true'
   })
 
   // Rent Reminder State
@@ -2906,24 +2875,21 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
   const markAllNotifsAsRead = () => {
     const todayStr = new Date().toISOString().split('T')[0]
-    const briefingId = `briefing_${todayStr}`
     const bonusIds = bonusKasirList.map(name => `bonus_${name}_6m_${todayStr.substring(0, 7)}`)
     const rentId = rentReminder ? `rent_${rentReminder.dueDateStr}` : ''
-    const allIds = Array.from(new Set([...readNotifIds, briefingId, ...bonusIds, rentId].filter(Boolean)))
+    const allIds = Array.from(new Set([...readNotifIds, ...bonusIds, rentId].filter(Boolean)))
     setReadNotifIds(allIds)
     localStorage.setItem('alphaPro_owner_read_notif_ids', JSON.stringify(allIds))
   }
 
   const currentTodayStr = new Date().toISOString().split('T')[0]
-  const currentBriefingId = `briefing_${currentTodayStr}`
-  const isBriefingUnread = !isBriefingDismissed && !readNotifIds.includes(currentBriefingId)
   const unreadBonusKasirList = bonusKasirList.filter(name => {
     const bonusId = `bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`
     return !readNotifIds.includes(bonusId)
   })
   const currentRentId = `rent_${rentReminder?.dueDateStr}`
   const isRentUnread = rentReminder && !isRentDismissed && !readNotifIds.includes(currentRentId)
-  const totalUnreadCount = (isBriefingUnread ? 1 : 0) + unreadBonusKasirList.length + (isRentUnread ? 1 : 0)
+  const totalUnreadCount = unreadBonusKasirList.length + (isRentUnread ? 1 : 0)
 
   // STATE: Owner Menu Reordering
   const [isEditMenuMode, setIsEditMenuMode] = useState(false)
@@ -3651,13 +3617,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           clockStr={clockStr}
           onMenuClick={() => props.setIsSidePanelOpen(true)}
           onShowBannerClick={
-            props.kasirRole === 'owner' && (isBonusDismissed || isBriefingDismissed)
+            props.kasirRole === 'owner' && isBonusDismissed
               ? () => {
                   setIsBonusDismissed(false);
-                  setIsBriefingDismissed(false);
                   localStorage.removeItem('alphaPro_owner_bonus_dismissed');
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  localStorage.removeItem(`alphaPro_owner_briefing_dismissed_${todayStr}`);
                 }
               : undefined
           }
@@ -4036,70 +3999,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   </div>
                 )}
 
-                {/* 2. Executive Briefing Banner */}
-                {!isBriefingDismissed && (
-                  <div 
-                    onClick={() => markNotifAsRead(currentBriefingId)}
-                    className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 rounded-xl border border-indigo-500/30 shadow-xs text-white flex items-center justify-between gap-2 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 shrink-0 bg-indigo-600/50 rounded-lg flex items-center justify-center border border-indigo-400/30 text-indigo-200">
-                        <i className="fa-solid fa-square-poll-vertical text-xs"></i>
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[9px] font-black text-indigo-300 uppercase tracking-widest leading-none">🌅 Executive Briefing</p>
-                          <span className="bg-emerald-500/20 text-emerald-300 text-[7px] font-black px-1.5 py-0.2 rounded-full border border-emerald-500/30">HARI INI</span>
-                        </div>
-                        {!isBriefingMinimized && (
-                          <p className="text-[10px] font-extrabold text-white mt-0.5 truncate">Rekap Pagi, Forecasting Stok & Omset Toko</p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          markNotifAsRead(currentBriefingId)
-                          const fabBtn = document.getElementById('bot-fab-btn')
-                          if (fabBtn) fabBtn.click()
-                        }}
-                        className="bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white text-[8px] font-black px-2.5 py-1 rounded-lg shadow-xs transition-all active:scale-95 uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                      >
-                        <i className="fa-solid fa-robot"></i> Briefing
-                      </button>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const next = !isBriefingMinimized
-                            setIsBriefingMinimized(next)
-                            localStorage.setItem('alphaPro_owner_briefing_minimized', String(next))
-                          }}
-                          title={isBriefingMinimized ? "Perbesar" : "Minimize"}
-                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-white/20 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
-                        >
-                          {isBriefingMinimized ? '➕' : '➖'}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            markNotifAsRead(currentBriefingId)
-                            const todayStr = new Date().toISOString().split('T')[0]
-                            setIsBriefingDismissed(true)
-                            localStorage.setItem(`alphaPro_owner_briefing_dismissed_${todayStr}`, 'true')
-                          }}
-                          title="Tutup Notifikasi"
-                          className="w-5 h-5 rounded-md bg-white/10 hover:bg-rose-600 text-white font-black text-[10px] flex items-center justify-center active:scale-90 transition-all cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* 3. Rent Warning Banner */}
                 {rentReminder && !isRentDismissed && (
@@ -4223,44 +4123,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   </div>
                 )}
 
-                <div 
-                  onClick={() => markNotifAsRead(currentBriefingId)}
-                  className={cn(
-                    "p-3 rounded-2xl flex items-start justify-between gap-3 transition-all cursor-pointer border",
-                    isBriefingUnread
-                      ? "bg-indigo-50 border-indigo-300 shadow-xs"
-                      : "bg-slate-50 border-slate-200 opacity-75"
-                  )}
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                      <i className="fa-solid fa-square-poll-vertical text-xs"></i>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[11px] font-black text-indigo-900">🌅 Executive Briefing Pagi</p>
-                        {isBriefingUnread ? (
-                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
-                        ) : (
-                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
-                        )}
-                      </div>
-                      <p className="text-[10px] font-semibold text-indigo-700 mt-0.5">Rekapitulasi pagi, forecasting stok & omset harian.</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      markNotifAsRead(currentBriefingId)
-                      setShowNotifModal(false)
-                      const fabBtn = document.getElementById('bot-fab-btn')
-                      if (fabBtn) fabBtn.click()
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black px-2.5 py-1.5 rounded-xl shrink-0 shadow-sm cursor-pointer"
-                  >
-                    Buka
-                  </button>
-                </div>
+
               </div>
 
               {/* Toggle Text Banners Option */}
