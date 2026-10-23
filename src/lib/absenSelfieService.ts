@@ -81,6 +81,26 @@ export const applySelfieWatermark = (
 };
 
 /**
+ * Konversi base64 DataURL ke Blob murni tanpa fetch (100% aman di Android WebView / PC / iOS)
+ */
+export const base64ToBlob = (base64Data: string): Blob => {
+  try {
+    const parts = base64Data.split(';base64,');
+    const contentType = parts[0]?.split(':')[1] || 'image/webp';
+    const raw = window.atob(parts[1] || parts[0]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  } catch (e) {
+    console.error('Error base64ToBlob:', e);
+    return new Blob([base64Data], { type: 'image/webp' });
+  }
+};
+
+/**
  * Simpan Record Absen Selfie ke Supabase dan LocalStorage
  */
 export const saveAbsenSelfieRecord = async (params: {
@@ -116,11 +136,12 @@ export const saveAbsenSelfieRecord = async (params: {
     let finalPhotoUrl = base64Image;
     let photoPath = null;
 
-    // 1. Coba upload ke Supabase Storage jika ada koneksi
+    // 1. Upload ke Supabase Storage via Blob murni (anti-gagal di WebView HP)
     try {
-      const fileName = `${storeId}/${cashierId}/${tanggal}_${shiftId}_${Date.now()}.webp`;
-      const res = await fetch(base64Image);
-      const blob = await res.blob();
+      const blob = base64ToBlob(base64Image);
+      const safeStoreId = storeId ? storeId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'default';
+      const safeCashierId = cashierId ? cashierId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'kasir';
+      const fileName = `${safeStoreId}/${safeCashierId}/${tanggal}_${shiftId}_${Date.now()}.webp`;
 
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('absen-selfie')
@@ -137,9 +158,11 @@ export const saveAbsenSelfieRecord = async (params: {
         if (publicUrlData?.publicUrl) {
           finalPhotoUrl = publicUrlData.publicUrl;
         }
+      } else if (uploadErr) {
+        console.error('Storage upload error:', uploadErr.message || uploadErr);
       }
     } catch (uploadError) {
-      console.warn('Storage upload fallback ke local Base64:', uploadError);
+      console.warn('Storage upload catch error:', uploadError);
     }
 
     const newRecord: AbsenSelfieRecord = {
@@ -162,7 +185,7 @@ export const saveAbsenSelfieRecord = async (params: {
 
     // 2. Simpan ke Supabase DB table `absen_selfie_records`
     try {
-      await supabase.from('absen_selfie_records').insert([
+      const { data: insertData, error: insertErr } = await supabase.from('absen_selfie_records').insert([
         {
           store_id: storeId,
           cashier_id: cashierId,
@@ -179,18 +202,27 @@ export const saveAbsenSelfieRecord = async (params: {
           is_photo_deleted: false
         }
       ]);
+
+      if (insertErr) {
+        console.error('Supabase DB Insert error:', insertErr.message || insertErr);
+      }
     } catch (dbErr) {
-      console.warn('DB insert fallback ke local cache:', dbErr);
+      console.warn('DB insert fallback error:', dbErr);
     }
 
-    // 3. Simpan juga ke cache lokal per-toko untuk instan offline
-    const localKey = `alphaPro_${storeId}_selfie_${cashierId}`;
-    try {
-      const existing: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(localKey) || '[]');
-      // Batasi cache lokal maksimal 30 foto terakhir agar hemat memori HP
-      const updated = [newRecord, ...existing.filter(r => r.tanggal !== tanggal || r.shift_id !== shiftId)].slice(0, 30);
-      localStorage.setItem(localKey, JSON.stringify(updated));
-    } catch {}
+    // 3. Simpan juga ke cache lokal multi-key untuk instan offline di HP yang sama
+    const localKeys = [
+      `alphaPro_${storeId}_selfie_${cashierId}`,
+      `alphaPro_selfie_${cashierId}`,
+      `alphaPro_default_selfie_${cashierId}`
+    ];
+    for (const localKey of localKeys) {
+      try {
+        const existing: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+        const updated = [newRecord, ...existing.filter(r => r.tanggal !== tanggal || r.shift_id !== shiftId)].slice(0, 30);
+        localStorage.setItem(localKey, JSON.stringify(updated));
+      } catch {}
+    }
 
     return { success: true, photoUrl: finalPhotoUrl };
   } catch (err: any) {
@@ -201,6 +233,7 @@ export const saveAbsenSelfieRecord = async (params: {
 
 /**
  * Ambil daftar ringkasan Album Kasir (Berapa foto & berapa KB per-kasir)
+ * Mencakup Cloud Supabase (antar HP) dan Local Storage Fallback
  */
 export const fetchCashierAlbums = async (
   storeId: string,
@@ -210,15 +243,21 @@ export const fetchCashierAlbums = async (
 
   // Filter kasir (kecuali owner)
   const cashiers = Object.entries(kasirList).filter(([id, acc]) => id !== 'owner' && acc.role !== 'owner');
+  const cashierIds = cashiers.map(([id]) => id);
 
-  // Coba ambil statistik dari Supabase
+  // 1. Coba ambil dari Supabase Cloud (berfungsi lintas HP & lintas store)
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('absen_selfie_records')
       .select('cashier_id, cashier_name, photo_size_kb, photo_url, is_photo_deleted, tanggal')
-      .eq('store_id', storeId)
       .eq('is_photo_deleted', false)
       .order('tanggal', { ascending: false });
+
+    if (cashierIds.length > 0) {
+      query = query.in('cashier_id', cashierIds);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data && data.length > 0) {
       for (const [id, acc] of cashiers) {
@@ -240,21 +279,31 @@ export const fetchCashierAlbums = async (
     console.warn('Gagal fetch album dari Supabase, membaca dari local cache:', e);
   }
 
-  // Fallback membaca dari localStorage per-kasir
+  // 2. Fallback membaca dari localStorage per-kasir (multi-keys)
   for (const [id, acc] of cashiers) {
-    const localKey = `alphaPro_${storeId}_selfie_${id}`;
     let records: AbsenSelfieRecord[] = [];
-    try {
-      records = JSON.parse(localStorage.getItem(localKey) || '[]').filter((r: AbsenSelfieRecord) => !r.is_photo_deleted);
-    } catch {}
+    const localKeys = [
+      `alphaPro_${storeId}_selfie_${id}`,
+      `alphaPro_selfie_${id}`,
+      `alphaPro_default_selfie_${id}`
+    ];
+    for (const key of localKeys) {
+      try {
+        const stored = JSON.parse(localStorage.getItem(key) || '[]');
+        if (stored.length > records.length) {
+          records = stored;
+        }
+      } catch {}
+    }
 
-    const totalSize = Math.round(records.reduce((acc, curr) => acc + (Number(curr.photo_size_kb) || 0), 0) * 10) / 10;
-    const latest = records[0];
+    const validRecords = records.filter((r: AbsenSelfieRecord) => !r.is_photo_deleted);
+    const totalSize = Math.round(validRecords.reduce((acc, curr) => acc + (Number(curr.photo_size_kb) || 0), 0) * 10) / 10;
+    const latest = validRecords[0];
 
     albums.push({
       cashier_id: id,
       cashier_name: acc.name,
-      total_photos: records.length,
+      total_photos: validRecords.length,
       total_size_kb: totalSize,
       latest_photo_url: latest?.photo_url || null,
       latest_date: latest?.tanggal || null
@@ -271,29 +320,38 @@ export const fetchCashierSelfiePhotos = async (
   storeId: string,
   cashierId: string
 ): Promise<AbsenSelfieRecord[]> => {
+  // 1. Dari Supabase Cloud
   try {
     const { data, error } = await supabase
       .from('absen_selfie_records')
       .select('*')
-      .eq('store_id', storeId)
       .eq('cashier_id', cashierId)
       .eq('is_photo_deleted', false)
       .order('tanggal', { ascending: false })
       .order('jam', { ascending: false });
 
-    if (!error && data) {
+    if (!error && data && data.length > 0) {
       return data as AbsenSelfieRecord[];
     }
   } catch (e) {}
 
-  // Fallback localStorage
-  const localKey = `alphaPro_${storeId}_selfie_${cashierId}`;
-  try {
-    const records: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(localKey) || '[]');
-    return records.filter(r => !r.is_photo_deleted);
-  } catch {
-    return [];
+  // 2. Fallback localStorage multi-keys
+  const localKeys = [
+    `alphaPro_${storeId}_selfie_${cashierId}`,
+    `alphaPro_selfie_${cashierId}`,
+    `alphaPro_default_selfie_${cashierId}`
+  ];
+  for (const key of localKeys) {
+    try {
+      const records: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(key) || '[]');
+      const valid = records.filter(r => !r.is_photo_deleted);
+      if (valid.length > 0) {
+        return valid;
+      }
+    } catch {}
   }
+
+  return [];
 };
 
 /**

@@ -6225,46 +6225,74 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
               {activeOwnerSubView === 'absen' && (
                 <div className="relative">
-                  {/* FILTER BULAN DAN TABS - STICKY MINIMALIS */}
-                  <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pt-1 pb-3 -mx-4 px-4 flex items-end justify-between gap-2 border-b border-gray-100/50 mb-4">
-                    <div className="flex-1">
-                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block mb-0.5 ml-0.5">Periode Kehadiran</label>
-                      <input 
-                        type="month"
-                        value={absenFilterMonth}
-                        onChange={(e) => setAbsenFilterMonth(e.target.value)}
-                        className="w-full max-w-[130px] text-[10px] py-1.5 px-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-gray-50 focus:border-teal-400 focus:bg-white transition-all shadow-inner"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className="flex bg-gray-100 p-0.5 rounded-[10px]">
-                        <button 
-                          onClick={() => setAbsenTab('summary')} 
-                          className={cn(
-                            "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
-                            absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                          )}
-                        >
-                          Ringkasan
-                        </button>
-                        <button 
-                          onClick={() => setAbsenTab('full')} 
-                          className={cn(
-                            "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
-                            absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                          )}
-                        >
-                          Riwayat
-                        </button>
+                  {/* FILTER BULAN DAN TABS - STICKY RESPONSIVE & SWIPEABLE JEMPOL */}
+                  <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md pt-1 pb-2.5 border-b border-gray-100/80 mb-3 space-y-2">
+                    {/* Baris 1: Periode Kehadiran & Tombol Akses Cepat Album Selfie */}
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-xs shrink-0">
+                          <i className="fa-solid fa-calendar-days"></i>
+                        </div>
+                        <div className="min-w-0">
+                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block leading-none">
+                            Periode Kehadiran
+                          </label>
+                          <input 
+                            type="month"
+                            value={absenFilterMonth}
+                            onChange={(e) => setAbsenFilterMonth(e.target.value)}
+                            className="text-[11px] font-black py-0.5 px-2 rounded-lg border border-gray-200 outline-none bg-gray-50 focus:border-teal-400 focus:bg-white transition-all shadow-inner mt-0.5"
+                          />
+                        </div>
                       </div>
+
+                      {/* Tombol Album Selfie - Rapi tidak terlalu ke pinggir */}
                       <button 
                         type="button"
                         onClick={() => setIsSelfieGalleryOpen(true)}
-                        className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-[10px] bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                        className="px-3 py-1.5 text-[9.5px] font-black uppercase tracking-wider rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 text-white flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
                         title="Buka Galeri Album Foto Selfie Absensi Kasir"
                       >
-                        <i className="fa-solid fa-camera-retro text-[10px]"></i>
-                        <span className="hidden sm:inline">Album</span> Selfie
+                        <i className="fa-solid fa-camera-retro text-xs"></i>
+                        <span>Album Selfie</span>
+                      </button>
+                    </div>
+
+                    {/* Baris 2: Navigasi Tab Swipeable / Geser Jempol */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar touch-pan-x py-0.5 px-0.5">
+                      <button 
+                        onClick={() => setAbsenTab('summary')} 
+                        className={cn(
+                          "px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5",
+                          absenTab === 'summary' 
+                            ? "bg-teal-600 text-white shadow-sm" 
+                            : "bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200/80"
+                        )}
+                      >
+                        <i className="fa-solid fa-chart-pie text-[10px]"></i>
+                        <span>Ringkasan</span>
+                      </button>
+
+                      <button 
+                        onClick={() => setAbsenTab('full')} 
+                        className={cn(
+                          "px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5",
+                          absenTab === 'full' 
+                            ? "bg-teal-600 text-white shadow-sm" 
+                            : "bg-gray-100 text-gray-600 hover:text-gray-900 hover:bg-gray-200/80"
+                        )}
+                      >
+                        <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
+                        <span>Riwayat Detail</span>
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => setIsSelfieGalleryOpen(true)}
+                        className="px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/60 transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-images text-[10px] text-teal-600"></i>
+                        <span>Galeri Foto Kasir</span>
                       </button>
                     </div>
                   </div>

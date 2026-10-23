@@ -80,6 +80,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [searchCashier, setSearchCashier] = useState('')
   const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Reset foto selfie jika kasir atau shift berganti
   useEffect(() => {
@@ -318,8 +319,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     !hasAbsenToday
   )
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
     setError('')
 
     if (!selectedUser || selectedUser.toLowerCase() === 'owner') {
@@ -372,45 +374,55 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       }
     }
 
-    // Success: Record attendance in local cache for today
-    if (account.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday) {
-      const today = getLocalDateString()
-      const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
-      
-      try {
-        const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
-        storeAbsens[selectedUser] = { date: today, time, shift: selectedShift }
-        localStorage.setItem(storeKey, JSON.stringify(storeAbsens))
+    setIsSubmitting(true)
 
-        const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
-        legacyAbsens[selectedUser] = { date: today, time, shift: selectedShift }
-        localStorage.setItem('alphaPro_absen_harian', JSON.stringify(legacyAbsens))
-      } catch (e) {}
+    try {
+      // Success: Record attendance in local cache for today
+      if (account.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday) {
+        const today = getLocalDateString()
+        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
+        
+        try {
+          const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
+          storeAbsens[selectedUser] = { date: today, time, shift: selectedShift }
+          localStorage.setItem(storeKey, JSON.stringify(storeAbsens))
 
-      // Simpan foto selfie jika ada ke cloud storage dan local album
-      if (capturedSelfie) {
-        saveAbsenSelfieRecord({
-          storeId: storeId && storeId !== 'all' ? storeId : 'default',
-          cashierId: selectedUser,
-          cashierName: account.name || selectedUser,
-          tanggal: today,
-          jam: time,
-          shiftId: selectedShift,
-          shiftName: activeShifts.find(s => s.id === selectedShift)?.name || selectedShift,
-          isLate: shiftLateness.isLate,
-          alasanTelat: shiftLateness.isLate ? alasanTelat.trim() : undefined,
-          base64Image: capturedSelfie,
-        }).catch(err => console.error('Upload selfie error:', err))
+          const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+          legacyAbsens[selectedUser] = { date: today, time, shift: selectedShift }
+          localStorage.setItem('alphaPro_absen_harian', JSON.stringify(legacyAbsens))
+        } catch (e) {}
+
+        // Simpan foto selfie jika ada ke cloud storage dan local album (AWAIT agar terunggah tuntas ke Supabase!)
+        if (capturedSelfie) {
+          try {
+            await saveAbsenSelfieRecord({
+              storeId: storeId && storeId !== 'all' ? storeId : 'default',
+              cashierId: selectedUser,
+              cashierName: account.name || selectedUser,
+              tanggal: today,
+              jam: time,
+              shiftId: selectedShift,
+              shiftName: activeShifts.find(s => s.id === selectedShift)?.name || selectedShift,
+              isLate: shiftLateness.isLate,
+              alasanTelat: shiftLateness.isLate ? alasanTelat.trim() : undefined,
+              base64Image: capturedSelfie,
+            })
+          } catch (err) {
+            console.error('Upload selfie error:', err)
+          }
+        }
       }
-    }
 
-    onLogin(
-      selectedUser, 
-      account, 
-      shiftLateness.isLate ? alasanTelat.trim() : undefined,
-      selectedShift
-    )
+      onLogin(
+        selectedUser, 
+        account, 
+        shiftLateness.isLate ? alasanTelat.trim() : undefined,
+        selectedShift
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const triggerShake = () => {
@@ -690,14 +702,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* Submit Button */}
           <button 
             type="submit" 
+            disabled={isSubmitting}
             className={`login-btn flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer ${
               isAbsenShowing 
                 ? '!py-2 sm:!py-2.5 !text-xs !rounded-xl !mt-1' 
                 : '!py-3.5 sm:!py-4 !text-base sm:!text-lg !rounded-2xl !mt-3 font-black tracking-widest shadow-xl shadow-blue-500/30 active:scale-98'
-            }`}
+            } ${isSubmitting ? 'opacity-80 cursor-wait' : ''}`}
           >
-            <i className={`fa-solid fa-arrow-right-to-bracket ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
-            MASUK
+            {isSubmitting ? (
+              <>
+                <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+                <span>Menyimpan Absensi...</span>
+              </>
+            ) : (
+              <>
+                <i className={`fa-solid fa-arrow-right-to-bracket ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
+                <span>MASUK</span>
+              </>
+            )}
           </button>
         </form>
 

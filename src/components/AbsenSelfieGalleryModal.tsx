@@ -34,27 +34,26 @@ export const AbsenSelfieGalleryModal: React.FC<AbsenSelfieGalleryModalProps> = (
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Load daftar album kasir saat modal dibuka
+  const loadAlbums = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchCashierAlbums(storeId, kasirList);
+      setAlbums(data);
+    } catch (e) {
+      console.error('Gagal load albums:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [storeId, kasirList]);
+
   useEffect(() => {
     if (!isOpen) {
       setSelectedCashier(null);
       setPreviewPhoto(null);
       return;
     }
-
-    const loadAlbums = async () => {
-      setIsLoading(true);
-      try {
-        const data = await fetchCashierAlbums(storeId, kasirList);
-        setAlbums(data);
-      } catch (e) {
-        console.error('Gagal load albums:', e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadAlbums();
-  }, [isOpen, storeId, kasirList]);
+  }, [isOpen, loadAlbums]);
 
   // Load foto-foto saat kasir dipilih
   const handleOpenCashierFolder = async (cashierId: string, cashierName: string) => {
@@ -162,12 +161,29 @@ export const AbsenSelfieGalleryModal: React.FC<AbsenSelfieGalleryModalProps> = (
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 shadow-xs active:scale-95 transition-all"
-          >
-            <i className="fa-solid fa-xmark text-sm"></i>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (selectedCashier) {
+                  handleOpenCashierFolder(selectedCashier.id, selectedCashier.name);
+                } else {
+                  loadAlbums();
+                }
+              }}
+              disabled={isLoading}
+              className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 text-teal-600 hover:text-teal-700 flex items-center justify-center border border-slate-200 dark:border-slate-700 shadow-xs active:scale-95 transition-all cursor-pointer"
+              title="Segarkan Foto"
+            >
+              <i className={cn("fa-solid fa-arrows-rotate text-xs", isLoading && "fa-spin")}></i>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 shadow-xs active:scale-95 transition-all cursor-pointer"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
         </div>
 
         {/* BODY MODAL */}
