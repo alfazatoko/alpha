@@ -42,6 +42,11 @@ ON CONFLICT (id) DO UPDATE SET public = true;
 DROP POLICY IF EXISTS "Public Read Absen Selfie" ON storage.objects;
 CREATE POLICY "Public Read Absen Selfie" ON storage.objects FOR SELECT USING (bucket_id = 'absen-selfie');
 
-DROP POLICY IF EXISTS "Public Upload Absen Selfie" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'absen-selfie');
+DROP POLICY IF EXISTS "Public Upload Absen Selfie" ON storage.objects;
+CREATE POLICY "Public Upload Absen Selfie" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'absen-selfie');
 
-DROP POLICY IF EXISTS "Public Delete Absen Selfie" ON storage.objects FOR DELETE USING (bucket_id = 'absen-selfie');
+DROP POLICY IF EXISTS "Public Update Absen Selfie" ON storage.objects;
+CREATE POLICY "Public Update Absen Selfie" ON storage.objects FOR UPDATE USING (bucket_id = 'absen-selfie');
+
+DROP POLICY IF EXISTS "Public Delete Absen Selfie" ON storage.objects;
+CREATE POLICY "Public Delete Absen Selfie" ON storage.objects FOR DELETE USING (bucket_id = 'absen-selfie');
