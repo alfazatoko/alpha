@@ -8,6 +8,7 @@ import SummaryCards from '../components/SummaryCards'
 import PosKasirView from './PosKasirView'
 import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
+import ProfitOwnerView from './ProfitOwnerView'
 import { printThermalReceipt, isAndroidBridgeAvailable } from '../lib/printerService'
 interface BerandaViewProps {
   active: boolean

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { cn, compressImage, getShiftInfo, getActiveShifts, APP_VERSION } from '../lib/utils'
+import { supabase } from '../lib/supabase'
 import { 
   printThermalReceipt, 
   formatReceiptCenter, 
@@ -466,11 +467,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
           ]
         });
         
-        setBtConnected(true);
-        setBtMacAddress(device.name || device.id || 'Web Bluetooth Printer');
-        localStorage.setItem('bluetooth_printer_mac', device.name || device.id || 'web_bt_printer');
+        const printerName = device.name || 'Web Bluetooth Printer';
+        const printerMac = device.name || device.id || 'web_bt_printer';
+        setBtMacAddress(printerMac);
+        setBtPrinterName(printerName);
+        setStoredPrinterMac(printerMac);
+        setStoredPrinterName(printerName);
         localStorage.setItem('use_web_bluetooth', 'true');
-        alert('Printer ' + (device.name || '') + ' berhasil dipilih!');
+        alert('Printer ' + printerName + ' berhasil dipilih!');
       } catch (error: any) {
         alert('Gagal memilih printer: ' + error.message);
       } finally {
