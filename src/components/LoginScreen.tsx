@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { getLocalDateString, getShiftInfo, getActiveShifts, checkShiftLateness, APP_VERSION, isVersionSupported } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { isAbsenSelfieEnabled, saveAbsenSelfieRecord } from '../lib/absenSelfieService'
+import { AbsenSelfieCapture } from './AbsenSelfieCapture'
 
 export interface KasirAccount {
   pin: string
@@ -77,6 +79,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   )
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [searchCashier, setSearchCashier] = useState('')
+  const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null)
+
+  // Reset foto selfie jika kasir atau shift berganti
+  useEffect(() => {
+    setCapturedSelfie(null)
+  }, [selectedUser, selectedShift])
 
   // Live financial & shift settings synced with Supabase Realtime
   const [liveFinancialSettings, setLiveFinancialSettings] = useState<Record<string, string>>(() => {
@@ -340,6 +348,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         triggerShake()
         return
       }
+
+      if (isAbsenSelfieEnabled(liveFinancialSettings) && !capturedSelfie) {
+        setError('Wajib ambil foto selfie bukti kehadiran terlebih dahulu.')
+        triggerShake()
+        return
+      }
     }
 
     // PIN validation
@@ -373,6 +387,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         legacyAbsens[selectedUser] = { date: today, time, shift: selectedShift }
         localStorage.setItem('alphaPro_absen_harian', JSON.stringify(legacyAbsens))
       } catch (e) {}
+
+      // Simpan foto selfie jika ada ke cloud storage dan local album
+      if (capturedSelfie) {
+        saveAbsenSelfieRecord({
+          storeId: storeId && storeId !== 'all' ? storeId : 'default',
+          cashierId: selectedUser,
+          cashierName: account.name || selectedUser,
+          tanggal: today,
+          jam: time,
+          shiftId: selectedShift,
+          shiftName: activeShifts.find(s => s.id === selectedShift)?.name || selectedShift,
+          isLate: shiftLateness.isLate,
+          alasanTelat: shiftLateness.isLate ? alasanTelat.trim() : undefined,
+          base64Image: capturedSelfie,
+        }).catch(err => console.error('Upload selfie error:', err))
+      }
     }
 
     onLogin(
@@ -395,7 +425,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       <div 
         className={`login-card ${isShaking ? 'shake' : ''} shadow-xl transition-all duration-300 ease-in-out ${
           isAbsenShowing 
-            ? '!py-3.5 !px-4 sm:!py-4 sm:!px-6 !max-w-[390px] !rounded-2xl' 
+            ? '!py-3.5 !px-4 sm:!py-4 sm:!px-6 !max-w-[410px] !max-h-[96dvh] overflow-y-auto !rounded-2xl' 
             : '!py-6 !px-6 sm:!py-7 sm:!px-8 !max-w-[425px] !rounded-3xl'
         }`}
       >
@@ -583,6 +613,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                     rows={1}
                     value={alasanTelat}
                     onChange={(e) => { setAlasanTelat(e.target.value); setError(''); }}
+                  />
+                </div>
+              )}
+
+              {/* Foto Selfie Absensi (Wajib jika diaktifkan oleh Owner di Pengaturan) */}
+              {isAbsenSelfieEnabled(liveFinancialSettings) && (
+                <div className="pt-0.5">
+                  <AbsenSelfieCapture
+                    storeName={storeName || 'ALFAZA CELL'}
+                    cashierName={kasirList[selectedUser]?.name || selectedUser}
+                    shiftName={activeShifts.find(s => s.id === selectedShift)?.name || selectedShift}
+                    onSelfieCaptured={setCapturedSelfie}
                   />
                 </div>
               )}

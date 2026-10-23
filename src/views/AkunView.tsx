@@ -1747,6 +1747,43 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </div>
                         </div>
                       </div>
+
+                      {/* FITUR BARU: WAJIB FOTO SELFIE SAAT ABSEN (PC) */}
+                      <div className="mt-4 p-4 rounded-2xl border border-teal-200 bg-teal-50/40 dark:bg-teal-950/20 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                            <i className="fa-solid fa-camera"></i>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+                                Wajib Foto Selfie Saat Absen
+                              </h4>
+                              <span className={cn(
+                                "text-[7.5px] font-black px-2 py-0.5 rounded-md uppercase",
+                                financialSettings.absenSelfieEnabled === 'true' 
+                                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300" 
+                                  : "bg-slate-200 text-slate-600"
+                              )}>
+                                {financialSettings.absenSelfieEnabled === 'true' ? 'AKTIF' : 'NONAKTIF (DEFAULT)'}
+                              </span>
+                            </div>
+                            <p className="text-[9px] text-slate-500 font-bold mt-0.5">
+                              Kasir wajib mengambil foto selfie di toko saat absen masuk. Foto tersimpan rapi per-album kasir & dapat dihapus.
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                          <input
+                            type="checkbox"
+                            checked={financialSettings.absenSelfieEnabled === 'true'}
+                            onChange={(e) => handleSaveFinancial('absenSelfieEnabled', e.target.checked ? 'true' : 'false')}
+                            className="sr-only peer"
+                          />
+                          <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3921,6 +3958,41 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             <span>Tampilan di Login:</span>
                             <span className="font-black font-mono">({financialSettings.shiftMalamStart || '18:00'} - {financialSettings.shiftMalamEnd || '23:59'})</span>
                           </div>
+                        </div>
+
+                        {/* FITUR BARU: WAJIB FOTO SELFIE SAAT ABSEN (Mobile) */}
+                        <div className="p-2.5 rounded-xl border border-teal-200/90 bg-teal-50/50 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs shrink-0">
+                              <i className="fa-solid fa-camera"></i>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <h5 className="text-[10px] font-black text-slate-800 uppercase">Wajib Selfie Absen</h5>
+                                <span className={cn(
+                                  "text-[7px] font-black px-1.5 py-0.5 rounded uppercase",
+                                  financialSettings.absenSelfieEnabled === 'true' 
+                                    ? "bg-emerald-100 text-emerald-700" 
+                                    : "bg-slate-200 text-slate-600"
+                                )}>
+                                  {financialSettings.absenSelfieEnabled === 'true' ? 'AKTIF' : 'OFF'}
+                                </span>
+                              </div>
+                              <p className="text-[7.5px] text-slate-500 font-bold leading-tight">
+                                Kasir wajib ambil foto selfie di toko saat absen
+                              </p>
+                            </div>
+                          </div>
+
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                            <input
+                              type="checkbox"
+                              checked={financialSettings.absenSelfieEnabled === 'true'}
+                              onChange={(e) => handleSaveFinancial('absenSelfieEnabled', e.target.checked ? 'true' : 'false')}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
+                          </label>
                         </div>
 
                         <button

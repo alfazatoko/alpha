@@ -10,6 +10,7 @@ import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 import ProfitOwnerView from './ProfitOwnerView'
 import { printThermalReceipt, isAndroidBridgeAvailable } from '../lib/printerService'
+import { AbsenSelfieGalleryModal } from '../components/AbsenSelfieGalleryModal'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -3246,6 +3247,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [localAbsensiOverrides, setLocalAbsensiOverrides] = useState<Record<string | number, string>>({})
   const [updatingLemburIds, setUpdatingLemburIds] = useState<Record<string | number, boolean>>({})
   const [absensiRefreshKey, setAbsensiRefreshKey] = useState(0)
+  const [isSelfieGalleryOpen, setIsSelfieGalleryOpen] = useState(false)
 
   // State modal edit absensi untuk owner
   const [editingAbsen, setEditingAbsen] = useState<{
@@ -6234,24 +6236,35 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                         className="w-full max-w-[130px] text-[10px] py-1.5 px-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-gray-50 focus:border-teal-400 focus:bg-white transition-all shadow-inner"
                       />
                     </div>
-                    <div className="flex bg-gray-100 p-0.5 rounded-[10px]">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex bg-gray-100 p-0.5 rounded-[10px]">
+                        <button 
+                          onClick={() => setAbsenTab('summary')} 
+                          className={cn(
+                            "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                            absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                          )}
+                        >
+                          Ringkasan
+                        </button>
+                        <button 
+                          onClick={() => setAbsenTab('full')} 
+                          className={cn(
+                            "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
+                            absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                          )}
+                        >
+                          Riwayat
+                        </button>
+                      </div>
                       <button 
-                        onClick={() => setAbsenTab('summary')} 
-                        className={cn(
-                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
-                          absenTab === 'summary' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                        )}
+                        type="button"
+                        onClick={() => setIsSelfieGalleryOpen(true)}
+                        className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-[10px] bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                        title="Buka Galeri Album Foto Selfie Absensi Kasir"
                       >
-                        Ringkasan
-                      </button>
-                      <button 
-                        onClick={() => setAbsenTab('full')} 
-                        className={cn(
-                          "px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-[8px] transition-all",
-                          absenTab === 'full' ? "bg-white text-teal-600 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                        )}
-                      >
-                        Riwayat
+                        <i className="fa-solid fa-camera-retro text-[10px]"></i>
+                        <span className="hidden sm:inline">Album</span> Selfie
                       </button>
                     </div>
                   </div>
@@ -7381,6 +7394,16 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       </div>
                     </div>
                   )}
+
+                  {/* MODAL POPUP ALBUM SELFIE ABSENSI (GALLERY FOLDER PER-KASIR) */}
+                  <AbsenSelfieGalleryModal
+                    isOpen={isSelfieGalleryOpen}
+                    onClose={() => setIsSelfieGalleryOpen(false)}
+                    storeId={props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : 'default'}
+                    storeName={props.storeName || 'ALFAZA CELL'}
+                    kasirList={props.kasirList || {}}
+                    showToast={props.showToast}
+                  />
                 </div>
               )}
 
