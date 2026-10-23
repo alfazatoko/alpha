@@ -8,8 +8,7 @@ import SummaryCards from '../components/SummaryCards'
 import PosKasirView from './PosKasirView'
 import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
-import ProfitOwnerView from './ProfitOwnerView'
-import { printThermalReceipt } from '../lib/printerService'
+import { printThermalReceipt, isAndroidBridgeAvailable } from '../lib/printerService'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -444,7 +443,7 @@ const GajiPanel: React.FC<{
       const isAutoPrint = localStorage.getItem('auto_print_gaji') === 'true';
       const btMac = localStorage.getItem('bluetooth_printer_mac');
 
-      if (isAutoPrint && btMac && (window as any).bluetoothSerial) {
+      if (isAutoPrint && (btMac || isAndroidBridgeAvailable())) {
         executePrintReceipt(text);
       } else {
         setReviewReceiptText(text);
@@ -522,7 +521,7 @@ const GajiPanel: React.FC<{
 
       const isAutoPrint = localStorage.getItem('auto_print_gaji') === 'true';
       const btMac = localStorage.getItem('bluetooth_printer_mac');
-      if (isAutoPrint && btMac && (window as any).bluetoothSerial) {
+      if (isAutoPrint && (btMac || isAndroidBridgeAvailable())) {
         executePrintReceipt(t);
       } else {
         setReviewReceiptText(t);

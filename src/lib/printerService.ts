@@ -1,6 +1,9 @@
 // ── CENTRALIZED PRINTER SERVICE (THERMAL ESC/POS & RAWBT) ──
-// Mendukung koneksi Bluetooth Native (Capacitor/Cordova) dengan auto-reconnect,
-// auto-fallback RawBT, formatting 32-kolom seragam, dan event prompt reconnect.
+// Terinspirasi dari arsitektur WebAppPrinter (developersismedika/webappprinter):
+// Menggunakan mekanisme "Smart On-Demand Socket":
+// Buka koneksi cepat saat cetak -> Tembak data -> Tutup socket dengan bersih di finally.
+// Hal ini mencegah "Hanging Socket" dan memungkinkan printer thermal portabel
+// masuk mode hemat daya (sleep) tanpa pernah memutus fungsionalitas cetak aplikasi!
 
 export const RECEIPT_WIDTH = 32;
 
@@ -58,10 +61,76 @@ export const setStoredPrinterMac = (mac: string): void => {
 };
 
 /**
- * Cek apakah plugin bluetooth serial native tersedia di perangkat
+ * Ambil Nama Printer Bluetooth yang tersimpan di localStorage
+ */
+export const getStoredPrinterName = (): string | null => {
+  try {
+    return localStorage.getItem('bluetooth_printer_name');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Simpan Nama Printer Bluetooth
+ */
+export const setStoredPrinterName = (name: string): void => {
+  try {
+    localStorage.setItem('bluetooth_printer_name', name);
+  } catch {}
+};
+
+/**
+ * Hapus / Lupakan Printer yang tersimpan
+ */
+export const clearStoredPrinter = (): void => {
+  try {
+    localStorage.removeItem('bluetooth_printer_mac');
+    localStorage.removeItem('bluetooth_printer_name');
+    localStorage.removeItem('use_web_bluetooth');
+  } catch {}
+};
+
+/**
+ * Cek apakah aplikasi berjalan di Kiosk Android Bridge (developersismedika/webappprinter)
+ */
+export const isAndroidBridgeAvailable = (): boolean => {
+  return (
+    typeof window !== 'undefined' &&
+    !!(window as any).Android &&
+    typeof (window as any).Android.printToDevice === 'function'
+  );
+};
+
+/**
+ * Cek apakah plugin bluetooth serial native tersedia di perangkat (Capacitor/Cordova)
  */
 export const isBluetoothPluginAvailable = (): boolean => {
   return typeof window !== 'undefined' && !!(window as any).bluetoothSerial;
+};
+
+/**
+ * Putuskan koneksi socket Bluetooth secara bersih & hentikan scanning
+ */
+export const disconnectBluetooth = (): Promise<void> => {
+  return new Promise((resolve) => {
+    if (!isBluetoothPluginAvailable()) {
+      resolve();
+      return;
+    }
+    try {
+      // Hentikan proses scanning discovery jika sedang berjalan
+      if (typeof (window as any).bluetoothSerial?.stopDiscovering === 'function') {
+        (window as any).bluetoothSerial.stopDiscovering();
+      }
+      (window as any).bluetoothSerial.disconnect(
+        () => resolve(),
+        () => resolve()
+      );
+    } catch {
+      resolve();
+    }
+  });
 };
 
 /**
@@ -82,14 +151,18 @@ export const checkBluetoothConnected = (): Promise<boolean> => {
 
 /**
  * Sambungkan ke printer Bluetooth dengan timeout & mode fallback Insecure
+ * Mengikuti best practice: bersihkan socket lama terlebih dahulu sebelum connect!
  */
-export const connectBluetoothPrinter = (mac: string, timeoutMs = 4500): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (!isBluetoothPluginAvailable() || !mac) {
-      resolve(false);
-      return;
-    }
+export const connectBluetoothPrinter = async (mac: string, timeoutMs = 4500): Promise<boolean> => {
+  if (!isBluetoothPluginAvailable() || !mac) {
+    return false;
+  }
 
+  // 1. Bersihkan sisa socket lama dan berikan jeda singkat
+  await disconnectBluetooth();
+  await new Promise((r) => setTimeout(r, 150));
+
+  return new Promise((resolve) => {
     let finished = false;
     const timer = setTimeout(() => {
       if (!finished) {
@@ -109,7 +182,7 @@ export const connectBluetoothPrinter = (mac: string, timeoutMs = 4500): Promise<
         }
       },
       () => {
-        // Jika mode secure gagal, coba mode connectInsecure
+        // Jika mode secure gagal, coba mode connectInsecure (kompatibel printer murah/Cina)
         if (finished) return;
         (window as any).bluetoothSerial.connectInsecure(
           mac,
@@ -163,7 +236,7 @@ export const printViaRawBt = (text: string): boolean => {
     a.click();
     document.body.removeChild(a);
     return true;
-  } catch (e) {
+  } catch {
     try {
       const intentUrl = `intent:${encodeURIComponent(text)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
       const a = document.createElement('a');
@@ -179,7 +252,6 @@ export const printViaRawBt = (text: string): boolean => {
 };
 
 // ── GLOBAL RECONNECT EVENT BUS ──
-// Memungkinkan komponen modal popup global mendengarkan permintaan sambungkan printer
 export type PrinterPromptEvent = {
   pendingText: string;
   mac: string | null;
@@ -213,65 +285,99 @@ export interface PrintOptions {
   allowPrompt?: boolean; // Jika true, buka dialog reconnect jika putus
 }
 
+// Anti-spam lock untuk mencegah crash tabrakan socket
+let isPrintingLock = false;
+
 /**
- * FUNGSI UTAMA CETAK STRUK TERPADU (Digunakan oleh seluruh halaman aplikasi)
+ * FUNGSI UTAMA CETAK STRUK TERPADU (Smart On-Demand Socket ala webappprinter)
+ * Buka koneksi cepat -> Tembak data -> Lepas socket bersih
  */
 export const printThermalReceipt = async (
   rawText: string,
   options: PrintOptions = {}
-): Promise<{ success: boolean; method: 'bluetooth' | 'rawbt' | 'prompt' | 'failed' }> => {
-  const allowPrompt = options.allowPrompt !== false;
-  const btMac = getStoredPrinterMac();
+): Promise<{ success: boolean; method: 'android_bridge' | 'bluetooth' | 'rawbt' | 'prompt' | 'failed' }> => {
+  if (isPrintingLock) {
+    options.onError?.('Proses cetak sedang berlangsung, mohon tunggu...');
+    return { success: false, method: 'failed' };
+  }
 
-  // 1. Jika terdaftar Bluetooth Native Printer
-  if (btMac && isBluetoothPluginAvailable()) {
-    // Cek apakah socket saat ini sudah terhubung
-    const isConnected = await checkBluetoothConnected();
-    if (isConnected) {
-      const writeOk = await writeBluetoothData(rawText);
-      if (writeOk) {
-        options.onSuccess?.();
-        return { success: true, method: 'bluetooth' };
+  isPrintingLock = true;
+  try {
+    // 1. Prioritas Utama: Jika aplikasi berjalan di dalam Kiosk Wrapper Android (webappprinter bridge)
+    if (isAndroidBridgeAvailable()) {
+      try {
+        const res = (window as any).Android.printToDevice(rawText);
+        if (res === 'ok' || res === true) {
+          options.onSuccess?.();
+          return { success: true, method: 'android_bridge' };
+        }
+      } catch (e) {
+        console.warn('Gagal lewat Android bridge, mencoba metode lain...', e);
       }
     }
 
-    // Jika belum terhubung atau write gagal, coba silent auto-reconnect
-    const reconnected = await connectBluetoothPrinter(btMac, 3500);
-    if (reconnected) {
-      const writeAfterOk = await writeBluetoothData(rawText);
-      if (writeAfterOk) {
-        options.onSuccess?.();
-        return { success: true, method: 'bluetooth' };
+    // 2. Prioritas Kedua: Bluetooth Native (Capacitor / Cordova)
+    const btMac = getStoredPrinterMac();
+    if (btMac && isBluetoothPluginAvailable()) {
+      // Buka koneksi On-Demand (Fresh Socket)
+      let connected = await connectBluetoothPrinter(btMac, 4500);
+
+      if (connected) {
+        const writeOk = await writeBluetoothData(rawText);
+        if (writeOk) {
+          // Beri jeda 800ms agar seluruh buffer terkirim ke kertas printer
+          await new Promise((r) => setTimeout(r, 800));
+          // Lepas socket secara bersih (seperti webappprinter) agar printer bebas sleep
+          await disconnectBluetooth();
+          options.onSuccess?.();
+          return { success: true, method: 'bluetooth' };
+        }
       }
+
+      // Percobaan ulang (Retry sekali lagi jika printer baru bangun dari sleep)
+      await disconnectBluetooth();
+      await new Promise((r) => setTimeout(r, 200));
+      const retryConnected = await connectBluetoothPrinter(btMac, 4500);
+      if (retryConnected) {
+        const retryWriteOk = await writeBluetoothData(rawText);
+        if (retryWriteOk) {
+          await new Promise((r) => setTimeout(r, 800));
+          await disconnectBluetooth();
+          options.onSuccess?.();
+          return { success: true, method: 'bluetooth' };
+        }
+      }
+
+      // Jika printer benar-benar tidak merespons (misal mati/jauh)
+      if (options.allowPrompt !== false) {
+        triggerPrinterPrompt({
+          pendingText: rawText,
+          mac: btMac,
+          onSuccess: options.onSuccess
+        });
+        return { success: false, method: 'prompt' };
+      }
+
+      // Fallback otomatis ke RawBT
+      const rawBtOk = printViaRawBt(rawText);
+      if (rawBtOk) {
+        options.onSuccess?.();
+        return { success: true, method: 'rawbt' };
+      }
+      options.onError?.('Printer Bluetooth tidak merespons dan RawBT tidak tersedia');
+      return { success: false, method: 'failed' };
     }
 
-    // Jika auto-reconnect gagal dan diizinkan prompt dialog
-    if (allowPrompt) {
-      triggerPrinterPrompt({
-        pendingText: rawText,
-        mac: btMac,
-        onSuccess: options.onSuccess
-      });
-      return { success: false, method: 'prompt' };
-    }
-
-    // Fallback otomatis ke RawBT jika tidak ada prompt
+    // 3. Fallback ke RawBT Driver jika di browser atau belum pairing native bluetooth
     const rawBtOk = printViaRawBt(rawText);
     if (rawBtOk) {
       options.onSuccess?.();
       return { success: true, method: 'rawbt' };
     }
-    options.onError?.('Gagal cetak Bluetooth dan RawBT');
+
+    options.onError?.('Tidak ada driver atau printer Bluetooth yang disandingkan');
     return { success: false, method: 'failed' };
+  } finally {
+    isPrintingLock = false;
   }
-
-  // 2. Jika tidak ada Bluetooth Native / berjalan di Web Browser -> Gunakan RawBT
-  const rawBtOk = printViaRawBt(rawText);
-  if (rawBtOk) {
-    options.onSuccess?.();
-    return { success: true, method: 'rawbt' };
-  }
-
-  options.onError?.('Tidak ada driver printer yang tersedia');
-  return { success: false, method: 'failed' };
 };

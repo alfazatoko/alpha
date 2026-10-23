@@ -3,6 +3,7 @@ import {
   subscribePrinterPrompt,
   connectBluetoothPrinter,
   writeBluetoothData,
+  disconnectBluetooth,
   printViaRawBt,
   type PrinterPromptEvent
 } from '../lib/printerService';
@@ -42,11 +43,14 @@ export const PrinterReconnectModal: React.FC<{
       if (ok) {
         const writeOk = await writeBluetoothData(promptEvent.pendingText);
         if (writeOk) {
+          await new Promise((r) => setTimeout(r, 700));
+          await disconnectBluetooth();
           if (showToast) showToast('Printer tersambung & struk berhasil dicetak!');
           promptEvent.onSuccess?.();
           setPromptEvent(null);
           return;
         } else {
+          await disconnectBluetooth();
           setErrorStatus('Tersambung tetapi gagal mengirim data struk. Coba ulangi.');
         }
       } else {
