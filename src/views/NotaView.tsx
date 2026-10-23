@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { ArrowLeft, Printer, Plus, Trash2 } from "lucide-react";
 import { formatRupiah, formatInputRupiah, parseNominal, getLocalISOString, cn } from "../lib/utils";
+import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider } from "../lib/printerService";
 
 interface NotaItem {
   nama: string;
@@ -61,80 +62,36 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
     }, 0);
   };
 
-  // Helper: format baris teks rata tengah (untuk kertas thermal ~32 karakter)
-  const PAPER_WIDTH = 32;
-  const centerText = (text: string) => {
-    const pad = Math.max(0, Math.floor((PAPER_WIDTH - text.length) / 2));
-    return ' '.repeat(pad) + text;
-  };
-  const rightAlignTwo = (left: string, right: string) => {
-    const space = Math.max(1, PAPER_WIDTH - left.length - right.length);
-    return left + ' '.repeat(space) + right;
-  };
-  const divider = '-'.repeat(PAPER_WIDTH);
-
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const isNative = !!(window as any)?.Capacitor?.isNativePlatform?.() || /android/i.test(navigator.userAgent);
     
     if (isNative) {
-      // Format teks biasa tanpa tag kode (plain text untuk RawBT)
       const noRef = Date.now().toString().slice(-6);
       let receiptText = '';
-      receiptText += centerText(shopName) + '\n';
-      receiptText += centerText(address) + '\n';
+      receiptText += formatReceiptCenter(shopName) + '\n';
+      receiptText += formatReceiptCenter(address) + '\n';
       receiptText += `Tgl: ${tanggal}\n`;
       receiptText += `No: #${noRef}\n`;
-      receiptText += divider + '\n';
+      receiptText += formatReceiptDivider() + '\n';
       
       items.forEach(item => {
         receiptText += item.nama + '\n';
         const qtyHarga = `${item.jumlah} x ${item.harga}`;
         const total = formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0));
-        receiptText += rightAlignTwo(qtyHarga, total) + '\n';
+        receiptText += formatReceiptRow(qtyHarga, total) + '\n';
       });
       
-      receiptText += divider + '\n';
-      receiptText += rightAlignTwo('TOTAL:', formatRupiah(calculateTotal())) + '\n';
-      receiptText += divider + '\n';
-      receiptText += centerText(footerText) + '\n';
+      receiptText += formatReceiptDivider() + '\n';
+      receiptText += formatReceiptRow('TOTAL:', formatRupiah(calculateTotal())) + '\n';
+      receiptText += formatReceiptDivider() + '\n';
+      if (footerText) {
+        receiptText += formatReceiptCenter(footerText) + '\n';
+      }
       receiptText += '\n\n\n';
       
-      const btMacAddress = localStorage.getItem('bluetooth_printer_mac');
-      if (btMacAddress && (window as any).bluetoothSerial) {
-        // Gunakan bluetoothSerial jika terhubung ke native bluetooth
-        (window as any).bluetoothSerial.write(
-          receiptText,
-          () => {
-             // Berhasil cetak native
-          },
-          (err: any) => {
-             alert('Gagal cetak via Bluetooth Native: ' + err);
-          }
-        );
-      } else {
-        // Coba rawbt:// scheme via anchor click (lebih kompatibel di Capacitor WebView)
-        const tryPrint = (scheme: string) => {
-          const a = document.createElement('a');
-          a.href = scheme;
-          a.rel = 'noopener';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        };
-
-        try {
-          // Metode 1: rawbt: URI langsung (didukung semua versi RawBT)
-          tryPrint(`rawbt:${encodeURIComponent(receiptText)}`);
-        } catch (e) {
-          try {
-            // Metode 2: intent scheme sebagai fallback
-            tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
-          } catch (e2) {
-            console.error("Gagal mencetak via RawBT", e2);
-            alert("Gagal membuka printer. Pastikan aplikasi RawBT sudah terinstal dan printer sudah di-pair.");
-          }
-        }
-      }
+      await printThermalReceipt(receiptText, {
+        onError: (err) => alert('Gagal cetak nota: ' + err)
+      });
     } else {
       window.print();
     }

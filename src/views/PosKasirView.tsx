@@ -4,6 +4,7 @@ import { GlobalHeader } from '../components/GlobalHeader';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal';
 import { cn } from '../lib/utils';
 import { playTransactionSound } from '../lib/audioManager';
+import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider } from '../lib/printerService';
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Product {
   id: string;
@@ -348,81 +349,42 @@ const PosKasirView: React.FC<PosKasirViewProps> = ({ kasirName = 'Kasir', kasirR
     setShowDeleteConfirm(null);
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!showStruk) return;
-    
-    // Generate text for RawBT / Bluetooth Serial (ESC/POS compatible plain text)
-    const w = 32;
-    const center = (s: string) => {
-      const txt = s.substring(0, w);
-      return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
-    };
-    const right = (left: string, right: string) => {
-      const space = w - left.length - right.length;
-      return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
-    };
     
     const dateStr = new Date(showStruk.timestamp).toLocaleDateString('id-ID');
     const timeStr = new Date(showStruk.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    let text = center(printSettings.namaToko || 'TOKO SAYA') + '\n';
+    let text = formatReceiptCenter(printSettings.namaToko || 'TOKO SAYA') + '\n';
     if (printSettings.alamat) {
-      text += center(printSettings.alamat) + '\n';
+      text += formatReceiptCenter(printSettings.alamat) + '\n';
     }
-    text += '-'.repeat(w) + '\n';
+    text += formatReceiptDivider() + '\n';
     text += `No   : ${showStruk.id}\n`;
     text += `Kasir: ${showStruk.kasir}\n`;
     text += `Waktu: ${dateStr} ${timeStr}\n`;
-    text += '-'.repeat(w) + '\n';
+    text += formatReceiptDivider() + '\n';
     
     showStruk.items.forEach(item => {
-      text += `${item.product.nama.substring(0, w)}\n`;
-      text += right(`${item.qty} x ${item.product.harga.toLocaleString('id-ID')}`, (item.product.harga * item.qty).toLocaleString('id-ID')) + '\n';
+      text += `${item.product.nama.substring(0, 32)}\n`;
+      text += formatReceiptRow(`${item.qty} x ${item.product.harga.toLocaleString('id-ID')}`, (item.product.harga * item.qty).toLocaleString('id-ID')) + '\n';
     });
     
-    text += '-'.repeat(w) + '\n';
-    text += right('TOTAL', `Rp ${showStruk.grandTotal.toLocaleString('id-ID')}`) + '\n';
-    text += right(showStruk.metodeBayar, showStruk.metodeBayar === 'TUNAI' ? `Rp ${showStruk.uangDiterima.toLocaleString('id-ID')}` : 'LUNAS') + '\n';
+    text += formatReceiptDivider() + '\n';
+    text += formatReceiptRow('TOTAL', `Rp ${showStruk.grandTotal.toLocaleString('id-ID')}`) + '\n';
+    text += formatReceiptRow(showStruk.metodeBayar, showStruk.metodeBayar === 'TUNAI' ? `Rp ${showStruk.uangDiterima.toLocaleString('id-ID')}` : 'LUNAS') + '\n';
     
     if (showStruk.metodeBayar === 'TUNAI') {
-      text += right('Kembalian', `Rp ${showStruk.kembalian.toLocaleString('id-ID')}`) + '\n';
+      text += formatReceiptRow('Kembalian', `Rp ${showStruk.kembalian.toLocaleString('id-ID')}`) + '\n';
     }
     
-    text += '-'.repeat(w) + '\n';
+    text += formatReceiptDivider() + '\n';
     if (printSettings.ucapan) {
-      text += center(printSettings.ucapan) + '\n';
+      text += formatReceiptCenter(printSettings.ucapan) + '\n';
     }
     text += '\n\n\n'; // Feed lines for paper tear
 
-    // Eksekusi print menggunakan Bluetooth Native / RawBT
-    const btMac = localStorage.getItem('bluetooth_printer_mac');
-    if (btMac && (window as any).bluetoothSerial) {
-      // Connect first if not connected, but usually it's handled, let's just write.
-      // If write fails, we could try reconnecting, but write will throw error so user knows.
-      (window as any).bluetoothSerial.write(text, 
-        () => { console.log('Print bluetooth success'); }, 
-        (err: any) => {
-          // If write fails, maybe try to connect then write
-          (window as any).bluetoothSerial.connect(btMac, () => {
-             (window as any).bluetoothSerial.write(text, () => {}, () => alert('Gagal print ke Bluetooth: ' + err));
-          }, () => {
-             (window as any).bluetoothSerial.connectInsecure(btMac, () => {
-               (window as any).bluetoothSerial.write(text, () => {}, () => alert('Gagal print ke Bluetooth Insecure: ' + err));
-             }, () => {
-               alert('Gagal terhubung ke Printer Bluetooth. Pastikan printer menyala.');
-             });
-          });
-        }
-      );
-    } else {
-      // Fallback ke aplikasi RawBT via intent URI
-      const url = `rawbt:${encodeURIComponent(text)}`;
-      const a = document.createElement('a'); 
-      a.href = url; 
-      document.body.appendChild(a); 
-      a.click(); 
-      document.body.removeChild(a);
-    }
+    await printThermalReceipt(text);
   };
 
   return (

@@ -21,6 +21,7 @@ import { SelectorScreen } from './components/SelectorScreen'
 import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
+import { PrinterReconnectModal } from './components/PrinterReconnectModal'
 
 
 // Views
@@ -584,6 +585,8 @@ const App: React.FC = () => {
         googleUid={googleSession.user.id} 
         googleEmail={googleSession.user.email}
         onLogout={selectedRole === 'owner' ? handleExitStore : handleLogoutCashierOnly}
+        onExitStore={handleExitStore}
+        onSelectRole={handleSelectRole}
         kasirList={kasirList}
         setKasirList={setKasirList}
         refreshKasirList={(newList) => { if (newList) setKasirList(newList) }}
@@ -611,6 +614,8 @@ interface MainAppProps {
   googleUid: string
   googleEmail?: string
   onLogout: () => void
+  onExitStore?: () => void
+  onSelectRole?: (role: 'owner' | 'kasir', storeId: string | 'all', store?: Store) => void
   kasirList: Record<string, KasirAccount>
   setKasirList: React.Dispatch<React.SetStateAction<Record<string, KasirAccount>>>
   refreshKasirList: (newList?: Record<string, KasirAccount>) => void
@@ -629,6 +634,8 @@ const MainApp: React.FC<MainAppProps> = ({
   googleUid, 
   googleEmail, 
   onLogout, 
+  onExitStore,
+  onSelectRole,
   kasirList, 
   setKasirList,
   refreshKasirList, 
@@ -658,7 +665,14 @@ const MainApp: React.FC<MainAppProps> = ({
     const saved = localStorage.getItem('alphaPro_pantau_store_id')
     return saved || 'all'
   })
-  const [stores, setStores] = useState<Store[]>([])
+  const [stores, setStores] = useState<Store[]>(() => {
+    try {
+      const saved = localStorage.getItem('alphaPro_cached_stores')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const targetStoreId = activeRole === 'owner' ? pantauStoreId : activeStoreId
 
   useEffect(() => {
@@ -1838,9 +1852,9 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }, [activeStoreId, activeRole])
 
-  // Fetch stores list for owner
+  // Fetch stores list for owner & store switcher
   useEffect(() => {
-    if (activeRole !== 'owner') return
+    if (!googleUid) return
     const fetchStores = async () => {
       const { data, error } = await supabase
         .from('stores')
@@ -1849,6 +1863,7 @@ const MainApp: React.FC<MainAppProps> = ({
         .order('created_at', { ascending: true })
       if (!error && data) {
         setStores(data)
+        localStorage.setItem('alphaPro_cached_stores', JSON.stringify(data))
         if (data.length > 0) {
           const storeIds = data.map(s => s.id)
           supabase
@@ -1870,7 +1885,42 @@ const MainApp: React.FC<MainAppProps> = ({
       }
     }
     fetchStores()
-  }, [activeRole, googleUid])
+  }, [googleUid])
+
+  const handleSwitchStore = useCallback((newStoreId: string, targetStore?: Store) => {
+    if (!newStoreId) return
+    const storeObj = targetStore || stores.find(s => s.id === newStoreId)
+
+    setPantauStoreId(newStoreId)
+    localStorage.setItem('alphaPro_pantau_store_id', newStoreId)
+    localStorage.setItem('alphaPro_active_store_id', newStoreId)
+
+    if (storeObj) {
+      setStoreName(storeObj.name)
+      setStoreSubtext(storeObj.subtext || '')
+      setStorePhoto(storeObj.photo_url || '')
+      localStorage.setItem('alphaPro_active_store', JSON.stringify(storeObj))
+    }
+
+    if (activeRole === 'owner') {
+      if (onSelectRole) {
+        onSelectRole('owner', newStoreId, storeObj)
+      } else {
+        try {
+          const storedList = localStorage.getItem(`alphaPro_${newStoreId}_kasir_list`)
+          if (storedList) setKasirList(JSON.parse(storedList))
+          const storedFin = localStorage.getItem(`alphaPro_${newStoreId}_financial`)
+          if (storedFin && setFinancialSettings) setFinancialSettings(JSON.parse(storedFin))
+        } catch (e) {}
+      }
+    } else {
+      if (onSelectRole && storeObj) {
+        onSelectRole('kasir', newStoreId, storeObj)
+      } else if (onExitStore) {
+        onExitStore()
+      }
+    }
+  }, [stores, activeRole, onSelectRole, onExitStore, setKasirList, setFinancialSettings])
 
   // Sync active store details based on pantauStoreId or activeStore
   useEffect(() => {
@@ -3409,9 +3459,17 @@ const MainApp: React.FC<MainAppProps> = ({
               storeSubtext={storeSubtext}
               storePhoto={storePhoto}
               kasirName={account?.name}
-              kasirRole={account?.role}
+              kasirRole={activeRole || account?.role}
               setIsSidePanelOpen={setIsSidePanelOpen}
               onLogout={() => setShowLogoutConfirm(true)}
+              stores={stores}
+              currentStoreId={activeRole === 'owner' ? pantauStoreId : activeStoreId}
+              onSwitchStore={handleSwitchStore}
+              onExitStore={onExitStore || onLogout}
+              kasirList={kasirList}
+              filterKasir={filterKasir}
+              setFilterKasir={setFilterKasir}
+              onUpdateActiveCashier={onUpdateActiveCashier}
             />
           )}
       {screenSize === 'pc' ? (
@@ -3421,21 +3479,24 @@ const MainApp: React.FC<MainAppProps> = ({
 
           {/* Right Column: Dynamic View Container */}
           <div className="flex-1 h-full relative rounded-[2rem] overflow-hidden shadow-xl ring-1 ring-slate-100 bg-white dark:bg-slate-800 dark:ring-slate-600 flex flex-col">
-            {activeView !== 'view-akun' && activeView !== 'view-laporan' && activeView !== 'view-transaksi' && activeView !== 'view-beranda' && (
+            {activeView !== 'view-akun' && activeView !== 'view-laporan' && activeView !== 'view-transaksi' && activeView !== 'view-beranda' && activeView !== 'view-input-transaksi' && activeView !== 'view-pos-kasir' && !activeView.startsWith('view-owner-') && (
               <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-slate-800 rounded-t-[2rem] shadow-md">
                 <h2 className="text-lg font-black text-slate-800 dark:text-slate-200 capitalize">{(() => {
                   const titles: Record<string, string> = {
                     'view-beranda': 'Beranda',
+                    'view-input-transaksi': 'Input Transaksi',
+                    'view-pos-kasir': 'POS Kasir',
+                    'view-laporan-pos': 'Laporan POS Kasir',
                     'view-transaksi': 'Riwayat',
                     'view-laporan': 'Laporan',
-                    'view-akun': 'Akun',
-                    'view-isi-saldo': 'Transaksi',
+                    'view-akun': 'Pengaturan & Akun',
+                    'view-isi-saldo': 'Isi Saldo & Modal',
                     'view-kasbon': 'Kasbon',
                     'view-kontak': 'Kontak',
                     'view-stok-voucher': 'Voucher',
                     'view-kalender': 'Kalender',
                     'view-nota': 'Nota',
-                    'view-otomatis': 'Otomatis',
+                    'view-otomatis': 'Preset Otomatis',
                     'view-owner-monitor': 'Monitor Toko',
                     'view-owner-laporan': 'Profit & Laba Admin',
                     'view-owner-grafik': 'Grafik Penjualan',
@@ -3446,7 +3507,7 @@ const MainApp: React.FC<MainAppProps> = ({
                     'view-owner-backup': 'Backup & Restore',
                     'view-owner-saldo': 'Manajemen Saldo',
                     'view-owner-profit': 'Profit Keuntungan',
-                    'view-input-transaksi': 'Input Transaksi'
+                    'view-owner-audit': 'Audit Laci Kasir'
                   };
                   return titles[activeView] || 'Dashboard';
                 })()}</h2>
@@ -3454,7 +3515,34 @@ const MainApp: React.FC<MainAppProps> = ({
             )}
             {(() => {
               switch (activeView) {
-                case 'view-beranda':
+                case 'view-pos-kasir':
+                  return (
+                    <div className="h-full flex-1 flex flex-col bg-[#F7F7F7] dark:bg-slate-900 overflow-y-auto">
+                      <PosKasirView 
+                        kasirName={account?.name}
+                        kasirRole={account?.role}
+                        storeName={storeName}
+                        storeSubtext={storeSubtext}
+                        storePhoto={storePhoto}
+                        dayName={new Date().toLocaleDateString('id-ID', { weekday: 'long' })}
+                        fullDate={new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        clockStr={todayAbsen}
+                        storeId={targetStoreId}
+                        onBack={() => setActiveView('view-beranda')}
+                        onGoToLaporan={() => setActiveView('view-laporan-pos')}
+                      />
+                    </div>
+                  );
+                case 'view-laporan-pos':
+                  return (
+                    <div className="h-full flex-1 flex flex-col bg-[#F7F7F7] dark:bg-slate-900 overflow-y-auto">
+                      <LaporanPosView 
+                        storeId={targetStoreId} 
+                        onBack={() => setActiveView('view-pos-kasir')} 
+                      />
+                    </div>
+                  );
+                case 'view-input-transaksi':
                   return (
                     <div className="h-full flex flex-col p-6 gap-6 bg-slate-50 dark:bg-slate-900 overflow-y-auto custom-scrollbar">
                       <div className="grid grid-cols-5 gap-4 shrink-0">
@@ -3507,16 +3595,31 @@ const MainApp: React.FC<MainAppProps> = ({
 
                       <div className="flex gap-6 flex-1 min-h-0">
                         {/* Transaction Form (Left/Main side) */}
-                        <div className="flex-[2] min-h-0 bg-white dark:bg-slate-800 rounded-[2rem] p-8 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 flex flex-col relative overflow-hidden">
-                          <div className="flex items-center gap-3 mb-6 shrink-0">
-                            <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                            <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Input Transaksi</h3>
+                        <div className="flex-[1.2] min-h-0 min-w-0 bg-white dark:bg-slate-800 rounded-[2rem] p-6 lg:p-8 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 flex flex-col relative overflow-hidden">
+                          <div className="flex items-center justify-between mb-6 shrink-0">
+                            <div className="flex items-center gap-3">
+                              <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                              <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Input Transaksi Kasir</h3>
+                            </div>
+                            <button
+                              onClick={() => setActiveView('view-beranda')}
+                              className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95"
+                            >
+                              <i className="fa-solid fa-house text-[10px]"></i>
+                              <span>Ke Beranda</span>
+                            </button>
                           </div>
                           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
                             <TransactionForm 
                               onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
                               isOwner={activeRole === 'owner'}
                               lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
+                              onOpenVoucherJualCepat={() => {
+                                setActiveView('view-stok-voucher');
+                                setTimeout(() => {
+                                  window.dispatchEvent(new CustomEvent('open-voucher-quick-sale'));
+                                }, 100);
+                              }}
                               onOpenRiwayatDetail={(tx) => {
                                 setActiveView('view-transaksi');
                                 setTimeout(() => {
@@ -3527,33 +3630,133 @@ const MainApp: React.FC<MainAppProps> = ({
                           </div>
                         </div>
                         
-                        {/* Right Side: Summary Cards & Akses Cepat */}
-                        <div className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 pb-6">
-                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
-                            <SummaryCards totalAdmin={totalAdmin} totalVolume={totalVolume} totalTransactions={todayTransactions.length} />
-                          </div>
-                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
-                            <div className="flex items-center gap-2 mb-4">
-                              <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
-                              <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Akses Cepat</h3>
+                        {/* Right Side: Summary Cards & Akses Cepat (Diperbesar ke samping kiri) */}
+                        <div className="flex-1 flex flex-col gap-5 overflow-y-auto custom-scrollbar pr-2 pb-6 min-w-[360px] max-w-[480px]">
+                          {/* Card Rekap Transaksi Hari Ini */}
+                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-5 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
+                            <div className="flex items-center justify-between mb-3.5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+                                <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Rekap Kasir Hari Ini</h3>
+                              </div>
+                              <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/30 uppercase tracking-wider">
+                                Live Stat
+                              </span>
                             </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-center">
+
+                            <div className="space-y-2.5">
+                              {/* Total Transaksi */}
+                              <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-50/70 to-indigo-50/40 dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-100/80 dark:border-blue-900/40 flex items-center justify-between transition-all hover:shadow-xs">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shadow-blue-600/20 shrink-0">
+                                    <i className="fa-solid fa-receipt text-xs"></i>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider block">
+                                      Transaksi
+                                    </span>
+                                    <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500">
+                                      Total nota tercatat hari ini
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums leading-none">
+                                    {todayTransactions.length}
+                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 ml-1">Trx</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Total Volume */}
+                              <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-50/70 to-indigo-50/40 dark:from-purple-950/30 dark:to-indigo-950/20 border border-purple-100/80 dark:border-purple-900/40 flex items-center justify-between transition-all hover:shadow-xs">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm shadow-purple-600/20 shrink-0">
+                                    <i className="fa-solid fa-chart-line text-xs"></i>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider block">
+                                      Volume
+                                    </span>
+                                    <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500">
+                                      Perputaran uang bruto
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-black text-slate-900 dark:text-white tabular-nums leading-none" title={formatRupiah(totalVolume)}>
+                                    {formatRupiah(totalVolume)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Profit (Laba Kasir) */}
+                              <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-50/80 to-teal-50/40 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-100/80 dark:border-emerald-900/40 flex items-center justify-between transition-all hover:shadow-xs">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shadow-emerald-600/20 shrink-0">
+                                    <i className="fa-solid fa-wallet text-xs"></i>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                                      Profit
+                                    </span>
+                                    <span className="text-[9px] font-medium text-emerald-600/80 dark:text-emerald-400/80">
+                                      Keuntungan admin kasir
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums leading-none" title={formatRupiah(totalAdmin)}>
+                                    +{formatRupiah(totalAdmin)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Akses Cepat */}
+                          <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-5 shadow-xl ring-1 ring-slate-100 dark:ring-slate-700/50 shrink-0">
+                            <div className="flex items-center justify-between mb-3.5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-4 bg-purple-600 rounded-full"></div>
+                                <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Akses Cepat</h3>
+                              </div>
+                              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Fitur Kasir</span>
+                            </div>
+
+                            <div className="space-y-2">
                               {[
-                                { id: 'view-kasbon', label: 'KASBON', icon: 'fa-file-invoice', color: 'bg-blue-500 hover:bg-blue-600' },
-                                { id: 'view-kontak', label: 'KONTAK', icon: 'fa-address-book', color: 'bg-emerald-500 hover:bg-emerald-600' },
-                                { id: 'view-stok-voucher', label: 'VOUCHER', icon: 'fa-ticket', color: 'bg-orange-500 hover:bg-orange-600' },
-                                { id: 'view-kalender', label: 'KALENDER', icon: 'fa-calendar-days', color: 'bg-red-500 hover:bg-red-600' },
-                                { id: 'view-nota', label: 'NOTA', icon: 'fa-receipt', color: 'bg-purple-500 hover:bg-purple-600' },
+                                { id: 'view-kasbon', label: 'KASBON', desc: 'Catat kasbon kasir & piutang pelanggan', icon: 'fa-file-invoice', color: 'from-blue-500 to-indigo-600', shadow: 'shadow-blue-500/20', hoverBorder: 'hover:border-blue-300 dark:hover:border-blue-800' },
+                                { id: 'view-kontak', label: 'KONTAK', desc: 'Buku nomor HP & kontak pelanggan', icon: 'fa-address-book', color: 'from-emerald-500 to-teal-600', shadow: 'shadow-emerald-500/20', hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-800' },
+                                { id: 'view-stok-voucher', label: 'VOUCHER', desc: 'Stok voucher fisik & inject kuota', icon: 'fa-ticket', color: 'from-amber-500 to-orange-600', shadow: 'shadow-amber-500/20', hoverBorder: 'hover:border-amber-300 dark:hover:border-amber-800' },
+                                { id: 'view-kalender', label: 'KALENDER', desc: 'Jadwal kerja & agenda pengingat toko', icon: 'fa-calendar-days', color: 'from-rose-500 to-red-600', shadow: 'shadow-rose-500/20', hoverBorder: 'hover:border-rose-300 dark:hover:border-rose-800' },
+                                { id: 'view-nota', label: 'NOTA', desc: 'Cetak & buat struk nota belanja', icon: 'fa-receipt', color: 'from-purple-500 to-violet-600', shadow: 'shadow-purple-500/20', hoverBorder: 'hover:border-purple-300 dark:hover:border-purple-800' },
                               ].map((item) => (
                                 <button 
                                   key={item.id} 
                                   onClick={() => setActiveView(item.id)} 
-                                  className={"flex flex-col items-center justify-center p-3 group active:scale-95 transition-transform bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700/50 hover:border-slate-300 dark:hover:border-slate-600 " + (activeView === item.id ? "ring-2 ring-violet-500" : "")}
+                                  className={cn(
+                                    "w-full p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/50 hover:bg-white dark:hover:bg-slate-800/90 transition-all duration-200 flex items-center justify-between group active:scale-[0.98] shadow-xs cursor-pointer",
+                                    item.hoverBorder,
+                                    activeView === item.id ? "ring-2 ring-violet-500 bg-white dark:bg-slate-800" : ""
+                                  )}
                                 >
-                                  <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md transition-colors", item.color)}>
-                                    <i className={cn("fa-solid text-sm", item.icon)}></i>
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={cn("w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center text-white shadow-sm shrink-0 transition-transform duration-200 group-hover:scale-105", item.color, item.shadow)}>
+                                      <i className={cn("fa-solid text-xs", item.icon)}></i>
+                                    </div>
+                                    <div className="text-left min-w-0">
+                                      <h4 className="text-[11px] font-black text-slate-800 dark:text-white uppercase tracking-wider group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                        {item.label}
+                                      </h4>
+                                      <p className="text-[9px] font-medium text-slate-400 dark:text-slate-500 mt-0.5 leading-tight">
+                                        {item.desc}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <p className="text-[8px] font-black text-slate-700 dark:text-slate-300 mt-2 tracking-tighter uppercase">{item.label}</p>
+                                  <div className="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 text-slate-400 group-hover:text-blue-600 flex items-center justify-center shrink-0 ml-2 transition-all">
+                                    <i className="fa-solid fa-chevron-right text-[8px] group-hover:translate-x-0.5 transition-transform"></i>
+                                  </div>
                                 </button>
                               ))}
                             </div>
@@ -3744,6 +3947,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       targetStoreId={targetStoreId}
                     />
                   );
+                case 'view-beranda':
                 case 'view-owner-monitor':
                 case 'view-owner-laporan':
                 case 'view-owner-grafik':
@@ -3753,6 +3957,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 case 'view-owner-backup':
                 case 'view-owner-saldo':
                 case 'view-owner-profit':
+                case 'view-owner-audit':
                   return (
                     <BerandaView
                       active={true}
@@ -4577,6 +4782,7 @@ const MainApp: React.FC<MainAppProps> = ({
       />
         </>
       )}
+      <PrinterReconnectModal showToast={showToast} />
     </div>
   )
 }

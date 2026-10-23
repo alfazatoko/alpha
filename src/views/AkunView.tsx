@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { cn, compressImage, getShiftInfo, getActiveShifts, APP_VERSION } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { printThermalReceipt, formatReceiptCenter, formatReceiptDivider, checkBluetoothConnected } from '../lib/printerService'
 
 interface AkunViewProps {
   active: boolean
@@ -147,13 +148,23 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   useEffect(() => {
+    const targetCat = localStorage.getItem('open_akun_category');
+    const targetTab = localStorage.getItem('open_akun_tab');
+    if (targetCat || targetTab) {
+      if (targetTab) setActiveTab(targetTab);
+      if (targetCat) setOpenCategory(targetCat);
+      localStorage.removeItem('open_akun_category');
+      localStorage.removeItem('open_akun_tab');
+      return;
+    }
+
     if (props.forceTab) {
       setActiveTab(props.forceTab)
       setOpenCategory(props.forceTab)
     } else {
       setActiveTab(props.kasirRole === 'owner' ? 'profil' : 'kasirSelf')
     }
-  }, [props.kasirRole, props.forceTab])
+  }, [props.kasirRole, props.forceTab, props.active])
 
   const getTabColorClasses = (color: string, isActive: boolean) => {
     if (isActive) return "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-md"
@@ -181,6 +192,46 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   // removed duplicated openCategory
   const [savedStatus, setSavedStatus] = useState(false)
   const [isCloudLoading, setIsCloudLoading] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
+    try { return localStorage.getItem('alpha_last_sync_time'); } catch { return null; }
+  });
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [dbPingTime, setDbPingTime] = useState<number | null>(null);
+
+  const checkDatabaseConnection = async (showNotification = false) => {
+    try {
+      setDbStatus('checking');
+      const start = performance.now();
+      const { error } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).limit(1);
+      const ping = Math.round(performance.now() - start);
+      if (error) throw error;
+      setDbStatus('connected');
+      setDbPingTime(ping);
+      if (showNotification) alert(`Koneksi Database Normal!\nStatus: Online & Terhubung\nPing: ${ping}ms`);
+    } catch (err: any) {
+      console.warn("Database connection check:", err);
+      setDbStatus('disconnected');
+      setDbPingTime(null);
+      if (showNotification) alert(`Koneksi Database Terputus / Offline:\n${err.message || 'Tidak dapat menghubungi server Supabase.'}`);
+    }
+  };
+
+  useEffect(() => {
+    checkDatabaseConnection();
+  }, []);
+
+  const handleTestPrint = async () => {
+    const text = formatReceiptCenter('TES CETAK THERMAL BERHASIL') + '\n'
+      + formatReceiptCenter(props.storeName || 'TOKO SAYA') + '\n'
+      + formatReceiptDivider() + '\n'
+      + 'Waktu : ' + new Date().toLocaleDateString('id-ID') + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '\n'
+      + 'Driver: ESC/POS Thermal 32 Kolom\n'
+      + 'Status: Koneksi Normal & Siap Pakai\n'
+      + formatReceiptDivider() + '\n'
+      + formatReceiptCenter('ALFAZA POS SYSTEM') + '\n\n\n';
+    
+    await printThermalReceipt(text);
+  };
 
   // State for cashier self-edit
   const [editKasirName, setEditKasirName] = useState('')
@@ -344,16 +395,29 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [pairedDevices, setPairedDevices] = useState<any[]>([]);
   const [btMacAddress, setBtMacAddress] = useState<string | null>(localStorage.getItem('bluetooth_printer_mac'));
   const [isScanningBt, setIsScanningBt] = useState(false);
+  const [autoPrintGaji, setAutoPrintGaji] = useState(() => localStorage.getItem('auto_print_gaji') === 'true');
 
   useEffect(() => {
-    if (btMacAddress && (window as any).bluetoothSerial) {
-      (window as any).bluetoothSerial.isConnected(
-        () => setBtConnected(true),
-        () => setBtConnected(false)
-      );
-    } else if (btMacAddress && localStorage.getItem('use_web_bluetooth')) {
-      setBtConnected(true);
-    }
+    const checkStatus = () => {
+      const storedMac = localStorage.getItem('bluetooth_printer_mac');
+      if (storedMac !== btMacAddress) {
+        setBtMacAddress(storedMac);
+      }
+      if ((window as any).bluetoothSerial) {
+        (window as any).bluetoothSerial.isConnected(
+          () => setBtConnected(true),
+          () => setBtConnected(false)
+        );
+      } else if (storedMac && localStorage.getItem('use_web_bluetooth')) {
+        setBtConnected(true);
+      } else {
+        setBtConnected(false);
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
   }, [btMacAddress]);
 
   const requestBluetoothPermissions = (callback: () => void, errorCallback: (err: string) => void) => {
@@ -875,37 +939,67 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const handleUploadToCloud = async () => {
     if (!props.onUploadToCloud) return
     setIsCloudLoading(true)
-    await props.onUploadToCloud()
-    setIsCloudLoading(false)
+    try {
+      await props.onUploadToCloud()
+      const now = new Date().toISOString()
+      localStorage.setItem('alpha_last_sync_time', now)
+      setLastSyncTime(now)
+      setDbStatus('connected')
+    } catch (err: any) {
+      console.error("Upload error:", err)
+      setDbStatus('disconnected')
+    } finally {
+      setIsCloudLoading(false)
+    }
   }
 
   const handleDownloadFromCloud = async () => {
     if (!props.onDownloadFromCloud) return
 
+    const doDownload = async () => {
+      setIsCloudLoading(true)
+      try {
+        await props.onDownloadFromCloud?.(false)
+        const now = new Date().toISOString()
+        localStorage.setItem('alpha_last_sync_time', now)
+        setLastSyncTime(now)
+        setDbStatus('connected')
+      } catch (err: any) {
+        console.error("Download error:", err)
+        setDbStatus('disconnected')
+      } finally {
+        setIsCloudLoading(false)
+      }
+    }
+
     if (props.onConfirm) {
       props.onConfirm(
         "DOWNLOAD DARI CLOUD",
         "Pengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?",
-        async () => {
-          setIsCloudLoading(true)
-          await props.onDownloadFromCloud?.(false)
-          setIsCloudLoading(false)
-        }
+        doDownload
       )
     } else {
       if (!confirm('PERINGATAN!\nPengaturan lokal HP ini (Kasir, PIN, dll) akan DITIMPA oleh data dari Cloud. Lanjutkan?')) return
-      setIsCloudLoading(true)
-      await props.onDownloadFromCloud(false)
-      setIsCloudLoading(false)
+      await doDownload()
     }
   }
 
   const handleSyncAll = async () => {
     if (!props.onUploadToCloud || !props.onDownloadFromCloud) return
     setIsCloudLoading(true)
-    await props.onUploadToCloud()
-    await props.onDownloadFromCloud(true)
-    setIsCloudLoading(false)
+    try {
+      await props.onUploadToCloud()
+      await props.onDownloadFromCloud(true)
+      const now = new Date().toISOString()
+      localStorage.setItem('alpha_last_sync_time', now)
+      setLastSyncTime(now)
+      setDbStatus('connected')
+    } catch (err: any) {
+      console.error("Sync all error:", err)
+      setDbStatus('disconnected')
+    } finally {
+      setIsCloudLoading(false)
+    }
   }
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2385,29 +2479,44 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                 <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
                               </a>
                               <button 
-                                onClick={() => {
-                                  const w = 32;
-                                  const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
-                                  const text = center('TEST PRINT BERHASIL') + '\n'
-                                    + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
-                                    + center('berjalan normal.') + '\n'
-                                    + '-'.repeat(w) + '\n\n\n';
-                                    
-                                  const btMac = localStorage.getItem('bluetooth_printer_mac');
-                                  if (btMac && (window as any).bluetoothSerial) {
-                                    (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
-                                  } else {
-                                    const url = `rawbt:${encodeURIComponent(text)}`;
-                                    const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                                  }
-                                }}
-                                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
+                                onClick={handleTestPrint}
+                                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all"
                               >
-                                <i className="fa-solid fa-print mr-1.5"></i> Tes Print
+                                <i className="fa-solid fa-print mr-1.5"></i> Tes Print Thermal
                               </button>
                             </div>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Opsi Auto-Print Slip Gaji & Struk */}
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                            <i className="fa-solid fa-print text-sm"></i>
+                          </div>
+                          <div>
+                            <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">
+                              Auto-Print Slip Gaji
+                            </h4>
+                            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold leading-tight mt-0.5">
+                              Cetak otomatis langsung saat printer Bluetooth terhubung (tanpa buka dialog preview).
+                            </p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                          <input 
+                            type="checkbox" 
+                            checked={autoPrintGaji} 
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setAutoPrintGaji(val);
+                              localStorage.setItem('auto_print_gaji', String(val));
+                            }} 
+                            className="sr-only peer" 
+                          />
+                          <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-[10px] font-bold uppercase mt-4">
@@ -2490,22 +2599,77 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               {activeTab === 'cloud' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm">
-                    <div className="flex flex-col items-center text-center max-w-xl mx-auto py-6">
-                      <div className="w-16 h-16 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-6 border border-purple-100 dark:border-purple-900/50 shadow-inner">
-                        <i className={cn("fa-solid text-2xl", isCloudLoading ? "fa-circle-notch fa-spin" : "fa-cloud")}></i>
+                    <div className="flex flex-col items-center text-center max-w-xl mx-auto py-4">
+                      <div className="w-16 h-16 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-5 border border-purple-100 dark:border-purple-900/50 shadow-inner">
+                        <i className={cn("fa-solid text-2xl", isCloudLoading ? "fa-circle-notch fa-spin" : "fa-database")}></i>
                       </div>
 
-                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Sinkronisasi Supabase Cloud</h3>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Backup global dan sinkronisasi data antar kasir realtime</p>
+                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-1">Pengaturan Online Database & Cloud</h3>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-6">Pusat kontrol sinkronisasi data kasir, stok, dan laporan secara realtime</p>
+
+                      {/* Live Database Status Card */}
+                      <div className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 mb-5 text-left flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-3.5 h-3.5 rounded-full shrink-0",
+                            dbStatus === 'connected' ? "bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400" : dbStatus === 'checking' ? "bg-amber-400 animate-spin" : "bg-rose-500"
+                          )} />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                                {dbStatus === 'connected' ? 'Supabase Online Database' : dbStatus === 'checking' ? 'Memeriksa Server Online...' : 'Koneksi Database Offline'}
+                              </h4>
+                              <span className={cn(
+                                "text-[8px] font-black uppercase px-2 py-0.5 rounded-md",
+                                dbStatus === 'connected' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400" : dbStatus === 'checking' ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
+                              )}>
+                                {dbStatus === 'connected' ? 'Terhubung' : dbStatus === 'checking' ? 'Checking' : 'Terputus'}
+                              </span>
+                            </div>
+                            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-0.5">
+                              {dbStatus === 'connected' && dbPingTime !== null ? `Latensi Jaringan: ${dbPingTime} ms • Sinkron Otomatis Aktif` : dbStatus === 'checking' ? 'Menghubungkan ke server PostgreSQL Supabase...' : 'Perangkat tidak terhubung ke internet'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => checkDatabaseConnection(true)}
+                          disabled={dbStatus === 'checking'}
+                          className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[9px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                          title="Cek respon server sekarang"
+                        >
+                          <i className={cn("fa-solid", dbStatus === 'checking' ? "fa-circle-notch fa-spin text-amber-500" : "fa-bolt text-purple-600")}></i>
+                          <span>Tes Ping</span>
+                        </button>
+                      </div>
+
+                      {/* Detail Status Grid */}
+                      <div className="grid grid-cols-3 gap-3 w-full mb-6">
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-center">
+                          <span className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Penyedia Database</span>
+                          <span className="text-[10px] font-black text-slate-800 dark:text-slate-200">Supabase Cloud</span>
+                        </div>
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-center">
+                          <span className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Status Auto-Sync</span>
+                          <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">Aktif Realtime</span>
+                        </div>
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-center">
+                          <span className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase mb-1">Terakhir Sinkron</span>
+                          <span className="text-[10px] font-black text-purple-700 dark:text-purple-400">
+                            {lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Belum Pernah'}
+                          </span>
+                        </div>
+                      </div>
 
                       <button
                         onClick={handleSyncAll}
                         disabled={isCloudLoading}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-2xl font-black text-xs shadow-lg shadow-purple-200 dark:shadow-none uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 mb-6"
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-2xl font-black text-xs shadow-lg shadow-purple-200 dark:shadow-none uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 mb-4"
                         style={{ color: '#ffffff' }}
                       >
                         <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-arrows-rotate"}></i>
-                        {isCloudLoading ? 'Membaca dan Menyinkronkan...' : 'MULAI UPDATE SYNC'}
+                        {isCloudLoading ? 'Membaca dan Menyinkronkan...' : 'MULAI UPDATE SYNC (UPLOAD & DOWNLOAD)'}
                       </button>
 
                       <div className="grid grid-cols-2 gap-4 w-full">
@@ -2515,7 +2679,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-3.5 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
                         >
                           <i className="fa-solid fa-cloud-arrow-up text-purple-600"></i>
-                          Upload Data
+                          Upload Data Lokal
                         </button>
                         <button
                           onClick={handleDownloadFromCloud}
@@ -2523,11 +2687,11 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-3.5 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
                         >
                           <i className="fa-solid fa-cloud-arrow-down text-purple-600"></i>
-                          Download Data
+                          Download Data Cloud
                         </button>
                       </div>
 
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter mt-8 leading-relaxed">
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter mt-6 leading-relaxed">
                         * Update Sync akan mengunggah data lokal Anda ke server cloud terlebih dahulu, lalu mengunduh versi komprehensif terbaru untuk disamakan pada semua perangkat kasir.
                       </p>
                     </div>
@@ -5002,36 +5166,89 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               className="w-full flex items-center px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
             >
               <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mr-3">
-                <i className="fa-solid fa-cloud text-xs"></i>
+                <i className="fa-solid fa-database text-xs"></i>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-black text-gray-900 leading-tight">Sinkronisasi Cloud</p>
-                <p className="text-[9px] text-gray-400 font-medium mt-0.5">Backup data & samakan setelan dengan perangkat lain</p>
+                <p className="text-[11px] font-black text-gray-900 leading-tight">Setting Online Database</p>
+                <p className="text-[9px] text-gray-400 font-medium mt-0.5">Status koneksi Supabase & sinkronisasi realtime</p>
               </div>
               <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'cloud' && "rotate-180")} />
             </button>
             {openCategory === 'cloud' && (
-              <div className="p-5 bg-purple-50/50 border-t border-purple-50 animate-in slide-in-from-top-2 duration-300 space-y-3">
+              <div className="p-4 bg-purple-50/40 border-t border-purple-100 animate-in slide-in-from-top-2 duration-300 space-y-3">
+                {/* Live Connection Card */}
+                <div className="p-3 bg-white border border-purple-100 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <div className={cn(
+                      "w-3 h-3 rounded-full shrink-0",
+                      dbStatus === 'connected' ? "bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400" : dbStatus === 'checking' ? "bg-amber-400 animate-spin" : "bg-rose-500"
+                    )} />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-black text-gray-800 uppercase">
+                          {dbStatus === 'connected' ? 'DATABASE ONLINE' : dbStatus === 'checking' ? 'MEMERIKSA...' : 'DATABASE OFFLINE'}
+                        </span>
+                        <span className={cn(
+                          "text-[7px] font-black uppercase px-1.5 py-0.2 rounded",
+                          dbStatus === 'connected' ? "bg-emerald-100 text-emerald-700" : dbStatus === 'checking' ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
+                        )}>
+                          {dbStatus === 'connected' ? 'TERKONEKSI' : dbStatus === 'checking' ? 'CHECK' : 'TERPUTUS'}
+                        </span>
+                      </div>
+                      <p className="text-[8px] font-bold text-gray-400 mt-0.5">
+                        {dbStatus === 'connected' && dbPingTime !== null ? `Supabase Cloud • Respon ${dbPingTime}ms` : 'Periksa jaringan internet Anda'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => checkDatabaseConnection(true)}
+                    disabled={dbStatus === 'checking'}
+                    className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 text-[8px] font-black rounded-lg border border-purple-200 transition-all flex items-center gap-1"
+                  >
+                    <i className={cn("fa-solid text-[7px]", dbStatus === 'checking' ? "fa-circle-notch fa-spin text-amber-500" : "fa-bolt")}></i>
+                    Ping DB
+                  </button>
+                </div>
+
+                {/* Status Badges */}
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="p-2 bg-white border border-purple-100 rounded-xl">
+                    <span className="block text-[7px] font-bold text-gray-400 uppercase">AUTO-SYNC REALTIME</span>
+                    <span className="text-[9px] font-black text-emerald-600">Aktif Antar Kasir</span>
+                  </div>
+                  <div className="p-2 bg-white border border-purple-100 rounded-xl">
+                    <span className="block text-[7px] font-bold text-gray-400 uppercase">TERAKHIR SINKRON</span>
+                    <span className="text-[9px] font-black text-purple-700">
+                      {lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Belum'}
+                    </span>
+                  </div>
+                </div>
+
                 <button
                   onClick={handleSyncAll}
                   disabled={isCloudLoading}
-                  className="w-full bg-purple-600 border border-purple-600 text-white py-3.5 rounded-xl font-black text-[10px] shadow-lg shadow-purple-200 uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50"
+                  className="w-full bg-purple-600 border border-purple-600 text-white py-3 rounded-xl font-black text-[10px] shadow-lg shadow-purple-200 uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700 disabled:opacity-50"
                   style={{ color: '#ffffff' }}
                 >
                   <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-arrows-rotate"}></i>
-                  {isCloudLoading ? 'Sinkronisasi...' : 'Update Sync'}
+                  {isCloudLoading ? 'Sedang Sinkronisasi...' : 'UPDATE SYNC SEMUA'}
                 </button>
+
                 <div className="flex gap-2">
                   <button onClick={handleUploadToCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
                     <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-up"}></i>
-                    Upload
+                    Upload Lokal
                   </button>
                   <button onClick={handleDownloadFromCloud} disabled={isCloudLoading} className="flex-1 bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-black text-[9px] shadow-sm uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-purple-50 disabled:opacity-50">
                     <i className={isCloudLoading ? "fa-solid fa-circle-notch fa-spin" : "fa-solid fa-cloud-arrow-down"}></i>
-                    Download
+                    Download Cloud
                   </button>
                 </div>
-                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-1">Update Sync = Upload lokal ke cloud, lalu download terbaru dari cloud. Gunakan untuk menyamakan data antar perangkat.</p>
+
+                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter px-1 text-center mt-1">
+                  * Update Sync = Upload data lokal ke server online, lalu ambil pembaruan termutakhir untuk diselaraskan ke semua perangkat kasir.
+                </p>
               </div>
             )}
 
@@ -5124,25 +5341,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               <i className="fa-brands fa-google-play mr-1.5"></i> Download RawBT
                             </a>
                             <button 
-                              onClick={() => {
-                                const w = 32;
-                                const center = (s: string) => ' '.repeat(Math.max(0, Math.floor((w - s.length) / 2))) + s;
-                                const text = center('TEST PRINT BERHASIL') + '\n'
-                                  + center('Koneksi RawBT & Aplikasi Kasir') + '\n'
-                                  + center('berjalan normal.') + '\n'
-                                  + '-'.repeat(w) + '\n\n\n';
-                                  
-                                const btMac = localStorage.getItem('bluetooth_printer_mac');
-                                if (btMac && (window as any).bluetoothSerial) {
-                                  (window as any).bluetoothSerial.write(text, () => {}, (err: any) => alert('Test print native gagal: ' + err));
-                                } else {
-                                  const url = `rawbt:${encodeURIComponent(text)}`;
-                                  const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                                }
-                              }}
+                              onClick={handleTestPrint}
                               className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all text-center"
                             >
-                              <i className="fa-solid fa-print mr-1.5"></i> Tes Print
+                              <i className="fa-solid fa-print mr-1.5"></i> Tes Print Thermal
                             </button>
                           </div>
                        </div>

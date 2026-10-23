@@ -9,6 +9,7 @@ import PosKasirView from './PosKasirView'
 import type { Transaction, Store } from '../types'
 import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 import ProfitOwnerView from './ProfitOwnerView'
+import { printThermalReceipt } from '../lib/printerService'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -152,7 +153,8 @@ const GajiPanel: React.FC<{
   transactions?: any[]
   gajiBonusList?: any[]
   fetchGajiBonus?: () => void
-}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId, transactions, gajiBonusList, fetchGajiBonus }) => {
+  onConfirm?: (t: string, m: string, c: () => void) => void
+}> = ({ kasirList, absensiList, storeName, showToast, activeStoreId, transactions, gajiBonusList, fetchGajiBonus, onConfirm }) => {
   if (activeStoreId === 'all') {
     return (
       <div className="p-6 text-center bg-amber-50 border border-amber-100 rounded-2xl">
@@ -205,6 +207,21 @@ const GajiPanel: React.FC<{
   })
   const [bonusNominal, setBonusNominal] = useState<string>('')
   const [bonusIsPaid, setBonusIsPaid] = useState<boolean>(true)
+
+  // State untuk Edit Riwayat Bonus
+  const [editingBonus, setEditingBonus] = useState<{
+    id: any;
+    kasir_id: string;
+    periode: string;
+    nominal: string;
+    isPaid: boolean;
+  } | null>(null);
+  const [isSavingBonus, setIsSavingBonus] = useState(false);
+
+  // State untuk Review & Print Struk Gaji
+  const [reviewReceiptText, setReviewReceiptText] = useState<string | null>(null);
+  const [reviewViewMode, setReviewViewMode] = useState<'visual' | 'raw'>('visual');
+  const [autoPrintSetting, setAutoPrintSetting] = useState<boolean>(() => localStorage.getItem('auto_print_gaji') === 'true');
   useEffect(() => {
     const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`)
     if (saved) {
@@ -281,16 +298,20 @@ const GajiPanel: React.FC<{
 
   const izinCount = izinList.filter(iz => iz.nama === selectedName && iz.tanggal.startsWith(month)).length
 
-  const hariKerja = editHariKerja ? (parseInt(hariKerjaManual) || 0) : autoHadirDays
-  const hariLibur = editLibur ? (parseInt(liburManual) || 0) : autoLiburDays
-  const hariLembur = editLemburHari ? (parseInt(lemburHariManual) || 0) : autoLemburDays
-  const currentIzin = editIzin ? (parseInt(izinManual) || 0) : izinCount
+  const hariKerja = editHariKerja ? (isNaN(parseInt(hariKerjaManual)) ? 0 : Math.max(0, parseInt(hariKerjaManual))) : autoHadirDays
+  const hariLibur = editLibur ? (isNaN(parseInt(liburManual)) ? 0 : Math.max(0, parseInt(liburManual))) : autoLiburDays
+  const hariLembur = editLemburHari ? (isNaN(parseInt(lemburHariManual)) ? 0 : Math.max(0, parseInt(lemburHariManual))) : autoLemburDays
+  const currentIzin = editIzin ? (isNaN(parseInt(izinManual)) ? 0 : Math.max(0, parseInt(izinManual))) : izinCount
 
-  const parseNum = (str: string) => parseInt(str.replace(/\D/g, '')) || 0
-  const formatNum = (str: string) => {
-    const num = parseInt(str.replace(/\D/g, '')) || 0
-    return num.toLocaleString('id-ID')
-  }
+  const parseNum = (val: any) => {
+    if (typeof val === 'number') return val;
+    return parseInt(String(val || '').replace(/\D/g, '')) || 0;
+  };
+  const formatNum = (val: any) => {
+    if (typeof val === 'number') return val.toLocaleString('id-ID');
+    const num = parseInt(String(val || '').replace(/\D/g, '')) || 0;
+    return num.toLocaleString('id-ID');
+  };
 
   const ratePerHari = mode === "harian" ? parseNum(gajiPerHari) : Math.round(parseNum(gajiBulanan) / 30)
   const defaultUangLembur = hariLembur * (ratePerHari || 50000)
@@ -303,51 +324,214 @@ const GajiPanel: React.FC<{
   const monthDate = new Date(yyyy, mm - 1)
   const monthLabel = monthDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
 
+  // Reset mode edit saat ganti kasir atau periode bulan
   useEffect(() => {
-    setHariKerjaManual(String(autoHadirDays))
     setEditHariKerja(false)
-
-    setLiburManual(String(autoLiburDays))
     setEditLibur(false)
-
-    setLemburHariManual(String(autoLemburDays))
     setEditLemburHari(false)
-
+    setEditUangLembur(false)
+    setEditIzin(false)
+    setHariKerjaManual(String(autoHadirDays))
+    setLiburManual(String(autoLiburDays))
+    setLemburHariManual(String(autoLemburDays))
+    setIzinManual(String(izinCount))
     const calcDefaultLembur = autoLemburDays * (ratePerHari || 50000)
     setUangLemburManual(calcDefaultLembur > 0 ? calcDefaultLembur.toLocaleString('id-ID') : "0")
-    setEditUangLembur(false)
+  }, [selectedKasir, month])
 
-    setIzinManual(String(izinCount))
-    setEditIzin(false)
-  }, [selectedKasir, month, autoHadirDays, autoLiburDays, autoLemburDays, izinCount, ratePerHari])
+  // Sinkronkan default manual jika belum diaktifkan edit manual
+  useEffect(() => {
+    if (!editHariKerja) setHariKerjaManual(String(autoHadirDays))
+  }, [autoHadirDays, editHariKerja])
 
-  const handleShareText = async () => {
-    const lines = [
-      `Slip Gaji - ${storeName || 'ALFAZA CELL'}`,
-      `Periode: ${monthLabel.toUpperCase()}`,
-      `Nama: ${selectedName}`,
-      `Hadir: ${hariKerja} hari`,
-      `Libur: ${hariLibur} hari`,
-      ...(hariLembur > 0 ? [`Lembur (${hariLembur} hri) = total ${formatRupiah(uangLemburVal)}`] : []),
-      ...(currentIzin > 0 ? [`Izin / Alpha: ${currentIzin} hari ${potonganIzinVal > 0 ? `(-${formatRupiah(potonganIzinVal)})` : ""}`] : []),
-      `Gaji Pokok: ${formatRupiah(gajiPokok)}`,
-      ...(uangLemburVal > 0 ? [`Uang Lembur: +${formatRupiah(uangLemburVal)}`] : []),
-      ...(parseNum(bonus) > 0 ? [`Bonus: +${formatRupiah(parseNum(bonus))}`] : []),
-      ...(currentIzin > 0 && potonganIzinVal > 0 ? [`Potongan Izin: -${formatRupiah(potonganIzinVal)}`] : []),
-      ...(parseNum(potonganLain) > 0 ? [`Potongan Lain: -${formatRupiah(parseNum(potonganLain))}${ketPotongan ? ` (${ketPotongan})` : ""}`] : []),
-      `Total Gaji: ${formatRupiah(totalGaji)}`,
-    ]
-    if (catatan) lines.push(`Catatan: ${catatan}`)
-    const text = lines.join("\n")
+  useEffect(() => {
+    if (!editLibur) setLiburManual(String(autoLiburDays))
+  }, [autoLiburDays, editLibur])
+
+  useEffect(() => {
+    if (!editLemburHari) setLemburHariManual(String(autoLemburDays))
+  }, [autoLemburDays, editLemburHari])
+
+  useEffect(() => {
+    if (!editIzin) setIzinManual(String(izinCount))
+  }, [izinCount, editIzin])
+
+  useEffect(() => {
+    if (!editUangLembur) {
+      const calcDefaultLembur = hariLembur * (ratePerHari || 50000)
+      setUangLemburManual(calcDefaultLembur > 0 ? calcDefaultLembur.toLocaleString('id-ID') : "0")
+    }
+  }, [hariLembur, ratePerHari, editUangLembur])
+
+  const generateSlipGajiReceiptText = () => {
+    const w = 32;
+    const center = (s: string) => {
+      const txt = (s || '').trim().substring(0, w);
+      return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
+    };
+    const right = (left: string, rightVal: string) => {
+      const l = (left || '').trim();
+      const r = (rightVal || '').trim();
+      const space = w - l.length - r.length;
+      return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+    };
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('id-ID');
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+
+    let t = '';
+    t += center(storeName || 'ALFAZA CELL') + '\n';
+    t += center('SLIP GAJI KARYAWAN') + '\n';
+    t += '='.repeat(w) + '\n';
+    t += right('Kasir', selectedName) + '\n';
+    t += right('Periode', monthLabel.toUpperCase()) + '\n';
+    t += right('Waktu Cetak', `${dateStr} ${timeStr}`) + '\n';
+    t += '-'.repeat(w) + '\n';
+    t += center('RINCIAN KEHADIRAN') + '\n';
+    t += right('Hadir (Kerja)', `${hariKerja} hari`) + '\n';
+    t += right('Libur (Off)', `${hariLibur} hari`) + '\n';
+    if (hariLembur > 0) {
+      t += right('Lembur', `${hariLembur} hri`) + '\n';
+    }
+    if (currentIzin > 0) {
+      t += right('Izin / Alpha', `${currentIzin} hari`) + '\n';
+    }
+    t += '-'.repeat(w) + '\n';
+    t += center('RINCIAN PENGGAJIAN') + '\n';
+    t += right('Gaji Pokok', `Rp ${formatNum(gajiPokok)}`) + '\n';
+    if (uangLemburVal > 0) {
+      t += right('Uang Lembur', `+Rp ${formatNum(uangLemburVal)}`) + '\n';
+    }
+    if (parseNum(bonus) > 0) {
+      t += right('Bonus', `+Rp ${formatNum(parseNum(bonus))}`) + '\n';
+    }
+    if (currentIzin > 0 && potonganIzinVal > 0) {
+      t += right('Potongan Izin', `-Rp ${formatNum(potonganIzinVal)}`) + '\n';
+    }
+    if (parseNum(potonganLain) > 0) {
+      const ket = ketPotongan ? ` (${ketPotongan})` : '';
+      t += right(`Potongan${ket}`.substring(0, 15), `-Rp ${formatNum(parseNum(potonganLain))}`) + '\n';
+    }
+    t += '='.repeat(w) + '\n';
+    t += right('TOTAL DITERIMA', `Rp ${formatNum(totalGaji)}`) + '\n';
+    t += '='.repeat(w) + '\n';
+    
+    if (catatan) {
+      t += `Catatan:\n${catatan}\n`;
+      t += '-'.repeat(w) + '\n';
+    }
+    
+    t += '\n';
+    t += center('Tanda Tangan / Penerima') + '\n\n\n';
+    t += center(`( ${selectedName} )`) + '\n';
+    t += '\n\n\n';
+
+    return t;
+  };
+  const executePrintReceipt = async (text: string) => {
+    showToast('Mengirim ke printer...');
+    const result = await printThermalReceipt(text);
+    if (result.success) {
+      showToast('Cetak struk gaji berhasil!');
+      setReviewReceiptText(null);
+    }
+  };
+
+  const handlePrintGajihClick = () => {
     try {
-      if (navigator.share) {
-        await navigator.share({ text })
+      const text = generateSlipGajiReceiptText();
+      const isAutoPrint = localStorage.getItem('auto_print_gaji') === 'true';
+      const btMac = localStorage.getItem('bluetooth_printer_mac');
+
+      if (isAutoPrint && btMac && (window as any).bluetoothSerial) {
+        executePrintReceipt(text);
       } else {
-        await navigator.clipboard.writeText(text)
-        showToast("Teks disalin ke clipboard")
+        setReviewReceiptText(text);
       }
-    } catch {}
-  }
+    } catch (e: any) {
+      console.error("Gagal memproses struk gaji:", e);
+      showToast("Gagal memproses struk gaji: " + (e?.message || e));
+    }
+  };
+
+  const handleCopyWAFromModal = async () => {
+    if (!reviewReceiptText) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(reviewReceiptText);
+        showToast("Teks struk berhasil disalin!");
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reviewReceiptText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast("Teks struk berhasil disalin!");
+      }
+    } catch {
+      showToast("Gagal menyalin teks.");
+    }
+  };
+
+  const printHistorySlip = (tx: any) => {
+    try {
+      const w = 32;
+      const center = (s: string) => {
+        const txt = (s || '').trim().substring(0, w);
+        return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
+      };
+      const right = (left: string, rightVal: string) => {
+        const l = (left || '').trim();
+        const r = (rightVal || '').trim();
+        const space = w - l.length - r.length;
+        return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+      };
+
+      const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir';
+      const txDate = new Date(tx.timestamp);
+      const dateStr = txDate.toLocaleDateString('id-ID');
+      const timeStr = txDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+
+      let t = '';
+      t += center(storeName || 'ALFAZA CELL') + '\n';
+      t += center('SLIP GAJI KARYAWAN') + '\n';
+      t += '='.repeat(w) + '\n';
+      t += right('Kasir', kasirName) + '\n';
+      t += right('Waktu Cetak', `${dateStr} ${timeStr}`) + '\n';
+      t += '-'.repeat(w) + '\n';
+
+      const details = tx.keterangan.replace('[GAJI] ', '').split(', ');
+      details.forEach((item: string) => {
+        const parts = item.split(': ');
+        if (parts.length >= 2) {
+          const lbl = parts[0].trim();
+          const val = parts.slice(1).join(': ').trim();
+          t += right(lbl.substring(0, 16), val) + '\n';
+        }
+      });
+
+      t += '='.repeat(w) + '\n';
+      t += right('TOTAL DITERIMA', `Rp ${formatNum(tx.nominal)}`) + '\n';
+      t += '='.repeat(w) + '\n';
+      t += '\n';
+      t += center('Tanda Tangan / Penerima') + '\n\n\n';
+      t += center(`( ${kasirName} )`) + '\n';
+      t += '\n\n\n';
+
+      const isAutoPrint = localStorage.getItem('auto_print_gaji') === 'true';
+      const btMac = localStorage.getItem('bluetooth_printer_mac');
+      if (isAutoPrint && btMac && (window as any).bluetoothSerial) {
+        executePrintReceipt(t);
+      } else {
+        setReviewReceiptText(t);
+      }
+    } catch (e: any) {
+      console.error("Gagal print struk riwayat:", e);
+      showToast("Gagal memproses struk: " + (e?.message || e));
+    }
+  };
 
   const handleSharePDF = async () => {
     if (!slipRef.current) return
@@ -646,6 +830,79 @@ const GajiPanel: React.FC<{
     }
   }
 
+  const handleOpenEditBonus = (tx: any) => {
+    const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+    const nominalVal = targetMatch ? targetMatch[1].replace(/\D/g, '') : String(tx.nominal || 0);
+    const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
+    const periodeVal = periodeMatch ? periodeMatch[1].trim() : (tx.timestamp ? tx.timestamp.split('T')[0] : '');
+    const isPaid = tx.keterangan.includes('Sudah Dibayar') || (tx.nominal && tx.nominal > 0);
+
+    setEditingBonus({
+      id: tx.id,
+      kasir_id: tx.kasir_id || '',
+      periode: periodeVal,
+      nominal: parseInt(nominalVal || '0').toLocaleString('id-ID'),
+      isPaid: !!isPaid
+    });
+  };
+
+  const handleSaveEditBonus = async () => {
+    if (!editingBonus) return;
+    if (!editingBonus.kasir_id || !editingBonus.periode || !editingBonus.nominal) {
+      showToast("Harap lengkapi semua data bonus!");
+      return;
+    }
+    setIsSavingBonus(true);
+    try {
+      const numBonus = parseNum(editingBonus.nominal);
+      const updatedKeterangan = `Periode: ${editingBonus.periode}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${editingBonus.isPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`;
+      
+      const { error } = await supabase.from('gaji_bonus').update({
+        kasir_id: editingBonus.kasir_id,
+        nominal: editingBonus.isPaid ? numBonus : 0,
+        keterangan: updatedKeterangan
+      }).eq('id', editingBonus.id);
+
+      if (error) throw error;
+      showToast("Riwayat bonus berhasil diperbarui!");
+      setEditingBonus(null);
+      if (fetchGajiBonus) fetchGajiBonus();
+    } catch (e: any) {
+      showToast("Gagal update bonus: " + e.message);
+    } finally {
+      setIsSavingBonus(false);
+    }
+  };
+
+  const handleDeleteBonus = (tx: any) => {
+    const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir';
+    const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
+    const nomStr = targetMatch ? targetMatch[1].replace(/^Rp\s*/i, '') : formatRupiah(tx.nominal).replace(/^Rp\s*/i, '');
+    
+    const executeDelete = async () => {
+      try {
+        const { error } = await supabase.from('gaji_bonus').delete().eq('id', tx.id);
+        if (error) throw error;
+        showToast("Riwayat bonus berhasil dihapus!");
+        if (fetchGajiBonus) fetchGajiBonus();
+      } catch (e: any) {
+        showToast("Gagal menghapus bonus: " + e.message);
+      }
+    };
+
+    if (onConfirm) {
+      onConfirm(
+        "Hapus Riwayat Bonus",
+        `Yakin ingin menghapus data bonus kasir ${kasirName} sebesar Rp ${nomStr}? Tindakan ini tidak dapat dibatalkan.`,
+        executeDelete
+      );
+    } else {
+      if (window.confirm(`Yakin ingin menghapus data bonus kasir ${kasirName} sebesar Rp ${nomStr}?`)) {
+        executeDelete();
+      }
+    }
+  };
+
   return (
     <div className="space-y-4 pb-10">
       {/* TABS (KOLOM BERWARNA BIRU) */}
@@ -784,14 +1041,36 @@ const GajiPanel: React.FC<{
         {/* ROW KEHADIRAN (HADIR & LIBUR) */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
-              HARI KERJA (HADIR)
-              <span className="flex items-center gap-1 cursor-pointer select-none" onClick={() => { setEditHariKerja(!editHariKerja); setHariKerjaManual(String(autoHadirDays)) }}>
-                <input type="checkbox" checked={editHariKerja} readOnly className="w-2.5 h-2.5 pointer-events-none" /> <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
-              </span>
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">HARI KERJA (HADIR)</span>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none py-0.5 px-1 rounded hover:bg-blue-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={editHariKerja}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setEditHariKerja(checked)
+                    if (checked && (!hariKerjaManual || hariKerjaManual === "0")) {
+                      setHariKerjaManual(String(autoHadirDays))
+                    }
+                  }}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                />
+                <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
+              </label>
+            </div>
             {editHariKerja ? (
-              <input type="number" value={hariKerjaManual} onChange={e => setHariKerjaManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-blue-200 outline-none font-bold bg-blue-50 text-blue-700" />
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  value={hariKerjaManual}
+                  onChange={e => setHariKerjaManual(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-blue-300 outline-none font-bold bg-blue-50 text-blue-700 focus:border-blue-500 pr-14"
+                  placeholder="0"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-blue-500 bg-blue-100/80 px-1.5 py-0.5 rounded">hari</span>
+              </div>
             ) : (
               <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
                 <span>{hariKerja} hari</span>
@@ -800,14 +1079,36 @@ const GajiPanel: React.FC<{
             )}
           </div>
           <div>
-            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
-              HARI LIBUR (OFF)
-              <span className="flex items-center gap-1 cursor-pointer select-none" onClick={() => { setEditLibur(!editLibur); setLiburManual(String(autoLiburDays)) }}>
-                <input type="checkbox" checked={editLibur} readOnly className="w-2.5 h-2.5 pointer-events-none" /> <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
-              </span>
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">HARI LIBUR (OFF)</span>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none py-0.5 px-1 rounded hover:bg-rose-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={editLibur}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setEditLibur(checked)
+                    if (checked && (!liburManual || liburManual === "0")) {
+                      setLiburManual(String(autoLiburDays))
+                    }
+                  }}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer accent-rose-600"
+                />
+                <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
+              </label>
+            </div>
             {editLibur ? (
-              <input type="number" value={liburManual} onChange={e => setLiburManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-rose-200 outline-none font-bold bg-rose-50 text-rose-700" />
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  value={liburManual}
+                  onChange={e => setLiburManual(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-rose-300 outline-none font-bold bg-rose-50 text-rose-700 focus:border-rose-500 pr-14"
+                  placeholder="0"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-rose-500 bg-rose-100/80 px-1.5 py-0.5 rounded">hari</span>
+              </div>
             ) : (
               <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
                 <span>{hariLibur} hari</span>
@@ -876,16 +1177,41 @@ const GajiPanel: React.FC<{
 
         {/* ROW IZIN / ALPHA JIKA ADA */}
         <div className="mb-3">
-          <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex justify-between mb-1">
-            IZIN / ALPHA
-            <span className="flex items-center gap-1 cursor-pointer select-none" onClick={() => { setEditIzin(!editIzin); setIzinManual(String(izinCount)) }}>
-              <input type="checkbox" checked={editIzin} readOnly className="w-2.5 h-2.5 pointer-events-none" /> <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
-            </span>
-          </label>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">IZIN / ALPHA</span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none py-0.5 px-1 rounded hover:bg-orange-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={editIzin}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setEditIzin(checked)
+                  if (checked && (!izinManual || izinManual === "0")) {
+                    setIzinManual(String(izinCount))
+                  }
+                }}
+                className="w-3.5 h-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+              />
+              <span className="text-[8px] text-blue-600 font-bold">EDIT</span>
+            </label>
+          </div>
           {editIzin ? (
-            <input type="number" value={izinManual} onChange={e => setIzinManual(e.target.value)} className="w-full text-xs p-2.5 rounded-lg border border-orange-200 outline-none font-bold bg-orange-50 text-orange-700" />
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                value={izinManual}
+                onChange={e => setIzinManual(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-lg border border-orange-300 outline-none font-bold bg-orange-50 text-orange-700 focus:border-orange-500 pr-14"
+                placeholder="0"
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-orange-500 bg-orange-100/80 px-1.5 py-0.5 rounded">hari</span>
+            </div>
           ) : (
-            <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700">{izinCount} hari</div>
+            <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
+              <span>{currentIzin} hari</span>
+              <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">Auto Absen</span>
+            </div>
           )}
         </div>
 
@@ -942,6 +1268,12 @@ const GajiPanel: React.FC<{
               <span className="text-green-100 font-bold uppercase">Bonus</span>
               <span className="font-black text-green-200">{formatRupiah(parseNum(bonus))}</span>
             </div>
+            {currentIzin > 0 && potonganIzinVal > 0 && (
+              <div className="flex justify-between text-[11px]">
+                <span className="text-red-200 font-bold uppercase">Potongan Izin ({currentIzin} hari)</span>
+                <span className="font-black text-red-200">-{formatRupiah(potonganIzinVal)}</span>
+              </div>
+            )}
             {parseNum(potonganLain) > 0 && (
               <div className="flex justify-between text-[11px]">
                 <span className="text-red-200 font-bold uppercase">Potongan {ketPotongan ? `(${ketPotongan})` : ""}</span>
@@ -982,10 +1314,10 @@ const GajiPanel: React.FC<{
           <i className="fa-solid fa-download text-[10px]"></i> UNDUH JPG
         </button>
         <button
-          onClick={handleShareText}
-          className="flex-[1_1_45%] bg-gray-800 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5"
+          onClick={handlePrintGajihClick}
+          className="flex-[1_1_45%] bg-slate-900 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
         >
-          <i className="fa-solid fa-copy text-[10px]"></i> SALIN TEKS
+          <i className="fa-solid fa-print text-[10px]"></i> PRINT GAJIH
         </button>
         <button
           onClick={handleSharePDF}
@@ -1209,31 +1541,49 @@ const GajiPanel: React.FC<{
               const isPaid = tx.keterangan.includes('Sudah Dibayar');
               const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
               const targetNominal = targetMatch ? targetMatch[1] : formatRupiah(tx.nominal);
+              const cleanNominal = targetNominal.replace(/^Rp\s*/i, '');
               const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
               const periode = periodeMatch ? periodeMatch[1] : "-";
               
               return (
-                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
-                   <div>
-                     <div className="flex items-center gap-2 mb-1">
+                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-center justify-between gap-3">
+                   <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                        <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
                        <span className={cn("px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest", isPaid ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
                          {isPaid ? "LUNAS" : "BELUM DIBAYAR"}
                        </span>
                      </div>
-                     <p className="text-[10px] text-gray-500 font-bold"><i className="fa-regular fa-clock text-blue-500 mr-1"></i> Periode {periode}</p>
+                     <p className="text-[10px] text-gray-500 font-bold truncate"><i className="fa-regular fa-clock text-blue-500 mr-1"></i> Periode {periode}</p>
                      <p className="text-[9px] text-gray-400 font-bold mt-0.5">Tgl Input: {dateStr}</p>
                    </div>
-                   <div className="text-right flex flex-col items-end">
-                     <p className="text-xs font-black text-blue-600 tabular-nums mb-2">Rp {targetNominal}</p>
-                     {!isPaid && (
+                   <div className="text-right flex flex-col items-end shrink-0">
+                     <p className="text-xs font-black text-blue-600 tabular-nums mb-2">Rp {cleanNominal}</p>
+                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                       {!isPaid && (
+                         <button
+                           onClick={() => handleTandaiDibayar(tx)}
+                           className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider active:scale-95 hover:bg-emerald-100 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                           title="Tandai Sudah Dibayar"
+                         >
+                           <i className="fa-solid fa-check text-[9px]"></i> Lunas
+                         </button>
+                       )}
                        <button
-                         onClick={() => handleTandaiDibayar(tx)}
-                         className="bg-white text-green-600 border border-green-200 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest active:scale-95 hover:bg-green-50 transition-all flex items-center gap-1.5 shadow-sm"
+                         onClick={() => handleOpenEditBonus(tx)}
+                         className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider active:scale-95 hover:bg-blue-100 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                         title="Edit Data Bonus"
                        >
-                         <i className="fa-solid fa-check"></i> Tandai Lunas
+                         <i className="fa-solid fa-pen-to-square text-[9px]"></i> Edit
                        </button>
-                     )}
+                       <button
+                         onClick={() => handleDeleteBonus(tx)}
+                         className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider active:scale-95 hover:bg-rose-100 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                         title="Hapus Riwayat Bonus"
+                       >
+                         <i className="fa-solid fa-trash-can text-[9px]"></i> Hapus
+                       </button>
+                     </div>
                    </div>
                 </div>
               )
@@ -1244,6 +1594,337 @@ const GajiPanel: React.FC<{
                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Belum ada riwayat bonus</p>
                </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT RIWAYAT BONUS */}
+      {editingBonus && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setEditingBonus(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                  <i className="fa-solid fa-pen-to-square"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-sm leading-tight">Edit Riwayat Bonus</h3>
+                  <p className="text-[10px] text-slate-500 font-bold mt-0.5">Perbarui rincian bonus kasir</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBonus(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-3.5 text-left">
+              <div>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">Pilih Kasir</label>
+                <div className="relative">
+                  <select
+                    value={editingBonus.kasir_id}
+                    onChange={e => setEditingBonus(prev => prev ? { ...prev, kasir_id: e.target.value } : null)}
+                    className="w-full text-xs p-2.5 pr-8 rounded-xl border border-slate-200 font-bold bg-white outline-none focus:border-blue-400 appearance-none cursor-pointer"
+                  >
+                    {kasirArr.map(([id, k]) => <option key={id} value={id}>{k.name.toUpperCase()}</option>)}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none"></i>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">Tanggal / Periode Bonus</label>
+                <input
+                  type="date"
+                  value={editingBonus.periode}
+                  onChange={e => setEditingBonus(prev => prev ? { ...prev, periode: e.target.value } : null)}
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold bg-white outline-none focus:border-blue-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">Nominal Bonus</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={editingBonus.nominal}
+                    onChange={e => setEditingBonus(prev => prev ? { ...prev, nominal: formatNum(e.target.value) } : null)}
+                    className="w-full text-xs py-2.5 pl-9 pr-3 rounded-xl border border-slate-200 font-bold bg-white outline-none focus:border-blue-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1.5">Status Pembayaran</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingBonus(prev => prev ? { ...prev, isPaid: true } : null)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-xl text-center font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer border",
+                      editingBonus.isPaid 
+                        ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                    )}
+                  >
+                    <i className="fa-solid fa-check mr-1"></i> Lunas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingBonus(prev => prev ? { ...prev, isPaid: false } : null)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-xl text-center font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer border",
+                      !editingBonus.isPaid 
+                        ? "bg-rose-600 text-white border-rose-600 shadow-sm" 
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                    )}
+                  >
+                    <i className="fa-solid fa-clock mr-1"></i> Belum Bayar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={isSavingBonus}
+                onClick={() => setEditingBonus(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSavingBonus}
+                onClick={handleSaveEditBonus}
+                className="px-4 py-2 text-xs font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSavingBonus ? (
+                  <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
+                ) : (
+                  <i className="fa-solid fa-check text-xs"></i>
+                )}
+                <span>Simpan Perubahan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REVIEW STRUK GAJI SEBELUM PRINT */}
+      {reviewReceiptText && (
+        <div 
+          className="fixed inset-0 z-[250] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 pb-24 sm:pb-6 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setReviewReceiptText(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[82vh] mb-6 sm:mb-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center text-xs shadow-xs">
+                  <i className="fa-solid fa-receipt"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-xs uppercase tracking-wide leading-tight">Review Struk Gaji</h3>
+                  <p className="text-[9px] text-slate-400 font-bold">Thermal POS 58mm (Rata Kolom 32)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewReceiptText(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-xs"></i>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-3.5 space-y-2.5 overflow-y-auto flex-1 custom-scrollbar">
+              {/* Status Printer, Tab Switch & Salin ke WA */}
+              <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200/80">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${localStorage.getItem('bluetooth_printer_mac') ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></div>
+                  <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider">
+                    {localStorage.getItem('bluetooth_printer_mac') ? 'Printer Siap' : 'Printer Offline'}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  <div className="flex bg-slate-200/70 p-0.5 rounded-lg text-[8px] font-bold select-none">
+                    <button
+                      type="button"
+                      onClick={() => setReviewViewMode('visual')}
+                      className={cn("px-2 py-0.5 rounded-md transition-all cursor-pointer", reviewViewMode === 'visual' ? "bg-white text-slate-900 shadow-2xs font-black" : "text-slate-500 hover:text-slate-800")}
+                    >
+                      Visual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewViewMode('raw')}
+                      className={cn("px-2 py-0.5 rounded-md transition-all cursor-pointer", reviewViewMode === 'raw' ? "bg-white text-slate-900 shadow-2xs font-black" : "text-slate-500 hover:text-slate-800")}
+                    >
+                      Raw 32
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyWAFromModal}
+                    className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                    title="Salin teks struk untuk dikirim ke WhatsApp"
+                  >
+                    <i className="fa-brands fa-whatsapp text-emerald-600 text-xs"></i>
+                    <span>Salin WA</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Thermal Paper Preview Container */}
+              <div className="bg-slate-100/80 p-2.5 rounded-2xl border border-slate-200 flex justify-center">
+                {reviewViewMode === 'visual' ? (
+                  <div className="w-full max-w-[285px] bg-white rounded-xl shadow-md border border-slate-200/90 p-3.5 font-mono select-all text-left">
+                    <div className="space-y-0.5">
+                      {reviewReceiptText.split('\n').map((line, idx) => {
+                        const trimmed = line.trim();
+                        if (!trimmed) {
+                          return <div key={idx} className="h-1.5" />;
+                        }
+
+                        // Separator lines
+                        if (/^={4,}$/.test(trimmed)) {
+                          return <div key={idx} className="border-b-2 border-slate-800 my-1" />;
+                        }
+                        if (/^-{4,}$/.test(trimmed)) {
+                          return <div key={idx} className="border-b border-dashed border-slate-400 my-1" />;
+                        }
+
+                        // Centered items
+                        const isSignature = trimmed.startsWith('(') && trimmed.endsWith(')');
+                        const isSectionHeader = trimmed === 'RINCIAN KEHADIRAN' || trimmed === 'RINCIAN PENGGAJIAN' || trimmed === 'SLIP GAJI KARYAWAN' || trimmed === 'Tanda Tangan / Penerima' || trimmed === (storeName || 'ALFAZA CELL').toUpperCase();
+                        const isCenter = isSignature || isSectionHeader || (line.startsWith('   ') && !line.includes('Rp ') && !line.trimEnd().endsWith('hari'));
+
+                        if (isCenter) {
+                          const isStoreOrTitle = trimmed === 'SLIP GAJI KARYAWAN' || trimmed === (storeName || 'ALFAZA CELL').toUpperCase();
+                          return (
+                            <div 
+                              key={idx} 
+                              className={cn(
+                                "text-center uppercase tracking-wide",
+                                isStoreOrTitle ? "font-black text-slate-900 text-[11px] leading-tight" : 
+                                isSectionHeader ? "font-black text-slate-800 text-[10px] my-0.5" :
+                                isSignature ? "font-black text-slate-900 text-[10px] mt-2.5" : "font-semibold text-slate-500 text-[9px]"
+                              )}
+                            >
+                              {trimmed}
+                            </div>
+                          );
+                        }
+
+                        // Two-column Left - Right split
+                        const parts = trimmed.split(/\s{2,}/);
+                        if (parts.length >= 2) {
+                          const left = parts[0].trim();
+                          const right = parts.slice(1).join(' ').trim();
+                          const isTotal = left.toUpperCase().includes('TOTAL');
+
+                          return (
+                            <div 
+                              key={idx} 
+                              className={cn(
+                                "flex justify-between items-center text-[10.5px] leading-tight py-0.5",
+                                isTotal ? "font-black text-slate-900 text-[11.5px] border-y border-slate-900 my-1 py-1" : "text-slate-800 font-semibold"
+                              )}
+                            >
+                              <span className={cn("text-left shrink-0", isTotal ? "text-slate-900 font-black" : "text-slate-600 font-bold")}>
+                                {left}
+                              </span>
+                              <span className={cn("text-right tabular-nums", isTotal ? "text-slate-900 font-black text-[12px]" : "font-black text-slate-900")}>
+                                {right}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        // Single line (e.g. Catatan)
+                        return (
+                          <div key={idx} className="text-left text-[9.5px] text-slate-700 font-medium leading-tight py-0.5">
+                            {trimmed}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full bg-white p-3 rounded-xl border border-dashed border-slate-300 shadow-inner overflow-x-auto text-left">
+                    <pre className="font-mono text-[10px] leading-tight text-slate-800 whitespace-pre select-all">
+                      {reviewReceiptText}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              {/* Checkbox Auto-Print Toggle */}
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-2 rounded-xl border border-slate-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={autoPrintSetting}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setAutoPrintSetting(checked);
+                    localStorage.setItem('auto_print_gaji', String(checked));
+                  }}
+                  className="w-3.5 h-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                />
+                <div className="text-left">
+                  <span className="text-[9.5px] font-black text-slate-800 uppercase tracking-wide block leading-none">
+                    Cetak Otomatis Selanjutnya
+                  </span>
+                  <span className="text-[8px] text-slate-400 font-medium block mt-0.5">
+                    Langsung cetak ke printer bluetooth tanpa buka review struk
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setReviewReceiptText(null)}
+                className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  executePrintReceipt(reviewReceiptText);
+                  setReviewReceiptText(null);
+                }}
+                className="px-4 py-2 text-xs font-black text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <i className="fa-solid fa-print text-xs"></i>
+                <span>Cetak Struk Sekarang</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3581,6 +4262,564 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   
   const ownerIsiBank = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
   const ownerSaldoBank = ownerIsiBank - ownerTotalBankOut
+
+  if (props.isPc && !isOwnerSubView) {
+    if (!props.active) return null;
+
+    const targetTrx = (props.kasirRole !== 'owner')
+      ? (props.kasirList[props.username]?.targetTrx || (financialSettings?.defaultTargetTrx ? parseInt(financialSettings.defaultTargetTrx) : 0))
+      : 0;
+    const targetPct = targetTrx > 0 ? Math.min(Math.round((ownerTotalTrx / targetTrx) * 100), 100) : 0;
+    const isTargetDone = targetPct >= 100;
+
+    return (
+      <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 p-6 overflow-y-auto hide-scrollbar gap-6 animate-in fade-in duration-200">
+        {/* TOP BAR / HEADER BERANDA PC */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-wrap items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-4">
+            {props.storePhoto ? (
+              <img src={props.storePhoto} className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-md" alt="Store Logo" />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center text-2xl shadow-md">
+                <i className="fa-solid fa-store"></i>
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{props.storeName || 'ALFAZA CELL'}</h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1.5 animate-pulse"></span>
+                  SISTEM AKTIF
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">{props.storeSubtext || 'Agen Brilink & Konter Pulsa'}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Filter Toko & Filter Kasir (Model Persis Mode HP) */}
+            {props.kasirRole === 'owner' && (
+              <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl px-3 py-1.5 shadow-sm gap-2">
+                {/* Select Toko */}
+                <div className="relative flex items-center gap-1.5">
+                  <i className="fa-solid fa-store text-blue-600 dark:text-blue-400 text-xs"></i>
+                  <select
+                    value={props.pantauStoreId || 'all'}
+                    onChange={(e) => props.setPantauStoreId && props.setPantauStoreId(e.target.value)}
+                    className="bg-transparent text-slate-800 dark:text-white text-xs font-black outline-none border-none cursor-pointer appearance-none pr-5 uppercase tracking-wider font-sans py-1 max-w-[130px] truncate"
+                  >
+                    <option value="all" className="text-slate-800 dark:text-slate-900">SEMUA TOKO</option>
+                    {(props.stores || []).map((store) => (
+                      <option key={store.id} value={store.id} className="text-slate-800 dark:text-slate-900">{store.name}</option>
+                    ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <div className="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 shrink-0"></div>
+
+                {/* Select Kasir */}
+                <div className="relative flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-tie text-indigo-600 dark:text-indigo-400 text-xs"></i>
+                  <select
+                    value={props.filterKasir || 'Semua'}
+                    onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                    disabled={props.pantauStoreId === 'all'}
+                    className={cn(
+                      "bg-transparent text-xs font-black outline-none border-none cursor-pointer appearance-none pr-5 uppercase tracking-wider font-sans py-1 max-w-[130px] truncate",
+                      props.pantauStoreId === 'all' ? "text-slate-400 cursor-not-allowed" : "text-slate-800 dark:text-white"
+                    )}
+                  >
+                    <option value="Semua" className="text-slate-800 dark:text-slate-900">SEMUA KASIR</option>
+                    {props.kasirList && Object.entries(props.kasirList)
+                      .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc?.role || '').toLowerCase() !== 'owner')
+                      .map(([id, acc]) => (
+                        <option key={id} value={id} className="text-slate-800 dark:text-slate-900">{acc.name}</option>
+                      ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                </div>
+              </div>
+            )}
+
+            {/* Jam & Tanggal Digital */}
+            <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-700/50 text-right">
+              <p className="text-xs font-black text-slate-800 dark:text-slate-100 tabular-nums">{dayName}, {fullDate}</p>
+              <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 tabular-nums uppercase tracking-widest mt-0.5"><i className="fa-regular fa-clock mr-1"></i> {clockStr}</p>
+            </div>
+
+            {/* Tombol Lonceng Notifikasi */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (props.kasirRole === 'owner') {
+                    setShowNotifModal(true);
+                  } else {
+                    setShowKasirNotif(!showKasirNotif);
+                  }
+                }}
+                className={cn(
+                  "w-11 h-11 rounded-2xl flex items-center justify-center transition-all relative active:scale-95 border",
+                  (props.kasirRole === 'owner' ? totalUnreadCount > 0 : (kasirLateHistory.length > 0 || activePesanMendadak))
+                    ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 animate-pulse"
+                    : "bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-800 dark:hover:text-white"
+                )}
+                title="Pemberitahuan & Notifikasi"
+              >
+                <i className="fa-solid fa-bell text-sm"></i>
+                {(props.kasirRole === 'owner' ? totalUnreadCount > 0 : (kasirLateHistory.length > 0 || activePesanMendadak)) && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-md">
+                    {props.kasirRole === 'owner' ? totalUnreadCount : (kasirLateHistory.length + (activePesanMendadak ? 1 : 0))}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Tombol Jurnal Shift / Tutup Shift */}
+            {props.onJurnalClick && (
+              <button
+                onClick={props.onJurnalClick}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-md shadow-indigo-500/20"
+                title="Buka / Tutup Shift & Setoran Kasir"
+              >
+                <i className="fa-solid fa-scale-balanced text-xs"></i>
+                <span>Jurnal Kasir</span>
+              </button>
+            )}
+
+            {/* Tombol Langsung ke Mesin Kasir / Input Transaksi */}
+            <button
+              onClick={() => props.setActiveView('view-input-transaksi')}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-md shadow-blue-500/20"
+            >
+              <i className="fa-solid fa-cash-register text-xs"></i>
+              <span>Input Transaksi</span>
+            </button>
+          </div>
+        </div>
+
+        {/* SECTION 1: 4 KARTU ASET LIKUID & FISIK (LEGA & INFORMATIF) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 shrink-0">
+          {/* Card 1: Saldo Bank */}
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-3xl shadow-sm text-white relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute right-3 bottom-2 text-white/10 text-6xl font-bold"><i className="fa-solid fa-building-columns"></i></div>
+            <div className="flex items-center justify-between z-10">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-100 flex items-center gap-2">
+                <i className="fa-solid fa-building-columns text-blue-200"></i> Saldo Bank (Plafon)
+              </span>
+              <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">DIGITAL</span>
+            </div>
+            <div className="my-4 z-10">
+              <p className="text-2xl font-black tracking-tight drop-shadow-sm">{formatRupiah(props.saldoBank)}</p>
+              <p className="text-[9px] text-blue-100/90 font-medium mt-1">Plafon modal bank terdaftar</p>
+            </div>
+            <div className="pt-2 border-t border-white/20 flex justify-between items-center text-[9px] font-bold text-blue-100 z-10">
+              <span>Mutasi Keluar Hari Ini</span>
+              <span>{ownerTotalBankOut > 0 ? `-${formatRupiah(ownerTotalBankOut)}` : 'Stabil'}</span>
+            </div>
+          </div>
+
+          {/* Card 2: Saldo Laci Kasir */}
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 rounded-3xl shadow-sm text-white relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute right-3 bottom-2 text-white/10 text-6xl font-bold"><i className="fa-solid fa-cash-register"></i></div>
+            <div className="flex items-center justify-between z-10">
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-100 flex items-center gap-2">
+                <i className="fa-solid fa-cash-register text-emerald-200"></i> Laci Kasir (Fisik)
+              </span>
+              <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">TUNAI</span>
+            </div>
+            <div className="my-4 z-10">
+              <p className="text-2xl font-black tracking-tight drop-shadow-sm">{formatRupiah(ownerTotalLaci)}</p>
+              <p className="text-[9px] text-emerald-100/90 font-medium mt-1">Uang cash fisik di laci kasir</p>
+            </div>
+            <div className="pt-2 border-t border-white/20 flex justify-between items-center text-[9px] font-bold text-emerald-100 z-10">
+              <span>Modal Awal Kasir</span>
+              <span>{formatRupiah(props.kasModal)}</span>
+            </div>
+          </div>
+
+          {/* Card 3: Total Aset Likuid */}
+          <div className="bg-gradient-to-br from-purple-600 to-violet-700 p-6 rounded-3xl shadow-sm text-white relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute right-3 bottom-2 text-white/10 text-6xl font-bold"><i className="fa-solid fa-vault"></i></div>
+            <div className="flex items-center justify-between z-10">
+              <span className="text-[10px] font-black uppercase tracking-widest text-purple-100 flex items-center gap-2">
+                <i className="fa-solid fa-vault text-purple-200"></i> Total Aset Likuid
+              </span>
+              <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">TOTAL</span>
+            </div>
+            <div className="my-4 z-10">
+              <p className="text-2xl font-black tracking-tight drop-shadow-sm">{formatRupiah(props.saldoBank + ownerTotalLaci)}</p>
+              <p className="text-[9px] text-purple-100/90 font-medium mt-1">Total uang kasir (Bank + Tunai Laci)</p>
+            </div>
+            <div className="pt-2 border-t border-white/20 flex justify-between items-center text-[9px] font-bold text-purple-100 z-10">
+              <span>Keamanan Saldo</span>
+              <span className="text-emerald-300">Tercatat</span>
+            </div>
+          </div>
+
+          {/* Card 4: Total Aset Masuk / Laba */}
+          <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 rounded-3xl shadow-sm text-white relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute right-3 bottom-2 text-white/10 text-6xl font-bold"><i className="fa-solid fa-hand-holding-dollar"></i></div>
+            <div className="flex items-center justify-between z-10">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-100 flex items-center gap-2">
+                <i className="fa-solid fa-hand-holding-dollar text-amber-200"></i> Admin & Omset Masuk
+              </span>
+              <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">LABA</span>
+            </div>
+            <div className="my-4 z-10">
+              <p className="text-2xl font-black tracking-tight drop-shadow-sm">{formatRupiah(ownerTotalAdmin)}</p>
+              <p className="text-[9px] text-amber-100/90 font-medium mt-1">Total Admin Fee ({ownerTotalTrx} Transaksi)</p>
+            </div>
+            <div className="pt-2 border-t border-white/20 flex justify-between items-center text-[9px] font-bold text-amber-100 z-10">
+              <span>Total Volume</span>
+              <span>{formatRupiah(ownerTotalVolume).replace(',00', '')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: GRID TENGAH (Kiri 7 Kolom: Pengumuman & Target & 5 Kategori; Kanan 5 Kolom: KasSummary & Akses Cepat) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* KOLOM KIRI (7 Kolom) */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            
+            {/* Pengumuman & Running Text */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fa-solid fa-bullhorn text-blue-600"></i> Pengumuman Toko
+                </span>
+                <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-0.5 rounded-full uppercase">Update</span>
+              </div>
+              
+              <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed">
+                  {props.mainAnnouncement || 'Selamat datang di Sistem Kasir Alfaza Pro. Pastikan selalu cek fisik laci kasir dan sisa saldo m-banking sebelum pergantian shift.'}
+                </p>
+              </div>
+
+              {(() => {
+                const cleanTexts = (props.runningTexts || []).map(t => typeof t === 'string' ? t.trim() : '').filter(Boolean);
+                if (cleanTexts.length === 0) return null;
+
+                const unit = cleanTexts.join('   •••   ') + '   •••   ';
+                let fullTrack = unit;
+                while (fullTrack.length < 250) {
+                  fullTrack += unit;
+                }
+
+                return (
+                  <div 
+                    className="overflow-hidden bg-slate-50 dark:bg-slate-900/50 py-2 px-3 rounded-xl border border-slate-100 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 relative group cursor-default select-none"
+                    title="Arahkan kursor ke sini untuk menjeda teks"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="shrink-0 text-amber-500 dark:text-amber-400 text-xs flex items-center gap-1.5 pr-2.5 border-r border-slate-200 dark:border-slate-700 font-black uppercase text-[10px] tracking-wider">
+                        <i className="fa-solid fa-sparkles text-amber-500 animate-pulse"></i> Motivasi
+                      </span>
+                      <div className="overflow-hidden relative flex-1 mask-fade-edges">
+                        <div className="inline-flex shrink-0 animate-marquee items-center group-hover:[animation-play-state:paused]">
+                          <span>{fullTrack}&nbsp;</span>
+                          <span>{fullTrack}&nbsp;</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Target Transaksi Kasir Hari Ini */}
+            {targetTrx > 0 && (
+              <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                      <i className="fa-solid fa-bullseye"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Target Transaksi Hari Ini</h4>
+                      <p className="text-[10px] text-slate-400 font-medium">Performa kasir: {props.kasirName || 'Kasir'}</p>
+                    </div>
+                  </div>
+                  {isTargetDone ? (
+                    <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-sm">
+                      <i className="fa-solid fa-circle-check"></i> Target Tercapai!
+                    </span>
+                  ) : (
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-300 tabular-nums bg-slate-50 dark:bg-slate-900 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                      {ownerTotalTrx} / {targetTrx} TRX ({targetPct}%)
+                    </span>
+                  )}
+                </div>
+                <div className="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden p-0.5">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-1000",
+                      isTargetDone ? "bg-gradient-to-r from-emerald-500 to-teal-400" : targetPct >= 70 ? "bg-gradient-to-r from-amber-400 to-orange-500" : "bg-gradient-to-r from-blue-500 to-indigo-600"
+                    )}
+                    style={{ width: `${targetPct}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* 5 Kategori Transaksi Hari Ini */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fa-solid fa-layer-group text-indigo-600"></i> Rincian Transaksi 5 Kategori
+                </h4>
+                <button
+                  onClick={() => props.setActiveView('view-transaksi')}
+                  className="text-[10px] font-black text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-wider"
+                >
+                  Lihat Riwayat
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { label: 'Transfer Bank', color: 'border-blue-200 bg-blue-50/50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30', icon: 'fa-building-columns' },
+                  { label: 'DANA', color: 'border-cyan-200 bg-cyan-50/50 text-cyan-700 dark:bg-cyan-950/20 dark:text-cyan-400 dark:border-cyan-900/30', icon: 'fa-wallet' },
+                  { label: 'FLIP', color: 'border-orange-200 bg-orange-50/50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400 dark:border-orange-900/30', icon: 'fa-arrow-right-arrow-left' },
+                  { label: 'Order Kuota', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30', icon: 'fa-mobile-screen' },
+                  { label: 'Tarik Tunai', color: 'border-rose-200 bg-rose-50/50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30', icon: 'fa-money-bill-wave' },
+                  { label: 'Aksesoris', color: 'border-fuchsia-200 bg-fuchsia-50/50 text-fuchsia-700 dark:bg-fuchsia-950/20 dark:text-fuchsia-400 dark:border-fuchsia-900/30', icon: 'fa-headphones' },
+                ].map(cat => {
+                  const txs = ownerTodayTxs.filter(t => t.kategori === cat.label);
+                  const vol = txs.reduce((s, t) => s + t.nominal, 0);
+                  const adm = txs.reduce((s, t) => s + t.adminFee, 0);
+                  return (
+                    <div key={cat.label} className={cn("p-3.5 rounded-2xl border flex flex-col justify-between transition-all hover:scale-[1.02]", cat.color)}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider truncate">{cat.label}</span>
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 shadow-xs tabular-nums">{txs.length} Trx</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-800 dark:text-white tabular-nums truncate">{formatRupiah(vol)}</p>
+                        <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">Admin: +{formatRupiah(adm)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* KOLOM KANAN (5 Kolom: Kas Laci & Akses Cepat) */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            
+            {/* Rincian Kas Laci (KasSummary Kasir) */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fa-solid fa-cash-register text-emerald-600"></i> Rincian Kas Laci Hari Ini
+                </h4>
+                <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 px-2 py-0.5 rounded-full uppercase">Fisik</span>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700/50">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><i className="fa-solid fa-vault text-[11px] text-slate-400"></i> Modal Awal Kasir</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-white">{formatRupiah(props.kasModal)}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2"><i className="fa-solid fa-globe text-[11px]"></i> Penjualan Digital</span>
+                  <span className="text-xs font-black text-blue-600 dark:text-blue-400">+{formatRupiah(penjualanDigital)}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-fuchsia-50/50 dark:bg-fuchsia-950/20 border border-fuchsia-100 dark:border-fuchsia-900/30">
+                  <span className="text-xs font-bold text-fuchsia-700 dark:text-fuchsia-400 flex items-center gap-2"><i className="fa-solid fa-headphones text-[11px]"></i> Aksesoris</span>
+                  <span className="text-xs font-black text-fuchsia-600 dark:text-fuchsia-400">+{formatRupiah(props.totalAksesoris)}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[11px]"></i> Admin Fee Terkumpul</span>
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">+{formatRupiah(ownerTotalAdmin)}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                  <span className="text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[11px]"></i> Tarik Tunai Pembeli</span>
+                  <span className="text-xs font-black text-rose-600 dark:text-rose-400">-{formatRupiah(props.totalTarik)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Total Kas Laci Fisik:</span>
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(ownerTotalLaci)}</span>
+              </div>
+            </div>
+
+            {/* Akses Cepat Fitur Tambahan */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
+              <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <i className="fa-solid fa-bolt text-purple-600"></i> Akses Cepat Fitur
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { id: 'view-kasbon', label: 'Kasbon', icon: 'fa-file-invoice', color: 'bg-blue-600 hover:bg-blue-700' },
+                  { id: 'view-kontak', label: 'Kontak', icon: 'fa-address-book', color: 'bg-emerald-600 hover:bg-emerald-700' },
+                  { id: 'view-stok-voucher', label: 'Voucher', icon: 'fa-ticket', color: 'bg-orange-500 hover:bg-orange-600' },
+                  { id: 'view-kalender', label: 'Kalender', icon: 'fa-calendar-days', color: 'bg-rose-600 hover:bg-rose-700' },
+                  { id: 'view-nota', label: 'Cetak Nota', icon: 'fa-receipt', color: 'bg-purple-600 hover:bg-purple-700' },
+                  { id: 'view-otomatis', label: 'Preset Teks', icon: 'fa-wand-magic-sparkles', color: 'bg-indigo-600 hover:bg-indigo-700' },
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => props.setActiveView(item.id)}
+                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 flex flex-col items-center justify-center gap-2 transition-all active:scale-95 group"
+                  >
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-105", item.color)}>
+                      <i className={cn("fa-solid text-sm", item.icon)}></i>
+                    </div>
+                    <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 3: TABEL TRANSAKSI TERAKHIR HARI INI (LIVE FEED KASIR) */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                <i className="fa-solid fa-clock-rotate-left text-blue-600"></i> Transaksi Terkini Hari Ini
+              </h4>
+              <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Pantauan transaksi yang baru saja diinput kasir</p>
+            </div>
+            <button
+              onClick={() => props.setActiveView('view-transaksi')}
+              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95"
+            >
+              <span>Lihat Seluruh Riwayat</span>
+              <i className="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Waktu</th>
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Kasir</th>
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Kategori</th>
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Keterangan</th>
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Nominal</th>
+                  <th className="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Admin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/30">
+                {ownerTodayTxs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
+                      Belum ada transaksi hari ini
+                    </td>
+                  </tr>
+                ) : (
+                  ownerTodayTxs.slice(0, 8).map(tx => {
+                    const timeStr = tx.timestamp ? tx.timestamp.split('T')[1]?.substring(0, 5) || tx.timestamp : '-';
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                        <td className="py-3 px-4 text-xs font-bold text-slate-500 tabular-nums">{timeStr}</td>
+                        <td className="py-3 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">{tx.kasir_id || '-'}</td>
+                        <td className="py-3 px-4">
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/30">
+                            {tx.kategori}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-[300px] truncate">{tx.keterangan || '-'}</td>
+                        <td className="py-3 px-4 text-xs font-black text-slate-800 dark:text-white text-right tabular-nums">{formatRupiah(tx.nominal)}</td>
+                        <td className="py-3 px-4 text-xs font-black text-emerald-600 dark:text-emerald-400 text-right tabular-nums">+{formatRupiah(tx.adminFee)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* POPUP NOTIFIKASI KASIR PC (LONCENG) */}
+        {props.kasirRole !== 'owner' && showKasirNotif && (
+          <div className="fixed inset-0 z-[9999] flex justify-end items-start p-6 pointer-events-none">
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-[1px] pointer-events-auto animate-in fade-in duration-200" onClick={() => setShowKasirNotif(false)} />
+            <div className="relative w-96 bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-10 pointer-events-auto animate-in slide-in-from-top-3 fade-in duration-200">
+              <div className="px-5 py-4 bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-950/30 dark:to-red-950/30 border-b border-rose-100 dark:border-rose-900/30 flex items-center justify-between">
+                <h4 className="text-xs font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fa-solid fa-bell text-xs"></i> PEMBERITAHUAN KASIR
+                </h4>
+                <div className="flex items-center gap-2">
+                  {kasirLateHistory.length > 0 && (
+                    <button onClick={handleClearLateNotifs} className="px-2.5 py-1 bg-white dark:bg-slate-800 text-rose-600 text-[9px] font-black rounded-lg border border-rose-200 dark:border-rose-800">HAPUS</button>
+                  )}
+                  <button onClick={() => setShowKasirNotif(false)} className="w-6 h-6 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 flex items-center justify-center text-xs font-bold">✕</button>
+                </div>
+              </div>
+              <div className="max-h-80 overflow-y-auto p-4 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
+                {activePesanMendadak && (
+                  <div className="bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-rose-200 shadow-sm">
+                    <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1">Pesan Owner:</p>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{activePesanMendadak}</p>
+                  </div>
+                )}
+                {kasirLateHistory.length === 0 && !activePesanMendadak ? (
+                  <div className="py-8 text-center text-slate-400 font-bold text-xs uppercase">Belum ada notifikasi</div>
+                ) : (
+                  kasirLateHistory.map((late, i) => (
+                    <div key={i} className="bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-rose-100 shadow-sm flex flex-col gap-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-slate-800 dark:text-white">{late.tanggal} • {late.jam}</span>
+                        <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">Telat {late.lateMins}m</span>
+                      </div>
+                      {late.alasan_telat && <p className="text-[10px] text-slate-500 mt-1">Alasan: {late.alasan_telat}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL NOTIFIKASI OWNER PC (LONCENG) */}
+        {showNotifModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">
+                    <i className="fa-solid fa-bell"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight">Notifikasi Owner</h3>
+                    <p className="text-[10px] font-bold text-slate-400">Peringatan dan info penting toko</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowNotifModal(false)} className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs flex items-center justify-center">✕</button>
+              </div>
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {bonusKasirList.length > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                    <p className="text-xs font-black text-emerald-800 dark:text-emerald-300">🎉 Bonus Kasir 6 Bulan Tercapai</p>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">{bonusKasirList.join(', ')}</p>
+                  </div>
+                )}
+                {ownerLateKasirs.length > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800">
+                    <p className="text-xs font-black text-rose-800 dark:text-rose-300">⏰ Kasir Terlambat Masuk Shift</p>
+                    {ownerLateKasirs.map((late, i) => (
+                      <p key={i} className="text-[10px] text-rose-600 dark:text-rose-400 mt-1">{late.name} (Shift {late.shift}) - Telat {late.lateMins} menit ({late.time})</p>
+                    ))}
+                  </div>
+                )}
+                {bonusKasirList.length === 0 && ownerLateKasirs.length === 0 && (
+                  <div className="py-12 text-center text-slate-400 font-bold text-xs uppercase">Tidak ada notifikasi baru</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("page-view hide-scrollbar", props.active && "active")}>
@@ -6155,6 +7394,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   transactions={props.transactions}
                   gajiBonusList={props.gajiBonusList}
                   fetchGajiBonus={props.fetchGajiBonus}
+                  onConfirm={props.onConfirm}
                 />
               )}
 

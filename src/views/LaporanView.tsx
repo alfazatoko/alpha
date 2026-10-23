@@ -203,9 +203,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [showSaldoRealModal])
 
-  // Auto-open jurnal modal ketika dipanggil dari luar (BerandaView)
+  // Hanya buka jurnal modal jika ada trigger baru setelah halaman terbuka (bukan auto-open saat pertama masuk)
+  const lastJurnalTriggerRef = React.useRef(props.openJurnalModal || 0)
   useEffect(() => {
-    if (props.openJurnalModal && props.openJurnalModal > 0) {
+    if (props.openJurnalModal && props.openJurnalModal > lastJurnalTriggerRef.current) {
+      lastJurnalTriggerRef.current = props.openJurnalModal
       setShowSaldoRealModal(true)
     }
   }, [props.openJurnalModal])
@@ -1130,17 +1132,35 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     return (
       <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 p-6 overflow-y-auto hide-scrollbar">
         {/* TOP BAR & TOOLBAR */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Rekapitulasi Laporan</h2>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter">Arus kas, laba, & penyesuaian</p>
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 lg:p-5 shadow-sm border border-slate-100 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-4 mb-5 shrink-0">
+          <div className="flex items-center gap-3">
+            {props.storePhoto ? (
+              <img src={props.storePhoto} alt="Store" className="w-10 h-10 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
+            ) : (
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-sm border border-indigo-100 dark:border-indigo-900/50 shadow-sm">
+                <i className="fa-solid fa-file-invoice-dollar"></i>
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Rekapitulasi Laporan Keuangan</h2>
+                {props.storeName && (
+                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    {props.storeName}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tight">
+                Arus kas laci, laba admin, & audit saldo kasir
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Tanggal Laporan */}
             <div className="flex flex-col">
-              <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Tanggal Laporan</span>
-              <div className="flex items-center gap-1.5">
+              <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Tanggal Laporan</span>
+              <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-sm">
                 <button 
                   onClick={() => {
                     if (!props.filterTanggal) return;
@@ -1150,7 +1170,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       props.setFilterTanggal(d.toISOString().split('T')[0]);
                     }
                   }}
-                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+                  className="w-7 h-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-all active:scale-95"
+                  title="Hari Sebelumnya"
                 >
                   <i className="fa-solid fa-chevron-left text-[10px]"></i>
                 </button>
@@ -1158,7 +1179,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   type="date"
                   value={props.filterTanggal}
                   onChange={(e) => props.setFilterTanggal(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-1.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 w-[95px] text-center"
+                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none w-[125px] text-center cursor-pointer"
                 />
                 <button 
                   onClick={() => {
@@ -1169,7 +1190,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       props.setFilterTanggal(d.toISOString().split('T')[0]);
                     }
                   }}
-                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+                  className="w-7 h-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-all active:scale-95"
+                  title="Hari Berikutnya"
                 >
                   <i className="fa-solid fa-chevron-right text-[10px]"></i>
                 </button>
@@ -1179,11 +1201,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             {/* Pantau Kasir (Owner Only) */}
             {props.kasirRole === 'owner' && props.setFilterKasir && (
               <div className="flex flex-col">
-                <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Pantau Kasir</span>
+                <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Pantau Kasir</span>
                 <select 
                   value={props.filterKasir || 'Semua'}
                   onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer"
+                  className="h-[38px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer shadow-sm"
                 >
                   <option value="Semua">Semua Kasir</option>
                   {Object.entries(props.kasirList)
@@ -1195,414 +1217,562 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
             )}
 
-            {/* Action Buttons Share */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowShareMenu(!showShareMenu)}
-                disabled={isSharing}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-md shadow-blue-500/10"
+            {/* Action Buttons Group */}
+            <div className="flex items-center gap-2 pt-3.5">
+              {/* Tombol Audit Shift */}
+              <button
+                onClick={() => setShowAuditModal(true)}
+                className={cn(
+                  "h-[38px] px-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm active:scale-95",
+                  auditDiscrepancies.length > 0
+                    ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/20 animate-pulse"
+                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                )}
+                title="Audit Fisik Laci & Pergantian Shift"
               >
-                <span>Bagikan</span>
-                {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]"></i> : <i className="fa-solid fa-share-nodes text-[10px]"></i>}
+                <i className="fa-solid fa-clipboard-check text-xs"></i>
+                <span>Audit Shift</span>
+                {auditDiscrepancies.length > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-white text-rose-600 text-[9px] font-black flex items-center justify-center shadow-sm">
+                    {auditDiscrepancies.length}
+                  </span>
+                )}
               </button>
 
-              {showShareMenu && (
-                <div className="absolute right-0 top-12 w-[180px] bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <button onClick={() => handleShare('download-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
-                    <i className="fa-solid fa-download text-emerald-500 w-4 text-center text-sm"></i> Download PDF
-                  </button>
-                  <button onClick={() => handleShare('share-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
-                    <i className="fa-solid fa-file-pdf text-red-500 w-4 text-center text-sm"></i> Share PDF
-                  </button>
-                  <button onClick={() => handleShare('share-wa-text')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
-                    <i className="fa-brands fa-whatsapp text-green-500 w-4 text-center text-sm"></i> Share WA Teks
-                  </button>
-                  <button onClick={() => handleShare('share-excel')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 transition-colors">
-                    <i className="fa-solid fa-file-excel text-green-600 w-4 text-center text-sm"></i> Share Excel
-                  </button>
-                </div>
-              )}
+              {/* Tombol Catat Sisa Saldo Real HP */}
+              <button
+                onClick={() => setShowSaldoRealModal(true)}
+                className="h-[38px] bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-sm shadow-emerald-500/10"
+                title="Input Sisa Saldo Aplikasi M-Banking di HP"
+              >
+                <i className="fa-solid fa-mobile-screen-button text-xs"></i>
+                <span>Update Saldo HP</span>
+              </button>
+
+              {/* Tombol Cetak / Print Struk Laporan */}
+              <button
+                onClick={() => window.print()}
+                className="h-[38px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-sm"
+                title="Cetak Laporan Keuangan"
+              >
+                <i className="fa-solid fa-print text-xs"></i>
+                <span>Cetak</span>
+              </button>
+
+              {/* Action Buttons Share */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  disabled={isSharing}
+                  className="h-[38px] bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all shadow-sm shadow-blue-500/10"
+                >
+                  <span>Bagikan</span>
+                  {isSharing ? <i className="fa-solid fa-circle-notch fa-spin text-[10px]"></i> : <i className="fa-solid fa-share-nodes text-[10px]"></i>}
+                </button>
+
+                {showShareMenu && (
+                  <div className="absolute right-0 top-12 w-[180px] bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button onClick={() => handleShare('download-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
+                      <i className="fa-solid fa-download text-emerald-500 w-4 text-center text-sm"></i> Download PDF
+                    </button>
+                    <button onClick={() => handleShare('share-pdf')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
+                      <i className="fa-solid fa-file-pdf text-red-500 w-4 text-center text-sm"></i> Share PDF
+                    </button>
+                    <button onClick={() => handleShare('share-wa-text')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 border-b border-gray-50 dark:border-slate-700 transition-colors">
+                      <i className="fa-brands fa-whatsapp text-green-500 w-4 text-center text-sm"></i> Share WA Teks
+                    </button>
+                    <button onClick={() => handleShare('share-excel')} className="w-full text-left px-4 py-3 text-[11px] font-black text-gray-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 transition-colors">
+                      <i className="fa-solid fa-file-excel text-green-600 w-4 text-center text-sm"></i> Share Excel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* SECTION 1: STATS CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* SECTION 1: 4 FINANCIAL BALANCE KPI CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-5 shrink-0">
           {/* Card 1: Saldo Bank */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-[2rem] shadow-sm relative overflow-hidden text-white">
-            <div className="absolute right-4 bottom-4 text-white/5 text-7xl font-bold"><i className="fa-solid fa-building-columns"></i></div>
-            <p className="text-[10px] text-blue-100 font-bold uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-building-columns text-blue-200"></i> Saldo Bank
-            </p>
-            <p className="text-2xl font-black mt-3 drop-shadow-sm">{formatRupiah(currentSaldoBank)}</p>
-            <p className="text-[9px] text-blue-200 font-medium mt-1 uppercase tracking-wider">Saldo buku tersisa di bank</p>
+          <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 p-5 rounded-3xl shadow-sm relative overflow-hidden text-white flex flex-col justify-between">
+            <div className="absolute right-3 -bottom-2 text-white/10 text-6xl font-black pointer-events-none">
+              <i className="fa-solid fa-building-columns"></i>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-blue-200 font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-building-columns"></i> Saldo Bank (Buku)
+                </span>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-white/15 text-white/90">Teoritis</span>
+              </div>
+              <p className="text-2xl font-black mt-2 tracking-tight drop-shadow-sm">{formatRupiah(currentSaldoBank)}</p>
+            </div>
+            <p className="text-[9px] text-blue-200/80 font-medium mt-2 uppercase tracking-wider">Sisa saldo tercatat di bank</p>
           </div>
 
           {/* Card 2: Saldo Laci Kasir */}
-          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-[2rem] shadow-sm relative overflow-hidden text-white">
-            <div className="absolute right-4 bottom-4 text-white/5 text-7xl font-bold"><i className="fa-solid fa-cash-register"></i></div>
-            <p className="text-[10px] text-emerald-100 font-bold uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-cash-register text-emerald-200"></i> Saldo Laci Kasir
-            </p>
-            <p className="text-2xl font-black mt-3 drop-shadow-sm">{formatRupiah(currentTotalSaldoKas)}</p>
-            <p className="text-[9px] text-emerald-200 font-medium mt-1 uppercase tracking-wider">Uang tunai fisik dalam laci</p>
+          <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-teal-800 p-5 rounded-3xl shadow-sm relative overflow-hidden text-white flex flex-col justify-between">
+            <div className="absolute right-3 -bottom-2 text-white/10 text-6xl font-black pointer-events-none">
+              <i className="fa-solid fa-cash-register"></i>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-emerald-200 font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-cash-register"></i> Saldo Laci Kasir
+                </span>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-white/15 text-white/90">Fisik Tunai</span>
+              </div>
+              <p className="text-2xl font-black mt-2 tracking-tight drop-shadow-sm">{formatRupiah(currentTotalSaldoKas)}</p>
+            </div>
+            <p className="text-[9px] text-emerald-200/80 font-medium mt-2 uppercase tracking-wider">Uang tunai fisik dalam laci kasir</p>
           </div>
 
           {/* Card 3: Modal Awal Kasir */}
-          <div className="bg-gradient-to-br from-slate-700 to-slate-800 p-6 rounded-[2rem] shadow-sm relative overflow-hidden text-white">
-            <div className="absolute right-4 bottom-4 text-white/5 text-7xl font-bold"><i className="fa-solid fa-vault"></i></div>
-            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-vault text-slate-400"></i> Modal Awal Kasir
-            </p>
-            <p className="text-2xl font-black mt-3 drop-shadow-sm">{formatRupiah(props.kasModal)}</p>
-            <p className="text-[9px] text-slate-400 font-medium mt-1 uppercase tracking-wider">Modal laci saat buka toko</p>
+          <div className="bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 p-5 rounded-3xl shadow-sm relative overflow-hidden text-white flex flex-col justify-between">
+            <div className="absolute right-3 -bottom-2 text-white/10 text-6xl font-black pointer-events-none">
+              <i className="fa-solid fa-vault"></i>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-vault"></i> Modal Awal Kasir
+                </span>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-white/15 text-white/90">Modal Toko</span>
+              </div>
+              <p className="text-2xl font-black mt-2 tracking-tight drop-shadow-sm">{formatRupiah(props.kasModal)}</p>
+            </div>
+            <p className="text-[9px] text-slate-400 font-medium mt-2 uppercase tracking-wider">Modal laci saat buka toko</p>
+          </div>
+
+          {/* Card 4: Total Laba / Admin Fee */}
+          <div className="bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-700 p-5 rounded-3xl shadow-sm relative overflow-hidden text-white flex flex-col justify-between">
+            <div className="absolute right-3 -bottom-2 text-white/10 text-6xl font-black pointer-events-none">
+              <i className="fa-solid fa-coins"></i>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-purple-200 font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-coins"></i> Laba / Admin Fee
+                </span>
+                {renderDelta(currentTotalAdmin, yesterdayStats?.admin, true)}
+              </div>
+              <p className="text-2xl font-black mt-2 tracking-tight drop-shadow-sm">{formatRupiah(currentTotalAdmin)}</p>
+            </div>
+            <p className="text-[9px] text-purple-200/80 font-medium mt-2 uppercase tracking-wider">Keuntungan admin transaksi hari ini</p>
           </div>
         </div>
 
-        {/* 4 RINGKASAN HARIAN (PC VIEW 1 KOTAK LEBAR DIVIDED BY LINES) */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 mb-6">
-          <div className="grid grid-cols-4 divide-x divide-slate-100 dark:divide-slate-700">
+        {/* SECTION 2: OPERATIONAL SUMMARY RIBBON (4 COLUMNS) */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700/60 mb-5 shrink-0">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 dark:divide-slate-700/70">
             {/* 1. TRX HARI INI */}
-            <div className="flex flex-col justify-between items-center text-center px-3">
-              <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">TRX HARI INI</span>
-              <span className="text-2xl font-black text-slate-800 dark:text-white my-1.5 leading-none">{currentTxCount}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Jumlah Transaksi</span>
+            <div className="flex flex-col justify-between items-center text-center px-3 py-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Total Transaksi</span>
+              <span className="text-xl font-black text-slate-800 dark:text-white my-1 leading-none">{currentTxCount} <span className="text-xs font-bold text-slate-400">Trx</span></span>
               {renderDelta(currentTxCount, yesterdayStats?.txCount, false)}
             </div>
 
-            {/* 2. ADMIN FEE */}
-            <div className="flex flex-col justify-between items-center text-center px-3">
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">ADMIN FEE</span>
-              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentTotalAdmin)}>{formatRupiah(currentTotalAdmin)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Total Admin Fee</span>
-              {renderDelta(currentTotalAdmin, yesterdayStats?.admin, true)}
-            </div>
-
-            {/* 3. UANG MASUK */}
-            <div className="flex flex-col justify-between items-center text-center px-3">
-              <span className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span> UANG MASUK
+            {/* 2. UANG MASUK */}
+            <div className="flex flex-col justify-between items-center text-center px-3 py-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Kas Masuk (Penjualan)</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 my-1 leading-none truncate max-w-full" title={formatRupiah(currentUangMasuk)}>
+                {formatRupiah(currentUangMasuk)}
               </span>
-              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentUangMasuk)}>{formatRupiah(currentUangMasuk)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Penjualan â†’ Laci</span>
               {renderDelta(currentUangMasuk, yesterdayStats?.uangMasuk, true)}
             </div>
 
-            {/* 4. TARIK TUNAI */}
-            <div className="flex flex-col justify-between items-center text-center px-3">
-              <span className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span> TARIK TUNAI
+            {/* 3. TARIK TUNAI */}
+            <div className="flex flex-col justify-between items-center text-center px-3 py-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Tarik Tunai (Keluar)</span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1 leading-none truncate max-w-full" title={formatRupiah(currentTotalTarik)}>
+                {formatRupiah(currentTotalTarik)}
               </span>
-              <span className="text-xl font-black text-rose-600 dark:text-rose-400 my-1.5 leading-none truncate w-full block" title={formatRupiah(currentTotalTarik)}>{formatRupiah(currentTotalTarik)}</span>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-0.5">Laci â†’ Pembeli</span>
               {renderDelta(currentTotalTarik, yesterdayStats?.tarik, true)}
             </div>
-          </div>
-        </div>
 
-        {/* VOUCHER SALES SUMMARY FOR PC */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-ticket text-sm"></i>
-              </div>
-              <div>
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Voucher Terjual (LAKU)</p>
-                <p className="text-lg font-black text-slate-800 dark:text-white mt-0.5">{totalQtyLaku} pcs</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-money-bill-wave text-sm"></i>
-              </div>
-              <div>
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Pembayaran Tunai</p>
-                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{formatRupiah(totalUangKeseluruhan - totalUangQris)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-qrcode text-sm"></i>
-              </div>
-              <div>
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Pembayaran QRIS</p>
-                <p className="text-lg font-black text-sky-600 dark:text-sky-400 mt-0.5">{formatRupiah(totalUangQris)}</p>
-              </div>
+            {/* 4. VOUCHER & QRIS */}
+            <div className="flex flex-col justify-between items-center text-center px-3 py-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Voucher & Non-Tunai</span>
+              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 my-1 leading-none">
+                {totalQtyLaku} <span className="text-xs font-bold text-slate-400">pcs</span>
+              </span>
+              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 truncate max-w-full">
+                Tunai: {formatRupiah(totalTunaiVoucher)} • QRIS: {formatRupiah(totalUangQris)}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* SECTION 2: GRID TABLE & ADJUSTMENT JOURNAL */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 items-start">
-          {/* Rekap per Kategori Table */}
-          <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-xs text-slate-800 dark:text-slate-200 tracking-widest uppercase flex items-center gap-2">
-                <i className="fa-solid fa-chart-pie text-indigo-500"></i> Rekap per Kategori
-              </h3>
-              <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-1 rounded-lg uppercase tracking-wider">Otomatis</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-700">
-                    <th className="pb-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Kategori</th>
-                    <th className="pb-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center w-20">Qty</th>
-                    <th className="pb-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Nominal</th>
-                    <th className="pb-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-right">Laba / Admin</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/30">
-                  {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'].map(cat => {
-                    let filtered = [];
-                    if (cat === 'Transaksi Khusus') {
-                      filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-                    } else {
-                      filtered = props.transactions.filter(t => 
-                        t.kategori === cat && 
-                        !(t.keterangan || '').includes('[KHUSUS]')
-                      );
-                    }
-                    
-                    if (filtered.length === 0) return null;
-                    
-                    let catColor = "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
-                    if (cat === 'Transfer Bank') catColor = "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
-                    if (cat === 'DANA') catColor = "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400";
-                    if (cat === 'FLIP') catColor = "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
-                    if (cat === 'Order Kuota') catColor = "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
-                    if (cat === 'Tarik Tunai') catColor = "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400";
-                    if (cat === 'Aksesoris') catColor = "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-400";
-                    if (cat === 'Transaksi Khusus') catColor = "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400";
-
-                    return (
-                      <tr key={cat} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-all">
-                        <td className="py-2.5">
-                          <span className={cn("px-2.5 py-0.5 rounded-xl text-xs font-black uppercase tracking-wider inline-block", catColor)}>
-                            {cat}
-                          </span>
-                        </td>
-                        <td className="py-2.5 font-bold text-slate-500 text-center text-xs">{filtered.length}</td>
-                        <td className="py-2.5 font-black text-slate-800 dark:text-slate-200 text-xs">{formatRupiah(filtered.reduce((s,t) => s+t.nominal, 0))}</td>
-                        <td className="py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right text-xs">{formatRupiah(filtered.reduce((s,t) => s+t.adminFee, 0))}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Jurnal Penyesuaian Saldo Card */}
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700/50">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-black text-xs text-slate-800 dark:text-slate-200 tracking-widest uppercase flex items-center gap-2">
-                <i className="fa-solid fa-scale-balanced text-indigo-500"></i> Jurnal Penyesuaian
-              </h3>
-              <span className="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase">Otomatis</span>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-2.5 bg-indigo-50/30 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/30">
-                <div>
-                  <p className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
-                  <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Total setoran saldo bank hari ini</p>
+        {/* SECTION 3: MAIN 2-COLUMN DASHBOARD (OPERATIONS vs AUDIT) */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 mb-5 items-start">
+          {/* LEFT COLUMN: REKAP KATEGORI & CASH FLOW DETAILS (7 COLUMNS) */}
+          <div className="xl:col-span-7 flex flex-col gap-5">
+            {/* Rekap per Kategori Table */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs shadow-sm">
+                    <i className="fa-solid fa-chart-pie"></i>
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xs text-slate-800 dark:text-slate-200 tracking-wider uppercase">
+                      Rekap per Kategori Transaksi
+                    </h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Rincian volume dan keuntungan per produk</p>
+                  </div>
                 </div>
-                <span className="font-black text-xs text-indigo-900 dark:text-white">
-                  {formatRupiah(currentIsiBank)}
+                <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                  Otomatis
                 </span>
               </div>
 
-              <div className="flex justify-between items-center p-2.5 bg-orange-50/30 dark:bg-orange-950/20 rounded-2xl border border-orange-100/50 dark:border-orange-900/30">
-                <div>
-                  <p className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase tracking-tight">2. Penjualan Digital</p>
-                  <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Saldo terpakai untuk transaksi digital</p>
-                </div>
-                <span className="font-black text-xs text-orange-600 dark:text-orange-400">-{formatRupiah(currentPenjualanDigital)}</span>
-              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-700 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      <th className="pb-3 pl-1">Kategori</th>
+                      <th className="pb-3 text-center w-16">Qty</th>
+                      <th className="pb-3 text-right">Nominal</th>
+                      <th className="pb-3 text-right">Laba / Admin</th>
+                      <th className="pb-3 text-right pr-1 w-20">Porsi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 dark:divide-slate-700/40">
+                    {(() => {
+                      const categoryRows = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'].map(cat => {
+                        let filtered = [];
+                        if (cat === 'Transaksi Khusus') {
+                          filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+                        } else {
+                          filtered = props.transactions.filter(t => 
+                            t.kategori === cat && 
+                            !(t.keterangan || '').includes('[KHUSUS]')
+                          );
+                        }
+                        
+                        if (filtered.length === 0) return null;
+                        
+                        let catColor = "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
+                        let catIcon = "fa-tag";
+                        if (cat === 'Transfer Bank') { catColor = "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200/50"; catIcon = "fa-building-columns"; }
+                        if (cat === 'DANA') { catColor = "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border border-cyan-200/50"; catIcon = "fa-wallet"; }
+                        if (cat === 'FLIP') { catColor = "bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200/50"; catIcon = "fa-arrow-right-arrow-left"; }
+                        if (cat === 'Order Kuota') { catColor = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200/50"; catIcon = "fa-wifi"; }
+                        if (cat === 'Tarik Tunai') { catColor = "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200/50"; catIcon = "fa-hand-holding-dollar"; }
+                        if (cat === 'Aksesoris') { catColor = "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 border border-fuchsia-200/50"; catIcon = "fa-headphones"; }
+                        if (cat === 'Transaksi Khusus') { catColor = "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200/50"; catIcon = "fa-star"; }
 
-              <div className="flex justify-between items-center p-2.5 bg-blue-50/50 dark:bg-blue-950/30 rounded-2xl border-2 border-blue-100 dark:border-blue-900/50">
-                <div>
-                  <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-tight">3. Sisa Saldo (Buku)</p>
-                  <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Sisa saldo di bank teoritis</p>
-                </div>
-                <span className="font-black text-xs text-blue-900 dark:text-white">{formatRupiah(currentSaldoBank)}</span>
-              </div>
+                        const catNominal = filtered.reduce((s,t) => s + t.nominal, 0);
+                        const catAdmin = filtered.reduce((s,t) => s + t.adminFee, 0);
+                        const totalAllNominal = props.transactions.reduce((s, t) => s + t.nominal, 0) || 1;
+                        const porsiPct = Math.round((catNominal / totalAllNominal) * 100);
 
-              <div className="flex flex-col gap-2 p-2.5 bg-emerald-50/30 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/30">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">4. Saldo Real App (HP)</p>
-                    <p className="text-[9px] text-slate-400 font-medium italic -mt-0.5">Input manual sisa saldo di HP</p>
-                  </div>
-                  <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{formatRupiah(props.saldoReal)}</span>
-                </div>
-                {props.onUpdateSaldoReal && (
-                  <button
-                    onClick={() => setShowSaldoRealModal(true)}
-                    className="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-xl py-3 px-4 flex items-center justify-between shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                        <i className="fa-solid fa-mobile-screen-button text-sm"></i>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-[11px] font-black uppercase tracking-widest leading-none mb-1">Catat Sisa Saldo Aplikasi Banking</p>
-                        <p className="text-[9px] font-medium opacity-90 leading-tight">Input saldo aplikasi Real Mbangking di aplikasi Hp</p>
-                      </div>
-                    </div>
-                    <div className="bg-yellow-400 text-yellow-900 px-4 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest shadow-sm">
-                      UPDATE
-                    </div>
-                  </button>
-                )}
-              </div>
+                        return (
+                          <tr key={cat} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-all">
+                            <td className="py-2.5 pl-1">
+                              <span className={cn("px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5", catColor)}>
+                                <i className={cn("fa-solid text-[10px]", catIcon)}></i>
+                                {cat}
+                              </span>
+                            </td>
+                            <td className="py-2.5 font-bold text-slate-600 dark:text-slate-300 text-center text-xs">{filtered.length}</td>
+                            <td className="py-2.5 font-black text-slate-800 dark:text-slate-200 text-xs text-right">{formatRupiah(catNominal)}</td>
+                            <td className="py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right text-xs">{formatRupiah(catAdmin)}</td>
+                            <td className="py-2.5 pr-1 text-right">
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                                {porsiPct}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }).filter(Boolean);
 
-              {(() => {
-                const selisih = props.saldoReal - currentSaldoBank;
-                
-                return (
-                  <div className={cn(
-                    "mt-4 p-4 rounded-[1.8rem] flex justify-between items-center border-2",
-                    selisih === 0 ? "bg-emerald-600 border-emerald-400 text-white shadow-md shadow-emerald-500/20" : 
-                    selisih > 0 ? "bg-blue-600 border-blue-400 text-white shadow-md shadow-blue-500/20" : "bg-rose-600 border-rose-400 text-white shadow-md shadow-rose-500/20"
-                  )}>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5 leading-none">
-                        {selisih === 0 ? <><i className="fa-solid fa-circle-check"></i> KLOP</> : 
-                         selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> SURPLUS</> : 
-                         <><i className="fa-solid fa-circle-xmark"></i> SELISIH</>}
-                      </p>
-                      <p className="text-[9px] opacity-90 font-bold italic mt-1 leading-tight">
-                        {selisih === 0 ? 'Catatan sisa saldo HP & buku pas' : 
-                         selisih > 0 ? 'Saldo di HP surplus dibanding buku' : 'Uang di bank kurang dari catatan'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-black text-sm block">{selisih === 0 ? 'âœ“ MATCH' : formatRupiah(selisih)}</span>
-                      {selisih !== 0 && <span className="text-[8px] font-black opacity-80 uppercase tracking-widest">Cek Kembali</span>}
-                    </div>
-                  </div>
-                );
-              })()}
+                      if (categoryRows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400">
+                              <i className="fa-solid fa-folder-open text-2xl mb-1.5 opacity-40 block"></i>
+                              <span className="text-xs font-bold uppercase tracking-wider">Belum ada transaksi pada tanggal ini</span>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return categoryRows;
+                    })()}
+                  </tbody>
+                  {props.transactions.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-200 dark:border-slate-700 font-black text-xs">
+                        <td className="pt-3 pl-1 text-slate-800 dark:text-white uppercase tracking-wider">Grand Total</td>
+                        <td className="pt-3 text-center text-slate-800 dark:text-white">{props.transactions.filter(t => !t.kategori.startsWith('Isi Saldo Real')).length}</td>
+                        <td className="pt-3 text-right text-slate-800 dark:text-white">{formatRupiah(props.transactions.reduce((s,t) => s + t.nominal, 0))}</td>
+                        <td className="pt-3 text-right text-emerald-600 dark:text-emerald-400">{formatRupiah(currentTotalAdmin)}</td>
+                        <td className="pt-3 pr-1 text-right text-slate-400 text-[10px]">100%</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </div>
-            
-            {/* Catatan Kasir PC */}
-            <div className="mt-4 bg-amber-50/50 dark:bg-amber-950/20 rounded-[1.8rem] p-4 border border-amber-100 dark:border-amber-900/30">
+
+            {/* Rincian Aliran Dana Kasir (3 Columns in 1 Card) */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs shadow-sm">
+                    <i className="fa-solid fa-money-bill-transfer"></i>
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xs text-slate-800 dark:text-slate-200 tracking-wider uppercase">
+                      Rincian Aliran Dana Kasir
+                    </h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Arus kas masuk laci, keluar, dan mutasi non-tunai</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 dark:divide-slate-700/60 pt-1">
+                {/* 1. Kas Masuk */}
+                <div className="flex flex-col justify-between pr-0 md:pr-4 pb-4 md:pb-0">
+                  <div>
+                    <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                      <i className="fa-solid fa-arrow-down-long text-xs"></i> KAS MASUK LACI
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/50 px-2.5 py-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Modal Tunai</span>
+                        <span className="font-black text-slate-800 dark:text-slate-200">{formatRupiah(props.kasModal)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-blue-50/50 dark:bg-blue-950/20 px-2.5 py-1.5 rounded-xl border border-blue-100/50 dark:border-blue-900/30">
+                        <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400">Digital</span>
+                        <span className="font-black text-blue-600 dark:text-blue-400">{formatRupiah(currentPenjualanDigital)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-fuchsia-50/50 dark:bg-fuchsia-950/20 px-2.5 py-1.5 rounded-xl border border-fuchsia-100/50 dark:border-fuchsia-900/30">
+                        <span className="text-[11px] font-bold text-fuchsia-700 dark:text-fuchsia-400">Aksesoris</span>
+                        <span className="font-black text-fuchsia-600 dark:text-fuchsia-400">{formatRupiah(currentTotalAksesoris)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-emerald-50/50 dark:bg-emerald-950/20 px-2.5 py-1.5 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">Admin Fee</span>
+                        <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(currentTotalAdmin)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Masuk</span>
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                      {formatRupiah(props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Kas Keluar */}
+                <div className="flex flex-col justify-between px-0 md:px-4 py-4 md:py-0">
+                  <div>
+                    <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                      <i className="fa-solid fa-arrow-up-long text-xs"></i> KAS KELUAR LACI
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-2 rounded-xl border border-rose-100/50 dark:border-rose-900/30">
+                        <div>
+                          <span className="text-[11px] font-bold text-rose-700 dark:text-rose-400 block">Tarik Tunai</span>
+                          <span className="text-[8px] text-slate-400 font-medium">Uang laci diserahkan ke pembeli</span>
+                        </div>
+                        <span className="font-black text-rose-600 dark:text-rose-400">-{formatRupiah(currentTotalTarik)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Keluar</span>
+                    <span className="text-xs font-black text-rose-600 dark:text-rose-400">
+                      -{formatRupiah(currentTotalTarik)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Kas Lainnya */}
+                <div className="flex flex-col justify-between pl-0 md:pl-4 pt-4 md:pt-0">
+                  <div>
+                    <div className="mb-2">
+                      <span className="text-[11px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="fa-solid fa-layer-group text-xs"></i> KAS LAINNYA
+                      </span>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Catatan di luar laci fisik</p>
+                    </div>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center bg-purple-50/50 dark:bg-purple-950/20 px-2.5 py-1.5 rounded-xl border border-purple-100/50 dark:border-purple-900/30">
+                        <span className="text-[11px] font-bold text-purple-700 dark:text-purple-400">Admin Dalam</span>
+                        <span className="font-black text-purple-600 dark:text-purple-400">{formatRupiah(totalAdminDalam)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-indigo-50/50 dark:bg-indigo-950/20 px-2.5 py-1.5 rounded-xl border border-indigo-100/50 dark:border-indigo-900/30">
+                        <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Non-Tunai / QRIS</span>
+                        <span className="font-black text-indigo-600 dark:text-indigo-400">{formatRupiah(totalNonTunai)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-fuchsia-50/50 dark:bg-fuchsia-950/20 px-2.5 py-1.5 rounded-xl border border-fuchsia-100/50 dark:border-fuchsia-900/30">
+                        <span className="text-[11px] font-bold text-fuchsia-700 dark:text-fuchsia-400">Khusus</span>
+                        <span className="font-black text-fuchsia-600 dark:text-fuchsia-400">{formatRupiah(totalKhusus)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Non-Laci</span>
+                    <span className="text-xs font-black text-purple-600 dark:text-purple-400">
+                      {formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: JURNAL PENYESUAIAN, VOUCHER, & CATATAN (5 COLUMNS) */}
+          <div className="xl:col-span-5 flex flex-col gap-5">
+            {/* Card 1: Jurnal Penyesuaian Saldo */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/60">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs shadow-sm">
+                    <i className="fa-solid fa-scale-balanced"></i>
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xs text-slate-800 dark:text-slate-200 tracking-wider uppercase">
+                      Jurnal Penyesuaian Saldo
+                    </h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Audit komparasi saldo bank vs riil HP</p>
+                  </div>
+                </div>
+                <span className="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase">
+                  Otomatis
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {/* 1. Modal Saldo Bank */}
+                <div className="flex justify-between items-center p-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100/60 dark:border-indigo-900/30">
+                  <div>
+                    <p className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-tight">1. Modal Saldo Bank (Isi)</p>
+                    <p className="text-[9px] text-slate-400 font-medium italic mt-0.5">Total setoran saldo bank hari ini</p>
+                  </div>
+                  <span className="font-black text-xs text-indigo-900 dark:text-white">
+                    {formatRupiah(currentIsiBank)}
+                  </span>
+                </div>
+
+                {/* 2. Penjualan Digital */}
+                <div className="flex justify-between items-center p-2.5 bg-orange-50/40 dark:bg-orange-950/20 rounded-2xl border border-orange-100/60 dark:border-orange-900/30">
+                  <div>
+                    <p className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase tracking-tight">2. Penjualan Digital</p>
+                    <p className="text-[9px] text-slate-400 font-medium italic mt-0.5">Saldo terpakai untuk transaksi digital</p>
+                  </div>
+                  <span className="font-black text-xs text-orange-600 dark:text-orange-400">-{formatRupiah(currentPenjualanDigital)}</span>
+                </div>
+
+                {/* 3. Sisa Saldo (Buku) */}
+                <div className="flex justify-between items-center p-2.5 bg-blue-50/60 dark:bg-blue-950/30 rounded-2xl border-2 border-blue-100 dark:border-blue-900/50">
+                  <div>
+                    <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-tight">3. Sisa Saldo (Buku)</p>
+                    <p className="text-[9px] text-slate-400 font-medium italic mt-0.5">Sisa saldo di bank secara catatan buku</p>
+                  </div>
+                  <span className="font-black text-xs text-blue-900 dark:text-white">{formatRupiah(currentSaldoBank)}</span>
+                </div>
+
+                {/* 4. Saldo Real App (HP) */}
+                <div className="p-2.5 bg-emerald-50/40 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100/60 dark:border-emerald-900/30">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">4. Saldo Real App (HP)</p>
+                      <p className="text-[9px] text-slate-400 font-medium italic mt-0.5">Sisa saldo riil di aplikasi HP</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{formatRupiah(props.saldoReal)}</span>
+                      {props.onUpdateSaldoReal && (
+                        <button
+                          onClick={() => setShowSaldoRealModal(true)}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                          title="Input Sisa Saldo M-Banking"
+                        >
+                          <i className="fa-solid fa-pen-to-square text-[9px]"></i>
+                          <span>Update</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selisih Verification Box */}
+                {(() => {
+                  const selisih = props.saldoReal - currentSaldoBank;
+                  
+                  return (
+                    <div className={cn(
+                      "p-3.5 rounded-2xl flex justify-between items-center border-2 transition-all shadow-sm",
+                      selisih === 0 ? "bg-emerald-600 border-emerald-400 text-white shadow-emerald-500/10" : 
+                      selisih > 0 ? "bg-blue-600 border-blue-400 text-white shadow-blue-500/10" : "bg-rose-600 border-rose-400 text-white shadow-rose-500/10"
+                    )}>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5 leading-none">
+                          {selisih === 0 ? <><i className="fa-solid fa-circle-check"></i> KLOP / MATCH</> : 
+                           selisih > 0 ? <><i className="fa-solid fa-circle-exclamation"></i> SURPLUS</> : 
+                           <><i className="fa-solid fa-circle-xmark"></i> SELISIH</>}
+                        </p>
+                        <p className="text-[9px] opacity-90 font-bold italic mt-1 leading-tight">
+                          {selisih === 0 ? 'Catatan sisa saldo HP & buku pas sempurna' : 
+                           selisih > 0 ? 'Saldo di HP surplus dibanding catatan buku' : 'Uang di bank riil kurang dari catatan'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-sm block">{selisih === 0 ? '✓ MATCH (Rp 0)' : formatRupiah(selisih)}</span>
+                        {selisih !== 0 && <span className="text-[8px] font-black opacity-80 uppercase tracking-widest">Cek Kembali</span>}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Card 2: Ringkasan Penjualan Voucher & QRIS */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-ticket text-indigo-500 text-xs"></i>
+                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Voucher Fisik & QRIS
+                  </h4>
+                </div>
+                <span className="text-[9px] font-bold text-slate-400 uppercase">Rekap Kasir</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2.5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100/60 dark:border-blue-900/30">
+                  <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase block">Voucher Terjual</span>
+                  <span className="text-base font-black text-slate-800 dark:text-white mt-0.5 block">{totalQtyLaku} <span className="text-[10px] text-slate-400 font-bold">pcs</span></span>
+                </div>
+                <div className="p-2.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100/60 dark:border-emerald-900/30">
+                  <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase block">Tunai Voucher</span>
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-1 block truncate" title={formatRupiah(totalTunaiVoucher)}>
+                    {formatRupiah(totalTunaiVoucher)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-2xl bg-sky-50/60 dark:bg-sky-950/20 border border-sky-100/60 dark:border-sky-900/30">
+                  <span className="text-[9px] font-black text-sky-600 dark:text-sky-400 uppercase block">QRIS Non-Tunai</span>
+                  <span className="text-xs font-black text-sky-600 dark:text-sky-400 mt-1 block truncate" title={formatRupiah(totalUangQris)}>
+                    {formatRupiah(totalUangQris)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Catatan Kasir */}
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700/60 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <i className="fa-solid fa-pen-to-square text-amber-500"></i>
-                <h4 className="text-xs font-black text-amber-800 dark:text-amber-500 uppercase tracking-widest">Catatan Kasir</h4>
+                <i className="fa-solid fa-pen-to-square text-amber-500 text-xs"></i>
+                <h4 className="text-xs font-black text-amber-800 dark:text-amber-500 uppercase tracking-widest">Catatan Kasir / Shift</h4>
               </div>
               <textarea
                 value={catatanKasir}
                 onChange={handleCatatanChange}
-                placeholder="Tulis pesan, kendala, atau keterangan tambahan untuk owner di sini..."
-                className="w-full bg-white dark:bg-slate-900 border border-amber-200/50 dark:border-amber-900/50 rounded-xl p-3 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none min-h-[80px]"
+                placeholder="Tulis pesan, kendala serah terima, atau keterangan tambahan untuk owner di sini..."
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-2xl p-3 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none min-h-[75px]"
               />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 3: CASH FLOW DETAILS (3 COLUMNS) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Kas Masuk */}
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-col justify-between">
-            <div>
-              <h4 className="text-xs font-black text-emerald-600 dark:text-emerald-400 mb-3 tracking-widest uppercase flex items-center gap-1.5">
-                <i className="fa-solid fa-arrow-down-long"></i> KAS MASUK
-              </h4>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50 px-3 py-2 rounded-xl border border-gray-100/50 dark:border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><i className="fa-solid fa-vault text-[10px]"></i> Modal Tunai</span>
-                  <span className="font-black text-xs text-slate-800 dark:text-slate-200">{formatRupiah(props.kasModal)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2 rounded-xl border border-blue-100/50 dark:border-blue-900/30">
-                  <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2"><i className="fa-solid fa-globe text-[10px]"></i> Digital</span>
-                  <span className="font-black text-xs text-blue-600 dark:text-blue-400">{formatRupiah(currentPenjualanDigital)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-fuchsia-50/50 dark:bg-fuchsia-950/20 px-3 py-2 rounded-xl border border-fuchsia-100/50 dark:border-fuchsia-900/30">
-                  <span className="text-[11px] font-bold text-fuchsia-700 dark:text-fuchsia-400 flex items-center gap-2"><i className="fa-solid fa-headphones text-[10px]"></i> Aksesoris</span>
-                  <span className="font-black text-xs text-fuchsia-600 dark:text-fuchsia-400">{formatRupiah(currentTotalAksesoris)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30">
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2"><i className="fa-solid fa-piggy-bank text-[10px]"></i> Admin Fee</span>
-                  <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{formatRupiah(currentTotalAdmin)}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Total Masuk</span>
-              <span className="text-sm font-black text-emerald-600">{formatRupiah(props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin)}</span>
-            </div>
-          </div>
-
-          {/* Kas Keluar */}
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-col justify-between">
-            <div>
-              <h4 className="text-xs font-black text-rose-600 dark:text-rose-400 mb-3 tracking-widest uppercase flex items-center gap-1.5">
-                <i className="fa-solid fa-arrow-up-long"></i> KAS KELUAR
-              </h4>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center bg-rose-50/50 dark:bg-rose-950/20 px-3 py-2 rounded-xl border border-rose-100/50 dark:border-rose-900/30">
-                  <span className="text-[11px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2"><i className="fa-solid fa-money-bill-transfer text-[10px]"></i> Tarik Tunai</span>
-                  <span className="font-black text-xs text-rose-600 dark:text-rose-400">-{formatRupiah(currentTotalTarik)}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Total Keluar</span>
-              <span className="text-sm font-black text-rose-600">-{formatRupiah(currentTotalTarik)}</span>
-            </div>
-          </div>
-
-          {/* Kas Lainnya */}
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50 flex flex-col justify-between">
-            <div>
-              <div className="mb-3">
-                <h4 className="text-xs font-black text-purple-600 dark:text-purple-400 tracking-widest uppercase flex items-center gap-1.5">
-                  <i className="fa-solid fa-layer-group"></i> KAS LAINNYA
-                </h4>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Hanya catatan, tidak masuk hitungan saldo laci kasir</p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center bg-purple-50/50 dark:bg-purple-950/20 px-3 py-2.5 rounded-xl border border-purple-100/50 dark:border-purple-900/30">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5"><i className="fa-solid fa-tags text-[10px]"></i> Admin Dalam / Non Tunai</span>
-                    <span className="text-[8px] text-purple-600/70 dark:text-purple-400/70 italic mt-0.5">Catatan laba admin (uang fisik tidak di laci)</span>
-                  </div>
-                  <span className="font-black text-xs text-purple-600 dark:text-purple-400">{formatRupiah(totalAdminDalam)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2.5 rounded-xl border border-indigo-100/50 dark:border-indigo-900/30">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5"><i className="fa-solid fa-credit-card text-[10px]"></i> Transaksi Non Tunai</span>
-                    <span className="text-[8px] text-indigo-600/70 dark:text-indigo-400/70 italic mt-0.5">Pembayaran via bank/qris (uang masuk bank)</span>
-                  </div>
-                  <span className="font-black text-xs text-indigo-600 dark:text-indigo-400">{formatRupiah(totalNonTunai)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-fuchsia-50/50 dark:bg-fuchsia-950/20 px-3 py-2.5 rounded-xl border border-fuchsia-100/50 dark:border-fuchsia-900/30">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-fuchsia-700 dark:text-fuchsia-400 flex items-center gap-1.5"><i className="fa-solid fa-star text-[10px]"></i> Transaksi Khusus</span>
-                    <span className="text-[8px] text-fuchsia-600/70 dark:text-fuchsia-400/70 italic mt-0.5">Catatan transaksi khusus di luar sistem laci</span>
-                  </div>
-                  <span className="font-black text-xs text-fuchsia-600 dark:text-fuchsia-400">{formatRupiah(totalKhusus)}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-400 uppercase">Total Lainnya</span>
-                <span className="text-[8px] text-slate-400/80 font-bold mt-0.5">TIDAK MEMPENGARUHI LACI</span>
-              </div>
-              <span className="text-sm font-black text-purple-600">{formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}</span>
             </div>
           </div>
         </div>
@@ -1889,6 +2059,195 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                     {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : confirmSelisih ? <><i className="fa-solid fa-triangle-exclamation text-lg"></i> TETAP SIMPAN</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN TOTAL SALDO</>}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL TIMELINE AUDIT SERAH TERIMA SHIFT (PC View) */}
+        {showAuditModal && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-[2rem] max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+              {/* Header Modal */}
+              <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+                    <i className="fa-solid fa-clipboard-check text-lg"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white">Timeline Audit Serah Terima Shift</h3>
+                    <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A ➔ Saldo Awal Kasir B</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowAuditModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              {/* Content List */}
+              <div className="p-4 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
+                {auditShiftPairs.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <i className="fa-solid fa-folder-open text-4xl mb-2 opacity-50"></i>
+                    <p className="text-xs font-bold uppercase tracking-wider">Belum ada riwayat closing/serah terima shift</p>
+                  </div>
+                ) : (
+                  auditShiftPairs.map((pair, idx) => {
+                    const isDiscrepancy = pair.selisih !== 0 && pair.kasirOpening !== 'Shift Selanjutnya'
+
+                    return (
+                      <div 
+                        key={pair.id + '-' + idx}
+                        className={cn(
+                          "p-4 rounded-2xl border transition-all space-y-3",
+                          isDiscrepancy 
+                            ? "bg-rose-50/60 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60 shadow-sm"
+                            : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/80"
+                        )}
+                      >
+                        {/* Top Header Row */}
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                              <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} • {pair.timeStr}
+                            </span>
+                            {pair.isOperan && (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">
+                                Auto Operan
+                              </span>
+                            )}
+                          </div>
+
+                          {isDiscrepancy ? (
+                            <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                              <i className="fa-solid fa-triangle-exclamation"></i> Selisih {formatRupiah(pair.selisih)}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                              <i className="fa-solid fa-circle-check"></i> KLOP / MATCH
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Main Handover Flow */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
+                          {/* Kasir Penyerah (Closing) */}
+                          <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                              Shift Penyerah (Closing)
+                            </span>
+                            <p className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                              <i className="fa-solid fa-user-minus text-rose-500"></i>
+                              {pair.kasirClosing}
+                            </p>
+                            <p className="text-sm font-black text-emerald-600 mt-1">
+                              {formatRupiah(pair.saldoClosing)}
+                            </p>
+                          </div>
+
+                          {/* Kasir Penerima (Saldo Awal) */}
+                          <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                              Shift Penerima (Saldo Awal)
+                            </span>
+                            <p className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                              <i className="fa-solid fa-user-plus text-blue-500"></i>
+                              {pair.kasirOpening}
+                            </p>
+                            <p className="text-sm font-black text-blue-600 mt-1">
+                              {formatRupiah(pair.saldoOpening)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Details Items if any */}
+                        {pair.details.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200/40 dark:border-slate-700/40">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Rincian Saldo Real HP:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {pair.details.map((d, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded-lg bg-slate-200/70 dark:bg-slate-700/70 text-slate-700 dark:text-slate-300 text-[9px] font-bold">
+                                  {d}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Footer Modal */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                  Total Record: {auditShiftPairs.length} Shift
+                </span>
+                <button
+                  onClick={() => setShowAuditModal(false)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BOTTOM SHEET / MODAL: PILIH KASIR PENERIMA (PC View) */}
+        {showKasirPenerimaSheet && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowKasirPenerimaSheet(false)}></div>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-[2rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-white dark:bg-slate-800">
+                <div>
+                  <h3 className="font-black text-[13px] uppercase tracking-widest text-slate-800 dark:text-white">Pilih Kasir Penerima</h3>
+                  <p className="text-[9px] text-slate-500 font-bold mt-0.5 uppercase tracking-wider">Shift Selanjutnya</p>
+                </div>
+                <button 
+                  onClick={() => setShowKasirPenerimaSheet(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 transition-colors"
+                >
+                  <i className="fa-solid fa-xmark text-sm text-slate-600 dark:text-slate-300"></i>
+                </button>
+              </div>
+              <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2 custom-scrollbar">
+                {Object.entries(props.kasirList || {})
+                  .filter(([username, data]: [string, any]) => username.toLowerCase() !== 'owner' && (data.role || '').toLowerCase() !== 'owner')
+                  .map(([username, data]: [string, any]) => {
+                  const isSelected = targetKasirId === username;
+                  const kasirName = data.name || username;
+                  return (
+                    <button
+                      key={username}
+                      onClick={() => {
+                        setTargetKasirId(username);
+                        setTimeout(() => setShowKasirPenerimaSheet(false), 200);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-4 p-3 rounded-2xl border transition-all active:scale-[0.98]",
+                        isSelected 
+                          ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 shadow-sm" 
+                          : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-blue-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-black shadow-sm">
+                        {kasirName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{kasirName}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">{data.role || 'Kasir'}</p>
+                      </div>
+                      {isSelected && (
+                        <i className="fa-solid fa-circle-check text-blue-600 text-base"></i>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

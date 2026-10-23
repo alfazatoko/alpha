@@ -414,17 +414,23 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
                 
                 <div className="space-y-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ¦ Saldo Bank (Plafon)</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                      <i className="fa-solid fa-building-columns text-blue-600"></i> Saldo Bank (Plafon)
+                    </p>
                     <p className="text-[11px] leading-relaxed">Uang digital yang mengendap di rekening bank terdaftar (misal: BRI, Mandiri, BCA) sebagai plafon transaksi Brilink.</p>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ“± Saldo Real Aplikasi (HP)</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                      <i className="fa-solid fa-mobile-screen-button text-emerald-600"></i> Saldo Real Aplikasi (HP)
+                    </p>
                     <p className="text-[11px] leading-relaxed">Saldo modal di dalam aplikasi keagenan HP (misal: Brilink Mobile, Kioser, dll) yang langsung berkurang saat melakukan transfer.</p>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1">ðŸ’µ Modal Tunai Kasir</p>
+                    <p className="font-black text-slate-800 dark:text-slate-200 text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                      <i className="fa-solid fa-cash-register text-amber-600"></i> Modal Tunai Kasir
+                    </p>
                     <p className="text-[11px] leading-relaxed">Uang tunai cash di laci kasir (fisik) yang disiapkan sebagai modal kembalian atau penarikan tunai.</p>
                   </div>
                 </div>

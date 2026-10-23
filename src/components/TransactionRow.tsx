@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { KasirAccount } from './LoginScreen'
+import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from '../lib/printerService'
 
 interface TransactionRowProps {
   t: Transaction
@@ -184,154 +185,62 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   })()
 
   const generateReceiptText = () => {
-    const w = 32;
-    const center = (s: string) => {
-      const txt = (s || '').substring(0, w);
-      return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
-    };
-    const right = (left: string, rightStr: string) => {
-      const l = (left || '').substring(0, 18);
-      const r = (rightStr || '');
-      const space = w - l.length - r.length;
-      return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
-    };
-
-    let text = center(effectiveStoreName.toUpperCase()) + '\n';
+    let text = formatReceiptCenter(effectiveStoreName.toUpperCase()) + '\n';
     if (effectiveStoreSubtext) {
-      text += center(effectiveStoreSubtext) + '\n';
+      text += formatReceiptCenter(effectiveStoreSubtext) + '\n';
     }
-    text += '='.repeat(w) + '\n';
+    text += formatReceiptDoubleDivider() + '\n';
     text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Kasir : ${effectiveKasirName}\n`;
-    text += '-'.repeat(w) + '\n';
+    text += formatReceiptDivider() + '\n';
     text += `Jenis : ${modalTransaksiLabel.substring(0, 24)}\n`;
     if (modalKeterangan && modalKeterangan !== '-') {
       text += `Ket   : ${modalKeterangan.substring(0, 24)}\n`;
     }
-    text += '-'.repeat(w) + '\n';
+    text += formatReceiptDivider() + '\n';
 
     if (appFee > 0) {
-      text += right('Harga Modal', 'Rp ' + formatRp(t.nominal)) + '\n';
-      text += right('Fee Aplikasi', 'Rp ' + formatRp(appFee)) + '\n';
-      text += right('Total Modal', 'Rp ' + formatRp(t.nominal + appFee)) + '\n';
-      text += right(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
-      text += '-'.repeat(w) + '\n';
-      text += right('TOTAL', 'Rp ' + formatRp(t.nominal + appFee + displayAdminFee)) + '\n';
+      text += formatReceiptRow('Harga Modal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptRow('Fee Aplikasi', 'Rp ' + formatRp(appFee)) + '\n';
+      text += formatReceiptRow('Total Modal', 'Rp ' + formatRp(t.nominal + appFee)) + '\n';
+      text += formatReceiptRow(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
+      text += formatReceiptDivider() + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + appFee + displayAdminFee)) + '\n';
     } else if (t.kategori === 'Tarik Tunai') {
       const totalTarik = t.nominal + (!hasAdminDalam ? t.adminFee : 0);
-      text += right('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
-      text += right(hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)', 'Rp ' + formatRp(t.adminFee)) + '\n';
-      text += '-'.repeat(w) + '\n';
-      text += right('TOTAL', 'Rp ' + formatRp(totalTarik)) + '\n';
+      text += formatReceiptRow('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
+      text += formatReceiptRow(hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += formatReceiptDivider() + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(totalTarik)) + '\n';
     } else {
-      text += right('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
-      text += right('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
-      text += '-'.repeat(w) + '\n';
-      text += right('TOTAL', 'Rp ' + formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))) + '\n';
+      text += formatReceiptRow('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptRow('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += formatReceiptDivider() + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))) + '\n';
     }
 
-    text += '='.repeat(w) + '\n';
-    text += center('Terima Kasih Atas') + '\n';
-    text += center('Kepercayaan Anda') + '\n';
+    text += formatReceiptDoubleDivider() + '\n';
+    text += formatReceiptCenter('Terima Kasih Atas') + '\n';
+    text += formatReceiptCenter('Kepercayaan Anda') + '\n';
     text += '\n\n\n'; // Feed lines for paper tear
     return text;
   };
 
-  const handleExecutePrint = (e?: React.MouseEvent) => {
+  const handleExecutePrint = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setIsPrinting(true);
 
-    const receiptText = generateReceiptText();
-    const btMac = localStorage.getItem('bluetooth_printer_mac');
-
-    const tryRawBtPrint = () => {
-      const tryPrint = (scheme: string) => {
-        const a = document.createElement('a');
-        a.href = scheme;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      };
-
-      try {
-        tryPrint(`rawbt:${encodeURIComponent(receiptText)}`);
+    try {
+      const receiptText = generateReceiptText();
+      const res = await printThermalReceipt(receiptText);
+      if (res.success) {
         setShowStrukPreview(false);
-      } catch (e) {
-        try {
-          tryPrint(`intent:${encodeURIComponent(receiptText)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
-          setShowStrukPreview(false);
-        } catch (e2) {
-          alert('Gagal membuka printer RawBT. Pastikan printer menyala dan bluetooth aktif.');
-        }
-      } finally {
-        setTimeout(() => setIsPrinting(false), 500);
       }
-    };
-
-    // 1. Eksekusi via Bluetooth Serial (Capacitor / Android Native)
-    if ((window as any).bluetoothSerial) {
-      if (!btMac) {
-        setIsPrinting(false);
-        alert('Printer Bluetooth belum diatur.\nSilakan hubungkan printer di menu Akun > Printer & Hardware terlebih dahulu.');
-        return;
-      }
-
-      // Coba tulis langsung jika sudah terhubung
-      (window as any).bluetoothSerial.write(
-        receiptText,
-        () => {
-          setIsPrinting(false);
-          setShowStrukPreview(false);
-        },
-        () => {
-          // Jika belum tersambung, coba auto-connect ke printer yang tersimpan
-          (window as any).bluetoothSerial.connect(
-            btMac,
-            () => {
-              (window as any).bluetoothSerial.write(
-                receiptText,
-                () => {
-                  setIsPrinting(false);
-                  setShowStrukPreview(false);
-                },
-                (errWrite: any) => {
-                  setIsPrinting(false);
-                  alert('Gagal cetak ke Printer: ' + errWrite);
-                }
-              );
-            },
-            () => {
-              // Coba mode Insecure jika mode normal ditolak
-              (window as any).bluetoothSerial.connectInsecure(
-                btMac,
-                () => {
-                  (window as any).bluetoothSerial.write(
-                    receiptText,
-                    () => {
-                      setIsPrinting(false);
-                      setShowStrukPreview(false);
-                    },
-                    (errInsec: any) => {
-                      setIsPrinting(false);
-                      alert('Gagal cetak via Bluetooth Insecure: ' + errInsec);
-                    }
-                  );
-                },
-                () => {
-                  setIsPrinting(false);
-                  // Fallback ke RawBT
-                  tryRawBtPrint();
-                }
-              );
-            }
-          );
-        }
-      );
-    } else {
-      // 2. Web / Browser / Fallback RawBT
-      tryRawBtPrint();
+    } catch (err: any) {
+      console.error('Print transaction error:', err);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
