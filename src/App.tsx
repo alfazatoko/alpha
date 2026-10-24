@@ -16,7 +16,7 @@ import TransactionForm from './components/TransactionForm'
 import SummaryCards from './components/SummaryCards'
 import LoginScreen, { type KasirAccount } from './components/LoginScreen'
 import { GoogleAuthScreen } from './components/GoogleAuthScreen'
-import { supabase } from './lib/supabase'
+import { supabase, ensureValidSupabaseSession } from './lib/supabase'
 import { SelectorScreen } from './components/SelectorScreen'
 import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
@@ -214,6 +214,14 @@ const App: React.FC = () => {
     };
 
     CapApp.addListener('appUrlOpen', handleAppUrlOpen);
+
+    // Refresh sesi otomatis ketika aplikasi HP kembali dibuka dari background
+    const handleAppStateChange = async (state: { isActive: boolean }) => {
+      if (state.isActive) {
+        await ensureValidSupabaseSession();
+      }
+    };
+    CapApp.addListener('appStateChange', handleAppStateChange);
 
     return () => {
       subscription.unsubscribe();

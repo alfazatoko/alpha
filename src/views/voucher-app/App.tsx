@@ -53,7 +53,7 @@ import {
   Store,
   CheckCircle2,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, ensureValidSupabaseSession } from '../../lib/supabase';
 
 // Core types & data
 import type { VoucherProduct, Cashier, Transaction, LiveNotification, ShiftHandover, DetailedHandoverRecord, UserRole } from './types';
@@ -867,12 +867,37 @@ export default function App({ onExit, externalRole, externalCashierName, externa
         // SELALU gunakan activeShiftCashierId jika ada, agar semua kasir dan owner melihat stok dari kasir yang aktif
         const targetCashierId = activeShiftCashierId || cashiers[activeCashierIndex]?.id || 'c1';
         
+        // Pastikan token session valid sebelum query ke Supabase
+        await ensureValidSupabaseSession();
+
         // Fetch Products
-        const { data: prods, error: err1 } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
-        if (err1) alert("Fetch Prods Error: " + err1.message);
+        let { data: prods, error: err1 } = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
+        
         // Fetch Stocks
-        const { data: stocks, error: err2 } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', 'GLOBAL');
-        if (err2) alert("Fetch Stocks Error: " + err2.message);
+        let { data: stocks, error: err2 } = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', 'GLOBAL');
+        
+        // Jika terdeteksi token expired, perbarui session secara otomatis (silent refresh) dan coba lagi
+        const isJwtError = Boolean(
+          (err1?.message && (err1.message.toLowerCase().includes('jwt') || err1.message.toLowerCase().includes('expired'))) ||
+          (err2?.message && (err2.message.toLowerCase().includes('jwt') || err2.message.toLowerCase().includes('expired')))
+        );
+
+        if (isJwtError) {
+          console.warn("Voucher SQL fetch encountered expired JWT. Refreshing session silently and retrying...");
+          const { data: refreshData } = await supabase.auth.refreshSession();
+          if (refreshData?.session) {
+            const r1 = await supabase.from('voucher_products').select('*').eq('store_id', activeStoreId);
+            const r2 = await supabase.from('voucher_stocks').select('*').eq('store_id', activeStoreId).eq('cashier_id', 'GLOBAL');
+            if (r1.data) prods = r1.data;
+            if (r2.data) stocks = r2.data;
+            err1 = r1.error;
+            err2 = r2.error;
+          }
+        }
+
+        // Jangan gunakan alert() yang mengganggu pengguna! Gunakan console.warn
+        if (err1 && !err1.message?.toLowerCase().includes('jwt')) console.warn("Fetch Prods Error:", err1.message);
+        if (err2 && !err2.message?.toLowerCase().includes('jwt')) console.warn("Fetch Stocks Error:", err2.message);
         
         if (prods) {
           const mapped = prods.map(p => {
@@ -1282,14 +1307,14 @@ export default function App({ onExit, externalRole, externalCashierName, externa
           barcode: newProduct.barcode,
           sku: newProduct.sku
         }).then(res1 => {
-          if (res1.error) alert("Error Insert Product: " + res1.error.message);
+          if (res1.error) console.warn("Error Insert Product:", res1.error.message);
           supabase.from('voucher_stocks').upsert({
             store_id: activeStoreId,
             product_id: newProduct.id,
             cashier_id: 'GLOBAL',
             current_stock: newProduct.currentStock
           }, { onConflict: 'store_id,product_id,cashier_id' }).then(res2 => {
-            if (res2.error) alert("Error Insert Stock: " + res2.error.message);
+            if (res2.error) console.warn("Error Insert Stock:", res2.error.message);
           });
         });
       }

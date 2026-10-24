@@ -102,14 +102,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.5
-          name: "ALFAZA ALPHA POS v1.4.5"
+          tag_name: v1.4.6
+          name: "ALFAZA ALPHA POS v1.4.6"
           body: |
-            ### Pembaruan Aplikasi v1.4.5
-            - **Absensi Online Kasir & Anti-Skip Gate:** Kasir yang belum absen otomatis diarahkan ke popup absensi saat login pertama, lengkap dengan shift dan keterangan telat otomatis.
-            - **Kamera Selfie Super Ringan & Cepat:** Auto-downscale dan kompresi WebP (~25 KB) mencegah lag di PC/HP, upload cloud berlangsung kilat tanpa macet di layar loading.
-            - **Perbaikan Input PIN & Tata Letak Modal:** Teks dan angka PIN login tidak lagi menindih ikon gembok, serta kolom foto selfie dan alasan telat tersusun rapi dan proporsional.
-            - **Penyempurnaan Struk Nota Belanja:** Tata letak dan pencetakan nota belanja diperbarui lebih rapi dan konsisten.
+            ### Pembaruan Aplikasi v1.4.6
+            - **Perbaikan Sesi & Token Supabase (Anti-JWT Expired):** Penanganan auto-refresh token di latar belakang saat aplikasi HP dibuka kembali dari background/tidur.
+            - **Pemberitahuan Sistem Hening:** Menghilangkan pop-up alert kasar pada modul stok voucher dan menggantinya dengan silent auto-retry.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

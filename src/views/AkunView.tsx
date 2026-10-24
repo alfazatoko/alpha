@@ -3053,16 +3053,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               props.absensiList || [],
               props.activeStoreId || ''
             );
-            // Hitung badge kinerja
-            const totalDays = myStats.hadir + myStats.izin + myStats.tidakAbsen;
-            const hadirRate = totalDays > 0 ? (myStats.hadir / totalDays) * 100 : 0;
-            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-500' };
-            if (hadirRate >= 95) badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
-            else if (hadirRate >= 80) badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
-            else if (hadirRate >= 60) badge = { label: 'Cukup', icon: '👍', color: 'bg-blue-100 text-blue-700' };
-            else if (totalDays > 0) badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
-
-            // --- COMPUTATION UNTUK SHIFT ---
+            // --- COMPUTATION UNTUK SHIFT & ABSENSI RIIL ---
             const todayD = new Date();
             const currentFilterMonth = todayD.toLocaleDateString('en-CA').substring(0, 7);
             const myAbsensi = (props.absensiList || []).filter(a => 
@@ -3104,7 +3095,31 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               }
             });
             latePagiDates.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
-            // -----------------------------------------------------------
+
+            // Hitung badge kinerja & kedisiplinan secara adil berbasis kehadiran & ketepatan waktu
+            const lateCount = latePagiDates.length;
+            const disciplinedRate = totalHadir > 0 
+              ? Math.max(0, Math.round(((totalHadir - lateCount) / totalHadir) * 100))
+              : 100;
+
+            let badge = { label: 'Baru', icon: '🌱', color: 'bg-slate-100 text-slate-600' };
+            let badgeDesc = 'Belum ada data kehadiran bulan ini.';
+
+            if (totalHadir > 0) {
+              if (lateCount === 0 && totalHadir >= 5) {
+                badge = { label: 'Bintang', icon: '⭐', color: 'bg-amber-100 text-amber-700' };
+                badgeDesc = 'Kehadiran sempurna & selalu tepat waktu! Luar biasa.';
+              } else if (lateCount <= 1 && totalHadir >= 2) {
+                badge = { label: 'Rajin', icon: '🏅', color: 'bg-emerald-100 text-emerald-700' };
+                badgeDesc = `Kehadiran sangat baik (${totalHadir}x hadir). Pertahankan!`;
+              } else if (disciplinedRate >= 60 || lateCount <= 2) {
+                badge = { label: 'Aktif', icon: '👍', color: 'bg-blue-100 text-blue-700' };
+                badgeDesc = `Kasir aktif bertugas (${totalHadir}x hadir). Terus tingkatkan!`;
+              } else {
+                badge = { label: 'Perlu Evaluasi', icon: '⚠️', color: 'bg-rose-100 text-rose-600' };
+                badgeDesc = `Terdapat ${lateCount} catatan keterlambatan dari ${totalHadir} kehadiran.`;
+              }
+            }
 
             return (
               <div className="mb-4">
@@ -3182,9 +3197,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                                ðŸ§‘â€ðŸ’¼ KASIR
+                            <div                               <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                                <i className="fa-solid fa-id-badge text-[10px]"></i> KASIR
                               </span>
                               <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
                                 {badge.icon} {badge.label}
@@ -3261,14 +3275,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           )}
                         </div>
 
-                        {totalDays > 0 && (
+                        {totalHadir > 0 && (
                           <div className="mt-3">
                             <div className="flex justify-between text-[8px] font-bold text-gray-400 mb-1">
-                              <span>Tingkat Kehadiran</span>
-                              <span className="font-black text-gray-700">{hadirRate.toFixed(0)}%</span>
+                              <span>Tingkat Ketepatan Waktu</span>
+                              <span className="font-black text-gray-700">{disciplinedRate}%</span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${hadirRate}%` }} />
+                              <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all" style={{ width: `${disciplinedRate}%` }} />
                             </div>
                           </div>
                         )}
@@ -3282,11 +3296,10 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             <p className="text-[8px] font-black uppercase tracking-widest opacity-70 mb-0.5">Badge Kinerja</p>
                             <p className="font-black text-sm">{badge.label}</p>
                             <p className="text-[9px] font-bold opacity-60 mt-0.5">
-                              {hadirRate >= 95 ? 'Kehadiran sempurna! Luar biasa.' :
-                               hadirRate >= 80 ? 'Kehadiran sangat baik, pertahankan!' :
-                               hadirRate >= 60 ? 'Kehadiran cukup baik, bisa ditingkatkan.' :
-                               totalDays > 0 ? 'Kehadiran rendah, perlu evaluasi.' : 'Belum ada data kehadiran.'}
+                              {badgeDesc}
                             </p>
+                          </div>
+                        </div>/p>
                           </div>
                         </div>
 
