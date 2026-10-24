@@ -47,6 +47,7 @@ interface LoginScreenProps {
   storePhoto?: string
   kasirListOverride?: Record<string, KasirAccount>
   financialSettings?: Record<string, string>
+  googleUid?: string
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ 
@@ -55,7 +56,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   storeId, 
   storePhoto,
   kasirListOverride, 
-  financialSettings: propFinancialSettings 
+  financialSettings: propFinancialSettings,
+  googleUid
 }) => {
   const [selectedUser, setSelectedUser] = useState(() => {
     try {
@@ -72,6 +74,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isPinEnabled, setIsPinEnabled] = useState(true)
   const [kasirList, setKasirList] = useState<Record<string, KasirAccount>>({})
   const [hasAbsenToday, setHasAbsenToday] = useState(false)
+  const [onlineTodayAbsen, setOnlineTodayAbsen] = useState<Record<string, { date: string; time: string; shift?: string }>>(() => {
+    const today = getLocalDateString()
+    const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
+    try {
+      const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
+      const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+      const merged = { ...legacyAbsens, ...storeAbsens }
+      const res: Record<string, { date: string; time: string; shift?: string }> = {}
+      for (const [k, v] of Object.entries(merged)) {
+        if ((v as any)?.date === today) {
+          res[k] = v as any
+        }
+      }
+      return res
+    } catch {
+      return {}
+    }
+  })
   const [selectedShift, setSelectedShift] = useState<'PAGI' | 'SIANG' | 'MALAM'>('SIANG')
   const [alasanTelat, setAlasanTelat] = useState('')
   const [currentTimeStr, setCurrentTimeStr] = useState(() => 
@@ -81,6 +101,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [searchCashier, setSearchCashier] = useState('')
   const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Dedicated Absensi Modal (Anti-Skip Gate) states
+  const [isAbsenModalOpen, setIsAbsenModalOpen] = useState(false)
+  const [authenticatedAccount, setAuthenticatedAccount] = useState<KasirAccount | null>(null)
+  const [absenModalError, setAbsenModalError] = useState('')
+  const [isSubmittingAbsen, setIsSubmittingAbsen] = useState(false)
 
   // Reset foto selfie jika kasir atau shift berganti
   useEffect(() => {
@@ -174,6 +200,117 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   }, [storeId])
 
+  // Online Multi-Device Attendance Synchronization via Supabase & Realtime
+  useEffect(() => {
+    const today = getLocalDateString()
+
+    const fetchOnlineAttendance = async () => {
+      try {
+        let absQuery = supabase
+          .from('absensi')
+          .select('username, nama, tanggal, jam_masuk, shift, status')
+          .eq('tanggal', today)
+
+        if (storeId && storeId !== 'all') {
+          absQuery = absQuery.eq('store_id', storeId)
+        } else if (googleUid) {
+          absQuery = absQuery.eq('user_id', googleUid)
+        }
+
+        const { data: absData, error: absErr } = await absQuery
+
+        const newMap: Record<string, { date: string; time: string; shift?: string }> = {}
+
+        if (!absErr && Array.isArray(absData)) {
+          for (const row of absData) {
+            if (row.username && row.status !== 'Libur' && row.status !== 'Izin') {
+              newMap[row.username] = {
+                date: row.tanggal,
+                time: row.jam_masuk || '',
+                shift: row.shift || ''
+              }
+            }
+          }
+        }
+
+        // Juga cek rekaman selfie di Supabase
+        try {
+          let sQuery = supabase
+            .from('absen_selfie_records')
+            .select('cashier_id, shift_id, shift_name, jam, tanggal')
+            .eq('tanggal', today)
+
+          if (storeId && storeId !== 'all') {
+            sQuery = sQuery.eq('store_id', storeId)
+          }
+
+          const { data: sData } = await sQuery
+          if (Array.isArray(sData)) {
+            for (const sRow of sData) {
+              if (sRow.cashier_id && !newMap[sRow.cashier_id]) {
+                newMap[sRow.cashier_id] = {
+                  date: sRow.tanggal,
+                  time: sRow.jam || '',
+                  shift: sRow.shift_id || sRow.shift_name || ''
+                }
+              }
+            }
+          }
+        } catch (e) {}
+
+        if (Object.keys(newMap).length > 0) {
+          setOnlineTodayAbsen(prev => ({ ...prev, ...newMap }))
+
+          // Simpan juga ke cache lokal agar instan
+          const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
+          try {
+            const currentStore = JSON.parse(localStorage.getItem(storeKey) || '{}')
+            const merged = { ...currentStore, ...newMap }
+            localStorage.setItem(storeKey, JSON.stringify(merged))
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Gagal sinkron absensi online:', err)
+      }
+    }
+
+    fetchOnlineAttendance()
+
+    // Realtime channel listener untuk tabel absensi & absen_selfie_records
+    const filter = storeId && storeId !== 'all' ? `store_id=eq.${storeId}` : undefined
+    const channel = supabase
+      .channel(`login_realtime_absensi_${storeId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'absensi',
+          ...(filter ? { filter } : {})
+        },
+        () => {
+          fetchOnlineAttendance()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'absen_selfie_records',
+          ...(filter ? { filter } : {})
+        },
+        () => {
+          fetchOnlineAttendance()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [storeId, googleUid])
+
   // Update clock every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -190,24 +327,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
   const isAbsenFeatureActive = activeShifts.length > 0
 
-  // Check if cashier has already clocked in today for this store
+  // Check if cashier has already clocked in today for this store (Online First with Local Cache fallback)
   useEffect(() => {
     if (selectedUser && selectedUser.toLowerCase() !== 'owner' && (kasirList[selectedUser]?.role || '').toLowerCase() !== 'owner') {
       const today = getLocalDateString()
       const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
       let alreadyAbsen = false
-      try {
-        const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
-        const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
-        if (storeAbsens[selectedUser]?.date === today || legacyAbsens[selectedUser]?.date === today) {
-          alreadyAbsen = true
-        }
-      } catch (e) {}
+
+      // 1. Cek dari online state Supabase
+      if (onlineTodayAbsen[selectedUser]?.date === today) {
+        alreadyAbsen = true
+      } else {
+        // 2. Fallback cek dari cache lokal
+        try {
+          const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
+          const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+          if (storeAbsens[selectedUser]?.date === today || legacyAbsens[selectedUser]?.date === today) {
+            alreadyAbsen = true
+          }
+        } catch (e) {}
+      }
+
       setHasAbsenToday(alreadyAbsen)
     } else {
       setHasAbsenToday(false)
     }
-  }, [selectedUser, kasirList, storeId])
+  }, [selectedUser, kasirList, storeId, onlineTodayAbsen])
 
   // Smart auto-select shift based on current time
   useEffect(() => {
@@ -280,9 +425,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   }, [])
 
-  // Check if specific cashier has already clocked in today
+  // Check if specific cashier has already clocked in today (Online First)
   const isCashierAbsenToday = (userId: string) => {
     const today = getLocalDateString()
+    if (onlineTodayAbsen[userId]?.date === today) return true
     const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
     try {
       const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
@@ -337,28 +483,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       return
     }
 
-    // Attendance validation (Only required on first login of the day when feature is active)
-    if (account.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday) {
-      if (!selectedShift) {
-        setError('Harap pilih shift absen Anda.')
-        triggerShake()
-        return
-      }
-
-      if (shiftLateness.isLate && !alasanTelat.trim()) {
-        setError('Anda terlambat absen. Harap isi keterangan alasan keterlambatan.')
-        triggerShake()
-        return
-      }
-
-      if (isAbsenSelfieEnabled(liveFinancialSettings) && !capturedSelfie) {
-        setError('Wajib ambil foto selfie bukti kehadiran terlebih dahulu.')
-        triggerShake()
-        return
-      }
-    }
-
-    // PIN validation
+    // 1. Validasi PIN terlebih dahulu (Keamanan utama)
     if (isPinEnabled) {
       if (!pin) {
         setError('PIN harus diisi.')
@@ -374,32 +499,113 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       }
     }
 
+    // 2. PIN Valid! Cek apakah kasir perlu melakukan absensi hari ini
+    const needsAbsen = Boolean(
+      account.role !== 'owner' && 
+      isAbsenFeatureActive && 
+      !hasAbsenToday
+    )
+
+    if (needsAbsen) {
+      // Buka popup modal absen (Anti-Skip Gate)
+      setAuthenticatedAccount(account)
+      setIsAbsenModalOpen(true)
+      setAbsenModalError('')
+      return
+    }
+
+    // 3. Jika sudah absen hari ini atau fitur absen tidak aktif -> Langsung masuk
     setIsSubmitting(true)
+    try {
+      onLogin(selectedUser, account)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Konfirmasi dan simpan absensi dari dalam Popup Modal (Anti-Skip Gate)
+  const handleConfirmAbsenAndLogin = async () => {
+    if (isSubmittingAbsen || !authenticatedAccount) return
+    setAbsenModalError('')
+
+    if (!selectedShift) {
+      setAbsenModalError('Harap pilih shift kerja Anda.')
+      return
+    }
+
+    if (shiftLateness.isLate && !alasanTelat.trim()) {
+      setAbsenModalError('Wajib isi keterangan alasan keterlambatan.')
+      return
+    }
+
+    if (isAbsenSelfieEnabled(liveFinancialSettings) && !capturedSelfie) {
+      setAbsenModalError('Wajib ambil foto selfie bukti kehadiran terlebih dahulu.')
+      return
+    }
+
+    setIsSubmittingAbsen(true)
 
     try {
-      // Success: Record attendance in local cache for today
-      if (account.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday) {
-        const today = getLocalDateString()
-        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
-        
-        try {
-          const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
-          storeAbsens[selectedUser] = { date: today, time, shift: selectedShift }
-          localStorage.setItem(storeKey, JSON.stringify(storeAbsens))
+      const today = getLocalDateString()
+      const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      const timeWithSec = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      const storeKey = storeId ? `alphaPro_${storeId}_absen_harian` : 'alphaPro_absen_harian'
 
-          const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
-          legacyAbsens[selectedUser] = { date: today, time, shift: selectedShift }
-          localStorage.setItem('alphaPro_absen_harian', JSON.stringify(legacyAbsens))
-        } catch (e) {}
+      // 1. Simpan ke local cache langsung (0ms)
+      try {
+        const storeAbsens = JSON.parse(localStorage.getItem(storeKey) || '{}')
+        storeAbsens[selectedUser] = { date: today, time, shift: selectedShift }
+        localStorage.setItem(storeKey, JSON.stringify(storeAbsens))
 
-        // Simpan foto selfie jika ada ke cloud storage dan local album (AWAIT agar terunggah tuntas ke Supabase!)
-        if (capturedSelfie) {
+        const legacyAbsens = JSON.parse(localStorage.getItem('alphaPro_absen_harian') || '{}')
+        legacyAbsens[selectedUser] = { date: today, time, shift: selectedShift }
+        localStorage.setItem('alphaPro_absen_harian', JSON.stringify(legacyAbsens))
+      } catch (e) {}
+
+      // Update state instan
+      setOnlineTodayAbsen(prev => ({
+        ...prev,
+        [selectedUser]: { date: today, time, shift: selectedShift }
+      }))
+      setHasAbsenToday(true)
+
+      // Payload absensi Supabase
+      const absPayload: any = {
+        user_id: googleUid || null,
+        store_id: storeId && storeId !== 'all' ? storeId : null,
+        username: selectedUser,
+        nama: authenticatedAccount.name || selectedUser,
+        tanggal: today,
+        jam_masuk: timeWithSec,
+        status: 'Hadir',
+        shift: selectedShift
+      }
+      if (shiftLateness.isLate && alasanTelat.trim()) {
+        absPayload.alasan_telat = alasanTelat.trim()
+      }
+
+      // 2. Jalankan sinkronisasi Cloud secara paralel (Tabel absensi & Upload foto selfie)
+      const cloudSyncTask = Promise.all([
+        (async () => {
+          try {
+            let { error: absInsertErr } = await supabase.from('absensi').insert([absPayload])
+            if (absInsertErr && (absInsertErr.message?.toLowerCase().includes('shift') || absInsertErr.details?.toLowerCase().includes('shift'))) {
+              delete absPayload.shift
+              absInsertErr = (await supabase.from('absensi').insert([absPayload])).error
+            }
+            if (absInsertErr) {
+              console.warn('Supabase absensi insert warning:', absInsertErr.message || absInsertErr)
+            }
+          } catch (err) {
+            console.warn('Absensi cloud insert catch:', err)
+          }
+        })(),
+        capturedSelfie ? (async () => {
           try {
             await saveAbsenSelfieRecord({
               storeId: storeId && storeId !== 'all' ? storeId : 'default',
               cashierId: selectedUser,
-              cashierName: account.name || selectedUser,
+              cashierName: authenticatedAccount.name || selectedUser,
               tanggal: today,
               jam: time,
               shiftId: selectedShift,
@@ -411,18 +617,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           } catch (err) {
             console.error('Upload selfie error:', err)
           }
-        }
-      }
+        })() : Promise.resolve()
+      ])
 
+      // Beri batas tunggu kilat (maksimal 1.2 detik).
+      // Bila jaringan normal, selesai dalam sekejap ratusan milidetik.
+      // Bila jaringan PC lambat/tethering, kasir TIDAK STUCK dan langsung masuk kasir,
+      // sementara sinkronisasi foto tetap rampung di background tanpa gangguan.
+      await Promise.race([
+        cloudSyncTask,
+        new Promise(resolve => setTimeout(resolve, 1200))
+      ])
+
+      // 3. Tutup modal & masuk ke aplikasi utama kasir!
+      setIsAbsenModalOpen(false)
       onLogin(
         selectedUser, 
-        account, 
+        authenticatedAccount, 
         shiftLateness.isLate ? alasanTelat.trim() : undefined,
         selectedShift
       )
     } finally {
-      setIsSubmitting(false)
+      setIsSubmittingAbsen(false)
     }
+  }
+
+  // Tombol Batal di Modal Absen (Kembali ke login awal dengan aman)
+  const handleCancelAbsenModal = () => {
+    setIsAbsenModalOpen(false)
+    setAuthenticatedAccount(null)
+    setPin('')
+    setCapturedSelfie(null)
+    setAlasanTelat('')
+    setAbsenModalError('')
   }
 
   const triggerShake = () => {
@@ -433,46 +660,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const effectiveStorePhoto = storePhoto || (storeId && storeId !== 'all' ? localStorage.getItem(`alphaPro_${storeId}_store_photo`) : null) || localStorage.getItem('alphaPro_store_photo') || null
 
   return (
-    <div className="login-screen !py-2 !px-3 sm:!py-4 sm:!px-4 min-h-[100dvh] flex items-center justify-center">
+    <div className="login-screen !py-4 !px-4 min-h-[100dvh] flex items-center justify-center">
+      {/* ── CARD LOGIN KASIR (SUPER MINIMALIS & BERSIH) ── */}
       <div 
-        className={`login-card ${isShaking ? 'shake' : ''} shadow-xl transition-all duration-300 ease-in-out ${
-          isAbsenShowing 
-            ? '!py-3.5 !px-4 sm:!py-4 sm:!px-6 !max-w-[410px] !max-h-[96dvh] overflow-y-auto !rounded-2xl' 
-            : '!py-6 !px-6 sm:!py-7 sm:!px-8 !max-w-[425px] !rounded-3xl'
-        }`}
+        className={`login-card ${isShaking ? 'shake' : ''} shadow-2xl transition-all duration-300 ease-in-out !py-6 !px-6 sm:!py-7 sm:!px-8 !max-w-[425px] !rounded-3xl border border-slate-100`}
       >
         {/* Logo Toko & Header */}
-        <div className={`login-header transition-all duration-300 ${isAbsenShowing ? '!mb-2' : '!mb-4'}`}>
-          <div className={`mx-auto mb-1.5 flex items-center justify-center transition-all duration-300 ${isAbsenShowing ? 'w-11 h-11' : 'w-14 h-14'}`}>
+        <div className="login-header !mb-4">
+          <div className="mx-auto mb-2 flex items-center justify-center w-14 h-14">
             <img 
               src={effectiveStorePhoto || "/logo_icon.png"} 
               onError={(e) => { (e.currentTarget.src = '/logo_icon.png') }} 
               alt={storeName || "Logo Toko"} 
-              className={`object-cover shadow-sm border border-slate-100 transition-all duration-300 ${
-                isAbsenShowing ? 'w-11 h-11 rounded-xl' : 'w-14 h-14 rounded-2xl shadow-md'
-              }`} 
+              className="w-14 h-14 rounded-2xl object-cover shadow-md border border-slate-100" 
             />
           </div>
-          <h1 className={`login-title font-black tracking-tight leading-tight transition-all duration-300 ${
-            isAbsenShowing ? '!text-base sm:!text-lg' : '!text-xl sm:!text-2xl'
-          }`}>
+          <h1 className="login-title font-black tracking-tight leading-tight !text-xl sm:!text-2xl">
             {storeName ? storeName.toUpperCase() : 'ALPHA'} <span className="login-title-accent">{storeName ? '' : 'Pro'}</span>
           </h1>
-          <p className={`login-subtitle text-slate-500 font-semibold leading-tight transition-all duration-300 ${
-            isAbsenShowing ? '!text-[11px] !mt-0.5' : '!text-xs sm:!text-[13px] !mt-1'
-          }`}>
-            {storeName ? 'Login Kasir' : 'Pembukuan Agen brilink & Konter'}
+          <p className="login-subtitle text-slate-500 font-semibold leading-tight !text-xs sm:!text-[13px] !mt-1">
+            {storeName ? 'Login Kasir' : 'Pembukuan Agen Brilink & Konter'}
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className={`login-form transition-all duration-300 ${isAbsenShowing ? '!gap-1.5' : '!gap-3.5 sm:!gap-4'}`}>
+        {/* Form Login Utama */}
+        <form onSubmit={handleSubmit} className="login-form gap-3.5 sm:gap-4">
           {/* User Select Trigger (Opens Popup Modal) */}
           <div className="login-field">
-            <div className="flex items-center justify-between mb-1">
-              <label className={`login-label !mb-0 font-bold text-slate-700 transition-all duration-300 ${
-                isAbsenShowing ? '!text-[11px]' : '!text-xs sm:!text-[13px]'
-              }`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="login-label !mb-0 font-bold text-slate-700 text-xs sm:text-[13px]">
                 Pilih Kasir
               </label>
               {selectedUser && (
@@ -496,24 +712,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                   setIsUserModalOpen(true)
                   setError('')
                 }}
-                className={`w-full flex items-center justify-between text-left transition-all duration-200 border bg-slate-50/70 hover:bg-white focus:bg-white hover:border-blue-400 outline-none cursor-pointer group shadow-xs ${
-                  isAbsenShowing 
-                    ? '!h-9 sm:!h-10 !py-1.5 !px-3 !rounded-xl !text-xs border-slate-200' 
-                    : '!h-14 !py-3 !px-4 !rounded-2xl !text-base sm:!text-lg font-bold border-slate-300 hover:shadow-md'
-                }`}
+                className="w-full flex items-center justify-between text-left transition-all duration-200 border bg-slate-50/70 hover:bg-white focus:bg-white hover:border-blue-400 outline-none cursor-pointer group shadow-xs h-14 py-3 px-4 rounded-2xl text-base sm:text-lg font-bold border-slate-300 hover:shadow-md"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className={`rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
                     selectedUser 
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-xs' 
                       : 'bg-slate-200 text-slate-400'
-                  } ${isAbsenShowing ? 'w-6 h-6 text-[10px] !rounded-lg' : 'w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm'}`}>
+                  } w-8 h-8 text-xs sm:w-9 sm:h-9 sm:text-sm`}>
                     <i className="fa-solid fa-user"></i>
                   </div>
                   <div className="min-w-0 flex items-center gap-2">
                     <span className={`truncate ${
                       selectedUser && kasirList[selectedUser] ? 'text-slate-900 font-black' : 'text-slate-400 font-medium'
-                    } ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}>
+                    } text-sm sm:text-base`}>
                       {selectedUser && kasirList[selectedUser] ? kasirList[selectedUser].name : 'Pilih Kasir...'}
                     </span>
                     {selectedUser && kasirList[selectedUser] && (
@@ -538,145 +750,55 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
           </div>
 
-          {/* ABSEN KEHADIRAN CARD (Muncul hanya jika belum absen hari ini dan fitur aktif) */}
-          {selectedUser && kasirList[selectedUser]?.role !== 'owner' && isAbsenFeatureActive && !hasAbsenToday && (
-            <div className="bg-slate-50/80 border border-blue-100 rounded-xl px-2.5 pt-2 pb-0.5 shadow-xs space-y-1 animate-in fade-in slide-in-from-top-1">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] shadow-xs shrink-0">
-                  <i className="fa-solid fa-calendar-check"></i>
+          {/* Status info jika kasir sudah absen hari ini (Terdeteksi Online) */}
+          {selectedUser && kasirList[selectedUser]?.role !== 'owner' && isAbsenFeatureActive && hasAbsenToday && (
+            <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl px-3 py-2 flex items-center justify-between text-emerald-900 shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-xs shadow-xs shrink-0">
+                  <i className="fa-solid fa-check"></i>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-wide leading-none">ABSEN KEHADIRAN</h4>
-                  <p className="text-[9px] text-slate-500 font-medium leading-none mt-0.5 truncate">Pilih jenis absen sesuai waktu Anda datang</p>
+                  <p className="text-[11px] font-black leading-tight uppercase text-emerald-950 truncate">
+                    Sudah Absen Hari Ini
+                  </p>
+                  <p className="text-[9px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
+                    {onlineTodayAbsen[selectedUser]?.shift ? `Shift ${onlineTodayAbsen[selectedUser]?.shift}` : 'Kehadiran Aktif'}
+                    {onlineTodayAbsen[selectedUser]?.time ? ` • Jam ${onlineTodayAbsen[selectedUser]?.time.slice(0, 5)}` : ''}
+                  </p>
                 </div>
               </div>
-
-              {/* Grid Shift */}
-              <div className={`grid gap-1 ${activeShifts.length === 1 ? 'grid-cols-1' : activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                {activeShifts.map((shift) => {
-                  const isSelected = selectedShift === shift.id
-                  
-                  let bgClasses = ''
-                  let iconElement = null
-                  let labelColor = 'text-white'
-
-                  if (shift.id === 'PAGI') {
-                    // Pagi dgn latar matahari terbit / sunrise - warna bold, deep, tidak soft
-                    bgClasses = isSelected
-                      ? 'bg-gradient-to-br from-sky-600 via-blue-700 to-amber-700 ring-2 ring-amber-400 shadow-md scale-[1.02]'
-                      : 'bg-gradient-to-br from-sky-700 via-blue-800 to-amber-800 hover:scale-[1.01] shadow-sm border-amber-300/30'
-                    iconElement = <i className="fa-solid fa-cloud-sun text-amber-300 text-lg mb-0.5 filter drop-shadow"></i>
-                    labelColor = 'text-amber-100'
-                  } else if (shift.id === 'SIANG') {
-                    // Siang dgn latar cerah royal blue to purple - pekat dan tajam
-                    bgClasses = isSelected
-                      ? 'bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 ring-2 ring-indigo-300 shadow-md scale-[1.02]'
-                      : 'bg-gradient-to-br from-blue-800 via-indigo-800 to-purple-900 hover:scale-[1.01] shadow-sm border-indigo-300/30'
-                    iconElement = <i className="fa-solid fa-sun text-yellow-300 text-lg mb-0.5 filter drop-shadow"></i>
-                    labelColor = 'text-indigo-100'
-                  } else {
-                    // Malam dgn gaya gelap / bulan - kontras tinggi
-                    bgClasses = isSelected
-                      ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 ring-2 ring-purple-400 shadow-md scale-[1.02]'
-                      : 'bg-gradient-to-br from-slate-900 via-gray-950 to-slate-950 hover:scale-[1.01] shadow-sm border-slate-700/50'
-                    iconElement = <i className="fa-solid fa-moon text-indigo-200 text-lg mb-0.5 filter drop-shadow"></i>
-                    labelColor = 'text-indigo-200'
-                  }
-
-                  return (
-                    <button
-                      key={shift.id}
-                      type="button"
-                      onClick={() => { setSelectedShift(shift.id); setError(''); }}
-                      className={`relative rounded-xl py-1.5 px-1 text-white transition-all flex flex-col items-center justify-center text-center cursor-pointer border select-none ${bgClasses}`}
-                    >
-                      {isSelected && (
-                        <span className="absolute top-1 right-1 w-4 h-4 bg-white text-emerald-600 rounded-full flex items-center justify-center text-[8px] font-black shadow ring-1 ring-emerald-500">
-                          <i className="fa-solid fa-check"></i>
-                        </span>
-                      )}
-                      {iconElement}
-                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-tight">
-                        {shift.name}
-                      </span>
-                      <span className={`text-[8.5px] sm:text-[9px] font-bold mt-0.5 tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] bg-black/40 px-1.5 py-0.5 rounded-full border border-white/10 ${labelColor} leading-none`}>
-                        ({shift.label})
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Keterangan Terlambat Absen (muncul jika terlambat) */}
-              {shiftLateness.isLate && (
-                <div className="bg-purple-50/80 border border-purple-200/80 rounded-xl px-2 pt-1 pb-0.5 animate-in fade-in slide-in-from-top-1">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <label className="text-[9px] font-black text-purple-900 flex items-center gap-1">
-                      <i className="fa-solid fa-pen-to-square text-purple-600 text-[8.5px]"></i>
-                      Keterangan Terlambat Absen
-                    </label>
-                    <span className="text-[7.5px] font-black text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-200 flex items-center gap-0.5">
-                      <i className="fa-solid fa-clock text-[6.5px]"></i> Telat {shiftLateness.lateMins} Menit
-                    </span>
-                  </div>
-                  <textarea
-                    className="w-full text-xs px-2 py-1 rounded-lg border border-purple-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-tight h-7 sm:h-7.5"
-                    placeholder="Tulis alasan keterlambatan absen di sini..."
-                    rows={1}
-                    value={alasanTelat}
-                    onChange={(e) => { setAlasanTelat(e.target.value); setError(''); }}
-                  />
-                </div>
-              )}
-
-              {/* Foto Selfie Absensi (Wajib jika diaktifkan oleh Owner di Pengaturan) */}
-              {isAbsenSelfieEnabled(liveFinancialSettings) && (
-                <div className="pt-0.5">
-                  <AbsenSelfieCapture
-                    storeName={storeName || 'ALFAZA CELL'}
-                    cashierName={kasirList[selectedUser]?.name || selectedUser}
-                    shiftName={activeShifts.find(s => s.id === selectedShift)?.name || selectedShift}
-                    onSelfieCaptured={setCapturedSelfie}
-                  />
-                </div>
-              )}
+              <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80 shrink-0 uppercase tracking-wide flex items-center gap-1">
+                <i className="fa-solid fa-cloud-check text-emerald-600"></i>
+                Online
+              </span>
             </div>
           )}
 
           {/* PIN Input (Hidden if PIN is disabled) */}
           {isPinEnabled && (
-            <div className={`login-field ${isAbsenShowing ? '!mt-0' : ''}`}>
-              <label className={`login-label font-bold text-slate-700 transition-all duration-300 ${
-                isAbsenShowing ? '!text-[10.5px] !mb-0 !leading-tight' : '!text-xs sm:!text-[13px] !mb-1.5'
-              }`}>
+            <div className="login-field">
+              <label className="login-label font-bold text-slate-700 text-xs sm:text-[13px] mb-1.5">
                 Masukkan PIN
               </label>
               <div className="relative">
-                <i className={`fa-solid fa-lock absolute text-gray-400 pointer-events-none transition-all duration-300 ${
-                  isAbsenShowing ? 'left-3 top-1/2 -translate-y-1/2 text-xs' : 'left-4 top-1/2 -translate-y-1/2 text-sm sm:text-base'
-                }`}></i>
+                <i className="fa-solid fa-lock absolute text-gray-400 pointer-events-none left-4 top-1/2 -translate-y-1/2 text-sm sm:text-base z-10"></i>
                 <input
                   type={showPin ? "text" : "password"}
                   value={pin}
                   onChange={(e) => { setPin(e.target.value.replace(/[^0-9]/g, '')); setError('') }}
                   placeholder="MASUKKAN PIN"
                   maxLength={6}
-                  className={`login-input tracking-wider transition-all duration-300 ${
-                    isAbsenShowing 
-                      ? '!py-1.5 !pl-8 !pr-8 !text-xs !rounded-xl !h-8 sm:!h-8.5' 
-                      : '!py-3.5 !pl-11 !pr-11 !text-base sm:!text-lg !rounded-2xl !h-14 tracking-widest font-black border-slate-300 shadow-sm'
-                  }`}
+                  className="login-input tracking-wider py-3.5 !pl-14 !pr-12 text-base sm:text-lg rounded-2xl h-14 tracking-widest font-black border-slate-300 shadow-sm"
+                  style={{ paddingLeft: '3.75rem', paddingRight: '3rem' }}
                   inputMode="numeric"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer ${
-                    isAbsenShowing ? 'right-2' : 'right-3.5'
-                  }`}
+                  className="absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer right-3.5 z-10"
                   title={showPin ? "Sembunyikan PIN" : "Tampilkan PIN"}
                 >
-                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
+                  <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} text-sm sm:text-base`}></i>
                 </button>
               </div>
             </div>
@@ -691,9 +813,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
           {/* Error Message */}
           {error && (
-            <div className={`login-error transition-all duration-300 ${
-              isAbsenShowing ? '!py-1.5 !px-2.5 !text-xs !rounded-xl !gap-1.5' : '!py-2.5 !px-3.5 !text-xs sm:!text-sm !rounded-2xl !gap-2 font-bold'
-            }`}>
+            <div className="login-error py-2.5 px-3.5 text-xs sm:text-sm rounded-2xl gap-2 font-bold animate-shake">
               <i className="fa-solid fa-circle-exclamation text-xs"></i>
               <span>{error}</span>
             </div>
@@ -703,20 +823,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           <button 
             type="submit" 
             disabled={isSubmitting}
-            className={`login-btn flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer ${
-              isAbsenShowing 
-                ? '!py-2 sm:!py-2.5 !text-xs !rounded-xl !mt-1' 
-                : '!py-3.5 sm:!py-4 !text-base sm:!text-lg !rounded-2xl !mt-3 font-black tracking-widest shadow-xl shadow-blue-500/30 active:scale-98'
-            } ${isSubmitting ? 'opacity-80 cursor-wait' : ''}`}
+            className={`login-btn flex items-center justify-center gap-2 py-3.5 sm:py-4 text-base sm:text-lg rounded-2xl mt-2 font-black tracking-widest shadow-xl shadow-blue-500/30 active:scale-98 transition-all cursor-pointer ${
+              isSubmitting ? 'opacity-80 cursor-wait' : ''
+            }`}
           >
             {isSubmitting ? (
               <>
                 <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
-                <span>Menyimpan Absensi...</span>
+                <span>Memverifikasi...</span>
               </>
             ) : (
               <>
-                <i className={`fa-solid fa-arrow-right-to-bracket ${isAbsenShowing ? 'text-xs' : 'text-sm sm:text-base'}`}></i>
+                <i className="fa-solid fa-arrow-right-to-bracket text-sm sm:text-base"></i>
                 <span>MASUK</span>
               </>
             )}
@@ -724,12 +842,217 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         </form>
 
         {/* Footer */}
-        <p className={`login-footer text-slate-400 font-medium transition-all duration-300 ${
-          isAbsenShowing ? '!text-[10px] !mt-1.5' : '!text-xs !mt-3'
-        }`}>
+        <p className="login-footer text-slate-400 font-medium text-xs mt-3">
           ALPHA Pro v{APP_VERSION}
         </p>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* POPUP / MODAL KHUSUS ABSENSI KEHADIRAN (ANTI-SKIP GATE)       */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {isAbsenModalOpen && authenticatedAccount && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
+          onClick={(e) => e.stopPropagation()} // Anti-Skip: Click outside does NOT dismiss!
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-md shadow-blue-500/20">
+                  <i className="fa-solid fa-calendar-check"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-tight">
+                    ABSENSI KEHADIRAN KASIR
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-semibold leading-tight mt-0.5">
+                    Lengkapi absensi sebelum membuka kasir
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                  <i className="fa-solid fa-clock text-[9px]"></i> {currentTimeStr}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 flex-1 text-left">
+              {/* Profile Card */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-xs shrink-0">
+                    <i className="fa-solid fa-user"></i>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                        {authenticatedAccount.name}
+                      </span>
+                      <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100 uppercase shrink-0">
+                        Kasir
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                      {storeName || 'Toko'} • {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                  Belum Absen
+                </span>
+              </div>
+
+              {/* Shift Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <i className="fa-solid fa-business-time text-blue-600"></i>
+                    Pilih Shift Hari Ini
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    Ketuk untuk memilih
+                  </span>
+                </div>
+                <div className={`grid gap-2 ${activeShifts.length === 1 ? 'grid-cols-1' : activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {activeShifts.map((shift) => {
+                    const isSelected = selectedShift === shift.id
+
+                    let bgClasses = ''
+                    let iconElement = null
+                    let labelColor = 'text-white'
+
+                    if (shift.id === 'PAGI') {
+                      bgClasses = isSelected
+                        ? 'bg-gradient-to-br from-sky-600 via-blue-700 to-amber-700 ring-2 ring-amber-400 shadow-md scale-[1.01]'
+                        : 'bg-gradient-to-br from-sky-700 via-blue-800 to-amber-800 hover:scale-[1.01] shadow-xs border-amber-300/30'
+                      iconElement = <i className="fa-solid fa-cloud-sun text-amber-300 text-sm filter drop-shadow shrink-0"></i>
+                      labelColor = 'text-amber-100'
+                    } else if (shift.id === 'SIANG') {
+                      bgClasses = isSelected
+                        ? 'bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 ring-2 ring-indigo-300 shadow-md scale-[1.01]'
+                        : 'bg-gradient-to-br from-blue-800 via-indigo-800 to-purple-900 hover:scale-[1.01] shadow-xs border-indigo-300/30'
+                      iconElement = <i className="fa-solid fa-sun text-yellow-300 text-sm filter drop-shadow shrink-0"></i>
+                      labelColor = 'text-indigo-100'
+                    } else {
+                      bgClasses = isSelected
+                        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 ring-2 ring-purple-400 shadow-md scale-[1.01]'
+                        : 'bg-gradient-to-br from-slate-900 via-gray-950 to-slate-950 hover:scale-[1.01] shadow-xs border-slate-700/50'
+                      iconElement = <i className="fa-solid fa-moon text-indigo-200 text-sm filter drop-shadow shrink-0"></i>
+                      labelColor = 'text-indigo-200'
+                    }
+
+                    return (
+                      <button
+                        key={shift.id}
+                        type="button"
+                        onClick={() => { setSelectedShift(shift.id); setAbsenModalError(''); }}
+                        className={`relative rounded-2xl py-2.5 px-2 text-white transition-all flex flex-col items-center justify-center text-center cursor-pointer border select-none ${bgClasses}`}
+                      >
+                        {isSelected && (
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-white text-emerald-600 rounded-full flex items-center justify-center text-[8px] font-black shadow ring-1 ring-emerald-500">
+                            <i className="fa-solid fa-check"></i>
+                          </span>
+                        )}
+                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                          {iconElement}
+                          <span className="text-xs font-black uppercase tracking-wider text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-none">
+                            {shift.name}
+                          </span>
+                        </div>
+                        <span className={`text-[9px] font-bold tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] bg-black/40 px-2 py-0.5 rounded-full border border-white/10 ${labelColor} leading-none mt-1`}>
+                          {shift.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Foto Selfie Absensi (Wajib jika diaktifkan oleh Owner di Pengaturan - Tepat di bawah pilih shift) */}
+              {isAbsenSelfieEnabled(liveFinancialSettings) && (
+                <div>
+                  <AbsenSelfieCapture
+                    storeName={storeName || 'ALFAZA CELL'}
+                    cashierName={authenticatedAccount.name || selectedUser}
+                    shiftName={activeShifts.find(s => s.id === selectedShift)?.name || selectedShift}
+                    onSelfieCaptured={setCapturedSelfie}
+                  />
+                </div>
+              )}
+
+              {/* Keterangan Terlambat (OTOMATIS MUNCUL HANYA JIKA TERLAMBAT - Posisi paling bawah & lebih compact) */}
+              {shiftLateness.isLate && (
+                <div className="bg-rose-50/90 border border-rose-200 rounded-2xl p-2.5 space-y-1.5 animate-in fade-in slide-in-from-top-1 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10.5px] font-black text-rose-800 flex items-center gap-1.5">
+                      <i className="fa-solid fa-triangle-exclamation text-rose-600"></i>
+                      Keterangan Terlambat Absen <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[8.5px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+                      <i className="fa-solid fa-clock text-[8px]"></i> Telat {shiftLateness.lateMins} Menit
+                    </span>
+                  </div>
+                  <textarea
+                    className="w-full text-xs p-2 rounded-xl border border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-normal h-12"
+                    placeholder="Tulis alasan keterlambatan Anda di sini (wajib diisi)..."
+                    rows={2}
+                    value={alasanTelat}
+                    onChange={(e) => { setAlasanTelat(e.target.value); setAbsenModalError(''); }}
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* Error Message inside Absen Modal */}
+              {absenModalError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2 animate-shake">
+                  <i className="fa-solid fa-circle-exclamation shrink-0"></i>
+                  <span>{absenModalError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions (Anti-Skip Gate) */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-col gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleConfirmAbsenAndLogin}
+                disabled={isSubmittingAbsen}
+                className={`w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm tracking-wide shadow-lg shadow-blue-500/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  isSubmittingAbsen ? 'opacity-70 cursor-wait' : ''
+                }`}
+              >
+                {isSubmittingAbsen ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                    <span>Menyimpan Absensi Cloud...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-arrow-right-to-bracket"></i>
+                    <span>KIRIM ABSENSI & BUKA KASIR</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmittingAbsen}
+                onClick={handleCancelAbsenModal}
+                className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors text-center cursor-pointer"
+              >
+                Batal / Kembali ke Layar Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* POPUP MODAL PILIH PENGGUNA / KASIR */}
       {isUserModalOpen && (
@@ -842,6 +1165,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                               {alreadyAbsen ? (
                                 <span className="text-emerald-600 flex items-center gap-1 font-semibold">
                                   <i className="fa-solid fa-circle-check text-[10px]"></i> Sudah Absen Hari Ini
+                                  {onlineTodayAbsen[id]?.shift ? ` (${onlineTodayAbsen[id].shift})` : ''}
                                 </span>
                               ) : (
                                 <span className="text-amber-600 flex items-center gap-1 font-semibold">

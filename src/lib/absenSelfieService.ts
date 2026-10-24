@@ -77,7 +77,11 @@ export const applySelfieWatermark = (
   ctx.fillStyle = '#38bdf8';
   ctx.fillText(`KASIR: ${cashierName.toUpperCase()} | ${dateStr} ${timeStr}`, 12, height - 10);
 
-  return canvas.toDataURL('image/webp', 0.82);
+  const dataUrl = canvas.toDataURL('image/webp', 0.72);
+  if (dataUrl.startsWith('data:image/png')) {
+    return canvas.toDataURL('image/jpeg', 0.72);
+  }
+  return dataUrl;
 };
 
 /**
@@ -134,36 +138,7 @@ export const saveAbsenSelfieRecord = async (params: {
     const photoSizeKb = Math.round((approxBytes / 1024) * 10) / 10;
 
     let finalPhotoUrl = base64Image;
-    let photoPath = null;
-
-    // 1. Upload ke Supabase Storage via Blob murni (anti-gagal di WebView HP)
-    try {
-      const blob = base64ToBlob(base64Image);
-      const safeStoreId = storeId ? storeId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'default';
-      const safeCashierId = cashierId ? cashierId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'kasir';
-      const fileName = `${safeStoreId}/${safeCashierId}/${tanggal}_${shiftId}_${Date.now()}.webp`;
-
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('absen-selfie')
-        .upload(fileName, blob, {
-          contentType: 'image/webp',
-          upsert: true
-        });
-
-      if (!uploadErr && uploadData) {
-        photoPath = uploadData.path;
-        const { data: publicUrlData } = supabase.storage
-          .from('absen-selfie')
-          .getPublicUrl(uploadData.path);
-        if (publicUrlData?.publicUrl) {
-          finalPhotoUrl = publicUrlData.publicUrl;
-        }
-      } else if (uploadErr) {
-        console.error('Storage upload error:', uploadErr.message || uploadErr);
-      }
-    } catch (uploadError) {
-      console.warn('Storage upload catch error:', uploadError);
-    }
+    let photoPath: string | null = null;
 
     const newRecord: AbsenSelfieRecord = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `selfie_${Date.now()}`,
@@ -183,9 +158,60 @@ export const saveAbsenSelfieRecord = async (params: {
       created_at: new Date().toISOString()
     };
 
-    // 2. Simpan ke Supabase DB table `absen_selfie_records`
+    // 1. Simpan langsung ke cache lokal multi-key secara instan (0ms) agar offline/reload aman
+    const localKeys = [
+      `alphaPro_${storeId}_selfie_${cashierId}`,
+      `alphaPro_selfie_${cashierId}`,
+      `alphaPro_default_selfie_${cashierId}`
+    ];
+    for (const localKey of localKeys) {
+      try {
+        const existing: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+        const updated = [newRecord, ...existing.filter(r => r.tanggal !== tanggal || r.shift_id !== shiftId)].slice(0, 30);
+        localStorage.setItem(localKey, JSON.stringify(updated));
+      } catch {}
+    }
+
+    // 2. Upload ke Supabase Storage via Blob murni (dengan batas timeout 3.5 detik)
     try {
-      const { data: insertData, error: insertErr } = await supabase.from('absen_selfie_records').insert([
+      const blob = base64ToBlob(base64Image);
+      const safeStoreId = storeId ? storeId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'default';
+      const safeCashierId = cashierId ? cashierId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'kasir';
+      const fileName = `${safeStoreId}/${safeCashierId}/${tanggal}_${shiftId}_${Date.now()}.webp`;
+
+      const uploadPromise = supabase.storage
+        .from('absen-selfie')
+        .upload(fileName, blob, {
+          contentType: 'image/webp',
+          upsert: true
+        });
+
+      const timeoutPromise = new Promise<{ data: null; error: any }>((resolve) => 
+        setTimeout(() => resolve({ data: null, error: new Error('Upload timeout') }), 3500)
+      );
+
+      const { data: uploadData, error: uploadErr } = await Promise.race([uploadPromise, timeoutPromise]);
+
+      if (!uploadErr && uploadData) {
+        photoPath = uploadData.path;
+        const { data: publicUrlData } = supabase.storage
+          .from('absen-selfie')
+          .getPublicUrl(uploadData.path);
+        if (publicUrlData?.publicUrl) {
+          finalPhotoUrl = publicUrlData.publicUrl;
+          newRecord.photo_url = finalPhotoUrl;
+          newRecord.photo_path = photoPath;
+        }
+      } else if (uploadErr) {
+        console.warn('Storage upload error/timeout:', uploadErr.message || uploadErr);
+      }
+    } catch (uploadError) {
+      console.warn('Storage upload catch error:', uploadError);
+    }
+
+    // 3. Simpan ke Supabase DB table `absen_selfie_records`
+    try {
+      const { error: insertErr } = await supabase.from('absen_selfie_records').insert([
         {
           store_id: storeId,
           cashier_id: cashierId,
@@ -204,24 +230,10 @@ export const saveAbsenSelfieRecord = async (params: {
       ]);
 
       if (insertErr) {
-        console.error('Supabase DB Insert error:', insertErr.message || insertErr);
+        console.warn('Supabase DB Insert warning:', insertErr.message || insertErr);
       }
     } catch (dbErr) {
       console.warn('DB insert fallback error:', dbErr);
-    }
-
-    // 3. Simpan juga ke cache lokal multi-key untuk instan offline di HP yang sama
-    const localKeys = [
-      `alphaPro_${storeId}_selfie_${cashierId}`,
-      `alphaPro_selfie_${cashierId}`,
-      `alphaPro_default_selfie_${cashierId}`
-    ];
-    for (const localKey of localKeys) {
-      try {
-        const existing: AbsenSelfieRecord[] = JSON.parse(localStorage.getItem(localKey) || '[]');
-        const updated = [newRecord, ...existing.filter(r => r.tanggal !== tanggal || r.shift_id !== shiftId)].slice(0, 30);
-        localStorage.setItem(localKey, JSON.stringify(updated));
-      } catch {}
     }
 
     return { success: true, photoUrl: finalPhotoUrl };

@@ -10,17 +10,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const formatRupiah = (amount: number) => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+export const parseNominal = (value: string | number | undefined | null): number => {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'number') return isNaN(value) ? 0 : Math.round(value);
+  return parseInt(String(value).replace(/[^0-9]/g, ''), 10) || 0;
 };
 
-export const parseNominal = (value: string) => {
-  return parseInt(value.replace(/[^0-9]/g, ''), 10) || 0;
+export const formatRupiah = (amount: number | string | undefined | null): string => {
+  if (amount === undefined || amount === null) return 'Rp 0';
+  const num = typeof amount === 'number' ? amount : parseNominal(amount);
+  const valid = Math.round(isNaN(num) ? 0 : num);
+  const formatted = valid.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `Rp ${formatted}`;
 };
 
 export const formatInputRupiah = (value: string) => {

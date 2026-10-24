@@ -1,7 +1,7 @@
-import React, { useState, useRef } from "react";
-import { ArrowLeft, Printer, Plus, Trash2 } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { ArrowLeft, Printer, Plus, Trash2, RotateCcw } from "lucide-react";
 import { formatRupiah, formatInputRupiah, parseNominal, getLocalISOString, cn } from "../lib/utils";
-import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider } from "../lib/printerService";
+import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from "../lib/printerService";
 
 interface NotaItem {
   nama: string;
@@ -9,17 +9,129 @@ interface NotaItem {
   jumlah: string;
 }
 
-const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; showToast: (m: string) => void; onConfirm: (t: string, m: string, c: () => void) => void; isPc?: boolean }> = ({ active, setActiveView, isPc }) => {
-  
-  const [shopName, setShopName] = useState(() => localStorage.getItem('nota_shopName') || localStorage.getItem('alphaPro_storeName') || "ALFAZA CELL");
-  const [address, setAddress] = useState(() => localStorage.getItem('nota_address') || "Jl. Merdeka No. 123, Indonesia");
+interface NotaViewProps {
+  active: boolean;
+  setActiveView: (v: string) => void;
+  showToast?: (m: string) => void;
+  onConfirm?: (t: string, m: string, c: () => void) => void;
+  isPc?: boolean;
+  storeName?: string;
+  storeSubtext?: string;
+  kasirName?: string;
+}
+
+const NotaView: React.FC<NotaViewProps> = ({ 
+  active, 
+  setActiveView, 
+  showToast, 
+  isPc, 
+  storeName, 
+  storeSubtext, 
+  kasirName 
+}) => {
+  // Ambil data profil toko & kasir aktif (sesuai akun toko & riwayat transaksi)
+  const getProfileStoreName = () => {
+    if (storeName && storeName.trim()) return storeName.trim();
+    try {
+      const savedStore = localStorage.getItem('alphaPro_active_store');
+      if (savedStore) {
+        const parsed = JSON.parse(savedStore);
+        if (parsed?.name) return parsed.name;
+      }
+    } catch {}
+    return localStorage.getItem('alphaPro_storeName') || "ALFAZA CELL";
+  };
+
+  const getProfileStoreAddress = () => {
+    if (storeSubtext && storeSubtext.trim()) return storeSubtext.trim();
+    try {
+      const savedStore = localStorage.getItem('alphaPro_active_store');
+      if (savedStore) {
+        const parsed = JSON.parse(savedStore);
+        if (parsed?.subtext) return parsed.subtext;
+      }
+    } catch {}
+    return "";
+  };
+
+  const getProfileKasirName = () => {
+    if (kasirName && kasirName.trim()) return kasirName.trim();
+    try {
+      const currentAcc = localStorage.getItem('alphaPro_current_account');
+      if (currentAcc) {
+        const parsed = JSON.parse(currentAcc);
+        if (parsed?.name) return parsed.name;
+      }
+    } catch {}
+    return localStorage.getItem('alphaPro_name') || "Kasir";
+  };
+
+  // State nama toko, alamat, kasir, dan footer
+  const [shopName, setShopName] = useState(() => {
+    const isCustom = localStorage.getItem('nota_is_custom') === 'true';
+    if (isCustom) {
+      return localStorage.getItem('nota_shopName') || getProfileStoreName();
+    }
+    return getProfileStoreName();
+  });
+
+  const [address, setAddress] = useState(() => {
+    const saved = localStorage.getItem('nota_address');
+    const isCustom = localStorage.getItem('nota_is_custom') === 'true';
+    if (saved && saved !== "Jl. Merdeka No. 123, Indonesia" && isCustom) {
+      return saved;
+    }
+    return getProfileStoreAddress();
+  });
+
+  const [kasir, setKasir] = useState(() => {
+    const isCustom = localStorage.getItem('nota_is_custom') === 'true';
+    if (isCustom) {
+      return localStorage.getItem('nota_kasir') || getProfileKasirName();
+    }
+    return getProfileKasirName();
+  });
+
   const [footerText, setFooterText] = useState(() => localStorage.getItem('nota_footer') || "TERIMA KASIH");
 
-  React.useEffect(() => {
+  // Sinkronisasi otomatis saat profil toko atau kasir berganti (jika belum dikustom manual)
+  useEffect(() => {
+    const isCustom = localStorage.getItem('nota_is_custom') === 'true';
+    if (!isCustom) {
+      setShopName(getProfileStoreName());
+      setAddress(getProfileStoreAddress());
+      setKasir(getProfileKasirName());
+    }
+  }, [storeName, storeSubtext, kasirName]);
+
+  useEffect(() => {
     localStorage.setItem('nota_shopName', shopName);
     localStorage.setItem('nota_address', address);
+    localStorage.setItem('nota_kasir', kasir);
     localStorage.setItem('nota_footer', footerText);
-  }, [shopName, address, footerText]);
+  }, [shopName, address, kasir, footerText]);
+
+  const handleResetToProfile = () => {
+    const pName = getProfileStoreName();
+    const pAddr = getProfileStoreAddress();
+    const pKasir = getProfileKasirName();
+    setShopName(pName);
+    setAddress(pAddr);
+    setKasir(pKasir);
+    localStorage.removeItem('nota_is_custom');
+    localStorage.setItem('nota_shopName', pName);
+    localStorage.setItem('nota_address', pAddr);
+    localStorage.setItem('nota_kasir', pKasir);
+    if (showToast) {
+      showToast('Data nota disinkronkan dengan profil toko & kasir aktif');
+    }
+  };
+
+  const handleCustomFieldChange = (setter: (v: string) => void, val: string) => {
+    localStorage.setItem('nota_is_custom', 'true');
+    setter(val);
+  };
+
   const [items, setItems] = useState<NotaItem[]>([]);
   const [currentItem, setCurrentItem] = useState<NotaItem>({ nama: "", harga: "", jumlah: "" });
   const [tanggal, setTanggal] = useState(getLocalISOString().split('T')[0]);
@@ -64,28 +176,39 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
 
   const handlePrint = async () => {
     const isNative = !!(window as any)?.Capacitor?.isNativePlatform?.() || /android/i.test(navigator.userAgent);
+    const paperWidth = ukuranKertas === '80mm' ? 48 : 32;
+    const noRef = Date.now().toString().slice(-6);
+    const now = new Date();
+    const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+    const effectiveShop = (shopName || getProfileStoreName()).trim();
+    const effectiveAddress = (address || '').trim();
+    const effectiveKasir = (kasir || getProfileKasirName()).trim();
     
     if (isNative) {
-      const noRef = Date.now().toString().slice(-6);
       let receiptText = '';
-      receiptText += formatReceiptCenter(shopName) + '\n';
-      receiptText += formatReceiptCenter(address) + '\n';
-      receiptText += `Tgl: ${tanggal}\n`;
-      receiptText += `No: #${noRef}\n`;
-      receiptText += formatReceiptDivider() + '\n';
+      receiptText += formatReceiptCenter(effectiveShop.toUpperCase(), paperWidth) + '\n';
+      if (effectiveAddress) {
+        receiptText += formatReceiptCenter(effectiveAddress, paperWidth) + '\n';
+      }
+      receiptText += formatReceiptDoubleDivider(paperWidth) + '\n';
+      receiptText += `Waktu : ${tanggal} ${jam}\n`;
+      receiptText += `No    : #${noRef}\n`;
+      receiptText += `Kasir : ${effectiveKasir}\n`;
+      receiptText += formatReceiptDivider('-', paperWidth) + '\n';
       
       items.forEach(item => {
-        receiptText += item.nama + '\n';
-        const qtyHarga = `${item.jumlah} x ${item.harga}`;
-        const total = formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0));
-        receiptText += formatReceiptRow(qtyHarga, total) + '\n';
+        receiptText += `${item.nama.substring(0, paperWidth)}\n`;
+        const itemTotalNum = parseNominal(item.harga) * (parseFloat(item.jumlah) || 0);
+        const qtyHarga = `${item.jumlah} x ${formatInputRupiah(item.harga)}`;
+        const total = formatRupiah(itemTotalNum);
+        receiptText += formatReceiptRow(qtyHarga, total, paperWidth) + '\n';
       });
       
-      receiptText += formatReceiptDivider() + '\n';
-      receiptText += formatReceiptRow('TOTAL:', formatRupiah(calculateTotal())) + '\n';
-      receiptText += formatReceiptDivider() + '\n';
-      if (footerText) {
-        receiptText += formatReceiptCenter(footerText) + '\n';
+      receiptText += formatReceiptDivider('-', paperWidth) + '\n';
+      receiptText += formatReceiptRow('TOTAL:', formatRupiah(calculateTotal()), paperWidth) + '\n';
+      receiptText += formatReceiptDoubleDivider(paperWidth) + '\n';
+      if (footerText && footerText.trim()) {
+        receiptText += formatReceiptCenter(footerText.trim(), paperWidth) + '\n';
       }
       receiptText += '\n\n\n';
       
@@ -97,43 +220,66 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
     }
   };
 
-  const ThermalReceipt = () => (
-    <div className="bg-white text-black mx-auto p-3 flex flex-col font-mono" style={{ width: ukuranKertas, minHeight: '150px' }}>
-      <div className="text-center mb-3">
-        <h2 className="text-[14px] font-bold leading-tight">{shopName}</h2>
-        <p className="text-[10px] leading-tight">{address}</p>
-      </div>
-      <div className="text-[10px] mb-2 border-b border-black border-dashed pb-2 space-y-0.5">
-        <div className="flex justify-between"><span>Tgl:</span><span>{tanggal}</span></div>
-        <div className="flex justify-between"><span>No:</span><span>#{Date.now().toString().slice(-6)}</span></div>
-      </div>
-      <table className="w-full text-[10px] mb-2">
-        <thead>
-          <tr className="border-b border-black border-dashed">
-            <th className="text-left font-normal pb-1">Item</th>
-            <th className="text-center font-normal px-1 pb-1">Qty</th>
-            <th className="text-right font-normal pb-1">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, i) => (
-            <tr key={i}>
-              <td className="py-1 align-top pr-1 leading-tight">{item.nama}</td>
-              <td className="py-1 text-center align-top leading-tight">{item.jumlah}</td>
-              <td className="py-1 text-right align-top leading-tight">{formatRupiah(parseNominal(item.harga) * (parseFloat(item.jumlah) || 0))}</td>
+  const ThermalReceipt = () => {
+    const effectiveShop = (shopName || getProfileStoreName()).trim();
+    const effectiveAddress = (address || '').trim();
+    const effectiveKasir = (kasir || getProfileKasirName()).trim();
+    const now = new Date();
+    const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+
+    return (
+      <div 
+        className="bg-white text-black mx-auto p-4 flex flex-col font-mono text-[10px] leading-tight" 
+        style={{ width: ukuranKertas, minHeight: '150px' }}
+      >
+        <div className="text-center mb-2.5">
+          <h2 className="text-[13px] font-black uppercase tracking-wide leading-tight">{effectiveShop}</h2>
+          {effectiveAddress && <p className="text-[9.5px] mt-0.5 text-slate-700 leading-tight">{effectiveAddress}</p>}
+        </div>
+        
+        <div className="border-y-2 border-black border-double py-1.5 my-1.5 space-y-0.5 text-[9.5px]">
+          <div className="flex justify-between"><span>Waktu:</span><span>{tanggal} {jam}</span></div>
+          <div className="flex justify-between"><span>No:</span><span>#{Date.now().toString().slice(-6)}</span></div>
+          <div className="flex justify-between"><span>Kasir:</span><span className="font-bold">{effectiveKasir}</span></div>
+        </div>
+
+        <table className="w-full text-[9.5px] my-1">
+          <thead>
+            <tr className="border-b border-black border-dashed">
+              <th className="text-left font-bold pb-1">Item</th>
+              <th className="text-center font-bold px-1 pb-1">Qty</th>
+              <th className="text-right font-bold pb-1">Total</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="border-t border-black border-dashed pt-2 flex justify-between items-center text-[11px] font-bold">
-        <span>TOTAL</span>
-        <span className="text-[12px]">{formatRupiah(calculateTotal())}</span>
+          </thead>
+          <tbody>
+            {items.map((item, i) => {
+              const itemTotal = parseNominal(item.harga) * (parseFloat(item.jumlah) || 0);
+              return (
+                <tr key={i} className="border-b border-slate-100 last:border-0">
+                  <td className="py-1 align-top pr-1 font-medium">{item.nama}</td>
+                  <td className="py-1 text-center align-top whitespace-nowrap">{item.jumlah}</td>
+                  <td className="py-1 text-right align-top whitespace-nowrap font-bold">{formatRupiah(itemTotal)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="border-t border-black border-dashed pt-2 flex justify-between items-center text-[11px] font-black">
+          <span>TOTAL:</span>
+          <span className="text-[12px]">{formatRupiah(calculateTotal())}</span>
+        </div>
+
+        <div className="border-t-2 border-black border-double my-2"></div>
+
+        {footerText && (
+          <div className="text-center mt-2 text-[9.5px]">
+            <p className="font-bold whitespace-pre-wrap">{footerText}</p>
+          </div>
+        )}
       </div>
-      <div className="text-center mt-6 text-[10px]">
-        <p className="font-bold whitespace-pre-wrap">{footerText}</p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   if (!active) return null;
 
@@ -183,20 +329,43 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
               
               {openSettingToko && (
                 <div className="px-6 pb-6 pt-2 space-y-3 border-t border-slate-100 dark:border-slate-700 animate-in slide-in-from-top-2 fade-in duration-200">
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-[9px] font-bold text-slate-400">Default otomatis mengikuti profil toko & kasir</span>
+                    <button
+                      type="button"
+                      onClick={handleResetToProfile}
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 text-[#0000c6] dark:text-blue-300 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all active:scale-95"
+                      title="Kembalikan nama toko, alamat dan kasir sesuai profil akun toko aktif"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Sinkron Profil</span>
+                    </button>
+                  </div>
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nama Toko/Instansi</label>
                     <input 
                       value={shopName} 
-                      onChange={e => setShopName(e.target.value)} 
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
+                      onChange={e => handleCustomFieldChange(setShopName, e.target.value)} 
+                      placeholder="Nama Toko..."
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-600" 
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Alamat Toko</label>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Alamat Toko / Subtext</label>
                     <input 
                       value={address} 
-                      onChange={e => setAddress(e.target.value)} 
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none" 
+                      onChange={e => handleCustomFieldChange(setAddress, e.target.value)} 
+                      placeholder="Alamat / Deskripsi Toko..."
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-600" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nama Kasir (Pencetak)</label>
+                    <input 
+                      value={kasir} 
+                      onChange={e => handleCustomFieldChange(setKasir, e.target.value)} 
+                      placeholder="Nama Kasir..."
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-600" 
                     />
                   </div>
                   <div>
@@ -205,7 +374,7 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
                       value={footerText} 
                       onChange={e => setFooterText(e.target.value)} 
                       rows={2}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none resize-none" 
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900 dark:text-white outline-none resize-none focus:border-blue-600" 
                     />
                   </div>
                 </div>
@@ -526,19 +695,42 @@ const NotaView: React.FC<{ active: boolean; setActiveView: (v: string) => void; 
           
           {openSettingToko && (
             <div className="p-3.5 pt-1 space-y-2.5 border-t border-slate-100 dark:border-slate-700/80 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[8px] font-bold text-slate-400">Default dari profil toko & kasir aktif</span>
+                <button
+                  type="button"
+                  onClick={handleResetToProfile}
+                  className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 text-[#0000c6] dark:text-blue-300 rounded-lg text-[8px] font-black uppercase tracking-wider flex items-center gap-1 transition-all active:scale-95 border border-blue-200/50"
+                  title="Kembalikan nama toko, alamat dan kasir sesuai profil toko aktif"
+                >
+                  <RotateCcw className="w-2.5 h-2.5" />
+                  <span>Sinkron Profil</span>
+                </button>
+              </div>
               <div>
                 <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">NAMA TOKO</label>
                 <input 
                   value={shopName} 
-                  onChange={e => setShopName(e.target.value)} 
+                  onChange={e => handleCustomFieldChange(setShopName, e.target.value)} 
+                  placeholder="Nama Toko..."
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>
               <div>
-                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">ALAMAT TOKO</label>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">ALAMAT TOKO / SUBTEXT</label>
                 <input 
                   value={address} 
-                  onChange={e => setAddress(e.target.value)} 
+                  onChange={e => handleCustomFieldChange(setAddress, e.target.value)} 
+                  placeholder="Alamat / Deskripsi Toko..."
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
+                />
+              </div>
+              <div>
+                <label className="block text-[8.5px] font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">NAMA KASIR (PENCETAK)</label>
+                <input 
+                  value={kasir} 
+                  onChange={e => handleCustomFieldChange(setKasir, e.target.value)} 
+                  placeholder="Nama Kasir..."
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-600 focus:bg-white transition-all" 
                 />
               </div>

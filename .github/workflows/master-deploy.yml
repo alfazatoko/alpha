@@ -102,13 +102,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.4
-          name: "ALFAZA ALPHA POS v1.4.4"
+          tag_name: v1.4.5
+          name: "ALFAZA ALPHA POS v1.4.5"
           body: |
-            ### Pembaruan Aplikasi v1.4.4
-            - **Menu Pengaturan Shift & Absensi Mandiri:** Dipindahkan langsung ke baris luar daftar menu pengaturan toko di halaman akun owner agar cepat dan mudah ditemukan.
-            - **Penyederhanaan Profil Toko:** Profil toko kini lebih fokus dan ringkas khusus untuk identitas toko, logo, slogan, dan pesan kasir.
-            - **Kartu Ringkasan Harian Halaman Riwayat:** Latar belakang kartu ringkasan (TRX Hari Ini, Admin Fee, Uang Masuk, Tarik Tunai) dibuat putih bersih dengan warna teks terkoordinasi rapi sesuai fungsinya.
+            ### Pembaruan Aplikasi v1.4.5
+            - **Absensi Online Kasir & Anti-Skip Gate:** Kasir yang belum absen otomatis diarahkan ke popup absensi saat login pertama, lengkap dengan shift dan keterangan telat otomatis.
+            - **Kamera Selfie Super Ringan & Cepat:** Auto-downscale dan kompresi WebP (~25 KB) mencegah lag di PC/HP, upload cloud berlangsung kilat tanpa macet di layar loading.
+            - **Perbaikan Input PIN & Tata Letak Modal:** Teks dan angka PIN login tidak lagi menindih ikon gembok, serta kolom foto selfie dan alasan telat tersusun rapi dan proporsional.
+            - **Penyempurnaan Struk Nota Belanja:** Tata letak dan pencetakan nota belanja diperbarui lebih rapi dan konsisten.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

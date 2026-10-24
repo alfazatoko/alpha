@@ -107,8 +107,26 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
     setIsProcessing(true);
 
     try {
-      const width = video.videoWidth || 640;
-      const height = video.videoHeight || 480;
+      const vWidth = video.videoWidth || 640;
+      const vHeight = video.videoHeight || 480;
+
+      // Batasi resolusi maksimal 480px agar foto selfie super ringan (~20-30KB)
+      // Mencegah lag/freeze di PC dengan webcam HD 1080p
+      const maxDim = 480;
+      let width = vWidth;
+      let height = vHeight;
+
+      if (width > height) {
+        if (width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -161,7 +179,7 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 600;
+        const maxDim = 480;
         let width = img.width;
         let height = img.height;
 
@@ -216,7 +234,7 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border border-blue-200/80 rounded-2xl p-2.5 sm:p-3 space-y-2">
+    <div className="bg-gradient-to-r from-blue-50/60 to-indigo-50/60 border border-blue-200/70 rounded-xl p-2 space-y-1.5 shadow-2xs">
       {/* Hidden fallback file input */}
       <input
         ref={fileInputRef}
@@ -228,40 +246,43 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
         disabled={disabled}
       />
 
-      {/* Header Bar */}
+      {/* Header Bar Minimalis */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-[10px] shadow-xs">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-md bg-teal-600 text-white flex items-center justify-center text-[9px] shadow-xs shrink-0">
             <i className="fa-solid fa-camera"></i>
           </div>
-          <div>
-            <h5 className="text-[10px] font-black text-slate-800 uppercase tracking-wider leading-none">
+          <div className="min-w-0">
+            <h5 className="text-[9.5px] font-black text-slate-800 uppercase tracking-wide leading-none">
               FOTO SELFIE WAJIB
             </h5>
-            <p className="text-[8px] text-slate-500 font-bold leading-none mt-0.5">
-              Live kamera kehadiran di toko
-            </p>
           </div>
         </div>
 
         {photoPreview && (
-          <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+          <span className="text-[7.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
             <i className="fa-solid fa-check"></i> FOTO SIAP
           </span>
         )}
 
         {isStreaming && (
-          <span className="text-[8px] font-black bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full flex items-center gap-1.5 animate-pulse shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> LIVE VIEW
+          <span className="text-[7.5px] font-black bg-rose-100 text-rose-700 border border-rose-300 px-1.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> LIVE
+          </span>
+        )}
+
+        {!photoPreview && !isStreaming && (
+          <span className="text-[7.5px] font-bold text-slate-400 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/60 leading-none">
+            Kehadiran Toko
           </span>
         )}
       </div>
 
       {/* ── KONDISI 1: LIVE KAMERA SEDANG AKTIF (VIEWFINDER + SHUTTER) ── */}
       {isStreaming && (
-        <div className="relative rounded-2xl overflow-hidden border-2 border-teal-500 shadow-md bg-slate-950 flex flex-col items-center">
+        <div className="relative rounded-xl overflow-hidden border-2 border-teal-500 shadow-md bg-slate-950 flex flex-col items-center">
           {/* Live Video Feed - Cermin Horizontal */}
-          <div className="relative w-full aspect-square max-h-[220px] sm:max-h-[240px] flex items-center justify-center overflow-hidden bg-black">
+          <div className="relative w-full aspect-square max-h-[180px] sm:max-h-[200px] flex items-center justify-center overflow-hidden bg-black">
             <video
               ref={videoRef}
               autoPlay
@@ -273,8 +294,8 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
 
             {/* Panduan Lingkaran Wajah Minimalis */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-36 h-44 rounded-full border-2 border-dashed border-white/60 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center">
-                <span className="text-[8.5px] font-bold text-white/80 bg-black/50 px-2 py-0.5 rounded-full mt-28">
+              <div className="w-28 h-36 rounded-full border-2 border-dashed border-white/60 shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center">
+                <span className="text-[7.5px] font-bold text-white/80 bg-black/50 px-1.5 py-0.5 rounded-full mt-24">
                   Posisikan Wajah
                 </span>
               </div>
@@ -284,7 +305,7 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
             <button
               type="button"
               onClick={stopLiveCamera}
-              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center text-xs backdrop-blur-xs transition-all active:scale-90 cursor-pointer shadow-md"
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center text-[10px] backdrop-blur-xs transition-all active:scale-90 cursor-pointer shadow-md"
               title="Tutup Kamera"
             >
               <i className="fa-solid fa-xmark"></i>
@@ -292,11 +313,11 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
           </div>
 
           {/* Bar Kontrol Jepret di Bawah Video */}
-          <div className="w-full bg-slate-900/95 py-2.5 px-4 flex items-center justify-between border-t border-white/10">
+          <div className="w-full bg-slate-900/95 py-2 px-3 flex items-center justify-between border-t border-white/10">
             <button
               type="button"
               onClick={stopLiveCamera}
-              className="text-[9.5px] font-black text-slate-300 hover:text-white uppercase tracking-wider px-2 py-1 rounded cursor-pointer"
+              className="text-[8.5px] font-black text-slate-300 hover:text-white uppercase tracking-wider px-1.5 py-0.5 rounded cursor-pointer"
             >
               Batal
             </button>
@@ -306,15 +327,15 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
               type="button"
               onClick={handleSnapPhoto}
               disabled={isProcessing}
-              className="w-13 h-13 rounded-full border-3 border-white bg-rose-600 hover:bg-rose-500 active:scale-90 flex items-center justify-center shadow-lg transition-transform cursor-pointer"
+              className="w-10 h-10 rounded-full border-2 border-white bg-rose-600 hover:bg-rose-500 active:scale-90 flex items-center justify-center shadow-lg transition-transform cursor-pointer"
               title="Jepret Foto Selfie"
             >
-              <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-rose-600 text-base font-black shadow-inner">
+              <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-rose-600 text-xs font-black shadow-inner">
                 <i className="fa-solid fa-camera"></i>
               </div>
             </button>
 
-            <span className="text-[9px] font-bold text-slate-400">
+            <span className="text-[8px] font-bold text-slate-400">
               Shift {shiftName}
             </span>
           </div>
@@ -323,70 +344,81 @@ export const AbsenSelfieCapture: React.FC<AbsenSelfieCaptureProps> = ({
 
       {/* ── KONDISI 2: FOTO TELAH BERHASIL DIAMBIL (PREVIEW + WATERMARK) ── */}
       {!isStreaming && photoPreview && (
-        <div className="relative rounded-xl overflow-hidden border border-teal-300 shadow-sm bg-black group max-h-[170px] flex items-center justify-center">
+        <div className="relative rounded-lg overflow-hidden border border-teal-300 shadow-xs bg-black group max-h-[120px] flex items-center justify-center">
           <img
             src={photoPreview}
             alt="Selfie Preview"
-            className="w-full h-auto max-h-[170px] object-cover"
+            className="w-full h-auto max-h-[120px] object-cover"
           />
           {/* Tombol Foto Ulang */}
           <button
             type="button"
             onClick={handleRetake}
-            className="absolute bottom-2 right-2 bg-white/95 hover:bg-white text-slate-800 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-md backdrop-blur-xs flex items-center gap-1 transition-all active:scale-95 cursor-pointer border border-slate-200"
+            className="absolute bottom-1.5 right-1.5 bg-white/95 hover:bg-white text-slate-800 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider shadow backdrop-blur-xs flex items-center gap-1 transition-all active:scale-95 cursor-pointer border border-slate-200"
           >
-            <i className="fa-solid fa-rotate-right text-teal-600"></i>
+            <i className="fa-solid fa-rotate-right text-teal-600 text-[8px]"></i>
             <span>Foto Ulang</span>
           </button>
         </div>
       )}
 
-      {/* ── KONDISI 3: BELUM MENGAMBIL FOTO (TOMBOL AKTIFKAN LIVE KAMERA) ── */}
+      {/* ── KONDISI 3: BELUM MENGAMBIL FOTO (TOMBOL AKTIFKAN LIVE KAMERA MINIMALIS & RAPI) ── */}
       {!isStreaming && !photoPreview && (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <button
             type="button"
             onClick={startLiveCamera}
             disabled={disabled || isProcessing}
             className={cn(
-              "w-full py-3.5 px-3 rounded-xl border-2 border-dashed border-teal-300 hover:border-teal-500 bg-white/90 hover:bg-white text-teal-800 transition-all flex flex-col items-center justify-center gap-1 text-center cursor-pointer active:scale-98 shadow-xs",
+              "w-full py-2 px-2.5 rounded-xl border border-teal-300/80 hover:border-teal-500 bg-white hover:bg-teal-50/50 text-teal-800 transition-all flex items-center justify-between cursor-pointer active:scale-98 shadow-xs group",
               isProcessing && "opacity-60 cursor-not-allowed"
             )}
           >
             {isProcessing ? (
-              <div className="flex items-center gap-2 py-1">
-                <i className="fa-solid fa-circle-notch fa-spin text-sm text-teal-600"></i>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+              <div className="flex items-center justify-center gap-2 py-0.5 w-full">
+                <i className="fa-solid fa-circle-notch fa-spin text-xs text-teal-600"></i>
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-700">
                   Menghubungkan Kamera...
                 </span>
               </div>
             ) : (
               <>
-                <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-base mb-0.5 shadow-2xs">
-                  <i className="fa-solid fa-camera"></i>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-xs shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <i className="fa-solid fa-camera"></i>
+                  </div>
+                  <div className="text-left min-w-0">
+                    <span className="block text-[10px] font-black uppercase tracking-wide text-teal-900 leading-tight">
+                      Buka Kamera Live Selfie
+                    </span>
+                    <span className="block text-[8px] font-semibold text-slate-400 leading-tight truncate">
+                      Kamera Depan HP / Webcam PC
+                    </span>
+                  </div>
                 </div>
-                <span className="text-[11px] font-black uppercase tracking-wider text-teal-700 leading-tight">
-                  Buka Kamera Live Selfie
-                </span>
-                <span className="text-[8px] font-bold text-slate-400">
-                  Webcam PC / Kamera Depan HP & Tablet Otomatis Aktif
-                </span>
+
+                <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <span className="text-[8px] font-black text-teal-700 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded-md group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                    Buka
+                  </span>
+                  <i className="fa-solid fa-chevron-right text-[9px] text-teal-400 group-hover:text-teal-600 transition-colors"></i>
+                </div>
               </>
             )}
           </button>
 
           {/* Pesan Kesalahan jika Kamera Diblokir / Tidak Ada */}
           {cameraError && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-left space-y-1">
-              <p className="text-[9px] font-bold text-rose-700 flex items-center gap-1">
-                <i className="fa-solid fa-triangle-exclamation text-rose-500"></i> {cameraError}
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-1.5 text-left space-y-1">
+              <p className="text-[8.5px] font-bold text-rose-700 flex items-center gap-1">
+                <i className="fa-solid fa-triangle-exclamation text-rose-500 text-[8px]"></i> {cameraError}
               </p>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full text-[8.5px] font-black text-rose-800 bg-white border border-rose-200 hover:bg-rose-100 py-1 px-2 rounded-lg transition-colors cursor-pointer text-center"
+                className="w-full text-[8px] font-black text-rose-800 bg-white border border-rose-200 hover:bg-rose-100 py-0.5 px-2 rounded transition-colors cursor-pointer text-center"
               >
-                Gunakan Pilihan Alternatif (Kamera Bawaan / File)
+                Pilihan Alternatif (Kamera Bawaan / File)
               </button>
             </div>
           )}

@@ -564,6 +564,7 @@ const App: React.FC = () => {
           storePhoto={activeStore?.photo_url || (activeStoreId && activeStoreId !== 'all' ? localStorage.getItem(`alphaPro_${activeStoreId}_store_photo`) : null) || localStorage.getItem('alphaPro_store_photo') || undefined}
           kasirListOverride={kasirList} 
           financialSettings={financialSettings}
+          googleUid={googleSession?.user?.id}
         />
       </div>
     )
@@ -2244,12 +2245,13 @@ const MainApp: React.FC<MainAppProps> = ({
       let checkQuery = supabase
         .from('absensi')
         .select('*')
-        .eq('user_id', googleUid)
         .eq('username', username)
         .eq('tanggal', today)
 
       if (activeStoreId !== 'all') {
         checkQuery = checkQuery.eq('store_id', activeStoreId)
+      } else if (googleUid) {
+        checkQuery = checkQuery.eq('user_id', googleUid)
       }
 
       const { data: current, error: checkError } = await checkQuery.maybeSingle()
@@ -3908,7 +3910,7 @@ const MainApp: React.FC<MainAppProps> = ({
                 case 'view-kalender':
                   return <KalenderView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
                 case 'view-nota':
-                  return <NotaView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />;
+                  return <NotaView active={true} isPc={screenSize === 'pc'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} storeName={storeName} storeSubtext={storeSubtext} kasirName={account.name} />;
                 case 'view-otomatis':
                   return (
                     <OtomatisView
@@ -4209,7 +4211,7 @@ const MainApp: React.FC<MainAppProps> = ({
           <KontakView active={activeView === 'view-kontak'} setActiveView={setActiveView} kasirName={account.name} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} />
           <VoucherView active={activeView === 'view-stok-voucher'} isPc={false} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} activeStoreId={targetStoreId} kasirRole={activeRole} kasirName={account.name} googleUid={googleUid} currentUsername={username} kasirList={kasirList} externalSearchQuery={botSearchQuery} externalTab={botActiveTab} />
           <KalenderView active={activeView === 'view-kalender'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
-          <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} />
+          <NotaView active={activeView === 'view-nota'} setActiveView={setActiveView} showToast={showToast} onConfirm={handleConfirm} storeName={storeName} storeSubtext={storeSubtext} kasirName={account.name} />
           <OtomatisView 
             active={activeView === 'view-otomatis'} 
             setActiveView={setActiveView} 
