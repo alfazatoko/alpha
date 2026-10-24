@@ -102,12 +102,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.6
-          name: "ALFAZA ALPHA POS v1.4.6"
+          tag_name: v1.4.7
+          name: "ALFAZA ALPHA POS v1.4.7"
           body: |
-            ### Pembaruan Aplikasi v1.4.6
-            - **Perbaikan Sesi & Token Supabase (Anti-JWT Expired):** Penanganan auto-refresh token di latar belakang saat aplikasi HP dibuka kembali dari background/tidur.
-            - **Pemberitahuan Sistem Hening:** Menghilangkan pop-up alert kasar pada modul stok voucher dan menggantinya dengan silent auto-retry.
+            ### Pembaruan Aplikasi v1.4.7
+            - **Perbaikan Struk Cetak Nota:** Nominal barang dan total kini tercetak akurat tanpa bug formatting `Rp .000`, support kertas 58mm & 80mm.
+            - **Sinkronisasi Profil Toko & Kasir:** Struk nota otomatis mengambil nama toko, alamat/subtext toko aktif, dan nama kasir yang bertugas mencetak nota.
+            - **Perbaikan Tampilan Profil Akun Kasir:** Memperbaiki teks label kasir dan badge evaluasi kehadiran/kedisiplinan kasir yang lebih adil dan akurat.
+            - **Pembersihan Encoding & Karakter Khusus:** Memperbaiki karakter mojibake di seluruh menu Isi Saldo, Laporan, dan Akun Kasir.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

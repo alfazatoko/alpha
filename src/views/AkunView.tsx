@@ -3197,7 +3197,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <h2 className="text-lg font-black text-gray-900 leading-tight">{myName}</h2>
-                            <div                               <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
                                 <i className="fa-solid fa-id-badge text-[10px]"></i> KASIR
                               </span>
                               <span className={cn('text-[9px] font-black px-2 py-0.5 rounded-full', badge.color)}>
@@ -3298,8 +3299,6 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             <p className="text-[9px] font-bold opacity-60 mt-0.5">
                               {badgeDesc}
                             </p>
-                          </div>
-                        </div>/p>
                           </div>
                         </div>
 

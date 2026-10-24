@@ -305,7 +305,7 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
               </div>
             )}
 
-            {/* Pilihan Aksi â€” Tahap 1 */}
+            {/* Pilihan Aksi — Tahap 1 */}
             <div className="pt-1 space-y-2">
               {isPenerima && (
                 <button
@@ -367,11 +367,11 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
 
         <div className="flex-1 text-left">
           <p className="text-[11px] font-black uppercase tracking-widest leading-none">
-            {isPenerima ? "ðŸ”” ADA SALDO OPERAN UNTUKMU!" : "ðŸ• SALDO OPERAN MENUNGGU"}
+            {isPenerima ? "🔔 ADA SALDO OPERAN UNTUKMU!" : "⏳ SALDO OPERAN MENUNGGU"}
           </p>
           <p className="text-[10px] opacity-85 font-semibold mt-0.5">
             {isPenerima
-              ? `dari ${operkan?.pengirim_name} â€” ${formatRupiah(operkan?.nominal_total || 0)}`
+              ? `dari ${operkan?.pengirim_name} — ${formatRupiah(operkan?.nominal_total || 0)}`
               : `Menunggu ${operkan?.penerima_name} konfirmasi`
             }
           </p>

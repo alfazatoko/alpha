@@ -877,7 +877,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         if (selisih === 0) {
           statusText = 'STATUS: KLOP';
           statusDesc = 'Sisa saldo di HP cocok dengan catatan buku';
-          statusVal = 'âœ“ MATCH';
+          statusVal = '✓ MATCH';
           r = 16; g = 185; b = 129; // Emerald green
         } else if (selisih > 0) {
           statusText = 'STATUS: SURPLUS';
@@ -962,19 +962,19 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           `*${(props.storeName || 'ALFAZA CELL').toUpperCase()}*`,
           `_${props.storeSubtext || 'Pembukuan Agen brilink & Konter'}_`,
           `==================================`,
-          `ðŸ“… *Tanggal:* ${props.filterTanggal}`,
-          `ðŸ‘¤ *Kasir:* ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`,
-          props.filterKasir && props.filterKasir !== 'Semua' ? `ðŸ‘ï¸ *Mode Pantau:* ${props.kasirList[props.filterKasir]?.name || props.filterKasir}` : '',
+          `📅 *Tanggal:* ${props.filterTanggal}`,
+          `👤 *Kasir:* ${props.kasirName || '-'} (${props.kasirRole === 'owner' ? 'OWNER' : 'KASIR'})`,
+          props.filterKasir && props.filterKasir !== 'Semua' ? `👁️ *Mode Pantau:* ${props.kasirList[props.filterKasir]?.name || props.filterKasir}` : '',
           `==================================`,
-          `ðŸ’µ *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
-          `ðŸ¦ *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
+          `💵 *Saldo Laci Kasir:* *${formatRupiah(currentTotalSaldoKas)}*`,
+          `🏦 *Saldo Bank:* *${formatRupiah(currentSaldoBank)}*`,
           `==================================`,
-          `ðŸŽŸï¸ *REKAP PENJUALAN VOUCHER*`,
-          `â€¢ Laku: ${totalQtyLaku} pcs`,
-          `â€¢ Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`,
-          `â€¢ QRIS: ${formatRupiah(totalUangQris)}`,
+          `🎟️ *REKAP PENJUALAN VOUCHER*`,
+          `• Laku: ${totalQtyLaku} pcs`,
+          `• Tunai: ${formatRupiah(totalUangKeseluruhan - totalUangQris)}`,
+          `• QRIS: ${formatRupiah(totalUangQris)}`,
           `==================================`,
-          `ðŸ“Š *REKAP PER KATEGORI*`
+          `📊 *REKAP PER KATEGORI*`
         ].filter(Boolean);
 
         const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
@@ -992,45 +992,45 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             const qty = filtered.length;
             const nom = filtered.reduce((s,t) => s + t.nominal, 0);
             const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
-            lines.push(`â€¢ *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
+            lines.push(`• *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
           }
         });
 
         lines.push(`==================================`);
-        lines.push(`ðŸ“¥ *KAS MASUK*`);
-        lines.push(`â€¢ Modal Tunai Kasir: ${formatRupiah(props.kasModal)}`);
-        lines.push(`â€¢ Penjualan Digital: ${formatRupiah(currentPenjualanDigital)}`);
-        lines.push(`â€¢ Penjualan Aksesoris: ${formatRupiah(currentTotalAksesoris)}`);
-        lines.push(`â€¢ Total Admin Fee: ${formatRupiah(currentTotalAdmin)}`);
+        lines.push(`📥 *KAS MASUK*`);
+        lines.push(`• Modal Tunai Kasir: ${formatRupiah(props.kasModal)}`);
+        lines.push(`• Penjualan Digital: ${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`• Penjualan Aksesoris: ${formatRupiah(currentTotalAksesoris)}`);
+        lines.push(`• Total Admin Fee: ${formatRupiah(currentTotalAdmin)}`);
         
         lines.push(`==================================`);
-        lines.push(`ðŸ“¤ *KAS KELUAR*`);
-        lines.push(`â€¢ Tarik Tunai Nasabah: -${formatRupiah(currentTotalTarik)}`);
+        lines.push(`📤 *KAS KELUAR*`);
+        lines.push(`• Tarik Tunai Nasabah: -${formatRupiah(currentTotalTarik)}`);
         
         lines.push(`==================================`);
-        lines.push(`ðŸ’¼ *KAS LAINNYA*`);
-        lines.push(`â€¢ Admin Dalam: ${formatRupiah(totalAdminDalam)}`);
-        lines.push(`â€¢ Transaksi Non Tunai: ${formatRupiah(totalNonTunai)}`);
-        lines.push(`â€¢ Transaksi Khusus: ${formatRupiah(totalKhusus)}`);
+        lines.push(`💼 *KAS LAINNYA*`);
+        lines.push(`• Admin Dalam: ${formatRupiah(totalAdminDalam)}`);
+        lines.push(`• Transaksi Non Tunai: ${formatRupiah(totalNonTunai)}`);
+        lines.push(`• Transaksi Khusus: ${formatRupiah(totalKhusus)}`);
         lines.push(`*Total Kas Lainnya:* ${formatRupiah(totalAdminDalam + totalNonTunai + totalKhusus)}`);
         
         lines.push(`==================================`);
-        lines.push(`âš–ï¸ *JURNAL PENYESUAIAN SALDO*`);
-        lines.push(`â€¢ 1. Modal Saldo Bank (Isi): ${formatRupiah(currentIsiBank)}`);
-        lines.push(`â€¢ 2. Penjualan Digital: -${formatRupiah(currentPenjualanDigital)}`);
-        lines.push(`â€¢ 3. Sisa Saldo (Buku): ${formatRupiah(currentSaldoBank)}`);
-        lines.push(`â€¢ 4. Saldo Real HP: ${formatRupiah(props.saldoReal)}`);
+        lines.push(`⚖️ *JURNAL PENYESUAIAN SALDO*`);
+        lines.push(`• 1. Modal Saldo Bank (Isi): ${formatRupiah(currentIsiBank)}`);
+        lines.push(`• 2. Penjualan Digital: -${formatRupiah(currentPenjualanDigital)}`);
+        lines.push(`• 3. Sisa Saldo (Buku): ${formatRupiah(currentSaldoBank)}`);
+        lines.push(`• 4. Saldo Real HP: ${formatRupiah(props.saldoReal)}`);
         
         const selisih = props.saldoReal - currentSaldoBank;
         let statusStr = '';
-        if (selisih === 0) statusStr = 'âœ… KLOP (âœ“ MATCH)';
-        else if (selisih > 0) statusStr = `ðŸ”µ SURPLUS (+${formatRupiah(selisih)})`;
-        else statusStr = `ðŸ”´ SELISIH (${formatRupiah(selisih)})`;
+        if (selisih === 0) statusStr = '✅ KLOP (✓ MATCH)';
+        else if (selisih > 0) statusStr = `🔵 SURPLUS (+${formatRupiah(selisih)})`;
+        else statusStr = `🔴 SELISIH (${formatRupiah(selisih)})`;
         
-        lines.push(`ðŸ‘‰ *STATUS:* *${statusStr}*`);
+        lines.push(`👉 *STATUS:* *${statusStr}*`);
         if (catatanKasir.trim()) {
           lines.push(`==================================`);
-          lines.push(`ðŸ“ *CATATAN KASIR:*`);
+          lines.push(`📝 *CATATAN KASIR:*`);
           lines.push(`"${catatanKasir}"`);
         }
         lines.push(`==================================`);
@@ -2574,7 +2574,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </button>
           </div>
 
-          {/* 3 Kolom â€” hanya judul + nominal */}
+          {/* 3 Kolom — hanya judul + nominal */}
           <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-700/60 p-3">
             {/* Kas Masuk */}
             <div 
@@ -3161,7 +3161,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
             </div>
             
             <p className="text-white text-xs font-black uppercase tracking-widest leading-relaxed">
-              âš ï¸ SILAHKAN PERIKSA KEMBALI PEMBUKUAN KAMU
+              ⚠️ SILAHKAN PERIKSA KEMBALI PEMBUKUAN KAMU
             </p>
             
             <button 
@@ -3187,7 +3187,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-wider text-white">Timeline Audit Serah Terima Shift</h3>
-                  <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A âž” Saldo Awal Kasir B</p>
+                  <p className="text-slate-300 text-[10px] font-medium">Rekap Kronologis Closing Kasir A ➔ Saldo Awal Kasir B</p>
                 </div>
               </div>
               <button 
@@ -3223,7 +3223,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                       <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                            <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} â€¢ {pair.timeStr}
+                            <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} • {pair.timeStr}
                           </span>
                           {pair.isOperan && (
                             <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">
