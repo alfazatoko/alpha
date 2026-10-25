@@ -808,19 +808,27 @@ const AssistantBot: React.FC<Props> = ({
     // ③ Gemini API (Jika ada key) — Menjawab segala jenis pertanyaan (Toko, Bisnis, Umum, Chat) layaknya Gemini AI
     if (activeKey) {
       try {
-        // Cek jika perintah untuk membuat foto / desain gambar AI
+        // Cek jika perintah untuk membuat foto / desain gambar AI (deteksi komprehensif)
         const isImageGen = 
-          /^(buat|bikin|generate|desain|gambar|lukis|ciptakan)\s+(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi)/i.test(queryLower) ||
-          /(foto|gambar|poster|banner|spanduk)\s+(untuk|tentang|promo|toko|produk)/i.test(queryLower) ||
-          queryLower.startsWith('buat foto') ||
-          queryLower.startsWith('bikin foto') ||
-          queryLower.startsWith('buat gambar') ||
-          queryLower.startsWith('bikin gambar')
+          /(buat|bikin|generate|desain|gambar|lukis|cipta|tolong|minta|cetak)/i.test(queryLower) &&
+          /(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi|flyer|brosur|baliho|wallpaper|jpg|png|grafis|visual)/i.test(queryLower) &&
+          !/(hapus|clear|baca|view|halaman)/i.test(queryLower) ||
+          queryLower.includes('buat foto') ||
+          queryLower.includes('bikin foto') ||
+          queryLower.includes('buat gambar') ||
+          queryLower.includes('bikin gambar') ||
+          queryLower.includes('buat desain') ||
+          queryLower.includes('desain banner') ||
+          queryLower.includes('desain spanduk') ||
+          queryLower.includes('desain poster') ||
+          queryLower.includes('desain logo') ||
+          queryLower.includes('desain jpg') ||
+          queryLower.includes('desain foto')
 
         if (isImageGen) {
           try {
             setIsTyping(true)
-            addMessage('bot', `🎨 **Sedang membuat foto AI...**\n\n_"${text}"_\nMohon tunggu beberapa detik.`, 'gemini')
+            addMessage('bot', `🎨 **Sedang mendesain foto AI...**\n\n_"${text}"_\nMohon tunggu beberapa detik.`, 'gemini')
             const imgResult = await generateAIPhoto(text)
             setIsTyping(false)
             setMessages(prev => [
@@ -829,7 +837,7 @@ const AssistantBot: React.FC<Props> = ({
                 id: 'img-' + Date.now(),
                 from: 'bot',
                 mode: 'gemini',
-                text: `✨ **Foto AI Berhasil Dibuat!**\n\nPrompt: _"${imgResult.prompt}"_\n\nKamu bisa klik **Simpan Foto** untuk download atau **Edit Foto** untuk menambah teks promo/filter:`,
+                text: `✨ **Foto Desain AI Berhasil Dibuat!**\n\nPrompt: _"${imgResult.prompt}"_\n\nKamu bisa klik tombol **Simpan Foto** untuk download atau **Edit Foto** untuk menambah teks promo/filter warna:`,
                 imageUrl: imgResult.imageUrl,
                 timestamp: Date.now()
               }
@@ -867,9 +875,37 @@ const AssistantBot: React.FC<Props> = ({
           { role: 'model' as const, parts: [{ text: cleanText }] as [{text: string}] }
         ].slice(-12)
         setIsTyping(false)
-        addMessage('bot', cleanText, 'gemini')
-        if (actions.length > 0) {
-          setTimeout(() => requestConfirmation(actions), 400)
+
+        // Check if Gemini triggered an image creation action: [ACTION:generate_image|prompt]
+        const imageAction = actions.find(a => a.type === 'generate_image')
+        const otherActions = actions.filter(a => a.type !== 'generate_image')
+
+        if (imageAction) {
+          try {
+            const imgPrompt = imageAction.payload.prompt || cleanQuery
+            const imgResult = await generateAIPhoto(imgPrompt)
+            setMessages(prev => [
+              ...prev,
+              {
+                id: 'bot-' + Date.now(),
+                from: 'bot',
+                mode: 'gemini',
+                text: cleanText || '✨ Ini desain foto yang kamu minta:',
+                imageUrl: imgResult.imageUrl,
+                timestamp: Date.now()
+              }
+            ])
+            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+            setSuggestions(['🎨 Buat Foto Lain', '✏️ Edit Foto Ini', ...getDynamicSuggestions()])
+          } catch (e: any) {
+            addMessage('bot', cleanText || `⚠️ Gagal membuat foto: ${e.message}`, 'gemini')
+          }
+        } else {
+          addMessage('bot', cleanText, 'gemini')
+        }
+
+        if (otherActions.length > 0) {
+          setTimeout(() => requestConfirmation(otherActions), 400)
         }
       } catch (e: any) {
         setIsTyping(false)

@@ -2154,6 +2154,16 @@ Kamu ditenagai oleh kecerdasan Google Gemini AI dengan peran ganda:
   • Obrolan santai, humor ringan, dan motivasi kerja.
 - JANGAN PERNAH menolak pertanyaan dengan alasan "bukan tentang toko". Jawablah dengan cerdas, ramah, dan solutif layaknya Google Gemini AI!
 
+🎨 KEMAMPUAN MEMBUAT DESAIN FOTO & GAMBAR AI (SANGAT PENTING!):
+- Kamu TERINTEGRASI dengan studio pembuat gambar/foto AI di aplikasi ini.
+- JANGAN SEKALI-KALI menjawab bahwa kamu "hanya AI berbasis teks dan tidak bisa membuat gambar/desain JPG"!
+- Jika pengguna meminta kamu membuat, mendesain, atau menggambar foto, spanduk, banner, poster, logo, atau visual JPG/PNG, kamu BISA membuatnya dengan menyertakan tag aksi di akhir jawabanmu:
+  [ACTION:generate_image|deskripsi prompt gambar visual dalam bahasa inggris yang indah, profesional, dan detail]
+  Contoh:
+  Jika user berkata: "buatkan desain banner promo kuota indosat", jawablah dengan ramah lalu sertakan:
+  [ACTION:generate_image|a vibrant commercial banner poster for mobile cellular shop, text PROMO KUOTA INDOSAT, bright yellow and red colors, modern advertising graphic design, 8k resolution]
+  Sistem aplikasi akan otomatis me-render foto tersebut dan memberikan tombol "Simpan Foto" serta "Edit Foto" kepada pengguna!
+
 GAYA & FORMAT KOMUNIKASI:
 - Gunakan Bahasa Indonesia yang ramah, santun, luwes, dan natural (tidak kaku).
 - Gunakan format Markdown yang rapi (bold, bullet points, penomoran) agar nyaman dan mudah dibaca di layar HP/layar kasir.
@@ -2325,7 +2335,7 @@ export function buildStoreContext(
 
 // ── Parse AI Action dari respon Gemini ────────────────────────────────────────
 export interface BotAction {
-  type: 'kasbon' | 'navigate' | 'izin' | 'kontak' | 'catatan' | 'custom_faq'
+  type: 'kasbon' | 'navigate' | 'izin' | 'kontak' | 'catatan' | 'custom_faq' | 'generate_image'
   payload: Record<string, string>
 }
 
@@ -2349,6 +2359,8 @@ export function parseBotActions(reply: string): { cleanText: string; actions: Bo
       actions.push({ type, payload: { judul: parts[1] || '', isi: parts[2] || '' } })
     } else if (type === 'custom_faq' && parts.length >= 3) {
       actions.push({ type, payload: { tanya: parts[1] || '', jawab: parts[2] || '' } })
+    } else if (type === 'generate_image' && parts.length >= 2) {
+      actions.push({ type: 'generate_image', payload: { prompt: parts.slice(1).join('|') || '' } })
     }
   }
 
