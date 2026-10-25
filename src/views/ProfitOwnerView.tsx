@@ -230,7 +230,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       ]);
 
       if (!resHarianRPC.error && resHarianRPC.data && resHarianRPC.data.length > 0) {
-        const dMap = {};
+        const dMap: Record<string, any> = {};
         resHarianRPC.data.forEach(r => {
           dMap[r.tanggal] = {
             tanggal: r.tanggal,
@@ -245,7 +245,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
         setIsLoadedFromSQL(true);
 
         if (!resBulananRPC.error && resBulananRPC.data && resBulananRPC.data.length > 0) {
-          const mMap = {};
+          const mMap: Record<string, any> = {};
           resBulananRPC.data.forEach(r => {
             mMap[r.bulan_key] = {
               bulan: r.bulan_key,
