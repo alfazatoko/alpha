@@ -4271,6 +4271,8 @@ const MainApp: React.FC<MainAppProps> = ({
                 banners={promoBanners} 
                 onGoToSettings={() => setActiveView('view-akun')} 
                 isOwner={activeRole === 'owner'} 
+                onSaveBanners={savePromoBanners}
+                activeStoreId={activeStoreId}
               />
 
               <div className="px-2 mt-2 pb-24 relative z-10">

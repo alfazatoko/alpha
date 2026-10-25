@@ -102,14 +102,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.7
-          name: "ALFAZA ALPHA POS v1.4.7"
+          tag_name: v1.4.8
+          name: "ALFAZA ALPHA POS v1.4.8"
           body: |
-            ### Pembaruan Aplikasi v1.4.7
-            - **Perbaikan Struk Cetak Nota:** Nominal barang dan total kini tercetak akurat tanpa bug formatting `Rp .000`, support kertas 58mm & 80mm.
-            - **Sinkronisasi Profil Toko & Kasir:** Struk nota otomatis mengambil nama toko, alamat/subtext toko aktif, dan nama kasir yang bertugas mencetak nota.
-            - **Perbaikan Tampilan Profil Akun Kasir:** Memperbaiki teks label kasir dan badge evaluasi kehadiran/kedisiplinan kasir yang lebih adil dan akurat.
-            - **Pembersihan Encoding & Karakter Khusus:** Memperbaiki karakter mojibake di seluruh menu Isi Saldo, Laporan, dan Akun Kasir.
+            ### Pembaruan Aplikasi v1.4.8
+            - **Fitur Quick Edit Banner Promo (+Transaksi):** Penambahan tombol edit terkunci di pojok kanan atas banner foto khusus Mode Owner.
+            - **Modal Quick Edit (Alur 3):** Modal interaktif langsung di layar transaksi untuk ganti, tambah (hingga 5 slot), dan hapus foto banner promosi.
+            - **Editor Crop & Zoom HD (Rasio 2.4 : 1):** Fitur geser dan zoom foto presisi, otomatis kompresi dan upload ke Supabase Storage serta sinkronisasi multi-perangkat.
+            - **React Portal & Scroll Lock:** Perbaikan tumpukan modal agar tampil di lapisan paling depan tanpa tertutup kolom live kasir atau bilah navigasi bawah.
+            - **Pembaruan Laporan & Performa Kasir:** Peningkatan akurasi laporan profit dan evaluasi kasir.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

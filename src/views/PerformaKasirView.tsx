@@ -3,6 +3,7 @@ import { GlobalHeader } from '../components/GlobalHeader'
 import { jsPDF } from 'jspdf'
 import { formatRupiah, cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { fetchLaporanHarianRPC, fetchLaporanBulananRPC } from '../lib/laporanService'
 import type { Transaction } from '../types'
 
 interface PerformaKasirViewProps {
@@ -232,6 +233,31 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       }
       const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
 
+      // ── 1. Prioritaskan Single Source of Truth SQL RPC ──
+      const { data: rpcHarian, error: rpcErr } = await fetchLaporanHarianRPC({
+        userId: props.googleUid,
+        storeId: props.targetStoreId,
+        kasirId: filterKasir,
+        startDate: startDate,
+        endDate: `${selectedMonth}-31`
+      })
+
+      if (!rpcErr && rpcHarian && rpcHarian.length > 0) {
+        const tmpMap = new Map()
+        rpcHarian.forEach(r => {
+          const kId = (filterKasir && filterKasir !== 'Semua') ? filterKasir : 'Semua'
+          tmpMap.set(`${r.tanggal}_${kId}`, {
+            tambahSaldo: Number(r.tambah_saldo || 0),
+            omset: Number(r.total_omzet || 0),
+            labaAdmin: Number(r.total_laba || 0),
+            countTx: Number(r.total_transaksi || 0)
+          })
+        })
+        setMonthlyRawDataMap(tmpMap)
+        setIsLoading(false)
+        return
+      }
+
       let from = 0
       const step = 1000
       let hasMore = true
@@ -304,6 +330,30 @@ const PerformaKasirView: React.FC<PerformaKasirViewProps> = (props) => {
       const year = selectedMonth.split('-')[0]
       const startDate = `${year}-01-01`
       const endDate = `${Number(year) + 1}-01-01`
+
+      // ── 1. Prioritaskan Single Source of Truth SQL RPC Bulanan ──
+      const { data: rpcBulanan, error: rpcYearErr } = await fetchLaporanBulananRPC({
+        userId: props.googleUid,
+        storeId: props.targetStoreId,
+        kasirId: filterKasir,
+        year: Number(year)
+      })
+
+      if (!rpcYearErr && rpcBulanan && rpcBulanan.length > 0) {
+        const tmpMap = new Map()
+        rpcBulanan.forEach(r => {
+          const kId = (filterKasir && filterKasir !== 'Semua') ? filterKasir : 'Semua'
+          tmpMap.set(`${r.bulan_key}_${kId}`, {
+            tambahSaldo: Number(r.tambah_saldo || 0),
+            omset: Number(r.total_omzet || 0),
+            labaAdmin: Number(r.total_laba || 0),
+            countTx: Number(r.total_transaksi || 0)
+          })
+        })
+        setYearlyRawDataMap(tmpMap)
+        setIsLoading(false)
+        return
+      }
 
       let from = 0
       const step = 1000

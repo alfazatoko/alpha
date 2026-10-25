@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatRupiah, cn, getLocalDateString } from '../lib/utils';
 import type { Transaction } from '../types';
 import { supabase } from '../lib/supabase';
+import { fetchLaporanHarianRPC, fetchLaporanBulananRPC } from '../lib/laporanService';
 
 interface ProfitOwnerViewProps {
   transactions: Transaction[];
@@ -210,6 +211,57 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       const startMonthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
       const endMonthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(daysInSelectedMonth).padStart(2, '0')}`;
       const kasirTarget = (filterKasir && filterKasir !== 'Semua') ? filterKasir : 'Semua';
+
+      // ── 1. Prioritaskan Single Source of Truth SQL RPC ──
+      const [resHarianRPC, resBulananRPC] = await Promise.all([
+        fetchLaporanHarianRPC({
+          userId: uid,
+          storeId: effectiveStoreId,
+          kasirId: kasirTarget,
+          startDate: startMonthStr,
+          endDate: endMonthStr
+        }),
+        fetchLaporanBulananRPC({
+          userId: uid,
+          storeId: effectiveStoreId,
+          kasirId: kasirTarget,
+          year: selectedYear
+        })
+      ]);
+
+      if (!resHarianRPC.error && resHarianRPC.data && resHarianRPC.data.length > 0) {
+        const dMap = {};
+        resHarianRPC.data.forEach(r => {
+          dMap[r.tanggal] = {
+            tanggal: r.tanggal,
+            total_profit_admin: Number(r.total_laba || 0),
+            admin_tunai: Number(r.laba_tunai || 0),
+            admin_non_tunai: Number(r.laba_non_tunai || 0),
+            total_transaksi: Number(r.total_transaksi || 0),
+            total_omzet: Number(r.total_omzet || 0)
+          };
+        });
+        setSqlDailyMap(dMap);
+        setIsLoadedFromSQL(true);
+
+        if (!resBulananRPC.error && resBulananRPC.data && resBulananRPC.data.length > 0) {
+          const mMap = {};
+          resBulananRPC.data.forEach(r => {
+            mMap[r.bulan_key] = {
+              bulan: r.bulan_key,
+              total_profit_admin: Number(r.total_laba || 0),
+              admin_tunai: Number(r.laba_tunai || 0),
+              admin_non_tunai: Number(r.laba_non_tunai || 0),
+              total_transaksi: Number(r.total_transaksi || 0),
+              total_omzet: Number(r.total_omzet || 0),
+              hari_terbaik_tanggal: r.hari_terbaik_tanggal,
+              hari_terbaik_profit: Number(r.hari_terbaik_laba || 0)
+            };
+          });
+          setSqlMonthlyMap(mMap);
+        }
+        return;
+      }
 
       // 1. Fetch Harian (Maksimal 31 baris data)
       let queryHarian = supabase
@@ -806,7 +858,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   useEffect(() => {
     if (isFetchingRemote || dailyProfitList.length === 0 || isSyncing) return;
     const timer = setTimeout(() => {
-      handleSyncToOnlineCloud(true);
+      // handleSyncToOnlineCloud(true); // dinonaktifkan: data dihitung terpusat oleh SQL RPC
     }, 2000);
     return () => clearTimeout(timer);
   }, [selectedMonth, selectedYear, filterKasir, dailyProfitList.length, isFetchingRemote]);
