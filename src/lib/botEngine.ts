@@ -2409,8 +2409,11 @@ Gunakan format markdown yang rapi. Bantu pengguna dalam hal apapun baik tentang 
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
+      const timeoutMs = thinkingMode === 'high' ? 60000 : 35000
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 12000)
+      const timeoutId = setTimeout(() => {
+        try { controller.abort() } catch(e) {}
+      }, timeoutMs)
 
       let res
       try {
@@ -2427,6 +2430,12 @@ Gunakan format markdown yang rapi. Bantu pengguna dalam hal apapun baik tentang 
             }
           })
         })
+      } catch (fetchErr: any) {
+        if (fetchErr.name === 'AbortError' || fetchErr.message?.includes('abort') || fetchErr.message?.includes('aborted')) {
+          lastError = new Error('Waktu proses habis karena server memerlukan waktu berpikir lebih lama. Silakan coba lagi atau gunakan Mode Medium (Cepat).')
+          continue
+        }
+        throw fetchErr
       } finally {
         clearTimeout(timeoutId)
       }
