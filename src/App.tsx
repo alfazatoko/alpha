@@ -1116,19 +1116,32 @@ const MainApp: React.FC<MainAppProps> = ({
     setGeminiApiKey(trimmedKey)
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
+
+    // Simpan juga ke store_voucher_app_data agar aman tersinkron tanpa ketergantungan kolom SQL
+    try {
+      const { data: vRow } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', effectiveStoreId).maybeSingle()
+      const existingData = vRow?.voucher_app_data || {}
+      await supabase.from('store_voucher_app_data').upsert({
+        store_id: effectiveStoreId,
+        voucher_app_data: { ...existingData, gemini_api_key: trimmedKey }
+      }, { onConflict: 'store_id' })
+    } catch (e) {}
+
     const isPin = localStorage.getItem(`alphaPro_${effectiveStoreId}_isPinEnabled`) !== 'false'
-    const { error } = await supabase.from('store_settings').upsert({
-      store_id: effectiveStoreId,
-      cashiers: kasirList,
-      presets,
-      running_texts: runningTexts,
-      main_announcement: mainAnnouncement,
-      is_pin_enabled: isPin,
-      gemini_api_key: trimmedKey || null,
-      updated_at: new Date().toISOString()
-    })
-    if (error) console.error('Gagal simpan Gemini key ke cloud:', error.message)
-    else showToast('GEMINI KEY DISIMPAN & DISINKRONKAN!')
+    try {
+      await supabase.from('store_settings').upsert({
+        store_id: effectiveStoreId,
+        cashiers: kasirList,
+        presets,
+        running_texts: runningTexts,
+        main_announcement: mainAnnouncement,
+        is_pin_enabled: isPin,
+        gemini_api_key: trimmedKey || null,
+        updated_at: new Date().toISOString()
+      })
+    } catch (e) {}
+
+    showToast('GEMINI KEY DISIMPAN & DISINKRONKAN!')
   }
 
   const handleSaveGeminiKeyClear = async () => {
@@ -1136,11 +1149,24 @@ const MainApp: React.FC<MainAppProps> = ({
     setGeminiApiKey('')
     const effectiveStoreId = targetStoreId !== 'all' ? targetStoreId : (activeStoreId !== 'all' ? activeStoreId : null)
     if (!effectiveStoreId) return
-    await supabase.from('store_settings').upsert({
-      store_id: effectiveStoreId,
-      gemini_api_key: null,
-      updated_at: new Date().toISOString()
-    })
+    try {
+      const { data: vRow } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', effectiveStoreId).maybeSingle()
+      if (vRow?.voucher_app_data) {
+        const copy = { ...vRow.voucher_app_data }
+        delete copy.gemini_api_key
+        await supabase.from('store_voucher_app_data').upsert({
+          store_id: effectiveStoreId,
+          voucher_app_data: copy
+        }, { onConflict: 'store_id' })
+      }
+    } catch (e) {}
+    try {
+      await supabase.from('store_settings').upsert({
+        store_id: effectiveStoreId,
+        gemini_api_key: null,
+        updated_at: new Date().toISOString()
+      })
+    } catch (e) {}
   }
 
   const handleSaveCashierSelf = async (targetUsername: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => {
@@ -1413,6 +1439,17 @@ const MainApp: React.FC<MainAppProps> = ({
           changed = true
         }
       }
+      try {
+        const { data: vData } = await supabase.from('store_voucher_app_data').select('voucher_app_data').eq('store_id', targetStoreId).maybeSingle()
+        if (vData?.voucher_app_data?.gemini_api_key) {
+          const local = localStorage.getItem('alphaPro_gemini_api_key')
+          if (!local || local !== vData.voucher_app_data.gemini_api_key) {
+            localStorage.setItem('alphaPro_gemini_api_key', vData.voucher_app_data.gemini_api_key)
+            setGeminiApiKey(vData.voucher_app_data.gemini_api_key)
+            changed = true
+          }
+        }
+      } catch (e) {}
 
       // Sync Kasbon
       try {

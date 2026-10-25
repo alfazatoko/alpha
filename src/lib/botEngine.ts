@@ -208,7 +208,7 @@ interface KBEntry { test: (c:string)=>boolean; answer: string|((c:string)=>strin
 const KB: KBEntry[] = [
   // Greeting
   {
-    test: c => /^(halo|hai|hay|hello|selamat pagi|selamat siang|selamat sore|selamat malam|permisi|assalamualaikum|waalaikumsalam|hei)(\s|$)|^(hi|p)$/.test(c),
+    test: c => /^(halo|hai|hay|hello|selamat (pagi|siang|sore|malam)|permisi|assalamualaikum|waalaikumsalam|hei|hi|p)[!.]*$/.test(c.trim()),
     answer: () => { const h=new Date().getHours(); const s=h<11?'Selamat pagi ☀️':h<15?'Selamat siang 🌤️':h<18?'Selamat sore 🌇':'Selamat malam 🌙'; return `${s}! 👋 Aku **Bot Alpha**, asisten toko kamu.\n\nAku bisa bantu:\n• Navigasi aplikasi (misal: *"atur stok"*, *"gaji kasir"*)\n• Cek & panduan edit stok\n• Rekap kasbon, kontak, absen, & penjualan\n• Kalkulator bisnis & info operator\n• Tanya umum (butuh Groq key)\n\nKetik *bantuan* untuk panduan lengkap.` }
   },
   // Identitas
@@ -1865,9 +1865,23 @@ export function answerFromKB(
 }
 
 // ── Gemini API ────────────────────────────────────────────────────────────────
-export interface ChatMessage { role: 'user' | 'model'; parts: [{ text: string }] }
+export interface ChatPart {
+  text?: string
+  inline_data?: { mime_type: string; data: string }
+}
 
-const GEMINI_MODEL = 'gemini-3.5-flash-lite'
+export interface ChatMessage {
+  role: 'user' | 'model'
+  parts: ChatPart[]
+}
+
+export const GEMINI_CANDIDATE_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash'
+]
+export const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 
 // ── Tipe data untuk konteks toko ──────────────────────────────────────────────
 export interface StoreContext {
@@ -1901,6 +1915,9 @@ export function buildSystemPrompt(ctx: StoreContext): string {
   const isOwner = ctx.role === 'owner'
   const storeName = ctx.storeName || 'ALFAZA CELL'
   const monthLabel = ctx.currentMonth || new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  const now = new Date()
+  const fullTodayStr = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 
   // ── Bangun "Buku Besar" dari data historis ──
   let bukuBesar = ''
@@ -1969,7 +1986,7 @@ ${ctx.stokRendah.map(p => `  - ${p.name}: ${p.stock} pcs (min alert: ${p.minStoc
   if (ctx.handoverRecords && ctx.handoverRecords.length > 0) {
     const todayStr = new Date().toISOString().split('T')[0]
     const todayHandovers = ctx.handoverRecords.filter((r: any) => r.date === todayStr || (r.timestamp || '').startsWith(todayStr))
-    const recentHandovers = ctx.handoverRecords.slice(0, 10) // max 10 terbaru
+    const recentHandovers = ctx.handoverRecords.slice(0, 3) // max 10 terbaru
 
     let handoverSection = `\n\n📋 DATA SERAH TERIMA KASIR (${recentHandovers.length} shift terakhir):\n`
     recentHandovers.forEach((r: any, i: number) => {
@@ -2091,7 +2108,7 @@ Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
 
       let logJamMasukStr = '\n\n📅 LOG ABSENSI & JAM MASUK KASIR BULAN INI:\n'
       Object.entries(byKasir).forEach(([kName, entries]) => {
-        logJamMasukStr += `  • ${kName} (${entries.length} log): ${entries.slice(0, 15).join(', ')}\n`
+        logJamMasukStr += `  • ${kName} (${entries.length} log): ${entries.slice(0, 3).join(', ')}\n`
       })
       bukuBesar += logJamMasukStr
     }
@@ -2115,11 +2132,33 @@ Total Plus (selisih lebih): Rp${totalPlus.toLocaleString('id-ID')}`
     }
   }
 
-  const basePrompt = `Kamu adalah Bot Alpha, asisten AI cerdas untuk toko ${storeName}.
-Kamu berperan sebagai "Karyawan Analis Toko" yang memahami pembukuan, stok voucher, dan operasional toko konter pulsa.
-Jawab dalam Bahasa Indonesia yang ringkas, cerdas, dan ramah. Gunakan emoji secukupnya.
-Format jawaban: gunakan baris baru dan poin jika perlu, maksimal 200 kata kecuali diminta analisa detail.
-Jika tidak tahu, katakan jujur. Jangan jawab hal berbahaya atau SARA.
+  const basePrompt = `Kamu adalah Bot Alpha, asisten AI cerdas, multifungsi, dan serba bisa untuk toko ${storeName}.
+📅 WAKTU REAL-TIME SAAT INI:
+- Hari ini adalah: ${fullTodayStr} (Pukul ${timeStr} WIB).
+- Gunakan tanggal ini sebagai acuan pasti jika user bertanya hari ini, besok, lusa, kemarin, atau hari apa.
+
+Kamu ditenagai oleh kecerdasan Google Gemini AI dengan peran ganda:
+
+1. 🌟 **KONSULTAN & ASISTEN PINTAR TOKO (${storeName})**:
+- Memahami operasional toko konter pulsa, paket data, voucher kuota, dan transaksi digital.
+- Mampu menganalisis penjualan, omzet harian/bulanan, stok menipis, absensi, audit uang laci, dan beban operasional toko berdasarkan data real-time di bawah.
+- Ahli memberikan strategi bisnis konter: ide promosi, diskon paket, copywriting/caption WhatsApp, TikTok, Instagram, tips meningkatkan retensi pelanggan, dan solusi komplain pembeli.
+
+2. 🧠 **ASISTEN KECERDASAN UMUM (GENERAL AI - SEPERTI GEMINI GOOGLE)**:
+- Kamu berwawasan luas dan BISA menjawab segala macam pertanyaan umum dari pengguna!
+- Contoh pertanyaan umum yang WAJIB kamu jawab dengan cerdas:
+  • Pengetahuan umum, sains, geografi, sejarah, tokoh dunia.
+  • Ide konten, caption media sosial, kata-kata promosi, surat resmi/pesan WA.
+  • Matematika, rumus perhitungan, konversi mata uang/satuan.
+  • Pertanyaan sehari-hari, resep masakan, tips produktivitas, teknologi, gadget/smartphone, troubleshooting jaringan & sinyal operator.
+  • Obrolan santai, humor ringan, dan motivasi kerja.
+- JANGAN PERNAH menolak pertanyaan dengan alasan "bukan tentang toko". Jawablah dengan cerdas, ramah, dan solutif layaknya Google Gemini AI!
+
+GAYA & FORMAT KOMUNIKASI:
+- Gunakan Bahasa Indonesia yang ramah, santun, luwes, dan natural (tidak kaku).
+- Gunakan format Markdown yang rapi (bold, bullet points, penomoran) agar nyaman dan mudah dibaca di layar HP/layar kasir.
+- Selalu utamakan solusi praktis yang langsung bisa dimanfaatkan pengguna.
+- Jika pengguna butuh penjelasan panjang atau detail, jelaskan secara terstruktur.
 
 PENGETAHUAN HALAMAN APLIKASI (MANUAL BOOK):
 - Halaman "Kasir" (Kelola Data Kasir): Tempat mengelola data profil toko dan akun kasir. Digunakan untuk menambah kasir baru, mengatur PIN, melihat identitas kasir, dan mengatur absensi.
@@ -2317,61 +2356,114 @@ export function parseBotActions(reply: string): { cleanText: string; actions: Bo
   return { cleanText, actions }
 }
 
-// ── Gemini API Call (dengan dukungan system prompt override) ──────────────────
+// ── Gemini API Call (dengan model fallback, image attachment, & dual thinking mode) ──────────
 export async function callGeminiAPI(
   userMessage: string,
   history: ChatMessage[],
   apiKey: string,
   systemPromptOverride?: string,
-  maxTokens: number = 2048
+  maxTokens: number = 2048,
+  imageAttachment?: { mimeType: string; base64: string } | null,
+  thinkingMode: 'medium' | 'high' = 'medium'
 ): Promise<string> {
-  const contents: ChatMessage[] = [
-    ...history.slice(-8),
-    { role: 'user', parts: [{ text: userMessage }] }
-  ]
-
-  const systemInstruction = systemPromptOverride || `Kamu adalah Bot Alpha, asisten AI untuk toko pulsa dan konter.
-Jawab dalam Bahasa Indonesia yang singkat, padat, dan ramah. Gunakan emoji secukupnya.
-Jika tidak tahu, jujur saja. Jangan jawab hal berbahaya atau SARA.`
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemInstruction }] },
-      contents,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: maxTokens,
+  const userParts: ChatPart[] = [{ text: userMessage }]
+  if (imageAttachment) {
+    userParts.push({
+      inline_data: {
+        mime_type: imageAttachment.mimeType,
+        data: imageAttachment.base64
       }
     })
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const apiMsg = err?.error?.message || ''
-    if (res.status === 400) throw new Error(`Request tidak valid: ${apiMsg || 'Cek format prompt atau API key.'}`)
-    if (res.status === 403) throw new Error('API key tidak valid atau tidak punya akses ke model ini. Cek di Settings bot.')
-    if (res.status === 404) throw new Error(`Model "${GEMINI_MODEL}" tidak ditemukan. Hubungi developer untuk update nama model.`)
-    if (res.status === 429) throw new Error('Quota API habis. Coba lagi beberapa saat.')
-    throw new Error(apiMsg || `Error HTTP ${res.status}`)
   }
 
-  const data = await res.json()
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-  const finishReason = data?.candidates?.[0]?.finishReason
+  const contents: ChatMessage[] = [
+    ...history.slice(-8),
+    { role: 'user', parts: userParts }
+  ]
 
-  // Saat MAX_TOKENS: jangan throw error — kembalikan hasil parsial dengan marker
-  // khusus agar caller bisa salvage data yang sudah berhasil diekstrak sebagian.
-  if (finishReason === 'MAX_TOKENS') {
-    return (text?.trim() || '') + '\n[SCAN_PARTIAL]'
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+
+  const defaultPrompt = `Kamu adalah Bot Alpha, asisten AI cerdas dan multifungsi layaknya Google Gemini.
+Hari ini adalah: ${todayStr}, pukul ${timeStr} WIB.
+Jawab dalam Bahasa Indonesia yang ramah, sopan, solutif, dan berwawasan luas.
+Gunakan format markdown yang rapi. Bantu pengguna dalam hal apapun baik tentang toko maupun pengetahuan umum.`
+
+  const systemInstruction = systemPromptOverride || defaultPrompt
+
+  let lastError: any = null
+
+  // Model selection based on Thinking Mode
+  const candidateModels = thinkingMode === 'high'
+    ? ['gemini-3.8-flash', 'gemini-3.5-flash']
+    : ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash']
+
+  const modeDirective = thinkingMode === 'high'
+    ? '\n\n🧠 MODE HIGH (BERPIKIR PANJANG & ANALISIS MENDALAM):\nGunakan penalaran mendalam dan sistematis layaknya model reasoning tinggi. Uraikan pemikiran langkah demi langkah (chain of thought), pertimbangkan risiko dan peluang, evaluasi opsi, serta berikan rekomendasi aksi konkret.'
+    : '\n\n⚡ MODE MEDIUM (PENALARAN CEPAT):\nBerikan jawaban yang cerdas, cepat, lugas, dan to the point.'
+
+  const effectiveInstruction = systemInstruction + modeDirective
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 12000)
+
+      let res
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: effectiveInstruction }] },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: maxTokens,
+            }
+          })
+        })
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        const apiMsg = err?.error?.message || ''
+        if (res.status === 404) {
+          lastError = new Error(`Model ${model} tidak aktif: ${apiMsg || '404'}`)
+          continue
+        }
+        if (res.status === 400) throw new Error(`Request tidak valid: ${apiMsg || 'Cek format prompt atau API key.'}`)
+        if (res.status === 403) throw new Error('API key Gemini tidak valid atau tidak memiliki izin akses. Cek di menu pengaturan ⚙️ bot.')
+        if (res.status === 429) throw new Error('Quota limit Gemini tercapai. Silakan coba lagi beberapa saat.')
+        throw new Error(apiMsg || `Error HTTP ${res.status}`)
+      }
+
+      const data = await res.json()
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      const finishReason = data?.candidates?.[0]?.finishReason
+
+      if (finishReason === 'MAX_TOKENS') {
+        return (text?.trim() || '') + '\n[SCAN_PARTIAL]'
+      }
+      if (!text && finishReason === 'SAFETY') {
+        throw new Error('Respons dibatasi oleh filter keamanan Google. Coba sesuaikan pertanyaan Anda.')
+      }
+      return text?.trim() || 'Maaf, tidak ada respon dari Gemini.'
+    } catch (err: any) {
+      lastError = err
+      if (err.message?.includes('tidak valid') || err.message?.includes('403')) {
+        throw err
+      }
+    }
   }
-  if (!text && finishReason === 'SAFETY') {
-    throw new Error('Respons diblokir filter keamanan Gemini. Coba ubah format teks input.')
-  }
-  return text?.trim() || 'Maaf, tidak ada respons dari Gemini.'
+
+  throw lastError || new Error('Gagal menghubungi Gemini AI. Pastikan perangkat terhubung ke internet.')
 }
 
 // ── Generator Briefing Eksekutif Owner (Goal 4) ───────────────────────────
@@ -2697,4 +2789,23 @@ export async function generateDailySummaryByDate(
   summary += '⏰ _Laporan harian otomatis closing malam (Pukul 23:30 WIB)_'
 
   return summary
+}
+
+// ── AI Image Generator Helper ────────────────────────────────────────────────
+export async function generateAIPhoto(
+  prompt: string
+): Promise<{ imageUrl: string; prompt: string }> {
+  let visualPrompt = prompt
+    .replace(/^(buatkan|buat|bikin|generate|desain|gambar|lukis|ciptakan)\s+(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi)?/i, '')
+    .trim()
+  if (!visualPrompt) visualPrompt = prompt
+
+  const seed = Math.floor(Math.random() * 999999)
+  const enhanced = encodeURIComponent(visualPrompt + ', commercial advertising quality, high resolution, clean visual design')
+  const imageUrl = `https://image.pollinations.ai/prompt/${enhanced}?width=1024&height=1024&nologo=true&seed=${seed}`
+
+  return {
+    imageUrl,
+    prompt: visualPrompt
+  }
 }

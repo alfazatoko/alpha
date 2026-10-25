@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, generateExecutiveBriefing, generateDailySummaryAllStores, generateDailySummaryByDate, VIEW_MAP, type ChatMessage, type BotAction } from '../lib/botEngine'
+import { parseAppIntent, findStokProduct, answerFromKB, callGeminiAPI, buildSystemPrompt, buildStoreContext, parseBotActions, generateExecutiveBriefing, generateDailySummaryAllStores, generateDailySummaryByDate, VIEW_MAP, type ChatMessage, type BotAction, generateAIPhoto } from '../lib/botEngine'
+import PhotoEditorModal from './PhotoEditorModal'
 import { supabase } from '../lib/supabase'
 import { motion } from 'motion/react'
 import { playSuccessChime, playNotificationChime, playMicBeep, playBotPop, isSoundEnabled, setSoundEnabled } from '../lib/soundFX'
@@ -33,6 +34,8 @@ interface BotMessage {
   from: 'user' | 'bot'
   text: string
   mode?: 'app' | 'kb' | 'gemini' | 'error'
+  imageUrl?: string
+  thinkingMode?: 'medium' | 'high'
   timestamp?: number
 }
 
@@ -105,7 +108,7 @@ const getDynamicSuggestions = () => {
     .filter(q => q !== 'bantuan' && q !== 'help' && q.length > 2)
     .slice(0, 3) // Get top 3
   
-  const defaults = ['bantuan', 'ke laporan', 'tanya stok axis', 'tips bisnis']
+  const defaults = ['bantuan', 'ide promo tiktok', 'briefing penjualan', 'prediksi stok', 'ke laporan', 'tips omzet']
   // Merge and enforce maximum of 6 suggestion chips
   return Array.from(new Set([...sorted, ...defaults])).slice(0, 6)
 }
@@ -173,6 +176,12 @@ const AssistantBot: React.FC<Props> = ({
   }, [activeStoreId, currentUsername])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [thinkingMode, setThinkingMode] = useState<'medium' | 'high'>(() => {
+    return (localStorage.getItem('alphaPro_bot_thinking_mode') as 'medium' | 'high') || 'medium'
+  })
+  const [attachedImage, setAttachedImage] = useState<{ file?: File; previewUrl: string; base64: string; mimeType: string } | null>(null)
+  const [photoEditorState, setPhotoEditorState] = useState<{ isOpen: boolean; imageUrl: string | null }>({ isOpen: false, imageUrl: null })
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [geminiKeyInput, setGeminiKeyInput] = useState('')
   const [geminiStatus, setGeminiStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [isSavingKey, setIsSavingKey] = useState(false)
@@ -496,7 +505,8 @@ const AssistantBot: React.FC<Props> = ({
                           queryLower.startsWith('g:') ||
                           queryLower.startsWith('g ')
 
-    const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || ''
+    const activeKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || envKey || ''
 
     if (isForceGemini) {
       if (!activeKey) {
@@ -522,6 +532,36 @@ const AssistantBot: React.FC<Props> = ({
       } catch (e: any) {
         setIsTyping(false)
         addMessage('bot', `⚠️ **Gemini Error:** ${e.message}`, 'error')
+      }
+      setSuggestions(getDynamicSuggestions())
+      return
+    }
+
+    // ⓪.0 Jawaban Kilat (0ms) untuk Pertanyaan Waktu & Kalender
+    const isDateTimeQuery = /(tanggal|hari|jam|pukul|waktu)/i.test(queryLower) && /(berapa|apa|sekarang|skrg|hari ini|besok|kemarin|lusa)/i.test(queryLower)
+    if (isDateTimeQuery && !/(rekap|laporan|transaksi|omzet|untung|kasbon|gaji|absen)/i.test(queryLower)) {
+      const now = new Date()
+      let targetDate = new Date()
+      let prefix = '📅 Hari ini'
+
+      if (queryLower.includes('besok')) {
+        targetDate.setDate(now.getDate() + 1)
+        prefix = '📅 Besok'
+      } else if (queryLower.includes('kemarin')) {
+        targetDate.setDate(now.getDate() - 1)
+        prefix = '📅 Kemarin'
+      } else if (queryLower.includes('lusa')) {
+        targetDate.setDate(now.getDate() + 2)
+        prefix = '📅 Lusa'
+      }
+
+      setIsTyping(false)
+      if (queryLower.includes('jam') || queryLower.includes('pukul') || (queryLower.includes('waktu') && queryLower.includes('sekarang'))) {
+        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        addMessage('bot', `🕐 Sekarang pukul **${timeStr}** WIB.`, 'app')
+      } else {
+        const dateStr = targetDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        addMessage('bot', `${prefix} adalah **${dateStr}**.`, 'app')
       }
       setSuggestions(getDynamicSuggestions())
       return
@@ -745,9 +785,102 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
-    // ② Coba Knowledge Base lokal (offline database intelligence)
-    await new Promise(r => setTimeout(r, 400))
-    const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
+    // ② Cek utilitas perhitungan data lokal tertentu (Briefing, Prediksi Stok, Beban Toko, Kembalian kalkulator)
+    const isSpecificLocalCalc = 
+      /^(briefing|closing malam|laporan malam|rangkuman hasil penjualan)/i.test(queryLower) ||
+      /^(prediksi stok|kapan stok habis|rekomendasi restok|rekomendasi belanja)/i.test(queryLower) ||
+      /^(beban operasional|beban toko|pengeluaran toko|biaya bulanan|sewa toko)/i.test(queryLower) ||
+      /^(bayar\s+\d+.*kembali)/i.test(queryLower) ||
+      /^(\d+[\s\d.,]*[+\-*\/x×÷]\s*[\d.,]+)$/.test(queryLower.trim())
+
+    if (isSpecificLocalCalc) {
+            const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
+      if (kbAnswer) {
+        const { cleanText, actions } = parseBotActions(kbAnswer)
+        setIsTyping(false)
+        addMessage('bot', cleanText, 'kb')
+        if (actions.length > 0) setTimeout(() => requestConfirmation(actions), 400)
+        setSuggestions(getDynamicSuggestions())
+        return
+      }
+    }
+
+    // ③ Gemini API (Jika ada key) — Menjawab segala jenis pertanyaan (Toko, Bisnis, Umum, Chat) layaknya Gemini AI
+    if (activeKey) {
+      try {
+        // Cek jika perintah untuk membuat foto / desain gambar AI
+        const isImageGen = 
+          /^(buat|bikin|generate|desain|gambar|lukis|ciptakan)\s+(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi)/i.test(queryLower) ||
+          /(foto|gambar|poster|banner|spanduk)\s+(untuk|tentang|promo|toko|produk)/i.test(queryLower) ||
+          queryLower.startsWith('buat foto') ||
+          queryLower.startsWith('bikin foto') ||
+          queryLower.startsWith('buat gambar') ||
+          queryLower.startsWith('bikin gambar')
+
+        if (isImageGen) {
+          try {
+            setIsTyping(true)
+            addMessage('bot', `🎨 **Sedang membuat foto AI...**\n\n_"${text}"_\nMohon tunggu beberapa detik.`, 'gemini')
+            const imgResult = await generateAIPhoto(text)
+            setIsTyping(false)
+            setMessages(prev => [
+              ...prev,
+              {
+                id: 'img-' + Date.now(),
+                from: 'bot',
+                mode: 'gemini',
+                text: `✨ **Foto AI Berhasil Dibuat!**\n\nPrompt: _"${imgResult.prompt}"_\n\nKamu bisa klik **Simpan Foto** untuk download atau **Edit Foto** untuk menambah teks promo/filter:`,
+                imageUrl: imgResult.imageUrl,
+                timestamp: Date.now()
+              }
+            ])
+            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+            setSuggestions(['🎨 Buat Foto Lain', '✏️ Edit Foto Ini', ...getDynamicSuggestions()])
+            return
+          } catch (err: any) {
+            setIsTyping(false)
+            addMessage('bot', `⚠️ Gagal membuat foto: ${err.message}`, 'error')
+            return
+          }
+        }
+
+        const cleanQuery = text.replace(/^(hey gemini|halo gemini|tanya gemini|gemini|g\.|g:|g\s)[,\s]*/i, '').trim() || text
+        const imgPayload = attachedImage ? { mimeType: attachedImage.mimeType, base64: attachedImage.base64 } : null
+        
+        const reply = await callGeminiAPI(
+          cleanQuery, 
+          geminiHistory.current, 
+          activeKey, 
+          systemPromptRef.current || undefined, 
+          2048, 
+          imgPayload, 
+          thinkingMode
+        )
+
+        // Clear attached image after sending
+        if (attachedImage) setAttachedImage(null)
+
+        const { cleanText, actions } = parseBotActions(reply)
+        geminiHistory.current = [
+          ...geminiHistory.current,
+          { role: 'user' as const, parts: [{ text: cleanQuery }] as [{text: string}] },
+          { role: 'model' as const, parts: [{ text: cleanText }] as [{text: string}] }
+        ].slice(-12)
+        setIsTyping(false)
+        addMessage('bot', cleanText, 'gemini')
+        if (actions.length > 0) {
+          setTimeout(() => requestConfirmation(actions), 400)
+        }
+      } catch (e: any) {
+        setIsTyping(false)
+        addMessage('bot', `⚠️ **Gemini AI:** ${e.message}`, 'error')
+      }
+      setSuggestions(getDynamicSuggestions())
+      return
+    }
+
+    // ④ Jika Offline (Tidak ada Gemini Key) — Coba Knowledge Base bawaan
+        const kbAnswer = answerFromKB(text, activeStoreId, currentUsername, kasirList, transactions, absensiList, voucherTransactions, voucherProducts)
     if (kbAnswer) {
       const { cleanText, actions } = parseBotActions(kbAnswer)
       setIsTyping(false)
@@ -762,39 +895,53 @@ const AssistantBot: React.FC<Props> = ({
       return
     }
 
-    // ③ Gemini API (jika ada key) — dengan System Prompt berisi Buku Besar & Role-Aware
-    if (activeKey) {
-      try {
-        const reply = await callGeminiAPI(text, geminiHistory.current, activeKey, systemPromptRef.current || undefined)
-        // Parse apakah ada AI Action di dalam respon
-        const { cleanText, actions } = parseBotActions(reply)
-        geminiHistory.current = [
-          ...geminiHistory.current,
-          { role: 'user' as const, parts: [{ text }] as [{text: string}] },
-          { role: 'model' as const, parts: [{ text: cleanText }] as [{text: string}] }
-        ].slice(-12)
-        setIsTyping(false)
-        addMessage('bot', cleanText, 'gemini')
-        // Eksekusi AI Action jika ada
-        if (actions.length > 0) {
-          setTimeout(() => requestConfirmation(actions), 400)
-        }
-      } catch (e: any) {
-        setIsTyping(false)
-        addMessage('bot', `⚠️ **Gemini Error:** ${e.message}`, 'error')
-      }
-      setSuggestions(getDynamicSuggestions())
-      return
-    }
-
-    // ④ Fallback
+    // ⑤ Fallback saat Offline
     setIsTyping(false)
-    addMessage('bot', `🤔 Maaf, aku belum tahu jawaban itu.\n\nJika ini perintah baru, kamu bisa mengajariku dengan klik **Ajari Bot** di bawah ini.`, 'kb')
+    addMessage('bot', `🤔 **Mode Offline**: Pertanyaan ini belum ada di buku panduan offline.\n\n💡 **Tips:** Pasang **Gemini API Key** di pengaturan (ikon ⚙️ di atas) agar bot bisa menjawab pertanyaan apapun secara cerdas layaknya Gemini AI Google!`, 'kb')
     setSuggestions(['Ajari Bot', ...getDynamicSuggestions()])
     }, 300)
   }, [input, isTyping, addMessage, setActiveView, setBotSearchQuery, setBotActiveTab, activeStoreId, currentUsername, geminiApiKey, kasirList, transactions, absensiList, customIntents, messages, onActionKasbon, onActionIzin, onActionCatatan, onActionKontak, onActionCustomFAQ])
 
   handleSendRef.current = handleSend
+
+  // ── Image Handlers: Upload & Download ──────────────────────────────────────
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      setAttachedImage({
+        file,
+        previewUrl: result,
+        base64,
+        mimeType: file.type || 'image/jpeg'
+      })
+      if (!input.trim()) {
+        setInput('Analisa foto ini dan jelaskan detailnya')
+      }
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const handleDownloadImage = async (url: string, filename = 'alpha-foto.jpg') => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      window.open(url, '_blank')
+    }
+  }
 
   // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
   const requestConfirmation = useCallback((actions: BotAction[]) => {
@@ -906,7 +1053,8 @@ const AssistantBot: React.FC<Props> = ({
     })
   }
 
-  const effectiveGeminiKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || ''
+  const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || ''
+  const effectiveGeminiKey = geminiApiKey || localStorage.getItem(GEMINI_KEY) || envKey || ''
   const hasGeminiKey = !!effectiveGeminiKey
 
   return (
@@ -984,6 +1132,37 @@ const AssistantBot: React.FC<Props> = ({
           </button>
         </div>
 
+        {/* ── Thinking Mode Sub-header Bar (⚡ Medium Cepat vs 🧠 High Panjang) ── */}
+        <div className="px-3 py-1.5 bg-black/25 border-b border-white/10 flex items-center justify-between shrink-0">
+          <span className="text-[9px] font-bold text-indigo-300">Mode AI:</span>
+          <div className="flex items-center bg-white/10 p-0.5 rounded-full border border-white/15">
+            <button
+              type="button"
+              onClick={() => {
+                setThinkingMode('medium')
+                localStorage.setItem('alphaPro_bot_thinking_mode', 'medium')
+              }}
+              className={`px-2.5 py-0.5 rounded-full text-[8.5px] font-black transition-all flex items-center gap-1 ${thinkingMode === 'medium' ? 'bg-amber-400 text-slate-900 shadow-sm' : 'text-white/60 hover:text-white'}`}
+              title="Medium: Penalaran Cepat (<1.5 detik)"
+            >
+              <span>⚡</span>
+              <span>Medium (Cepat)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setThinkingMode('high')
+                localStorage.setItem('alphaPro_bot_thinking_mode', 'high')
+              }}
+              className={`px-2.5 py-0.5 rounded-full text-[8.5px] font-black transition-all flex items-center gap-1 ${thinkingMode === 'high' ? 'bg-violet-400 text-slate-900 shadow-sm' : 'text-white/60 hover:text-white'}`}
+              title="High: Berpikir Panjang & Analisis Mendalam"
+            >
+              <span>🧠</span>
+              <span>High (Panjang)</span>
+            </button>
+          </div>
+        </div>
+
         {/* Settings Panel */}
         {showSettings && (
           <div className="px-4 py-3 border-b border-white/10 shrink-0 space-y-3" style={{ background:'rgba(255,255,255,0.04)' }}>
@@ -1038,7 +1217,7 @@ const AssistantBot: React.FC<Props> = ({
                 {isSavingKey ? '⏳ Menyimpan & sync cloud...' : geminiStatus==='saved' ? '✓ Tersimpan & Disync!' : geminiStatus==='error' ? '✗ Key terlalu pendek / tidak valid' : '💾 Simpan & Sync ke Cloud'}
               </button>
             </div>
-            <p className="text-indigo-300/60 text-[8.5px] text-center">✨ Gratis • Model: gemini-3.5-flash-lite • 🌐 Sync Supabase</p>
+            <p className="text-indigo-300/60 text-[8.5px] text-center">✨ Gratis • Model: gemini-3.5-flash-lite (Ultra Cepat) • 🌐 Sync Supabase</p>
           </div>
         )}
 
@@ -1189,6 +1368,31 @@ const AssistantBot: React.FC<Props> = ({
                         </div>
                         <div className={`px-3 py-2 rounded-2xl text-[11px] font-medium leading-relaxed shadow ${msg.from==='user'?'bg-indigo-600 text-white rounded-tr-sm':'bg-white/10 text-slate-100 rounded-tl-sm border border-white/10'}`}>
                           {renderText(msg.text)}
+                          {msg.imageUrl && (
+                            <div className="mt-2 space-y-1.5">
+                              <div className="rounded-xl overflow-hidden border border-white/20 bg-black/40">
+                                <img
+                                  src={msg.imageUrl}
+                                  alt="AI Photo"
+                                  className="w-full max-h-52 object-contain rounded-xl hover:scale-105 transition-transform duration-300"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1 pt-0.5">
+                                <button
+                                  onClick={() => handleDownloadImage(msg.imageUrl!, `alpha-foto-${Date.now()}.jpg`)}
+                                  className="flex-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center gap-1 shadow transition-all active:scale-95"
+                                >
+                                  <span>📥</span> Simpan Foto
+                                </button>
+                                <button
+                                  onClick={() => setPhotoEditorState({ isOpen: true, imageUrl: msg.imageUrl! })}
+                                  className="flex-1 py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center gap-1 shadow transition-all active:scale-95"
+                                >
+                                  <span>✏️</span> Edit Foto
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1307,8 +1511,49 @@ const AssistantBot: React.FC<Props> = ({
               </div>
             ) : null}
 
+            {/* Image Attachment Preview */}
+            {attachedImage && (
+              <div className="mx-3 mb-1.5 p-1.5 bg-black/40 border border-white/20 rounded-xl flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <img src={attachedImage.previewUrl} alt="Preview" className="w-7 h-7 rounded-lg object-cover border border-white/30 shrink-0" />
+                  <span className="text-[9.5px] text-indigo-200 truncate font-medium">Foto siap dianalisa</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPhotoEditorState({ isOpen: true, imageUrl: attachedImage.previewUrl })}
+                    className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[8.5px] font-bold"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => setAttachedImage(null)}
+                    className="w-5 h-5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-[10px] font-bold flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Input Bar */}
             <div className="px-3 pb-3 pt-1 shrink-0 flex gap-1.5 items-center">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Lampirkan / Analisa Foto"
+                className="w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border bg-white/10 hover:bg-white/20 text-indigo-200 border-white/20"
+              >
+                <span className="text-sm">📷</span>
+              </button>
+
               {/* Mic Voice Command Button */}
               <button
                 type="button"
@@ -1359,6 +1604,22 @@ const AssistantBot: React.FC<Props> = ({
           </>
         )}
       </div>
+
+      {/* ── Photo Editor Modal ────────────────────────────────────────── */}
+      <PhotoEditorModal
+        isOpen={photoEditorState.isOpen}
+        imageUrl={photoEditorState.imageUrl}
+        storeName="ALFAZA CELL"
+        onClose={() => setPhotoEditorState({ isOpen: false, imageUrl: null })}
+        onSendToChat={(base64, caption) => {
+          setAttachedImage({
+            previewUrl: `data:image/jpeg;base64,${base64}`,
+            base64,
+            mimeType: 'image/jpeg'
+          })
+          setInput(caption || 'Analisa foto yang baru saya edit ini')
+        }}
+      />
     </>
   )
 }

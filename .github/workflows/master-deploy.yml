@@ -102,15 +102,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.4.8
-          name: "ALFAZA ALPHA POS v1.4.8"
+          tag_name: v1.4.9
+          name: "ALFAZA ALPHA POS v1.4.9"
           body: |
-            ### Pembaruan Aplikasi v1.4.8
-            - **Fitur Quick Edit Banner Promo (+Transaksi):** Penambahan tombol edit terkunci di pojok kanan atas banner foto khusus Mode Owner.
-            - **Modal Quick Edit (Alur 3):** Modal interaktif langsung di layar transaksi untuk ganti, tambah (hingga 5 slot), dan hapus foto banner promosi.
-            - **Editor Crop & Zoom HD (Rasio 2.4 : 1):** Fitur geser dan zoom foto presisi, otomatis kompresi dan upload ke Supabase Storage serta sinkronisasi multi-perangkat.
-            - **React Portal & Scroll Lock:** Perbaikan tumpukan modal agar tampil di lapisan paling depan tanpa tertutup kolom live kasir atau bilah navigasi bawah.
-            - **Pembaruan Laporan & Performa Kasir:** Peningkatan akurasi laporan profit dan evaluasi kasir.
+            ### Pembaruan Aplikasi v1.4.9
+            - **Sinkronisasi Laporan Single Source of Truth:** Perbaikan selisih transaksi dan omzet antara Halaman Profit dan Grafik Performa menggunakan RPC Supabase.
+            - **Bot Alpha AI Pintar:** Integrasi resmi Google Gemini AI (menjawab segala pertanyaan umum, konsultasi bisnis konter pulsa, dan strategi promosi).
+            - **2 Pilihan Mode AI (Medium & High):**
+              - *⚡ Medium (Penalaran Cepat)*: Model ultra-kilat Flash Lite untuk kasir saat melayani pelanggan (< 1.5 detik).
+              - *🧠 High (Berpikir Panjang)*: Deep reasoning terstruktur untuk analisis bisnis & strategi owner.
+            - **Studio Buat & Edit Foto AI:**
+              - *Buat Foto*: Generate gambar/poster promosi konter otomatis dari teks prompt AI.
+              - *Edit Foto*: Studio Canvas interaktif untuk menambahkan teks promo, banner warna, efek/filter warna, rotasi, dan watermark toko.
+              - *Simpan Foto*: Tombol 1-klik unduh (download) langsung file foto JPG.
+            - **Multimodal Camera Vision:** Kemampuan bot menganalisis foto struk/nota, barcode, dan foto produk fisik lewat tombol kamera.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
