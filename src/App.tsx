@@ -2746,13 +2746,24 @@ const MainApp: React.FC<MainAppProps> = ({
       finalNominal = nominal
     }
 
-    let baseKet = data.keterangan || ''
+    let baseKet = (data.keterangan || '').trim()
+    // Bersihkan jika ada duplikasi tag sebelumnya
+    baseKet = baseKet.replace(/\[NON_TUNAI\](\s*\[NON_TUNAI\])+/gi, '[NON_TUNAI]').trim()
+
     if (options) {
-      if (options.isAdminNonTunai) baseKet += ' [ADMIN_DALAM]'
-      if (options.subTab === 'NON_TUNAI') baseKet += ' [NON_TUNAI]'
+      if (options.isAdminNonTunai && !baseKet.toUpperCase().includes('[ADMIN_DALAM]')) {
+        baseKet += ' [ADMIN_DALAM]'
+      }
+      if (options.subTab === 'NON_TUNAI' && !baseKet.toUpperCase().includes('[NON_TUNAI]')) {
+        baseKet += ' [NON_TUNAI]'
+      }
       if (options.activeTab === 'LAIN') {
-        if (options.subTab.toLowerCase() === 'khusus') baseKet += ' [KHUSUS]'
-        if (options.subTab.toLowerCase() === 'non_tunai') baseKet += ' [NON_TUNAI]'
+        if (options.subTab.toLowerCase() === 'khusus' && !baseKet.toUpperCase().includes('[KHUSUS]')) {
+          baseKet += ' [KHUSUS]'
+        }
+        if (options.subTab.toLowerCase() === 'non_tunai' && !baseKet.toUpperCase().includes('[NON_TUNAI]')) {
+          baseKet += ' [NON_TUNAI]'
+        }
       }
     }
 

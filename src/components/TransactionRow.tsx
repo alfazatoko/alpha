@@ -58,14 +58,21 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const canEdit = isToday
   const canDelete = isToday && kasirRole === 'owner'
 
-  const isKhusus = (t.keterangan || '').includes('[KHUSUS]')
-  const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]')
+  const isKhusus = (t.keterangan || '').toUpperCase().includes('[KHUSUS]')
+  const isNonTunai = (t.keterangan || '').toUpperCase().includes('[NON_TUNAI]')
   const rowColorClass = isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : "text-black"
 
   const formatRp = (num: number) => num.toLocaleString('id-ID');
   const formatK = (num: number) => (num % 1000 === 0) ? `${num / 1000}K` : formatRp(num);
 
-  let formattedKeterangan = t.keterangan ? t.keterangan.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : '-';
+  // Bersihkan duplikasi tag dan rapikan format tampilan
+  let rawCleanKet = (t.keterangan || '')
+    .replace(/(\[\s*non[_\s]tunai\s*\]\s*)+/gi, '[Non Tunai] ')
+    .replace(/(\[\s*admin[_\s]dalam\s*\]\s*)+/gi, '[Admin Dalam] ')
+    .replace(/(\[\s*khusus\s*\]\s*)+/gi, '[Khusus] ')
+    .trim();
+
+  let formattedKeterangan = rawCleanKet ? rawCleanKet.replace(/\b\w/g, l => l.toUpperCase()) : '-';
   let displayKategori = t.kategori;
 
   if (formattedKeterangan.includes('\n')) {
@@ -73,11 +80,54 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     displayKategori = parts[0];
     formattedKeterangan = parts.slice(1).join(' ');
   }
+  // Helper membersihkan keterangan agar rapi, bebas dari prefix kategori berulang dan tag teknis
+  const formatCleanKeterangan = (raw: string, kategoriName: string) => {
+    if (!raw || raw === '-') return '-';
+    let cleaned = raw
+      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
+      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
+      .replace(/\[\s*khusus\s*\]/gi, '')
+      .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
+      .trim();
+
+    const catNames = [kategoriName, 'Order Kuota', 'Transfer Bank', 'Transfer', 'Tarik Tunai', 'Aksesoris', 'Voucher', 'Dana', 'Flip', 'Bank UOB']
+      .filter(Boolean)
+      .join('|');
+
+    const catPrefixRegex = new RegExp(`^(${catNames})\\s*(=|:|\\>|-|\\|)\\s*`, 'i');
+    cleaned = cleaned.replace(catPrefixRegex, '').trim();
+
+    const catPlainRegex = new RegExp(`^(${catNames})\\s+`, 'i');
+    cleaned = cleaned.replace(catPlainRegex, '').trim();
+
+    if (cleaned && cleaned === cleaned.toUpperCase() && cleaned.length > 2) {
+      cleaned = cleaned.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    return cleaned || '-';
+  };
+
   let listKeterangan = formattedKeterangan;
   let modalKeterangan = formattedKeterangan;
   let modalTransaksiLabel = displayKategori;
   const hasAdminDalam = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
-  let adminFeeLabel = hasAdminDalam ? "Biaya admin ( Potong Dalam ) :" : "Biaya Admin (Tunai):";
+  let adminFeeLabel = hasAdminDalam 
+    ? "Biaya admin ( Potong Dalam ) :" 
+    : isNonTunai 
+    ? "Biaya Admin (Non Tunai):" 
+    : "Biaya Admin (Tunai):";
+
+  const isSplitPayment = (t.keterangan || '').includes('[SPLIT:');
+  let modalSumberMasuk = 'Laci Kasir';
+  if (t.kategori === 'Tarik Tunai') {
+    modalSumberMasuk = t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').replace(/bank uob/ig, 'Bank').trim() || 'EDC / Bank';
+  } else if (isSplitPayment) {
+    modalSumberMasuk = 'Sebagian Tunai & Non Tunai';
+  } else if (isNonTunai) {
+    modalSumberMasuk = 'Non Tunai / QRIS / Bank Transfer';
+  } else {
+    modalSumberMasuk = 'Laci Kasir';
+  };
 
   let appFee = 0;
   if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && t.keterangan?.includes('[FEE_APP:')) {
@@ -125,9 +175,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     if (adminPotong) {
       adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
     } else {
-      adminFeeLabel = "Biaya Admin (Tunai):";
+      adminFeeLabel = isNonTunai ? "Biaya Admin (Non Tunai):" : "Biaya Admin (Tunai):";
     }
   } else {
+    // Bersihkan keterangan agar tidak berulang dengan nama Transaksi dan tag [Non Tunai]
+    modalKeterangan = formatCleanKeterangan(modalKeterangan, t.kategori);
+    listKeterangan = formatCleanKeterangan(listKeterangan, t.kategori);
+
     // Fallback penghapusan label Admin Dalam secara umum jika tidak tercover di atas
     if (listKeterangan.toLowerCase().includes('[admin_dalam]')) {
       adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
@@ -325,7 +379,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Transaksi:</span>
-                  <span className="text-blue-600 font-black">{modalTransaksiLabel}</span>
+                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{modalTransaksiLabel}</span>
                 </div>
               </div>
 
@@ -344,11 +398,22 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   </span>
                   <span className="text-rose-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? 'Laci Kasir' : t.kategori}</span>
                 </div>
-                <div className="flex justify-between items-center bg-emerald-50/50 rounded-lg py-1.5 px-3 text-[11.5px] border border-emerald-100">
-                  <span className="text-emerald-600 font-black flex items-center gap-1.5">
+                <div className={cn(
+                  "flex justify-between items-center rounded-lg py-1.5 px-3 text-[11.5px] border transition-colors",
+                  isNonTunai ? "bg-purple-50/60 border-purple-100" : "bg-emerald-50/50 border-emerald-100"
+                )}>
+                  <span className={cn(
+                    "font-black flex items-center gap-1.5",
+                    isNonTunai ? "text-purple-600" : "text-emerald-600"
+                  )}>
                     <i className="fa-solid fa-arrow-down-left text-[9px]"></i> Sumber Uang Masuk:
                   </span>
-                  <span className="text-emerald-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? (t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').replace(/bank uob/ig, 'Bank').trim() || 'EDC / Bank') : 'Laci Kasir'}</span>
+                  <span className={cn(
+                    "font-black text-right",
+                    isNonTunai ? "text-purple-900" : "text-emerald-900"
+                  )}>
+                    {modalSumberMasuk}
+                  </span>
                 </div>
               </div>
 
@@ -358,7 +423,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   <>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">Harga Modal:</span>
-                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">Fee Aplikasi:</span>
@@ -366,22 +431,22 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                     </div>
                     <div className="flex justify-between items-center text-[12px] pt-1.5 mt-0.5 border-t border-slate-100">
                       <span className="text-slate-600 font-black">Total Modal:</span>
-                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal + appFee)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal + appFee)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
-                      <span className="text-emerald-600 font-black">Rp {formatRp(displayAdminFee)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(displayAdminFee)}</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">Nominal:</span>
-                      <span className="text-slate-800 font-black">Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
-                      <span className="text-slate-800 font-black">Rp {formatRp(t.adminFee)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.adminFee)}</span>
                     </div>
                   </>
                 )}
@@ -390,7 +455,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               {/* Total (Dashed Border) */}
               <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-300 mt-0.5">
                 <span className="text-slate-800 font-black text-[13px]">Total:</span>
-                <span className="text-blue-600 font-black text-[14px]">Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
+                <span className={cn("font-black text-[14px]", isNonTunai ? "text-purple-600" : "text-blue-600")}>Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
               </div>
 
               {/* Edit / Delete Actions */}

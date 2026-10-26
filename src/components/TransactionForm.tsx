@@ -44,6 +44,18 @@ const ITEMS: Record<string, { id: string, name: string, icon: string, color: str
     { id: 'TRANSFER BANK', name: 'TRANSFER', icon: 'fa-building-columns', color: 'text-blue-600' },
     { id: 'DANA', name: 'DANA', icon: 'fa-wallet', color: 'text-blue-500' },
     { id: 'GOPAY', name: 'GOPAY', icon: 'fa-wallet', color: 'text-green-500' }
+  ],
+  'AKSESORIS': [
+    { id: 'CHARGER', name: 'CHARGER', icon: 'fa-plug', color: 'text-blue-500' },
+    { id: 'KABEL DATA', name: 'KABEL DATA', icon: 'fa-bolt', color: 'text-amber-500' },
+    { id: 'HEADSET', name: 'HEADSET', icon: 'fa-headphones', color: 'text-purple-500' },
+    { id: 'TEMPERED GLASS', name: 'TEMPERED GLASS', icon: 'fa-mobile-screen', color: 'text-emerald-500' },
+    { id: 'CASING', name: 'CASING', icon: 'fa-shield-halved', color: 'text-indigo-500' },
+    { id: 'POWERBANK', name: 'POWERBANK', icon: 'fa-battery-full', color: 'text-teal-500' },
+    { id: 'SPEAKER', name: 'SPEAKER', icon: 'fa-volume-high', color: 'text-rose-500' },
+    { id: 'MEMORY / OTG', name: 'MEMORY / OTG', icon: 'fa-hard-drive', color: 'text-cyan-500' },
+    { id: 'HOLDER HP', name: 'HOLDER HP', icon: 'fa-mobile', color: 'text-orange-500' },
+    { id: 'LAINNYA', name: 'LAINNYA', icon: 'fa-box-open', color: 'text-slate-600' }
   ]
 };
 
@@ -222,7 +234,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [selectedBank, setSelectedBank] = useState('BRI')
   const [selectedSumber, setSelectedSumber] = useState('QRIS')
   const [sumberAplikasi, setSumberAplikasi] = useState('')
-  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|null>(null)
+  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|'AKSESORIS'|null>(null)
   const [selectedTujuan, setSelectedTujuan] = useState('')
   const [selectedTujuanFee, setSelectedTujuanFee] = useState(0)
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
@@ -297,22 +309,42 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const defaultLists = {
       BANK: ITEMS['TRANSFER_BANK'],
       ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
-      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']]
+      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
+      AKSESORIS: ITEMS['AKSESORIS']
     };
     try {
       const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
-      if (popupPreset && popupPreset.data) return popupPreset.data;
+      if (popupPreset && popupPreset.data) {
+        return {
+          ...defaultLists,
+          ...popupPreset.data,
+          AKSESORIS: popupPreset.data.AKSESORIS || ITEMS['AKSESORIS']
+        };
+      }
     } catch(e) {}
     
     const saved = localStorage.getItem('alphaPro_popup_lists');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...defaultLists,
+          ...parsed,
+          AKSESORIS: parsed.AKSESORIS || ITEMS['AKSESORIS']
+        };
+      } catch (e) {}
+    }
     return defaultLists;
   });
 
   React.useEffect(() => {
     const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
     if (popupPreset && popupPreset.data) {
-      setPopupLists(popupPreset.data);
+      setPopupLists(prev => ({
+        ...prev,
+        ...popupPreset.data,
+        AKSESORIS: popupPreset.data.AKSESORIS || prev.AKSESORIS || ITEMS['AKSESORIS']
+      }));
     }
   }, [presets]);
   
@@ -431,7 +463,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           return;
         }
         if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setActiveMode('TARIK'); setKategori('Tarik Tunai'); setIsAdminManuallyEdited(false); return; }
-        if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setActiveMode('AKSESORIS'); setKategori('Aksesoris'); setIsAdminManuallyEdited(false); return; }
+        if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setActiveMode('AKSESORIS'); setKategori('Aksesoris'); setIsAdminManuallyEdited(false); setClassicPopupMode('AKSESORIS'); return; }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
         if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setIsSumberModalOpen(true); return; }
         if (e.key === 's' || e.key === 'S') { e.preventDefault(); setIsTujuanModalOpen(true); return; }
@@ -492,6 +524,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     } else if (activeMode === 'TARIK') {
       autoText = `${tarikLabel} : ${tarikSubLabel}`;
+    } else if (activeMode === 'AKSESORIS') {
+      autoText = customLabels['AKSESORIS'] || 'Aksesoris';
     } else {
       const modeCustom = customLabels[activeMode] || kategori;
       autoText = `${modeCustom}`;
@@ -1032,6 +1066,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setKategori('Tarik Tunai')
                 } else if (mode.id === 'AKSESORIS') {
                   setKategori('Aksesoris')
+                  setClassicPopupMode('AKSESORIS')
                 } else {
                   setKategori('')
                   setSumberAplikasi('')
@@ -1166,6 +1201,36 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </button>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Picker / Selector - Aksesoris */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-emerald-50/80 rounded-2xl border border-emerald-100 p-2 mb-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[9px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
+                <i className="fa-solid fa-headset text-emerald-600"></i> Pilihan Aksesoris:
+              </p>
+              <button
+                type="button"
+                onClick={() => setClassicPopupMode('AKSESORIS')}
+                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[8px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1 transition-all"
+              >
+                <i className="fa-solid fa-grid-2 text-[7px]"></i>
+                <span>PILIH / UBAH</span>
+              </button>
+            </div>
+            <div 
+              onClick={() => setClassicPopupMode('AKSESORIS')}
+              className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-emerald-200 cursor-pointer hover:border-emerald-400 transition-colors"
+            >
+              <span className="text-[11px] font-black text-slate-800">
+                {keterangan || <span className="text-slate-400 italic">Klik untuk memilih jenis aksesoris</span>}
+              </span>
+              <span className="text-[9px] font-bold text-emerald-600">
+                Pilih
+              </span>
             </div>
           </div>
         )}
@@ -1581,7 +1646,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   setActiveMode(mode.id as any);
                   setIsAdminManuallyEdited(false);
                   if (mode.id === 'TARIK') setKategori('Tarik Tunai');
-                  else if (mode.id === 'AKSESORIS') setKategori('Aksesoris');
+                  else if (mode.id === 'AKSESORIS') {
+                    setKategori('Aksesoris');
+                    setClassicPopupMode('AKSESORIS');
+                  }
                   else setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank');
                 }}
                 className={cn(
@@ -1741,6 +1809,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
+        {/* Banner Aksesoris Tema 2 */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="mb-2 px-4 animate-in fade-in slide-in-from-top-2">
+            <div 
+              onClick={() => setClassicPopupMode('AKSESORIS')}
+              className="flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl px-3 py-2 cursor-pointer hover:border-purple-400 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                  <i className="fa-solid fa-headset text-xs"></i>
+                </div>
+                <div>
+                  <span className="text-[7.5px] font-bold text-purple-700 uppercase tracking-wider block">Jenis Aksesoris Terpilih:</span>
+                  <span className="text-[11px] font-black text-slate-800">
+                    {keterangan || <span className="text-slate-400 font-medium">Klik untuk memilih aksesoris</span>}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2 py-1 bg-white border border-purple-200 text-purple-700 rounded-lg text-[8px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1">
+                <i className="fa-solid fa-pen-to-square text-[8px]"></i>
+                <span>PILIH</span>
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* KETERANGAN */}
         <div className="mb-1 px-5">
           <div className="flex justify-between items-center mb-1">
@@ -1758,6 +1852,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md text-[8px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 shadow-sm border border-blue-100"
                 >
                   <i className="fa-solid fa-list text-[7px]"></i> PILIH TUJUAN
+                </button>
+              )}
+              {activeMode === 'AKSESORIS' && (
+                <button
+                  type="button"
+                  onClick={() => setClassicPopupMode('AKSESORIS')}
+                  className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-md text-[8px] font-black hover:bg-purple-100 transition-colors flex items-center gap-1 shadow-sm border border-purple-200"
+                >
+                  <i className="fa-solid fa-list text-[7px]"></i> PILIH AKSESORIS
                 </button>
               )}
             </div>
@@ -2141,6 +2244,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner Aksesoris Tema 3 */}
+        {activeMode === 'AKSESORIS' && (
+          <div className="mb-3 px-5 animate-in fade-in slide-in-from-top-2">
+            <div 
+              onClick={() => setClassicPopupMode('AKSESORIS')}
+              className="flex items-center justify-between bg-purple-50/60 border border-purple-200 rounded-xl px-3 py-2.5 cursor-pointer hover:border-purple-400 transition-all shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm">
+                  <i className="fa-solid fa-headset text-sm"></i>
+                </div>
+                <div>
+                  <span className="text-[8px] font-bold text-purple-700 uppercase tracking-wider block">Sub-Kategori Aksesoris</span>
+                  <span className="text-[12px] font-black text-slate-800">
+                    {keterangan || <span className="text-slate-400 font-normal">Pilih Aksesoris (Charger, Headset, dll)</span>}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 bg-white border border-purple-200 text-purple-700 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-xs">
+                PILIH
+              </span>
             </div>
           </div>
         )}
@@ -2603,6 +2731,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           setKategori('Aksesoris');
                           setIsAdminManuallyEdited(false);
                           setIsTema3SheetOpen(false);
+                          setClassicPopupMode('AKSESORIS');
                           return;
                         }
                         setActiveMode(m.id as any);
@@ -2739,12 +2868,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div>
                 <h3 className="text-[13px] font-black text-[#0c1f44] uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-4 bg-[#0066ff] rounded-full"></div>
-                  Pilih Tujuan Transaksi
+                  {classicPopupMode === 'AKSESORIS' ? 'Pilih Jenis Aksesoris' : 'Pilih Tujuan Transaksi'}
                 </h3>
                 <p className="text-[10px] font-bold text-slate-500 mt-1">
                   {classicPopupMode === 'BANK' && "Silakan pilih nama Bank tujuan"}
                   {classicPopupMode === 'ORDER_KUOTA' && "Pilih PPOB atau E-Wallet"}
                   {classicPopupMode === 'FLIP' && "Pilih tujuan transfer via Flip"}
+                  {classicPopupMode === 'AKSESORIS' && "Silakan pilih sub-kategori aksesoris"}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -2777,10 +2907,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                    const newList = list.map((x: any) => x.id === item.id ? { ...x, fee: newFee } : x);
                                    handleUpdatePopupList(classicPopupMode, newList);
                                  }
+                               } else {
+                                 const newName = window.prompt(`Ubah nama pilihan "${item.name}":`, item.name);
+                                 if (newName && newName.trim()) {
+                                   const trimmed = newName.trim().toUpperCase();
+                                   const list = popupLists[classicPopupMode] || [];
+                                   const newList = list.map((x: any) => x.id === item.id ? { ...x, id: trimmed, name: trimmed } : x);
+                                   handleUpdatePopupList(classicPopupMode, newList);
+                                 }
                                }
                                return;
                             }
                             setIsKetAuto(true);
+                            if (classicPopupMode === 'AKSESORIS') {
+                               setKeterangan(item.name);
+                               setClassicPopupMode(null);
+                               setTimeout(() => {
+                                 nominalRef.current?.focus();
+                                 nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                               }, 150);
+                               return;
+                            }
                             if (classicPopupMode === 'BANK') {
                                setSelectedBank(item.name);
                             } else {
@@ -2824,9 +2971,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     {isEditingPopup && (
                       <button 
                         onClick={() => {
-                          const name = window.prompt("Masukkan nama pilihan baru:");
+                          const name = window.prompt(classicPopupMode === 'AKSESORIS' ? "Masukkan nama aksesoris baru:" : "Masukkan nama pilihan baru:");
                           if (name && name.trim()) {
-                             const newItem = { id: name.toUpperCase(), name: name.toUpperCase(), icon: 'fa-star', color: 'text-amber-500' };
+                             const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : 'fa-star';
+                             const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : 'text-amber-500';
+                             const newItem = { id: name.trim().toUpperCase(), name: name.trim().toUpperCase(), icon, color };
                              handleUpdatePopupList(classicPopupMode, [...list, newItem]);
                           }
                         }}

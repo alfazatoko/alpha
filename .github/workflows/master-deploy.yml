@@ -102,10 +102,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.0
-          name: "ALFAZA ALPHA POS v1.5.0"
+          tag_name: v1.5.1
+          name: "ALFAZA ALPHA POS v1.5.1"
           body: |
-            ### Pembaruan Aplikasi v1.5.0
+            ### Pembaruan Aplikasi v1.5.1
+            - **Popup Sub-Kategori Aksesoris Interaktif:** Pilihan sub-kategori aksesoris cepat (Charger, Kabel Data, Headset, Tempered Glass, dll) dengan kemampuan edit nama, hapus, dan tambah pilihan baru langsung dari kasir.
+            - **Penyempurnaan Alur & Tampilan Non Tunai:** Sumber uang masuk otomatis tercatat Non Tunai/QRIS/Bank, label biaya admin non tunai, dan penegasan warna ungu pada nominal transaksi.
+            - **Kerapian Catatan Riwayat Transaksi:** Format keterangan rapi tanpa duplikasi tag dan pembersihan teks otomatis.
+            - **Panduan Ukuran Banner Promosi:** Tampilan panduan ukuran rekomendasi banner (1200 x 500 px, landscape) di menu akun & slider promo.
+            - **Studio Buat Desain Foto JPG & Promosi AI:** Integrasi chatbot generator desain foto dan canvas editor.
             - **Studio Buat Desain Foto JPG & Promosi AI:** Integrasi menyeluruh generator desain foto dari teks percakapan chatbot tanpa penolakan teks AI, dilengkapi Canvas Editor (teks promo toko, banner warna, filter, rotasi, watermark ALFAZA CELL) dan tombol 1-klik unduh JPG langsung.
             - **Sinkronisasi Laporan Single Source of Truth:** Perbaikan selisih transaksi dan omzet antara Halaman Profit dan Grafik Performa menggunakan RPC Supabase.
             - **Bot Alpha AI Pintar:** Integrasi resmi Google Gemini AI (menjawab segala pertanyaan umum, konsultasi bisnis konter pulsa, dan strategi promosi).

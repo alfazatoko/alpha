@@ -866,6 +866,17 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
         Foto promosi akan berganti otomatis secara halus di bagian atas halaman + Transaksi kasir (tanpa teks). Ukuran dan lekukan disamakan dengan kolom header Riwayat (<strong className="text-blue-600 dark:text-blue-400">Arus kas keluar masuk · Data Transaksi</strong>) agar pas, ramping, dan tidak terpotong baik di mode HP maupun Tablet.
       </p>
 
+      {/* Info Panduan Ukuran Ideal Banner */}
+      <div className="mb-3.5 p-2.5 rounded-xl bg-gradient-to-r from-blue-50/90 to-indigo-50/90 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200/70 dark:border-blue-800/60 flex items-center justify-between gap-2 text-[10px] shadow-2xs">
+        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-medium">
+          <i className="fa-solid fa-ruler-combined text-blue-600 dark:text-blue-400 text-xs shrink-0"></i>
+          <span>Ukuran Ideal Banner: <strong className="text-blue-700 dark:text-blue-300 font-black">Lebar 1200 px × Tinggi 500 px</strong> (Rasio Landscape 2.4 : 1)</span>
+        </div>
+        <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-black text-[9px] shrink-0">
+          Format Landscape
+        </span>
+      </div>
+
       {/* Grid Foto */}
       <div className={cn(
         "grid gap-3",
@@ -911,6 +922,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             </span>
             <span className="text-[8px] text-blue-500 dark:text-blue-400 font-bold">
               Slot {localPromoBanners.length + 1} dari 5
+            </span>
+            <span className="text-[7.5px] text-slate-400 dark:text-slate-500 font-mono font-bold mt-0.5">
+              1200 × 500 px
             </span>
             <input
               type="file"
@@ -5745,6 +5759,17 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
               >
                 <i className="fa-solid fa-xmark text-xs"></i>
               </button>
+            </div>
+
+            {/* Info Ukuran Pas Banner */}
+            <div className="flex items-center justify-between w-[320px] sm:w-[336px] px-3 py-1.5 mb-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-[10px]">
+              <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                <i className="fa-solid fa-ruler-combined text-blue-600 dark:text-blue-400"></i>
+                Ukuran Pas: <strong>1200 × 500 px</strong>
+              </span>
+              <span className="text-[9px] font-black text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-md">
+                Rasio 2.4 : 1
+              </span>
             </div>
 
             {/* Framing Box (Preview Pemotongan Sesuai Rasio Banner 2.4 : 1) */}

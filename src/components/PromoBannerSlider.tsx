@@ -535,6 +535,47 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
                     </button>
                   )}
 
+                  {/* KARTU INFORMASI PANDUAN UKURAN BANNER (LEBAR & TINGGI) */}
+                  <div className="rounded-2xl bg-gradient-to-br from-blue-50/90 via-sky-50/60 to-indigo-50/90 border border-blue-200/80 p-3.5 shadow-xs">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-blue-900">
+                        <div className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center text-[10px]">
+                          <i className="fa-solid fa-ruler-combined"></i>
+                        </div>
+                        <span className="text-[11px] font-black uppercase tracking-tight">Ukuran Rekomendasi Banner</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-black tracking-wider shadow-xs">
+                        Rasio 2.4 : 1
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="bg-white/95 rounded-xl p-2 border border-blue-100 shadow-xs flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-arrows-left-right text-[10px]"></i>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Lebar Ideal</div>
+                          <div className="text-[12px] font-black text-blue-700">1200 px</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white/95 rounded-xl p-2 border border-blue-100 shadow-xs flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                          <i className="fa-solid fa-arrows-up-down text-[10px]"></i>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Tinggi Ideal</div>
+                          <div className="text-[12px] font-black text-indigo-700">500 px</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                      💡 Gunakan foto berorientasi <strong className="text-slate-700 font-bold">Landscape (Memanjang Horizontal)</strong> dengan ukuran ideal <strong className="text-blue-700 font-black">1200 × 500 px</strong> (atau <span className="font-semibold text-slate-600">1600 × 667 px</span>) agar pas sempurna dan tidak terpotong saat tampil di layar kasir.
+                    </p>
+                  </div>
+
                   <p className="text-[10px] text-slate-400 font-bold text-center leading-relaxed pt-1">
                     Foto yang disimpan langsung tampil di layar transaksi dan tersinkron ke semua perangkat kasir.
                   </p>
@@ -544,6 +585,17 @@ export const PromoBannerSlider: React.FC<PromoBannerSliderProps> = ({
               {/* MODE 2: CROP & ZOOM FOTO */}
               {modalMode === 'crop' && (
                 <>
+                  {/* Badge Info Ukuran Banner saat Crop */}
+                  <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <i className="fa-solid fa-crop-simple text-amber-600 text-xs"></i>
+                      Frame Banner: <strong>Rasio 2.4 : 1 (Landscape)</strong>
+                    </span>
+                    <span className="bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-md font-mono text-[9px] font-black">
+                      1200 × 500 px
+                    </span>
+                  </div>
+
                   <div className="flex justify-center">
                     <div
                       className="relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-slate-950 touch-none select-none cursor-grab active:cursor-grabbing"
