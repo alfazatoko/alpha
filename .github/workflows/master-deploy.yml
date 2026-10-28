@@ -102,13 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.4
-          name: "ALFAZA ALPHA POS v1.5.4"
+          tag_name: v1.5.5
+          name: "ALFAZA ALPHA POS v1.5.5"
           body: |
-            ### Pembaruan Aplikasi v1.5.4
-            - **Integrasi Database Online & Built-in Fee Aplikasi Transaksi:** Penanaman langsung (built-in) nilai nominal fee aplikasi untuk pilihan tujuan transaksi PPOB & E-Wallet (DANA +200, GOPAY +900, OVO +700, SHOPEEPAY +100, LINKAJA +800, MAXIM +2200, TOKEN LISTRIK +1850) sehingga langsung muncul di seluruh HP kasir.
-            - **Tabel Khusus & Sinkronisasi Realtime Supabase:** Penyediaan tabel database terisolasi `store_popup_lists` dengan sinkronisasi instan multi-perangkat via Supabase Realtime saat ada perubahan pilihan dan fee aplikasi di form transaksi.
-            - **Desain Grid & Tombol Kategori Minimalis:** Pengecilan lingkaran grid ikon kategori layanan agar lebih rapi, proporsional, dan minimalis.
+            ### Pembaruan Aplikasi v1.5.5
+            - **Perbaikan Crash Realtime Multi-Perangkat:** Mengatasi error "cannot add postgres_changes callbacks after subscribe()" pada tablet/layar transaksi dengan membuat channel realtime unik dan aman (try/catch).
+            - **Pilihan Tujuan Transaksi & Nominal Fee Built-in:** Seluruh pilihan tujuan transaksi (DANA, Gopay, Ovo, ShopeePay, LinkAja, Maxim, Token Listrik) beserta nominal fee aplikasi langsung tampil secara built-in dan tersinkronisasi via database online `store_popup_lists`.
+            - **Desain Grid & Tombol Kategori Minimalis:** Desain kategori lebih kompak, rapi, dan minimalis.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

@@ -408,47 +408,57 @@ const App: React.FC = () => {
     fetchStoreSettings()
 
     // Realtime subscription for store_settings (sync jam absen shift & presets popup fee antar perangkat)
-    const storeSettingsChannel = supabase
-      .channel(`rt_store_settings_${activeStoreId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'store_settings',
-          filter: `store_id=eq.${activeStoreId}`
-        },
-        (payload: any) => {
-          if (payload.new && payload.new.financial_settings) {
-            const newFin = payload.new.financial_settings
-            setFinancialSettings(newFin)
-            localStorage.setItem(`alphaPro_${activeStoreId}_financial`, JSON.stringify(newFin))
-          }
-          if (payload.new && payload.new.presets && Array.isArray(payload.new.presets)) {
-            const incomingPresets = payload.new.presets
-            const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
-            if (popupObj && popupObj.data) {
-              localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupObj.data))
-              localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
-              window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
-                detail: { lists: popupObj.data, storeId: activeStoreId }
-              }))
+    let storeSettingsChannel: any = null
+    try {
+      const channelName = `rt_store_settings_${activeStoreId}_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      storeSettingsChannel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'store_settings',
+            filter: `store_id=eq.${activeStoreId}`
+          },
+          (payload: any) => {
+            if (payload.new && payload.new.financial_settings) {
+              const newFin = payload.new.financial_settings
+              setFinancialSettings(newFin)
+              localStorage.setItem(`alphaPro_${activeStoreId}_financial`, JSON.stringify(newFin))
             }
-            const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
-            if (labelObj && labelObj.data) {
-              localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data))
-              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
-              window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
-                detail: { labels: labelObj.data, storeId: activeStoreId }
-              }))
+            if (payload.new && payload.new.presets && Array.isArray(payload.new.presets)) {
+              const incomingPresets = payload.new.presets
+              const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
+              if (popupObj && popupObj.data) {
+                localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupObj.data))
+                localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
+                window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+                  detail: { lists: popupObj.data, storeId: activeStoreId }
+                }))
+              }
+              const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+              if (labelObj && labelObj.data) {
+                localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+                localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
+                window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+                  detail: { labels: labelObj.data, storeId: activeStoreId }
+                }))
+              }
             }
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe()
+    } catch(e) {
+      console.warn('store_settings realtime warning:', e)
+    }
 
     return () => {
-      supabase.removeChannel(storeSettingsChannel)
+      if (storeSettingsChannel) {
+        try {
+          supabase.removeChannel(storeSettingsChannel)
+        } catch(e) {}
+      }
     }
   }, [activeStoreId, googleSession?.user?.id])
 

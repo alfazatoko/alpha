@@ -162,30 +162,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     fetchLabels();
 
     // 3. Realtime listener per store_id: saat Owner simpan, seluruh HP kasir langsung ter-update seketika
-    const channelName = `rt_custom_labels_${activeStoreId}_${Date.now()}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'store_custom_labels',
-          filter: `store_id=eq.${activeStoreId}`
-        },
-        (payload: any) => {
-          if (payload.new && payload.new.labels && typeof payload.new.labels === 'object') {
-            const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...payload.new.labels };
-            setCustomLabels(merged);
-            setTempLabels(merged);
-            localStorage.setItem(storeKey, JSON.stringify(payload.new.labels));
+    let channel: any = null;
+    try {
+      const channelName = `rt_custom_labels_${activeStoreId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'store_custom_labels',
+            filter: `store_id=eq.${activeStoreId}`
+          },
+          (payload: any) => {
+            if (payload.new && payload.new.labels && typeof payload.new.labels === 'object') {
+              const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...payload.new.labels };
+              setCustomLabels(merged);
+              setTempLabels(merged);
+              localStorage.setItem(storeKey, JSON.stringify(payload.new.labels));
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn('Custom labels realtime subscribe warning:', e);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {}
+      }
     };
   }, [activeStoreId, presets]);
 
@@ -434,33 +443,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (!sId) return;
 
     // 1. Fetch langsung dari tabel online store_popup_lists
-    supabase.from('store_popup_lists').select('lists').eq('store_id', sId).maybeSingle()
-      .then(({ data, error }) => {
+    const fetchOnlineLists = async () => {
+      try {
+        const { data, error } = await supabase.from('store_popup_lists').select('lists').eq('store_id', sId).maybeSingle();
         if (!error && data?.lists) {
           const merged = mergePopupListWithDefaults(data.lists);
           setPopupLists(merged);
           localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(merged));
         }
-      });
+      } catch (e) {}
+    };
+    fetchOnlineLists();
 
-    // 2. Realtime listener Postgres Changes agar detik itu juga HP 2 terupdate
-    const channel = supabase.channel(`rt_popup_lists_${sId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'store_popup_lists',
-        filter: `store_id=eq.${sId}`
-      }, (payload: any) => {
-        if (payload.new && payload.new.lists) {
-          const merged = mergePopupListWithDefaults(payload.new.lists);
-          setPopupLists(merged);
-          localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(merged));
-        }
-      })
-      .subscribe();
+    // 2. Realtime listener Postgres Changes dengan nama channel unik & aman
+    let channel: any = null;
+    try {
+      const channelName = `rt_popup_lists_${sId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      channel = supabase.channel(channelName)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'store_popup_lists',
+          filter: `store_id=eq.${sId}`
+        }, (payload: any) => {
+          if (payload.new && payload.new.lists) {
+            const merged = mergePopupListWithDefaults(payload.new.lists);
+            setPopupLists(merged);
+            localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(merged));
+          }
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('Realtime channel subscribe warning:', e);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {}
+      }
     };
   }, [effectiveStoreId, mergePopupListWithDefaults]);
 
