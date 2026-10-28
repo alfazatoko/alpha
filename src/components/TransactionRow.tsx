@@ -65,51 +65,31 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const formatRp = (num: number) => num.toLocaleString('id-ID');
   const formatK = (num: number) => (num % 1000 === 0) ? `${num / 1000}K` : formatRp(num);
 
-  // Bersihkan duplikasi tag dan rapikan format tampilan
+  // Bersihkan tag teknis internal dari keterangan tampilan
   let rawCleanKet = (t.keterangan || '')
-    .replace(/(\[\s*non[_\s]tunai\s*\]\s*)+/gi, '[Non Tunai] ')
-    .replace(/(\[\s*admin[_\s]dalam\s*\]\s*)+/gi, '[Admin Dalam] ')
-    .replace(/(\[\s*khusus\s*\]\s*)+/gi, '[Khusus] ')
+    .replace(/\[\s*(non[_\s]tunai|admin[_\s]dalam|khusus)\s*\]/gi, '')
+    .replace(/\s+/g, ' ')
     .trim();
 
-  let formattedKeterangan = rawCleanKet ? rawCleanKet.replace(/\b\w/g, l => l.toUpperCase()) : '-';
-  let displayKategori = t.kategori;
-
-  if (formattedKeterangan.includes('\n')) {
-    const parts = formattedKeterangan.split('\n');
-    displayKategori = parts[0];
-    formattedKeterangan = parts.slice(1).join(' ');
-  }
-  // Helper membersihkan keterangan agar rapi, bebas dari prefix kategori berulang dan tag teknis
-  const formatCleanKeterangan = (raw: string, kategoriName: string) => {
-    if (!raw || raw === '-') return '-';
-    let cleaned = raw
-      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
-      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
-      .replace(/\[\s*khusus\s*\]/gi, '')
-      .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
-      .trim();
-
-    const catNames = [kategoriName, 'Order Kuota', 'Transfer Bank', 'Transfer', 'Tarik Tunai', 'Aksesoris', 'Voucher', 'Dana', 'Flip', 'Bank UOB']
-      .filter(Boolean)
-      .join('|');
-
-    const catPrefixRegex = new RegExp(`^(${catNames})\\s*(=|:|\\>|-|\\|)\\s*`, 'i');
-    cleaned = cleaned.replace(catPrefixRegex, '').trim();
-
-    const catPlainRegex = new RegExp(`^(${catNames})\\s+`, 'i');
-    cleaned = cleaned.replace(catPlainRegex, '').trim();
-
-    if (cleaned && cleaned === cleaned.toUpperCase() && cleaned.length > 2) {
-      cleaned = cleaned.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  // Ekstrak Fee Aplikasi jika ada
+  let appFee = 0;
+  if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && rawCleanKet.includes('[FEE_APP:')) {
+    const feeMatch = rawCleanKet.match(/\[FEE_APP:(\d+)\]/i);
+    if (feeMatch) {
+      appFee = parseInt(feeMatch[1], 10);
+      rawCleanKet = rawCleanKet.replace(/\[fee_app:\d+\]/ig, '').trim();
     }
+  }
+  const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
 
-    return cleaned || '-';
-  };
+  let displayJenisTransaksi = t.kategori;
+  let displaySubKategori = '';
+  let displayCatatanTambahan = '';
+  const subLabelTitle = 'Layanan / Produk:';
+  const receiptSubLabel = 'Produk    :';
 
-  let listKeterangan = formattedKeterangan;
-  let modalKeterangan = formattedKeterangan;
-  let modalTransaksiLabel = displayKategori;
+  const cleanDigits = (s: string) => s.replace(/\D/g, '');
+
   const hasAdminDalam = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
   let adminFeeLabel = hasAdminDalam 
     ? "Biaya admin ( Potong Dalam ) :" 
@@ -124,74 +104,149 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   } else if (isSplitPayment) {
     modalSumberMasuk = 'Sebagian Tunai & Non Tunai';
   } else if (isNonTunai) {
-    modalSumberMasuk = 'Non Tunai / QRIS / Bank Transfer';
+    modalSumberMasuk = (t.kategori === 'Aksesoris' || t.kategori === 'Voucher') ? 'QRIS' : 'Non Tunai / QRIS';
   } else {
     modalSumberMasuk = 'Laci Kasir';
-  };
-
-  let appFee = 0;
-  if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && t.keterangan?.includes('[FEE_APP:')) {
-    const match = t.keterangan.match(/\[FEE_APP:(\d+)\]/);
-    if (match) {
-      appFee = parseInt(match[1], 10);
-      listKeterangan = listKeterangan.replace(/\[fee_app:\d+\]/ig, '').trim();
-      modalKeterangan = modalKeterangan.replace(/\[fee_app:\d+\]/ig, '').trim();
-    }
   }
-  const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
 
-  let isTarikTunaiFormat = false;
-  let metodeRaw = '';
-  
+  // Tentukan Sumber Uang Keluar (menyesuaikan aplikasi yang dipilih)
+  let modalSumberKeluar = '—';
   if (t.kategori === 'Tarik Tunai') {
+    modalSumberKeluar = 'Laci Kasir';
+  } else if (/order\s*kuota/i.test(t.kategori) || /order\s*kuota/i.test(rawCleanKet)) {
+    modalSumberKeluar = 'Order Kuota';
+  } else if (/flip/i.test(rawCleanKet) || /flip/i.test(t.kategori)) {
+    modalSumberKeluar = 'Flip';
+  } else if (/bank\s*uob/i.test(rawCleanKet) || /bank\s*uob/i.test(t.kategori)) {
+    modalSumberKeluar = 'Bank UOB';
+  } else if (/transfer|bank/i.test(t.kategori) || /transfer|bank/i.test(rawCleanKet)) {
+    modalSumberKeluar = 'Bank UOB';
+  } else if (/dana/i.test(t.kategori) || /dana/i.test(rawCleanKet)) {
+    modalSumberKeluar = 'DANA';
+  } else if (/aksesoris|voucher/i.test(t.kategori) || /aksesoris|voucher/i.test(rawCleanKet)) {
+    modalSumberKeluar = '—';
+  } else {
+    modalSumberKeluar = '—';
+  }
+
+  if (t.kategori === 'Tarik Tunai') {
+    displayJenisTransaksi = 'Tarik Tunai';
+    let metodeRaw = '';
     if (t.keterangan?.startsWith('TARIK_TUNAI|')) {
-       isTarikTunaiFormat = true;
        metodeRaw = t.keterangan.split('|')[1] || '';
     } else if (t.keterangan?.toLowerCase().startsWith('tarik tunai :')) {
-       isTarikTunaiFormat = true;
        metodeRaw = t.keterangan.split(':')[1] || '';
+    } else {
+       metodeRaw = rawCleanKet.replace(/tarik\s*tunai/i, '').replace(/=/g, '').trim();
     }
-  }
 
-  if (isTarikTunaiFormat) {
     metodeRaw = metodeRaw.replace(/\[ADMIN_DALAM\]/ig, '').replace(/\[NON_TUNAI\]/ig, '').trim();
     if (metodeRaw.toUpperCase() === 'QRIS') metodeRaw = 'QRIS';
-    else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC';
+    else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC / ATM';
     else if (metodeRaw.toUpperCase() === 'ATM') metodeRaw = 'ATM';
     else if (metodeRaw.toUpperCase().includes('BANK')) metodeRaw = 'BANK';
-    else metodeRaw = metodeRaw.charAt(0).toUpperCase() + metodeRaw.slice(1).toLowerCase();
+    else if (metodeRaw) metodeRaw = metodeRaw.charAt(0).toUpperCase() + metodeRaw.slice(1);
+    else metodeRaw = 'EDC / Tunai';
 
-    const adm = t.adminFee;
-    const nom = t.nominal;
-    const adminPotong = hasAdminDalam;
-
-    modalTransaksiLabel = `TARIK TUNAI > ${metodeRaw.toUpperCase()}`;
-
-    const tarikNom = adminPotong ? (nom - adm) : nom;
-    
-    listKeterangan = `${metodeRaw} | Tarik ${formatK(tarikNom)} | Adm ${formatK(adm)}`;
-    modalKeterangan = `Tarik ${formatK(tarikNom)} | Adm ${formatK(adm)}`;
-
-    if (adminPotong) {
-      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
-    } else {
-      adminFeeLabel = isNonTunai ? "Biaya Admin (Non Tunai):" : "Biaya Admin (Tunai):";
-    }
+    displaySubKategori = metodeRaw;
   } else {
-    // Bersihkan keterangan agar tidak berulang dengan nama Transaksi dan tag [Non Tunai]
-    modalKeterangan = formatCleanKeterangan(modalKeterangan, t.kategori);
-    listKeterangan = formatCleanKeterangan(listKeterangan, t.kategori);
+    const lines = rawCleanKet.split('\n').map(l => l.trim()).filter(Boolean);
+    let line1 = lines[0] || '';
+    let manualNotes = lines.slice(1).join(' ').trim();
 
-    // Fallback penghapusan label Admin Dalam secara umum jika tidak tercover di atas
-    if (listKeterangan.toLowerCase().includes('[admin_dalam]')) {
-      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
-      listKeterangan = listKeterangan.replace(/\[admin_dalam\]/ig, '').replace(/\s+/g, ' ').trim();
+    // Hapus technical tags
+    line1 = line1
+      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
+      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
+      .replace(/\[\s*khusus\s*\]/gi, '')
+      .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
+      .trim();
+
+    // Deteksi awal Jenis Transaksi berdasarkan t.kategori & teks
+    const isOrderKuota = /order\s*kuota/i.test(t.kategori) || /order\s*kuota/i.test(line1);
+    const isTransferBank = /transfer|bank/i.test(t.kategori) || /flip/i.test(t.kategori) || /transfer|bank\s*uob|flip/i.test(line1);
+    const isAksesoris = /aksesoris/i.test(t.kategori) || /aksesoris/i.test(line1);
+    const isVoucher = /voucher/i.test(t.kategori) || /voucher/i.test(line1);
+
+    if (isOrderKuota) {
+      displayJenisTransaksi = 'Order Kuota';
+    } else if (isTransferBank) {
+      displayJenisTransaksi = 'Transfer Bank';
+    } else if (isAksesoris) {
+      displayJenisTransaksi = 'Aksesoris';
+    } else if (isVoucher) {
+      displayJenisTransaksi = 'Voucher';
+    } else {
+      displayJenisTransaksi = t.kategori;
     }
-    if (modalKeterangan.toLowerCase().includes('[admin_dalam]')) {
-      adminFeeLabel = "Biaya admin ( Potong Dalam ) :";
-      modalKeterangan = modalKeterangan.replace(/\[admin_dalam\]/ig, '').replace(/\s+/g, ' ').trim();
+
+    let rawSub = '';
+
+    const sepMatch = line1.match(/\s*(=|:|>)\s*/);
+    if (sepMatch && sepMatch.index !== undefined) {
+      const left = line1.substring(0, sepMatch.index).trim();
+      const right = line1.substring(sepMatch.index + sepMatch[0].length).trim();
+
+      if (/order\s*kuota/i.test(left)) {
+        displayJenisTransaksi = 'Order Kuota';
+      } else if (/transfer|bank\s*uob|flip/i.test(left)) {
+        displayJenisTransaksi = 'Transfer Bank';
+      } else if (/aksesoris/i.test(left)) {
+        displayJenisTransaksi = 'Aksesoris';
+      } else if (/voucher/i.test(left)) {
+        displayJenisTransaksi = 'Voucher';
+      }
+
+      rawSub = right;
+    } else {
+      const catNames = [t.kategori, 'Order Kuota', 'Transfer Bank', 'Transfer', 'Flip', 'Bank UOB', 'Aksesoris', 'Voucher']
+        .filter(Boolean)
+        .join('|');
+      const catPrefixMatch = line1.match(new RegExp(`^(${catNames})\\s+`, 'i'));
+      if (catPrefixMatch) {
+        rawSub = line1.substring(catPrefixMatch[0].length).trim();
+      } else if (line1.toUpperCase() !== t.kategori.toUpperCase()) {
+        rawSub = line1;
+      }
+    }
+
+    // Khusus Aksesoris atau Voucher: jika nama produk berada di baris berikutnya
+    if ((isAksesoris || isVoucher) && !rawSub && manualNotes) {
+      rawSub = manualNotes;
+      manualNotes = '';
+    }
+
+    // Pertahankan nama produk dan angka denom lengkap (seperti ISI 20, ISI 25, ISI 50)
+    let cleanSub = rawSub.trim();
+    cleanSub = cleanSub.replace(/^Bank\s+UOB\s+/i, '').trim();
+
+    // Jika cleanSub hanya angka yang sama dengan nominal transaksi, jangan jadikan sub-kategori
+    if (cleanSub && cleanDigits(cleanSub) === cleanDigits(t.nominal.toString())) {
+      cleanSub = '';
+    }
+
+    // Rapikan penamaan Bank (misal BRI -> Bank BRI) jika transaksi Transfer Bank
+    if (displayJenisTransaksi === 'Transfer Bank' && cleanSub) {
+      if (/^(BRI|BCA|BNI|MANDIRI|BSI|BTN|CIMB|PERMATA|JAGO|SEABANK|NEO)$/i.test(cleanSub)) {
+        cleanSub = 'Bank ' + cleanSub.toUpperCase();
+      }
+    }
+
+    if (cleanSub && /[a-zA-Z]/.test(cleanSub)) {
+      displaySubKategori = cleanSub.replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    // Catatan tambahan manual
+    if (manualNotes && cleanDigits(manualNotes) !== cleanDigits(t.nominal.toString())) {
+      displayCatatanTambahan = manualNotes;
     }
   }
+
+  let modalTransaksiLabel = displaySubKategori 
+    ? `${displayJenisTransaksi} > ${displaySubKategori}` 
+    : displayJenisTransaksi;
+  let modalKeterangan = displayCatatanTambahan || '-';
+  let listKeterangan = displaySubKategori || displayCatatanTambahan || (appFee > 0 ? `Fee App: Rp ${formatRp(appFee)}` : '-');
 
   const effectiveStoreName = storeName || (() => {
     try {
@@ -248,9 +303,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Kasir : ${effectiveKasirName}\n`;
     text += formatReceiptDivider() + '\n';
-    text += `Jenis : ${modalTransaksiLabel.substring(0, 24)}\n`;
-    if (modalKeterangan && modalKeterangan !== '-') {
-      text += `Ket   : ${modalKeterangan.substring(0, 24)}\n`;
+    text += `Transaksi : ${displayJenisTransaksi.toUpperCase().substring(0, 20)}\n`;
+    if (displaySubKategori) {
+      text += `${receiptSubLabel} ${displaySubKategori.toUpperCase().substring(0, 20)}\n`;
+    }
+    if (displayCatatanTambahan) {
+      text += `Ket       : ${displayCatatanTambahan.substring(0, 20)}\n`;
     }
     text += formatReceiptDivider() + '\n';
 
@@ -267,6 +325,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += formatReceiptRow(hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)', 'Rp ' + formatRp(t.adminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(totalTarik)) + '\n';
+    } else if (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) {
+      text += formatReceiptRow('Harga Barang', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptDivider() + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal)) + '\n';
     } else {
       text += formatReceiptRow('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
       text += formatReceiptRow('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
@@ -314,31 +376,50 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
           {/* INFO UTAMA */}
           <div className="flex flex-col gap-[2px]">
             <div className={cn("text-[13px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
-               {t.kategori}
+               {displayJenisTransaksi}
             </div>
-            <div className="text-[9px] text-blue-900 dark:text-blue-300 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
-               {listKeterangan}
-            </div>
-            <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tracking-tight leading-none">
+            {displaySubKategori ? (
+              <div className="text-[10px] text-blue-900 dark:text-blue-300 font-black tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-tight">
+                 {displaySubKategori}
+              </div>
+            ) : listKeterangan && listKeterangan !== '-' ? (
+              <div className="text-[9px] text-blue-900 dark:text-blue-300 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
+                 {listKeterangan}
+              </div>
+            ) : null}
+            {displaySubKategori && displayCatatanTambahan && (
+              <div className="text-[9px] text-slate-500 dark:text-slate-400 font-medium tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
+                 {displayCatatanTambahan}
+              </div>
+            )}
+            <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tracking-tight leading-none mt-0.5">
                {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
         </div>
 
         {/* NOMINAL & ADMIN */}
-        <div className="flex flex-col items-end gap-0 pr-1 mt-0.5 shrink-0">
+        <div className="flex flex-col items-end gap-0.5 pr-1 mt-0.5 shrink-0">
           <div className={cn(
             "text-[13px] font-black tracking-tight leading-tight",
-            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black")
+            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600 dark:text-purple-400" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black dark:text-white")
           )}>
             {t.nominal.toLocaleString('id-ID')}
           </div>
-          <div className={cn(
-            "text-[11px] font-extrabold uppercase", 
-            isKhusus ? "text-orange-400" : (isNonTunai || (t.keterangan || '').includes('[ADMIN_DALAM]')) ? "text-[#0066AE]" : "text-emerald-600"
-          )}>
-            Admin: {displayAdminFee.toLocaleString('id-ID')}
-          </div>
+          {t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
+            isNonTunai ? (
+              <span className="text-[8px] font-black uppercase text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-900/30">
+                NON TUNAI
+              </span>
+            ) : null
+          ) : (
+            <div className={cn(
+              "text-[11px] font-extrabold uppercase", 
+              isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-600 dark:text-purple-400" : ((t.keterangan || '').includes('[ADMIN_DALAM]') ? "text-[#0066AE]" : "text-emerald-600")
+            )}>
+              Admin: {displayAdminFee.toLocaleString('id-ID')}
+            </div>
+          )}
         </div>
       </div>
 
@@ -362,7 +443,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             
             {/* Body */}
             <div className="p-3.5 flex flex-col gap-2.5">
-              {/* Waktu & Kasir & Transaksi */}
+              {/* Waktu & Kasir & Transaksi & Dynamic Sub Label */}
               <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Waktu:</span>
@@ -379,24 +460,32 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Transaksi:</span>
-                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{modalTransaksiLabel}</span>
+                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{displayJenisTransaksi}</span>
                 </div>
+                {displaySubKategori && (
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-slate-500 font-bold">{subLabelTitle}</span>
+                    <span className="text-slate-900 font-black text-right break-words max-w-[210px]">{displaySubKategori}</span>
+                  </div>
+                )}
               </div>
 
               {/* Kolom Info Transaksi (Ket Tambahan, Sumber Keluar, Sumber Masuk) - Dibuat Rapat & Rapi */}
               <div className="flex flex-col gap-1.5">
-                {/* Keterangan */}
-                <div className="flex justify-between items-center bg-slate-50/80 rounded-lg py-1.5 px-3 text-[11.5px] border border-slate-100">
-                  <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
-                  <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{modalKeterangan}</span>
-                </div>
+                {/* Keterangan Tambahan (Hanya muncul jika kasir isi catatan manual ekstra) */}
+                {displayCatatanTambahan && (
+                  <div className="flex justify-between items-center bg-slate-50/80 rounded-lg py-1.5 px-3 text-[11.5px] border border-slate-100">
+                    <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
+                    <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{displayCatatanTambahan}</span>
+                  </div>
+                )}
 
                 {/* Sumber Uang (Keluar/Masuk) */}
                 <div className="flex justify-between items-center bg-rose-50/50 rounded-lg py-1.5 px-3 text-[11.5px] border border-rose-100">
                   <span className="text-rose-600 font-black flex items-center gap-1.5">
                     <i className="fa-solid fa-arrow-up-right text-[9px]"></i> Sumber Uang Keluar:
                   </span>
-                  <span className="text-rose-900 font-black text-right">{t.kategori === 'Tarik Tunai' ? 'Laci Kasir' : t.kategori}</span>
+                  <span className="text-rose-900 font-black text-right">{modalSumberKeluar}</span>
                 </div>
                 <div className={cn(
                   "flex justify-between items-center rounded-lg py-1.5 px-3 text-[11.5px] border transition-colors",
@@ -438,6 +527,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(displayAdminFee)}</span>
                     </div>
                   </>
+                ) : (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-slate-500 font-bold">Harga Barang:</span>
+                    <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal)}</span>
+                  </div>
                 ) : (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
@@ -567,13 +661,19 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
                 <div className="flex flex-col gap-0.5">
                   <div className="flex justify-between items-start text-[10px]">
-                    <span className="text-slate-500 font-sans font-bold">Jenis:</span>
-                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{modalTransaksiLabel}</span>
+                    <span className="text-slate-500 font-sans font-bold">Transaksi:</span>
+                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displayJenisTransaksi}</span>
                   </div>
-                  {modalKeterangan && modalKeterangan !== '-' && (
+                  {displaySubKategori && (
+                    <div className="flex justify-between items-start text-[10px]">
+                      <span className="text-slate-500 font-sans font-bold">Layanan / Produk:</span>
+                      <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displaySubKategori}</span>
+                    </div>
+                  )}
+                  {displayCatatanTambahan && (
                     <div className="flex justify-between items-start text-[10px]">
                       <span className="text-slate-500 font-sans font-bold">Ket  :</span>
-                      <span className="text-slate-700 text-right flex-1 ml-2 break-words">{modalKeterangan}</span>
+                      <span className="text-slate-700 text-right flex-1 ml-2 break-words">{displayCatatanTambahan}</span>
                     </div>
                   )}
                 </div>
@@ -620,6 +720,18 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       <div className="flex justify-between font-black text-[12px] text-slate-900">
                         <span>TOTAL</span>
                         <span>Rp {formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))}</span>
+                      </div>
+                    </>
+                  ) : (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
+                    <>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-600">Harga Barang</span>
+                        <span>Rp {formatRp(t.nominal)}</span>
+                      </div>
+                      <div className="border-b border-dashed border-slate-300 my-1"></div>
+                      <div className="flex justify-between font-black text-[12px] text-slate-900">
+                        <span>TOTAL</span>
+                        <span>Rp {formatRp(t.nominal)}</span>
                       </div>
                     </>
                   ) : (

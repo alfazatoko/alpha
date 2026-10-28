@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/lib/botEngine.ts — Bot Alpha Engine (Enhanced Offline Edition)
 // ─────────────────────────────────────────────────────────────────────────────
+import { composeSmartStudioPhoto } from './studioComposer'
 
 // ── View Map ──────────────────────────────────────────────────────────────────
 export const VIEW_MAP: Record<string, { view: string; label: string; keywords: string[] }> = {
@@ -2335,7 +2336,7 @@ export function buildStoreContext(
 
 // ── Parse AI Action dari respon Gemini ────────────────────────────────────────
 export interface BotAction {
-  type: 'kasbon' | 'navigate' | 'izin' | 'kontak' | 'catatan' | 'custom_faq' | 'generate_image'
+  type: 'kasbon' | 'navigate' | 'izin' | 'kontak' | 'catatan' | 'custom_faq' | 'generate_image' | 'studio_edit_photo' | 'generate_promo_banner'
   payload: Record<string, string>
 }
 
@@ -2361,6 +2362,10 @@ export function parseBotActions(reply: string): { cleanText: string; actions: Bo
       actions.push({ type, payload: { tanya: parts[1] || '', jawab: parts[2] || '' } })
     } else if (type === 'generate_image' && parts.length >= 2) {
       actions.push({ type: 'generate_image', payload: { prompt: parts.slice(1).join('|') || '' } })
+    } else if (type === 'studio_edit_photo' && parts.length >= 2) {
+      actions.push({ type: 'studio_edit_photo', payload: { instruction: parts.slice(1).join('|') || '' } })
+    } else if (type === 'generate_promo_banner' && parts.length >= 2) {
+      actions.push({ type: 'generate_promo_banner', payload: { prompt: parts.slice(1).join('|') || '' } })
     }
   }
 
@@ -2436,6 +2441,40 @@ Gunakan format markdown yang rapi. Bantu pengguna dalam hal apapun baik tentang 
           body: JSON.stringify({
             system_instruction: { parts: [{ text: effectiveInstruction }] },
             contents,
+            tools: [
+              {
+                function_declarations: [
+                  {
+                    name: 'studio_edit_photo',
+                    description: 'Panggil tool ini saat pengguna melampirkan foto produk/kartu voucher dan meminta untuk edit foto, memoles, mengganti suasana/latar belakang, atau membuat foto produk studio.',
+                    parameters: {
+                      type: 'OBJECT',
+                      properties: {
+                        instruction: {
+                          type: 'STRING',
+                          description: 'Instruksi visual atau tema studio yang diinginkan.'
+                        }
+                      },
+                      required: ['instruction']
+                    }
+                  },
+                  {
+                    name: 'generate_promo_banner',
+                    description: 'Panggil tool ini saat pengguna meminta membuatkan desain poster, banner promo, atau gambar baru dari nol tanpa foto terlampir.',
+                    parameters: {
+                      type: 'OBJECT',
+                      properties: {
+                        prompt: {
+                          type: 'STRING',
+                          description: 'Deskripsi visual banner promosi yang ingin dibuat.'
+                        }
+                      },
+                      required: ['prompt']
+                    }
+                  }
+                ]
+              }
+            ],
             generationConfig: {
               temperature: 0.7,
               maxOutputTokens: maxTokens,
@@ -2466,16 +2505,27 @@ Gunakan format markdown yang rapi. Bantu pengguna dalam hal apapun baik tentang 
       }
 
       const data = await res.json()
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      const parts = data?.candidates?.[0]?.content?.parts || []
+      const text = parts.map((p: any) => p.text).filter(Boolean).join('\n')
+      const fnCall = parts.find((p: any) => p.functionCall)?.functionCall
       const finishReason = data?.candidates?.[0]?.finishReason
 
-      if (finishReason === 'MAX_TOKENS') {
-        return (text?.trim() || '') + '\n[SCAN_PARTIAL]'
+      let output = text?.trim() || ''
+      if (fnCall) {
+        if (fnCall.name === 'studio_edit_photo') {
+          output += `\n[ACTION:studio_edit_photo|${fnCall.args?.instruction || userMessage}]`
+        } else if (fnCall.name === 'generate_promo_banner') {
+          output += `\n[ACTION:generate_promo_banner|${fnCall.args?.prompt || userMessage}]`
+        }
       }
-      if (!text && finishReason === 'SAFETY') {
+
+      if (finishReason === 'MAX_TOKENS') {
+        return (output || '') + '\n[SCAN_PARTIAL]'
+      }
+      if (!output && finishReason === 'SAFETY') {
         throw new Error('Respons dibatasi oleh filter keamanan Google. Coba sesuaikan pertanyaan Anda.')
       }
-      return text?.trim() || 'Maaf, tidak ada respon dari Gemini.'
+      return output || 'Maaf, tidak ada respon dari Gemini.'
     } catch (err: any) {
       lastError = err
       if (err.message?.includes('tidak valid') || err.message?.includes('403')) {
@@ -2812,21 +2862,117 @@ export async function generateDailySummaryByDate(
   return summary
 }
 
-// ── AI Image Generator Helper ────────────────────────────────────────────────
+// ── AI Image Generator & Editor Helper (Google Gemini Native + Intelligent Fallback) ─────
 export async function generateAIPhoto(
-  prompt: string
-): Promise<{ imageUrl: string; prompt: string }> {
+  prompt: string,
+  apiKey?: string,
+  sourceImage?: { mimeType: string; base64: string } | null
+): Promise<{ imageUrl: string; prompt: string; isAiEdited?: boolean; source: 'gemini' | 'fallback' }> {
   let visualPrompt = prompt
-    .replace(/^(buatkan|buat|bikin|generate|desain|gambar|lukis|ciptakan)\s+(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi)?/i, '')
+    .replace(/^(buatkan|buat|bikin|generate|desain|gambar|lukis|ciptakan|tolong edit|edit foto|edit gambar|ubah latar|ganti background|ganti latar)\s+(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi)?/i, '')
     .trim()
   if (!visualPrompt) visualPrompt = prompt
 
+  // ── 1. Jika Kasir Memberikan Foto + Instruksi Edit (Smart Studio Composition) ──
+  // Menjaga produk kartu fisik asli 100% utuh dan menyatukannya dengan studio komersial mewah
+  if (sourceImage) {
+    try {
+      const studioRes = await composeSmartStudioPhoto(
+        sourceImage.base64,
+        visualPrompt,
+        {
+          storeName: 'ALFAZA CELL',
+          apiKey: apiKey
+        }
+      )
+      return {
+        imageUrl: studioRes.imageUrl,
+        prompt: visualPrompt,
+        isAiEdited: true,
+        source: studioRes.source === 'gemini' ? 'gemini' : 'fallback'
+      }
+    } catch (editErr) {
+      console.warn('Smart Studio composer error:', editErr)
+    }
+  }
+
+  // ── 2. Jika Text-to-Image Menggunakan Google Gemini Imagen 3 Resmi ──
+  if (apiKey) {
+    try {
+      const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`
+      const enhancedPrompt = `${visualPrompt}, commercial advertising poster for phone accessory and voucher store ALFAZA CELL, clean product photography, vibrant colors, 4k resolution, studio lighting`
+      
+      const res = await fetch(imagenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt: enhancedPrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: "1:1",
+            personGeneration: "ALLOW_ADULT"
+          }
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const b64 = data?.predictions?.[0]?.bytesBase64Encoded
+        if (b64) {
+          return {
+            imageUrl: `data:image/jpeg;base64,${b64}`,
+            prompt: visualPrompt,
+            isAiEdited: false,
+            source: 'gemini'
+          }
+        }
+      }
+    } catch (imagenErr) {
+      console.warn('Gemini Imagen 3 call warning:', imagenErr)
+    }
+
+    // Coba alternatif Gemini Flash Image jika Imagen 3 tidak aktif pada akun pengguna
+    try {
+      const flashImgUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
+      const resFlash = await fetch(flashImgUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `Generate a high quality product advertising banner for: ${visualPrompt}. Clean typography and modern design.` }] }],
+          generationConfig: {
+            responseModalities: ["IMAGE", "TEXT"]
+          }
+        })
+      })
+      if (resFlash.ok) {
+        const dataFlash = await resFlash.json()
+        const parts = dataFlash?.candidates?.[0]?.content?.parts || []
+        const imgPart = parts.find((p: any) => p.inline_data || p.inlineData)
+        if (imgPart) {
+          const b64 = imgPart.inline_data?.data || imgPart.inlineData?.data
+          const mime = imgPart.inline_data?.mime_type || imgPart.inlineData?.mimeType || 'image/jpeg'
+          return {
+            imageUrl: `data:${mime};base64,${b64}`,
+            prompt: visualPrompt,
+            isAiEdited: false,
+            source: 'gemini'
+          }
+        }
+      }
+    } catch (flashErr) {
+      console.warn('Gemini Flash Image fallback warning:', flashErr)
+    }
+  }
+
+  // ── 3. Cadangan Berkualitas Tinggi (Jika API Key belum diset atau kuota Gemini sedang habis) ──
   const seed = Math.floor(Math.random() * 999999)
-  const enhanced = encodeURIComponent(visualPrompt + ', commercial advertising quality, high resolution, clean visual design')
-  const imageUrl = `https://image.pollinations.ai/prompt/${enhanced}?width=1024&height=1024&nologo=true&seed=${seed}`
+  const cleanEnhanced = encodeURIComponent(`${visualPrompt}, ultra realistic, commercial advertising quality, high resolution, 4k clean graphic banner design`)
+  const imageUrl = `https://image.pollinations.ai/prompt/${cleanEnhanced}?width=1024&height=1024&nologo=true&seed=${seed}`
 
   return {
     imageUrl,
-    prompt: visualPrompt
+    prompt: visualPrompt,
+    isAiEdited: !!sourceImage,
+    source: 'fallback'
   }
 }

@@ -139,6 +139,7 @@ const AssistantBot: React.FC<Props> = ({
   onActionCustomFAQ
 }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
   const [hasMorningSummary, setHasMorningSummary] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   
@@ -323,7 +324,7 @@ const AssistantBot: React.FC<Props> = ({
     }
   }, [isListening])
   const endRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const geminiHistory = useRef<ChatMessage[]>([])
@@ -467,7 +468,10 @@ const AssistantBot: React.FC<Props> = ({
   const sendTimeoutRef = useRef<any>(null)
 
   const handleSend = useCallback((rawText?: string) => {
-    const text = (rawText ?? input).trim()
+    let text = (rawText ?? input).trim()
+    if (!text && attachedImage) {
+      text = 'Poles dan buatkan foto studio estetik untuk kartu ini'
+    }
     if (!text || isTyping) return
     setInput('')
     
@@ -805,14 +809,19 @@ const AssistantBot: React.FC<Props> = ({
       }
     }
 
-    // ③ Gemini API (Jika ada key) — Menjawab segala jenis pertanyaan (Toko, Bisnis, Umum, Chat) layaknya Gemini AI
-    if (activeKey) {
+    // Cek jika kasir melampirkan foto dan meminta edit / studio composition
+    const isImageEdit = !!attachedImage && (
+      /(edit|ubah|ganti|hapus|perjelas|hilangkan|poles|perbagus|latar|background|suasana|neon|etalase|efek|cantik|bersihkan|studio|foto)/i.test(queryLower) ||
+      queryLower.length <= 4 // Jika hanya upload foto dan ketik singkat
+    )
+
+    // ③ Gemini API & Studio Image Processing
+    if (activeKey || isImageEdit) {
       try {
-        // Cek jika perintah untuk membuat foto / desain gambar AI (deteksi komprehensif)
         const isImageGen = 
           /(buat|bikin|generate|desain|gambar|lukis|cipta|tolong|minta|cetak)/i.test(queryLower) &&
           /(foto|gambar|poster|spanduk|banner|logo|desain|ilustrasi|flyer|brosur|baliho|wallpaper|jpg|png|grafis|visual)/i.test(queryLower) &&
-          !/(hapus|clear|baca|view|halaman)/i.test(queryLower) ||
+          !/(baca|view|halaman|bantuan)/i.test(queryLower) ||
           queryLower.includes('buat foto') ||
           queryLower.includes('bikin foto') ||
           queryLower.includes('buat gambar') ||
@@ -825,29 +834,44 @@ const AssistantBot: React.FC<Props> = ({
           queryLower.includes('desain jpg') ||
           queryLower.includes('desain foto')
 
-        if (isImageGen) {
+        if (isImageGen || isImageEdit) {
           try {
             setIsTyping(true)
-            addMessage('bot', `🎨 **Sedang mendesain foto AI...**\n\n_"${text}"_\nMohon tunggu beberapa detik.`, 'gemini')
-            const imgResult = await generateAIPhoto(text)
+            const sourceImgPayload = attachedImage ? { mimeType: attachedImage.mimeType, base64: attachedImage.base64 } : null
+            
+            if (isImageEdit) {
+              addMessage('bot', `🎨 **Sedang mengedit foto dengan Gemini AI...**\n\nInstruksi: _"${text}"_\nMenjaga produk asli toko & memproses latar belakang baru secara cerdas...`, 'gemini')
+            } else {
+              addMessage('bot', `🎨 **Sedang mendesain foto AI studio...**\n\n_"${text}"_\nMohon tunggu beberapa detik.`, 'gemini')
+            }
+
+            const imgResult = await generateAIPhoto(text, activeKey, sourceImgPayload)
+            
+            // Bersihkan foto terlampir setelah proses selesai
+            if (attachedImage) setAttachedImage(null)
+            
             setIsTyping(false)
+            const resultMsg = imgResult.isAiEdited
+              ? `✨ **Foto Berhasil Diedit oleh Gemini AI!**\n\nProduk Anda tetap utuh dengan latar belakang baru sesuai instruksi: _"${imgResult.prompt}"_\n\n${imgResult.source === 'fallback' ? '💡 _(Catatan: Menggunakan mode visual cadangan)_' : '🌟 _(Diproses dengan model resmi Google Gemini)_'}\n\nKlik **Simpan**, **Poles**, atau **Kirim WA**:`
+              : `✨ **Desain Foto AI Berhasil Dibuat!**\n\nPrompt: _"${imgResult.prompt}"_\n\n${imgResult.source === 'fallback' ? '💡 _(Catatan: Menggunakan mode visual cadangan)_' : '🌟 _(Kualitas studio model resmi Google Gemini)_'}\n\nKlik **Simpan**, **Poles**, atau **Kirim WA**:`
+
             setMessages(prev => [
               ...prev,
               {
                 id: 'img-' + Date.now(),
                 from: 'bot',
                 mode: 'gemini',
-                text: `✨ **Foto Desain AI Berhasil Dibuat!**\n\nPrompt: _"${imgResult.prompt}"_\n\nKamu bisa klik tombol **Simpan Foto** untuk download atau **Edit Foto** untuk menambah teks promo/filter warna:`,
+                text: resultMsg,
                 imageUrl: imgResult.imageUrl,
                 timestamp: Date.now()
               }
             ])
             setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-            setSuggestions(['🎨 Buat Foto Lain', '✏️ Edit Foto Ini', ...getDynamicSuggestions()])
+            setSuggestions(['🎨 Buat Foto Lain', '✏️ Poles di Kanvas', ...getDynamicSuggestions()])
             return
           } catch (err: any) {
             setIsTyping(false)
-            addMessage('bot', `⚠️ Gagal membuat foto: ${err.message}`, 'error')
+            addMessage('bot', `⚠️ Gagal memproses foto: ${err.message}`, 'error')
             return
           }
         }
@@ -876,29 +900,50 @@ const AssistantBot: React.FC<Props> = ({
         ].slice(-12)
         setIsTyping(false)
 
-        // Check if Gemini triggered an image creation action: [ACTION:generate_image|prompt]
-        const imageAction = actions.find(a => a.type === 'generate_image')
-        const otherActions = actions.filter(a => a.type !== 'generate_image')
+        // Check if Gemini triggered tool actions (studio_edit_photo, generate_promo_banner, or generate_image)
+        const studioAction = actions.find(a => a.type === 'studio_edit_photo')
+        const bannerAction = actions.find(a => a.type === 'generate_promo_banner' || a.type === 'generate_image')
+        const otherActions = actions.filter(a => a.type !== 'generate_image' && a.type !== 'studio_edit_photo' && a.type !== 'generate_promo_banner')
 
-        if (imageAction) {
+        if (studioAction) {
           try {
-            const imgPrompt = imageAction.payload.prompt || cleanQuery
-            const imgResult = await generateAIPhoto(imgPrompt)
+            const instr = studioAction.payload.instruction || cleanQuery
+            const imgResult = await generateAIPhoto(instr, activeKey, imgPayload)
             setMessages(prev => [
               ...prev,
               {
                 id: 'bot-' + Date.now(),
                 from: 'bot',
                 mode: 'gemini',
-                text: cleanText || '✨ Ini desain foto yang kamu minta:',
+                text: cleanText ? `${cleanText}\n\n✨ **Foto Studio Berhasil Dibuat!**\n\nProduk Anda tetap utuh dengan tata letak studio profesional.` : '✨ **Foto Studio Berhasil Dibuat!**',
                 imageUrl: imgResult.imageUrl,
                 timestamp: Date.now()
               }
             ])
             setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-            setSuggestions(['🎨 Buat Foto Lain', '✏️ Edit Foto Ini', ...getDynamicSuggestions()])
+            setSuggestions(['🎨 Buat Foto Lain', '✏️ Poles di Kanvas', ...getDynamicSuggestions()])
           } catch (e: any) {
             addMessage('bot', cleanText || `⚠️ Gagal membuat foto: ${e.message}`, 'gemini')
+          }
+        } else if (bannerAction) {
+          try {
+            const imgPrompt = bannerAction.payload.prompt || cleanQuery
+            const imgResult = await generateAIPhoto(imgPrompt, activeKey, null)
+            setMessages(prev => [
+              ...prev,
+              {
+                id: 'bot-' + Date.now(),
+                from: 'bot',
+                mode: 'gemini',
+                text: cleanText ? `${cleanText}\n\n✨ **Banner Promo Berhasil Dibuat!**` : '✨ **Banner Promo Berhasil Dibuat!**',
+                imageUrl: imgResult.imageUrl,
+                timestamp: Date.now()
+              }
+            ])
+            setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+            setSuggestions(['🎨 Buat Foto Lain', '✏️ Poles di Kanvas', ...getDynamicSuggestions()])
+          } catch (e: any) {
+            addMessage('bot', cleanText || `⚠️ Gagal membuat banner: ${e.message}`, 'gemini')
           }
         } else {
           addMessage('bot', cleanText, 'gemini')
@@ -954,9 +999,7 @@ const AssistantBot: React.FC<Props> = ({
         base64,
         mimeType: file.type || 'image/jpeg'
       })
-      if (!input.trim()) {
-        setInput('Analisa foto ini dan jelaskan detailnya')
-      }
+      // Kolom input dibiarkan kosong agar kasir leluasa mengetik apa saja
     }
     reader.readAsDataURL(file)
     e.target.value = ''
@@ -977,6 +1020,37 @@ const AssistantBot: React.FC<Props> = ({
     } catch {
       window.open(url, '_blank')
     }
+  }
+
+  const handleShareWhatsApp = async (imageUrl: string, captionText?: string) => {
+    const shareText = `Halo! Promo terbaru dari ALFAZA CELL:\n${captionText ? captionText.slice(0, 120) : 'Silakan cek foto promo berikut'}`
+    if (navigator.share) {
+      try {
+        if (imageUrl.startsWith('data:')) {
+          const res = await fetch(imageUrl)
+          const blob = await res.blob()
+          const file = new File([blob], 'promo-alfaza.jpg', { type: blob.type || 'image/jpeg' })
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: 'Promo ALFAZA CELL',
+              text: shareText,
+              files: [file]
+            })
+            return
+          }
+        }
+        await navigator.share({
+          title: 'Promo ALFAZA CELL',
+          text: shareText,
+          url: imageUrl.startsWith('http') ? imageUrl : undefined
+        })
+        return
+      } catch (e) {
+        // Fallback jika batal atau tidak didukung
+      }
+    }
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + (imageUrl.startsWith('http') ? '\n' + imageUrl : ''))}`
+    window.open(waUrl, '_blank')
   }
 
   // ── AI Action: Minta Konfirmasi Dulu ─────────────────────────────────────────
@@ -1055,7 +1129,23 @@ const AssistantBot: React.FC<Props> = ({
     setPendingActionSummary('')
   }, [addMessage])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key==='Enter') handleSend() }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+Enter atau Cmd+Enter langsung mengirim pesan
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      handleSend()
+    }
+    // Enter biasa menghasilkan baris baru di textarea tanpa langsung terkirim
+  }
+
+  // Auto-resize tinggi textarea saat teks bertambah/berkurang (min 38px, max 112px)
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      const scrollH = inputRef.current.scrollHeight
+      inputRef.current.style.height = `${Math.min(Math.max(scrollH, 38), 112)}px`
+    }
+  }, [input])
 
   const handleSaveGeminiKey = async () => {
     const k = geminiKeyInput.trim()
@@ -1123,8 +1213,19 @@ const AssistantBot: React.FC<Props> = ({
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       <div
         id="bot-chat-panel"
-        style={{ background:'linear-gradient(160deg,#1a1050 0%,#0f0930 60%,#0d0726 100%)', maxHeight:'calc(100dvh - 80px)' }}
-        className={`fixed top-[68px] left-3 z-[997] w-[min(320px,calc(100vw-24px))] rounded-3xl overflow-hidden shadow-2xl shadow-black/30 border border-white/10 flex flex-col transition-all duration-300 origin-top-left ${isOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
+        style={{ 
+          background: isExpanded 
+            ? 'linear-gradient(160deg,#130a38 0%,#09051c 60%,#050212 100%)' 
+            : 'linear-gradient(160deg,#1a1050 0%,#0f0930 60%,#0d0726 100%)', 
+          maxHeight: isExpanded ? '100dvh' : 'calc(100dvh - 80px)' 
+        }}
+        className={cn(
+          "fixed z-[999] overflow-hidden shadow-2xl shadow-black/50 flex flex-col transition-all duration-300",
+          isExpanded 
+            ? "inset-0 w-full h-[100dvh] rounded-none border-none" 
+            : "top-[68px] left-3 w-[min(340px,calc(100vw-24px))] rounded-3xl border border-white/10 origin-top-left",
+          isOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'
+        )}
       >
         {/* Header */}
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/10 shrink-0" style={{ background:'linear-gradient(90deg,#4f46e5 0%,#7c3aed 100%)' }}>
@@ -1160,10 +1261,34 @@ const AssistantBot: React.FC<Props> = ({
               {hasGeminiKey ? '✨ Gemini AI + Offline KB' : '📚 Mode Offline — Set Gemini key di ⚙️'}
             </p>
           </div>
-          <button onClick={()=>{setShowSettings(p=>!p);setShowTeachModal(false)}} title="Settings" className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-90 ${showSettings?'bg-white/30 text-white':'bg-white/15 hover:bg-white/25 text-white/70'}`}>
+
+          {/* Tombol Pengaturan */}
+          <button onClick={()=>{setShowSettings(p=>!p);setShowTeachModal(false)}} title="Pengaturan AI" className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-90 ${showSettings?'bg-white/30 text-white':'bg-white/15 hover:bg-white/25 text-white/70'}`}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
           </button>
-          <button onClick={()=>{setIsOpen(false);setShowSettings(false);setShowTeachModal(false)}} className="w-7 h-7 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-all shrink-0 active:scale-90 ml-0.5">
+
+          {/* Tombol Perbesar / Perkecil Layar (Fullscreen Toggle) */}
+          <button 
+            type="button"
+            onClick={() => setIsExpanded(p => !p)} 
+            title={isExpanded ? "Kecilkan Layar" : "Perbesar Selayar Penuh"}
+            className="w-7 h-7 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-all shrink-0 active:scale-90 ml-0.5"
+          >
+            {isExpanded ? (
+              // Icon Minimize / Restore
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M10 14l-7 7"/>
+              </svg>
+            ) : (
+              // Icon Maximize / Fullscreen
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
+              </svg>
+            )}
+          </button>
+
+          {/* Tombol Tutup (X) */}
+          <button onClick={()=>{setIsOpen(false);setIsExpanded(false);setShowSettings(false);setShowTeachModal(false)}} title="Tutup Chatbot" className="w-7 h-7 rounded-xl bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-all shrink-0 active:scale-90 ml-0.5">
             <span className="text-[11px] font-black">✕</span>
           </button>
         </div>
@@ -1341,7 +1466,7 @@ const AssistantBot: React.FC<Props> = ({
               ref={chatContainerRef}
               onScroll={(e) => localStorage.setItem('alphaPro_bot_scroll', e.currentTarget.scrollTop.toString())}
               className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5" 
-              style={{ minHeight:'180px', maxHeight:'340px' }}
+              style={{ minHeight: isExpanded ? '320px' : '180px', maxHeight: isExpanded ? 'calc(100dvh - 210px)' : '340px' }}
             >
               {messages.filter(msg => {
                 if (historyFilter === 'all') return true
@@ -1397,7 +1522,7 @@ const AssistantBot: React.FC<Props> = ({
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                         </button>
                       )}
-                      <div className={`max-w-[82%] flex flex-col gap-0.5 ${msg.from==='user'?'items-end':''}`}>
+                      <div className={`max-w-[85%] flex flex-col gap-0.5 ${msg.from==='user'?'items-end':''}`}>
                         <div className="flex items-center gap-1.5 px-1">
                           {msg.from==='bot' && <ModeBadge mode={msg.mode}/>}
                           {timeString && <span className="text-[8.5px] text-white/30 font-bold tracking-wider">{timeString}</span>}
@@ -1410,21 +1535,30 @@ const AssistantBot: React.FC<Props> = ({
                                 <img
                                   src={msg.imageUrl}
                                   alt="AI Photo"
-                                  className="w-full max-h-52 object-contain rounded-xl hover:scale-105 transition-transform duration-300"
+                                  className={cn("w-full object-contain rounded-xl hover:scale-102 transition-transform duration-300", isExpanded ? "max-h-[58vh]" : "max-h-52")}
                                 />
                               </div>
                               <div className="flex items-center gap-1 pt-0.5">
                                 <button
                                   onClick={() => handleDownloadImage(msg.imageUrl!, `alpha-foto-${Date.now()}.jpg`)}
                                   className="flex-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center gap-1 shadow transition-all active:scale-95"
+                                  title="Simpan foto ke perangkat"
                                 >
-                                  <span>📥</span> Simpan Foto
+                                  <span>📥</span> Simpan
                                 </button>
                                 <button
                                   onClick={() => setPhotoEditorState({ isOpen: true, imageUrl: msg.imageUrl! })}
                                   className="flex-1 py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center gap-1 shadow transition-all active:scale-95"
+                                  title="Poles di kanvas manual"
                                 >
-                                  <span>✏️</span> Edit Foto
+                                  <span>✏️</span> Poles
+                                </button>
+                                <button
+                                  onClick={() => handleShareWhatsApp(msg.imageUrl!, msg.text)}
+                                  className="py-1 px-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center gap-1 shadow transition-all active:scale-95"
+                                  title="Kirim ke WhatsApp"
+                                >
+                                  <span>📲</span> WA
                                 </button>
                               </div>
                             </div>
@@ -1572,7 +1706,7 @@ const AssistantBot: React.FC<Props> = ({
             )}
 
             {/* Input Bar */}
-            <div className="px-3 pb-3 pt-1 shrink-0 flex gap-1.5 items-center">
+            <div className="px-3 pb-3 pt-1 shrink-0 flex gap-1.5 items-end">
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -1585,7 +1719,7 @@ const AssistantBot: React.FC<Props> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 title="Lampirkan / Analisa Foto"
-                className="w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border bg-white/10 hover:bg-white/20 text-indigo-200 border-white/20"
+                className="w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border bg-white/10 hover:bg-white/20 text-indigo-200 border-white/20 mb-0.5"
               >
                 <span className="text-sm">📷</span>
               </button>
@@ -1596,7 +1730,7 @@ const AssistantBot: React.FC<Props> = ({
                 onClick={toggleVoiceRecording}
                 title={isListening ? "Mendengarkan... Klik untuk berhenti" : "Perintah Suara (Voice Input)"}
                 className={cn(
-                  "w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border",
+                  "w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer border mb-0.5",
                   isListening
                     ? "bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-600/50 animate-pulse"
                     : "bg-white/10 hover:bg-white/20 text-indigo-200 border-white/20"
@@ -1613,24 +1747,30 @@ const AssistantBot: React.FC<Props> = ({
                 )}
               </button>
 
-              <input
+              <textarea
                 ref={inputRef}
                 id="bot-chat-input"
-                type="text"
+                rows={1}
                 value={input}
-                onChange={e=>setInput(e.target.value)}
+                onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? '🎙️ Mendengarkan suara...' : (hasGeminiKey ? 'Ketik G. [tugas] atau tanya...' : 'Ketik perintah atau pertanyaan...')}
+                placeholder={isListening ? '🎙️ Mendengarkan suara...' : (attachedImage ? 'Ketik instruksi edit atau klik tombol kirim...' : (hasGeminiKey ? 'Ketik G. [tugas] atau tanya...' : 'Ketik perintah atau pertanyaan...'))}
+                title="Tekan Enter untuk baris baru. Tekan tombol Kirim atau Ctrl+Enter untuk kirim."
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(255,255,255,0.25) transparent'
+                }}
                 className={cn(
-                  "flex-1 bg-white/10 border border-white/20 rounded-2xl px-3 py-2.5 text-[11px] font-medium text-white placeholder:text-indigo-300/60 focus:outline-none focus:border-indigo-400/70 focus:bg-white/15 transition-all",
+                  "flex-1 min-w-0 bg-white/10 border border-white/20 rounded-2xl px-3 py-2 text-[11px] font-medium text-white placeholder:text-indigo-300/60 focus:outline-none focus:border-indigo-400/70 focus:bg-white/15 transition-all resize-none min-h-[38px] max-h-28 overflow-y-auto overflow-x-hidden leading-relaxed whitespace-pre-wrap break-words",
                   isListening && "border-rose-400/80 bg-rose-500/10 placeholder:text-rose-200"
                 )}
               />
               <button
                 id="bot-send-btn"
                 onClick={()=>handleSend()}
-                disabled={!input.trim()||isTyping}
-                className="w-9 h-9 rounded-2xl shrink-0 bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 active:scale-90 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer"
+                disabled={(!input.trim() && !attachedImage) || isTyping}
+                title="Kirim Pesan"
+                className="w-9 h-9 rounded-2xl shrink-0 bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 active:scale-90 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer mb-0.5"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -1653,7 +1793,7 @@ const AssistantBot: React.FC<Props> = ({
             base64,
             mimeType: 'image/jpeg'
           })
-          setInput(caption || 'Analisa foto yang baru saya edit ini')
+          setInput(caption || '')
         }}
       />
     </>

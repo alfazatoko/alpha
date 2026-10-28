@@ -510,29 +510,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       : (customLabels[selectedSumber] || selectedSumber);
 
     if (activeMode === 'DIGITAL') {
-      if (activeTheme === 'TEMA_1') {
-        if (sumberAplikasi === 'BANK') autoText = `Transfer > ${bankLabel} ${selectedBank}`;
-        else if (sumberAplikasi === 'FLIP') autoText = `${flipLabel} > ${selectedTujuan.replace('BANK ', 'Bank ')}`;
-        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `${orderKuotaLabel} > ${selectedTujuan}`;
-        else if (sumberAplikasi === 'DANA') autoText = `${danaLabel} > Aplikasi Dana`;
-        else autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
+      if (sumberAplikasi === 'BANK') {
+        autoText = selectedBank ? `${bankLabel} > ${selectedBank}` : bankLabel;
+      } else if (sumberAplikasi === 'FLIP') {
+        const dest = (selectedTujuan || '').replace(/^BANK\s+/i, 'Bank ');
+        autoText = dest ? `${flipLabel} > ${dest}` : flipLabel;
+      } else if (sumberAplikasi === 'ORDER KUOTA') {
+        autoText = selectedTujuan ? `${orderKuotaLabel} > ${selectedTujuan}` : orderKuotaLabel;
+      } else if (sumberAplikasi === 'DANA') {
+        autoText = `${danaLabel} > Aplikasi Dana`;
       } else {
-        if (sumberAplikasi === 'BANK') autoText = `${bankLabel} : ${selectedBank}`;
-        else if (sumberAplikasi === 'FLIP') autoText = `${flipLabel}${selectedTujuan ? ` : ${selectedTujuan}` : ''}`;
-        else if (sumberAplikasi === 'ORDER KUOTA') autoText = `${orderKuotaLabel}${selectedTujuan ? ` : ${selectedTujuan}` : ''}${nominal && nominal !== '0' ? ` ${nominal}` : ''}`;
-        else autoText = `Topup : ${customLabels[sumberAplikasi] || sumberAplikasi}`;
+        autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
       }
     } else if (activeMode === 'TARIK') {
-      autoText = `${tarikLabel} : ${tarikSubLabel}`;
+      autoText = `${tarikLabel} > ${tarikSubLabel}`;
     } else if (activeMode === 'AKSESORIS') {
       autoText = customLabels['AKSESORIS'] || 'Aksesoris';
     } else {
       const modeCustom = customLabels[activeMode] || kategori;
       autoText = `${modeCustom}`;
-      if (nominal && nominal !== '0' && kategori !== 'Order Kuota') autoText += ` ${nominal}`;
     }
     
-    return activeTheme === 'TEMA_1' ? autoText : autoText.toUpperCase();
+    return autoText.toUpperCase();
   }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, selectedTujuan, activeTheme, customLabels]);
   
   // Split Payment Logic
@@ -811,11 +810,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const onSaveInternal = () => {
     setErrorMsg(null)
+
+    // Validasi Wajib Keterangan jika subteks tidak dipilih pada mode DIGITAL
+    if (activeMode === 'DIGITAL') {
+      const hasSubteks = (sumberAplikasi === 'BANK' && Boolean(selectedBank && selectedBank.trim())) ||
+                         (sumberAplikasi === 'ORDER KUOTA' && Boolean(selectedTujuan && selectedTujuan.trim())) ||
+                         (sumberAplikasi === 'FLIP' && Boolean(selectedTujuan && selectedTujuan.trim())) ||
+                         (sumberAplikasi === 'DANA');
+
+      if (!hasSubteks && !keterangan.trim()) {
+        setErrorMsg('Pilih sub-kategori/tujuan atau isi keterangan transaksi!');
+        keteranganRef.current?.focus();
+        return;
+      }
+    }
     
     // Combine manual keterangan with auto prefix if needed
     let finalKeteranganBase = (isKetAuto && autoTextPrefix) 
       ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
-      : keterangan;
+      : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
 
     if ((kategori === 'Order Kuota' || kategori === 'FLIP') && selectedTujuanFee > 0) {
       finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
@@ -827,10 +840,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         setErrorMsg('Harga wajib diisi!')
         return
       }
-      // Set admin=0 for aksesoris, isAdminNonTunai based on pay mode
       setAdmin('0')
       const isNonTunai = aksesorisPayMode === 'QRIS'
-      onSave({ kategori, nominal, admin: '0', keterangan: finalKeteranganBase }, { activeTab: 'BARU', subTab: 'KHUSUS', isAdminNonTunai: isNonTunai })
+      let ketAksesoris = finalKeteranganBase
+      if (isNonTunai && !ketAksesoris.toUpperCase().includes('[NON_TUNAI]')) {
+        ketAksesoris += ' [NON_TUNAI]'
+      }
+      onSave(
+        { kategori, nominal, admin: '0', keterangan: ketAksesoris }, 
+        { activeTab: isNonTunai ? 'LAIN' : 'BARU', subTab: isNonTunai ? 'NON_TUNAI' : 'NORMAL', isAdminNonTunai: false }
+      )
       setIsKetAuto(true)
       return
     }
@@ -1312,12 +1331,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <button
                       key={p.id}
                       onClick={() => {
-                        if (activeTheme === 'TEMA_1') {
-                           setKeterangan(pKet.toUpperCase());
-                        } else {
-                           setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
-                           setIsKetAuto(false);
+                        const cleanPKet = (pKet || '').replace(new RegExp(`^${safeKat}\\s*(=|:|>)\\s*`, 'i'), '').trim();
+                        const upper = cleanPKet.toUpperCase();
+                        if (!selectedTujuan) {
+                          if (upper.includes('PULSA')) setSelectedTujuan('PULSA');
+                          else if (upper.includes('TOKEN') || upper.includes('PLN') || upper.includes('LISTRIK')) setSelectedTujuan('TOKEN LISTRIK');
+                          else if (upper.includes('DANA')) setSelectedTujuan('DANA');
+                          else if (upper.includes('GOPAY')) setSelectedTujuan('GOPAY');
+                          else if (upper.includes('OVO')) setSelectedTujuan('OVO');
+                          else if (upper.includes('SHOPEE')) setSelectedTujuan('SHOPEEPAY');
+                          else if (upper.includes('LINKAJA')) setSelectedTujuan('LINKAJA');
+                          else if (upper.includes('MAXIM')) setSelectedTujuan('MAXIM');
+                          else if (upper.includes('PDAM')) setSelectedTujuan('PDAM');
                         }
+                        if (!selectedBank && (sumberAplikasi === 'BANK' || safeKat.toLowerCase().includes('bank'))) {
+                          if (upper.includes('BRI')) setSelectedBank('BANK BRI');
+                          else if (upper.includes('BCA')) setSelectedBank('BANK BCA');
+                          else if (upper.includes('BNI')) setSelectedBank('BANK BNI');
+                          else if (upper.includes('MANDIRI')) setSelectedBank('BANK MANDIRI');
+                        }
+                        setKeterangan(cleanPKet.toUpperCase());
+                        setIsKetAuto(true);
                         
                         if (isOrderKuota) {
                           if (orderKuotaMode === 'NOMINAL_ADMIN') {
@@ -1327,6 +1361,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          if (pJual > 0) setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           nominalRef.current?.focus();
                         }
                       }}
@@ -1925,15 +1961,36 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <button
                       key={p.id}
                       onClick={() => {
-                        setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
+                        const cleanPKet = (pKet || '').replace(new RegExp(`^${safeKat}\\s*(=|:|>)\\s*`, 'i'), '').trim();
+                        const upper = cleanPKet.toUpperCase();
+                        if (!selectedTujuan) {
+                          if (upper.includes('PULSA')) setSelectedTujuan('PULSA');
+                          else if (upper.includes('TOKEN') || upper.includes('PLN') || upper.includes('LISTRIK')) setSelectedTujuan('TOKEN LISTRIK');
+                          else if (upper.includes('DANA')) setSelectedTujuan('DANA');
+                          else if (upper.includes('GOPAY')) setSelectedTujuan('GOPAY');
+                          else if (upper.includes('OVO')) setSelectedTujuan('OVO');
+                          else if (upper.includes('SHOPEE')) setSelectedTujuan('SHOPEEPAY');
+                          else if (upper.includes('LINKAJA')) setSelectedTujuan('LINKAJA');
+                          else if (upper.includes('MAXIM')) setSelectedTujuan('MAXIM');
+                          else if (upper.includes('PDAM')) setSelectedTujuan('PDAM');
+                        }
+                        if (!selectedBank && (sumberAplikasi === 'BANK' || safeKat.toLowerCase().includes('bank'))) {
+                          if (upper.includes('BRI')) setSelectedBank('BANK BRI');
+                          else if (upper.includes('BCA')) setSelectedBank('BANK BCA');
+                          else if (upper.includes('BNI')) setSelectedBank('BANK BNI');
+                          else if (upper.includes('MANDIRI')) setSelectedBank('BANK MANDIRI');
+                        }
+                        setKeterangan(cleanPKet.toUpperCase());
+                        setIsKetAuto(true);
                         if (isOrderKuota) {
                           setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
                           setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          if (pJual > 0) setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           nominalRef.current?.focus();
                         }
-                        setIsKetAuto(false);
                       }}
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[11px] font-black uppercase tracking-wide px-3 py-1.5 rounded-xl transition-all text-left shadow-sm"
                     >
@@ -2285,9 +2342,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             </label>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-2 focus-within:ring-2 focus-within:ring-blue-100 transition-all flex flex-col shadow-sm">
-            {isKetAuto && (
+            {isKetAuto && autoTextPrefix && (
               <div className="text-[12px] font-bold text-[#0066ff] mb-1.5 pb-1.5 border-b border-gray-100">
-                {kategori}
+                {autoTextPrefix}
               </div>
             )}
             <textarea 
@@ -2338,15 +2395,36 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <button
                       key={p.id}
                       onClick={() => {
-                        setKeterangan(`${safeKat.toUpperCase()} = ${pKet.toUpperCase()}`);
+                        const cleanPKet = (pKet || '').replace(new RegExp(`^${safeKat}\\s*(=|:|>)\\s*`, 'i'), '').trim();
+                        const upper = cleanPKet.toUpperCase();
+                        if (!selectedTujuan) {
+                          if (upper.includes('PULSA')) setSelectedTujuan('PULSA');
+                          else if (upper.includes('TOKEN') || upper.includes('PLN') || upper.includes('LISTRIK')) setSelectedTujuan('TOKEN LISTRIK');
+                          else if (upper.includes('DANA')) setSelectedTujuan('DANA');
+                          else if (upper.includes('GOPAY')) setSelectedTujuan('GOPAY');
+                          else if (upper.includes('OVO')) setSelectedTujuan('OVO');
+                          else if (upper.includes('SHOPEE')) setSelectedTujuan('SHOPEEPAY');
+                          else if (upper.includes('LINKAJA')) setSelectedTujuan('LINKAJA');
+                          else if (upper.includes('MAXIM')) setSelectedTujuan('MAXIM');
+                          else if (upper.includes('PDAM')) setSelectedTujuan('PDAM');
+                        }
+                        if (!selectedBank && (sumberAplikasi === 'BANK' || safeKat.toLowerCase().includes('bank'))) {
+                          if (upper.includes('BRI')) setSelectedBank('BANK BRI');
+                          else if (upper.includes('BCA')) setSelectedBank('BANK BCA');
+                          else if (upper.includes('BNI')) setSelectedBank('BANK BNI');
+                          else if (upper.includes('MANDIRI')) setSelectedBank('BANK MANDIRI');
+                        }
+                        setKeterangan(cleanPKet.toUpperCase());
+                        setIsKetAuto(true);
                         if (isOrderKuota) {
                           setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
                           setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           adminRef.current?.focus();
                         } else {
+                          setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+                          if (pJual > 0) setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
                           nominalRef.current?.focus();
                         }
-                        setIsKetAuto(false);
                       }}
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-wide px-2.5 py-1.5 rounded-xl transition-all text-left shadow-sm"
                     >
