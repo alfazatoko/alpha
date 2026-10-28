@@ -102,18 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.2
-          name: "ALFAZA ALPHA POS v1.5.2"
+          tag_name: v1.5.3
+          name: "ALFAZA ALPHA POS v1.5.3"
           body: |
-            ### Pembaruan Aplikasi v1.5.2
-            - **Standarisasi Rincian & Struk Transaksi:** Label informasi baris kedua seragam menggunakan **`Layanan / Produk:`** untuk semua kategori transaksi (Transfer Bank, Order Kuota, Tarik Tunai, Aksesoris, Voucher).
-            - **Penyempurnaan Alur Kas Transaksi Aksesoris (Tunai vs Non Tunai/QRIS):**
-              - *Bayar Tunai*: Sumber Uang Masuk otomatis masuk ke **Laci Kasir** dan terhitung dalam kas fisik laci.
-              - *Bayar Non Tunai (QRIS)*: Sumber Uang Masuk tercatat **QRIS**, nominal berwarna **Ungu Kontras** dengan badge **NON TUNAI**, **100% dipisahkan dari laci kasir fisik** dan masuk ke **Kas Lain Nya / Non Tunai**.
-              - Peniadaan baris admin fee Rp 0 dan pembersihan tag teknis `[Admin Dalam]` pada rincian struk aksesoris/barang toko.
-              - Sumber uang keluar untuk aksesoris dan voucher disesuaikan menjadi strip (`—`) karena tidak memotong modal saldo server.
-            - **Pemulihan Angka Denominasi Paket & Token Listrik:** Angka isi produk (seperti `ISI 20`, `ISI 25`, `ISI 50`) kini tampil utuh dan lengkap tanpa terpotong di riwayat transaksi maupun cetak struk kasir.
-            - **Penyempurnaan Studio Desain Foto & Promosi AI:** Integrasi menyeluruh generator desain foto dan Canvas Editor (teks promo toko, banner warna, filter warna, watermark toko ALFAZA CELL, dan tombol unduh JPG).
+            ### Pembaruan Aplikasi v1.5.3
+            - **Sinkronisasi Multi-Perangkat Realtime Per Toko:** Sinkronisasi instan antar HP/perangkat saat mengedit pilihan tujuan transaksi (nama & fee aplikasi +200, +900, dll.) dan custom labels tombol kategori layanan yang terisolasi per toko (`store_id`).
+            - **Pengecilan Grid & Tombol Kategori Minimalis:** Desain tombol kategori form transaksi (Transfer, Tarik Tunai, Aksesoris, Voucher) kini lebih kompak dengan ikon proporsional dan jarak lebih rapi & minimalis.
+            - **Penyempurnaan Rincian & Struk Transaksi:** Konsistensi label layanan, pemisahan kas fisik vs non-tunai, dan pemulihan angka denominasi produk pulsa/paket data.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

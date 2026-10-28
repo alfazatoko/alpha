@@ -362,6 +362,26 @@ const App: React.FC = () => {
             localStorage.setItem(`alphaPro_${activeStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
           }
+
+          // Sync presets (popupLists, customLabels, dsb.) per-toko
+          if (data.presets && Array.isArray(data.presets)) {
+            const popupObj = data.presets.find((p: any) => p && p.id === '_POPUP_LISTS_');
+            if (popupObj && popupObj.data) {
+              localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupObj.data));
+              localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data));
+              window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+                detail: { lists: popupObj.data, storeId: activeStoreId }
+              }));
+            }
+            const labelObj = data.presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_');
+            if (labelObj && labelObj.data) {
+              localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data));
+              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data));
+              window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+                detail: { labels: labelObj.data, storeId: activeStoreId }
+              }));
+            }
+          }
           
           // Preload custom sound if any
           preloadTransactionSound(activeStoreId);
@@ -387,7 +407,7 @@ const App: React.FC = () => {
 
     fetchStoreSettings()
 
-    // Realtime subscription for store_settings (sync jam absen shift antar perangkat)
+    // Realtime subscription for store_settings (sync jam absen shift & presets popup fee antar perangkat)
     const storeSettingsChannel = supabase
       .channel(`rt_store_settings_${activeStoreId}`)
       .on(
@@ -403,6 +423,25 @@ const App: React.FC = () => {
             const newFin = payload.new.financial_settings
             setFinancialSettings(newFin)
             localStorage.setItem(`alphaPro_${activeStoreId}_financial`, JSON.stringify(newFin))
+          }
+          if (payload.new && payload.new.presets && Array.isArray(payload.new.presets)) {
+            const incomingPresets = payload.new.presets
+            const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
+            if (popupObj && popupObj.data) {
+              localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupObj.data))
+              localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
+              window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+                detail: { lists: popupObj.data, storeId: activeStoreId }
+              }))
+            }
+            const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+            if (labelObj && labelObj.data) {
+              localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
+              window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+                detail: { labels: labelObj.data, storeId: activeStoreId }
+              }))
+            }
           }
         }
       )
@@ -935,12 +974,12 @@ const MainApp: React.FC<MainAppProps> = ({
       } catch (e) {}
     }
 
-    // 2. Fetch data banner langsung dari kamar kolom promo_banners di Supabase store_settings
+    // 2. Fetch data banner & presets langsung dari Supabase store_settings
     const fetchFreshBanners = async () => {
       try {
         const { data, error } = await supabase
           .from('store_settings')
-          .select('promo_banners')
+          .select('promo_banners, presets')
           .eq('store_id', effectiveStoreId)
           .maybeSingle()
 
@@ -949,13 +988,36 @@ const MainApp: React.FC<MainAppProps> = ({
           localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(data.promo_banners))
           localStorage.setItem('alphaPro_promoBanners', JSON.stringify(data.promo_banners))
         }
+
+        if (!error && data?.presets && Array.isArray(data.presets)) {
+          const popupObj = data.presets.find((p: any) => p && p.id === '_POPUP_LISTS_')
+          if (popupObj && popupObj.data) {
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_popup_lists`, JSON.stringify(popupObj.data))
+            localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
+            window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+              detail: { lists: popupObj.data, storeId: effectiveStoreId }
+            }))
+          }
+          const labelObj = data.presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+          if (labelObj && labelObj.data) {
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+            localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
+            window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+              detail: { labels: labelObj.data, storeId: effectiveStoreId }
+            }))
+          }
+          setPresets(data.presets)
+          if (googleUid) {
+            localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(data.presets))
+          }
+        }
       } catch (err) {}
     }
 
     fetchFreshBanners()
 
-    // 3. Realtime subscription: saat Owner ganti banner di HP Owner,
-    // semua HP Kasir di toko tersebut langsung ter-update otomatis tanpa perlu refresh atau login ulang
+    // 3. Realtime subscription: saat Owner ganti banner atau edit pilihan fee/nama transaksi di HP lain,
+    // semua HP di toko tersebut langsung ter-update otomatis tanpa perlu refresh atau login ulang
     const channelName = `rt_promo_banners_${effectiveStoreId}_${Date.now()}`
     const bannerChannel = supabase
       .channel(channelName)
@@ -973,6 +1035,36 @@ const MainApp: React.FC<MainAppProps> = ({
             setPromoBanners(incoming)
             localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(incoming))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(incoming))
+          }
+          if (payload.new && Array.isArray(payload.new.presets)) {
+            const incomingPresets = payload.new.presets
+            const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
+            if (popupObj && popupObj.data) {
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_popup_lists`, JSON.stringify(popupObj.data))
+              localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
+              window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+                detail: { lists: popupObj.data, storeId: effectiveStoreId }
+              }))
+            }
+            const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+            if (labelObj && labelObj.data) {
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
+              window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+                detail: { labels: labelObj.data, storeId: effectiveStoreId }
+              }))
+            }
+            const adminObj = incomingPresets.find((p: any) => p && p.id === '_ADMIN_RULES_')
+            if (adminObj && adminObj.data) {
+              setAdminRules(adminObj.data)
+              if (googleUid) {
+                localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_adminRules`, JSON.stringify(adminObj.data))
+              }
+            }
+            setPresets(incomingPresets)
+            if (googleUid) {
+              localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(incomingPresets))
+            }
           }
         }
       )
@@ -1352,12 +1444,28 @@ const MainApp: React.FC<MainAppProps> = ({
         let incomingPresets = data.presets
         let incomingAdminRules = null
         if (Array.isArray(incomingPresets)) {
+          const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
+          if (popupObj && popupObj.data) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_popup_lists`, JSON.stringify(popupObj.data))
+            localStorage.setItem('alphaPro_popup_lists', JSON.stringify(popupObj.data))
+            window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+              detail: { lists: popupObj.data, storeId: targetStoreId }
+            }))
+          }
+
+          const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+          if (labelObj && labelObj.data) {
+            localStorage.setItem(`alphaPro_${targetStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+            localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
+            window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+              detail: { labels: labelObj.data, storeId: targetStoreId }
+            }))
+          }
+
           const adminIdx = incomingPresets.findIndex((p: any) => p.id === '_ADMIN_RULES_')
           if (adminIdx >= 0) {
             incomingAdminRules = incomingPresets[adminIdx].data
           }
-          // Kamar Presets Murni: buang semua objek metadata yang berawalan _
-          incomingPresets = incomingPresets.filter((p: any) => p && !p.id?.startsWith?.('_'))
         }
 
         const local = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_presets`)
@@ -1768,12 +1876,14 @@ const MainApp: React.FC<MainAppProps> = ({
       
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = newPresets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const basePresets = newPresets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
         const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
         const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
         if (popupPreset) combinedPresets.push(popupPreset)
         const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
         if (transferPreset) combinedPresets.push(transferPreset)
+        const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+        if (labelPreset) combinedPresets.push(labelPreset)
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
@@ -1790,7 +1900,20 @@ const MainApp: React.FC<MainAppProps> = ({
   useEffect(() => {
     const handleUpdatePopupLists = (e: any) => {
       if (e.detail) {
-        savePopupLists(e.detail)
+        if (e.detail.lists) {
+          savePopupLists(e.detail.lists, e.detail.storeId)
+        } else {
+          savePopupLists(e.detail)
+        }
+      }
+    }
+    const handleUpdateCustomLabels = (e: any) => {
+      if (e.detail) {
+        if (e.detail.labels) {
+          saveCustomLabels(e.detail.labels, e.detail.storeId)
+        } else {
+          saveCustomLabels(e.detail)
+        }
       }
     }
     const handleUpdateTransferMethods = (e: any) => {
@@ -1799,23 +1922,27 @@ const MainApp: React.FC<MainAppProps> = ({
       }
     }
     window.addEventListener('alphaUpdatePopupLists', handleUpdatePopupLists)
+    window.addEventListener('alphaUpdateCustomLabels', handleUpdateCustomLabels)
     window.addEventListener('alphaUpdateTransferMethods', handleUpdateTransferMethods)
     return () => {
       window.removeEventListener('alphaUpdatePopupLists', handleUpdatePopupLists)
+      window.removeEventListener('alphaUpdateCustomLabels', handleUpdateCustomLabels)
       window.removeEventListener('alphaUpdateTransferMethods', handleUpdateTransferMethods)
     }
-  }, [presets, adminRules, activeStoreId, targetStoreId, kasirList, runningTexts, mainAnnouncement])
+  }, [presets, adminRules, activeStoreId, targetStoreId, kasirList, runningTexts, mainAnnouncement, googleUid])
 
   const saveTransferMethods = async (methods: string[]) => {
     const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
     if (googleUid) {
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
         const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
         const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
         if (popupPreset) combinedPresets.push(popupPreset)
         combinedPresets.push({ id: '_TRANSFER_METHODS_', data: methods })
+        const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+        if (labelPreset) combinedPresets.push(labelPreset)
         
         setPresets(combinedPresets)
         localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
@@ -1833,28 +1960,95 @@ const MainApp: React.FC<MainAppProps> = ({
     }
   }
 
-  const savePopupLists = async (newLists: Record<string, any[]>) => {
-    const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
-    if (googleUid) {
-      if (targetId && targetId !== 'all') {
-        const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
-        const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }, { id: '_POPUP_LISTS_', data: newLists }]
-        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
-        if (transferPreset) combinedPresets.push(transferPreset)
-        setPresets(combinedPresets)
+  const savePopupLists = async (newLists: Record<string, any[]>, storeIdOverride?: string) => {
+    const targetId = storeIdOverride || (targetStoreId !== 'all' ? targetStoreId : activeStoreId)
+    if (targetId && targetId !== 'all') {
+      const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
+      const combinedPresets = [
+        ...basePresets, 
+        { id: '_ADMIN_RULES_', data: adminRules }, 
+        { id: '_POPUP_LISTS_', data: newLists }
+      ]
+      const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+      if (transferPreset) combinedPresets.push(transferPreset)
+      const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+      if (labelPreset) combinedPresets.push(labelPreset)
+
+      setPresets(combinedPresets)
+      if (googleUid) {
         localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
-        
-        await supabase.from('store_settings').upsert({
+      }
+      localStorage.setItem(`alphaPro_${targetId}_popup_lists`, JSON.stringify(newLists))
+      localStorage.setItem('alphaPro_popup_lists', JSON.stringify(newLists))
+
+      window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+        detail: { lists: newLists, storeId: targetId }
+      }))
+      
+      await supabase.from('store_settings').upsert({
+        store_id: targetId,
+        cashiers: kasirList,
+        presets: combinedPresets,
+        running_texts: runningTexts,
+        main_announcement: mainAnnouncement,
+        is_pin_enabled: isPin,
+        updated_at: new Date().toISOString()
+      })
+
+      try {
+        await supabase.from('store_configs').upsert({
           store_id: targetId,
-          cashiers: kasirList,
           presets: combinedPresets,
-          running_texts: runningTexts,
-          main_announcement: mainAnnouncement,
-          is_pin_enabled: isPin,
           updated_at: new Date().toISOString()
         })
+      } catch(e) {}
+    }
+  }
+
+  const saveCustomLabels = async (newLabels: Record<string, any>, storeIdOverride?: string) => {
+    const targetId = storeIdOverride || (targetStoreId !== 'all' ? targetStoreId : activeStoreId)
+    if (targetId && targetId !== 'all') {
+      const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
+      const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
+      const combinedPresets = [
+        ...basePresets, 
+        { id: '_ADMIN_RULES_', data: adminRules }, 
+        { id: '_CUSTOM_LABELS_', data: newLabels }
+      ]
+      const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+      if (popupPreset) combinedPresets.push(popupPreset)
+      const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+      if (transferPreset) combinedPresets.push(transferPreset)
+
+      setPresets(combinedPresets)
+      if (googleUid) {
+        localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
       }
+      localStorage.setItem(`alphaPro_${targetId}_custom_labels`, JSON.stringify(newLabels))
+      localStorage.setItem('alphaPro_custom_labels', JSON.stringify(newLabels))
+
+      window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+        detail: { labels: newLabels, storeId: targetId }
+      }))
+      
+      await supabase.from('store_settings').upsert({
+        store_id: targetId,
+        cashiers: kasirList,
+        presets: combinedPresets,
+        running_texts: runningTexts,
+        main_announcement: mainAnnouncement,
+        is_pin_enabled: isPin,
+        updated_at: new Date().toISOString()
+      })
+
+      try {
+        await supabase.from('store_configs').upsert({
+          store_id: targetId,
+          presets: combinedPresets,
+          updated_at: new Date().toISOString()
+        })
+      } catch(e) {}
     }
   }
 
@@ -1867,12 +2061,14 @@ const MainApp: React.FC<MainAppProps> = ({
       
       if (targetId && targetId !== 'all') {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_')
+        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
         const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: newRules }]
         const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
         if (popupPreset) combinedPresets.push(popupPreset)
         const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
         if (transferPreset) combinedPresets.push(transferPreset)
+        const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+        if (labelPreset) combinedPresets.push(labelPreset)
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,

@@ -114,13 +114,32 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [tempLabels, setTempLabels] = useState<Record<string, any>>(customLabels);
   const [isSavingLabels, setIsSavingLabels] = useState(false);
 
-  // Sync customLabels dari Supabase & Realtime per-toko
+  // Sync customLabels dari Presets, Supabase & Realtime per-toko
   useEffect(() => {
     if (!activeStoreId || activeStoreId === 'all') return;
 
     const storeKey = `alphaPro_${activeStoreId}_custom_labels`;
 
-    // 1. Fetch dari cloud Supabase (tabel khusus store_custom_labels)
+    // 1. Cek dari presets prop (_CUSTOM_LABELS_) jika tersedia
+    const labelPreset = presets?.find((p: any) => p && p.id === '_CUSTOM_LABELS_');
+    if (labelPreset && labelPreset.data && typeof labelPreset.data === 'object') {
+      const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...labelPreset.data };
+      setCustomLabels(merged);
+      setTempLabels(merged);
+      localStorage.setItem(storeKey, JSON.stringify(labelPreset.data));
+    } else {
+      const saved = localStorage.getItem(storeKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...parsed };
+          setCustomLabels(merged);
+          setTempLabels(merged);
+        } catch (e) {}
+      }
+    }
+
+    // 2. Fetch dari cloud Supabase (tabel khusus store_custom_labels)
     const fetchLabels = async () => {
       try {
         const { data, error } = await supabase
@@ -132,16 +151,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         if (data && data.labels && typeof data.labels === 'object') {
           const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...data.labels };
           setCustomLabels(merged);
+          setTempLabels(merged);
           localStorage.setItem(storeKey, JSON.stringify(data.labels));
         }
       } catch (e) {
-        // Abaikan jika tabel belum dibuat di schema Supabase (tetap pakai local)
+        // Abaikan jika tabel belum dibuat di schema Supabase (tetap pakai presets / local)
       }
     };
 
     fetchLabels();
 
-    // 2. Realtime listener per store_id: saat Owner simpan, seluruh HP kasir langsung ter-update seketika
+    // 3. Realtime listener per store_id: saat Owner simpan, seluruh HP kasir langsung ter-update seketika
     const channelName = `rt_custom_labels_${activeStoreId}_${Date.now()}`;
     const channel = supabase
       .channel(channelName)
@@ -157,6 +177,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           if (payload.new && payload.new.labels && typeof payload.new.labels === 'object') {
             const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...payload.new.labels };
             setCustomLabels(merged);
+            setTempLabels(merged);
             localStorage.setItem(storeKey, JSON.stringify(payload.new.labels));
           }
         }
@@ -166,6 +187,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [activeStoreId, presets]);
+
+  // Listener event update customLabels lokal & realtime lintas komponen
+  useEffect(() => {
+    const handleLabelsEvent = (e: any) => {
+      const detail = e.detail;
+      const labels = detail?.labels || detail;
+      const storeId = detail?.storeId;
+      if (labels && typeof labels === 'object') {
+        if (!storeId || !activeStoreId || storeId === activeStoreId) {
+          const merged = { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...labels };
+          setCustomLabels(merged);
+          setTempLabels(merged);
+        }
+      }
+    };
+    window.addEventListener('alphaCustomLabelsUpdated', handleLabelsEvent);
+    return () => window.removeEventListener('alphaCustomLabelsUpdated', handleLabelsEvent);
   }, [activeStoreId]);
 
   const handleSaveCustomLabels = async () => {
@@ -174,7 +213,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_custom_labels` : 'alphaPro_custom_labels';
       setCustomLabels(tempLabels);
       localStorage.setItem(storeKey, JSON.stringify(tempLabels));
-      window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', { detail: tempLabels }));
+      window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', { 
+        detail: { labels: tempLabels, storeId: activeStoreId } 
+      }));
 
       const visibleTransfer = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].filter(m => !tempLabels['HIDE_' + m]);
       if (visibleTransfer.length > 0) {
@@ -187,6 +228,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (activeStoreId && activeStoreId !== 'all') {
         localStorage.setItem(`alphaPro_${activeStoreId}_transferMethods`, JSON.stringify(visibleTransfer));
         window.dispatchEvent(new CustomEvent('alphaUpdateTransferMethods', { detail: visibleTransfer }));
+
+        // Simpan juga ke App.tsx agar tersimpan ke cloud Supabase store_settings.presets._CUSTOM_LABELS_
+        window.dispatchEvent(new CustomEvent('alphaUpdateCustomLabels', { 
+          detail: { labels: tempLabels, storeId: activeStoreId } 
+        }));
 
         try {
           await supabase
@@ -313,7 +359,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       AKSESORIS: ITEMS['AKSESORIS']
     };
     try {
-      const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
+      const popupPreset = presets?.find((p: any) => p && p.id === '_POPUP_LISTS_');
       if (popupPreset && popupPreset.data) {
         return {
           ...defaultLists,
@@ -323,7 +369,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
     } catch(e) {}
     
-    const saved = localStorage.getItem('alphaPro_popup_lists');
+    const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_popup_lists` : 'alphaPro_popup_lists';
+    const saved = localStorage.getItem(storeKey) || localStorage.getItem('alphaPro_popup_lists');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -337,26 +384,78 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     return defaultLists;
   });
 
+  // Sync popupLists saat presets atau activeStoreId berubah (isolasi per toko)
   React.useEffect(() => {
-    const popupPreset = presets?.find((p: any) => p.id === '_POPUP_LISTS_');
+    const defaultLists = {
+      BANK: ITEMS['TRANSFER_BANK'],
+      ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
+      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
+      AKSESORIS: ITEMS['AKSESORIS']
+    };
+
+    const popupPreset = presets?.find((p: any) => p && p.id === '_POPUP_LISTS_');
     if (popupPreset && popupPreset.data) {
-      setPopupLists(prev => ({
-        ...prev,
+      setPopupLists({
+        ...defaultLists,
         ...popupPreset.data,
-        AKSESORIS: popupPreset.data.AKSESORIS || prev.AKSESORIS || ITEMS['AKSESORIS']
-      }));
+        AKSESORIS: popupPreset.data.AKSESORIS || ITEMS['AKSESORIS']
+      });
+      if (activeStoreId) {
+        localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupPreset.data));
+      }
+      return;
     }
-  }, [presets]);
+
+    if (activeStoreId) {
+      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_popup_lists`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setPopupLists({
+            ...defaultLists,
+            ...parsed,
+            AKSESORIS: parsed.AKSESORIS || ITEMS['AKSESORIS']
+          });
+          return;
+        } catch (e) {}
+      }
+    }
+  }, [presets, activeStoreId]);
+
+  // Realtime update listener dari App.tsx untuk popupLists per toko
+  React.useEffect(() => {
+    const handlePopupChanged = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.lists) {
+        if (!detail.storeId || !activeStoreId || detail.storeId === activeStoreId) {
+          setPopupLists(prev => ({
+            ...prev,
+            ...detail.lists,
+            AKSESORIS: detail.lists.AKSESORIS || prev.AKSESORIS || ITEMS['AKSESORIS']
+          }));
+        }
+      }
+    };
+    window.addEventListener('alphaPopupListsChanged', handlePopupChanged);
+    return () => window.removeEventListener('alphaPopupListsChanged', handlePopupChanged);
+  }, [activeStoreId]);
   
   const [isEditingPopup, setIsEditingPopup] = useState(false);
 
   const handleUpdatePopupList = (mode: string, newList: any[]) => {
     const updated = { ...popupLists, [mode]: newList };
     setPopupLists(updated);
+    
+    // Simpan terisolasi per toko di localStorage
+    if (activeStoreId) {
+      localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(updated));
+    }
     localStorage.setItem('alphaPro_popup_lists', JSON.stringify(updated));
     
-    // Dispatch to App.tsx so it syncs online
-    window.dispatchEvent(new CustomEvent('alphaUpdatePopupLists', { detail: updated }));
+    // Dispatch ke App.tsx dengan menyertakan storeId aktif agar disinkronkan ke Supabase per-toko
+    window.dispatchEvent(new CustomEvent('alphaUpdatePopupLists', { 
+      detail: { lists: updated, storeId: activeStoreId } 
+    }));
   };
 
   // Sync initialMode when it changes externally
@@ -1062,7 +1161,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
       {activeTheme === 'TEMA_1' ? (
       <>
-      <div className="grid grid-cols-4 gap-1 mb-1">
+      <div className="grid grid-cols-4 gap-1.5 mb-1.5 px-3">
         {([
           { id: 'DIGITAL', label: customLabels['DIGITAL'] || 'Transfer', icon: 'fa-paper-plane', key: 'Q', ref: btnDigitalRef, active: 'from-blue-500 to-blue-700 shadow-blue-500/40', ic: 'text-blue-500', hov: 'hover:bg-blue-50 hover:border-blue-200' },
           { id: 'TARIK', label: customLabels['TARIK'] || 'Tarik Tunai', icon: 'fa-money-bill-transfer', key: 'W', ref: btnTarikRef, active: 'from-red-500 to-red-700 shadow-red-500/40', ic: 'text-red-500', hov: 'hover:bg-red-50 hover:border-red-200' },
@@ -1094,16 +1193,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               }}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}
               className={cn(
-                'relative flex flex-col items-center justify-center pt-2 pb-1.5 px-1 rounded-2xl border-2 transition-all duration-300 gap-1 outline-none overflow-hidden min-w-0',
-                isAct ? `bg-gradient-to-br ${mode.active} border-transparent text-white shadow-[0_8px_20px_-6px] scale-[1.02] z-10` : cn('bg-white border-gray-100 text-gray-600', mode.hov)
+                'relative flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all duration-300 gap-1 outline-none overflow-hidden min-w-0',
+                isAct ? `bg-gradient-to-br ${mode.active} border-transparent text-white shadow-sm scale-[1.02] z-10` : cn('bg-white border-gray-100 text-gray-600', mode.hov)
               )}
             >
               {/* Shortcut Badge */}
-              <span className={cn('absolute top-1 left-1.5 text-[8px] font-black leading-none px-1 py-0.5 rounded', isAct ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-400')}>{mode.key}</span>
-              <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', isAct ? 'bg-white/20 shadow-inner' : 'bg-gray-50')}>
-                <i className={cn('fa-solid', mode.icon, 'text-sm', isAct ? 'text-white' : mode.ic)}></i>
+              <span className={cn('absolute top-1 left-1.5 text-[7.5px] font-black leading-none px-1 py-0.5 rounded', isAct ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-400')}>{mode.key}</span>
+              <div className={cn('w-7 h-7 rounded-full flex items-center justify-center', isAct ? 'bg-white/20 shadow-inner' : 'bg-gray-50')}>
+                <i className={cn('fa-solid', mode.icon, 'text-[12px]', isAct ? 'text-white' : mode.ic)}></i>
               </div>
-              <span className={cn('text-[9px] font-black uppercase tracking-tight text-center leading-none', isAct ? 'text-white' : 'text-gray-700')}>{mode.label}</span>
+              <span className={cn('text-[8.5px] font-black uppercase tracking-tight text-center leading-none', isAct ? 'text-white' : 'text-gray-700')}>{mode.label}</span>
             </button>
           )
         })}
@@ -1662,7 +1761,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       ) : activeTheme === 'TEMA_2' ? (
       <>
         {/* 4 TOMBOL LAYANAN */}
-        <div className="grid grid-cols-4 gap-2 mb-2 px-4">
+        <div className="grid grid-cols-4 gap-1.5 mb-2 px-3">
           {([
             { id: 'DIGITAL',   label: (customLabels['DIGITAL'] || 'TRANSFER').toUpperCase(),     icon: 'fa-paper-plane',        iconBg: '#0066ff' },
             { id: 'TARIK',     label: (customLabels['TARIK'] || 'TARIK TUNAI').toUpperCase(),  icon: 'fa-money-bill-transfer', iconBg: '#10b981' },
@@ -1689,19 +1788,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   else setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank');
                 }}
                 className={cn(
-                  "flex flex-col items-center justify-center py-3.5 px-1 rounded-[18px] border-2 bg-white transition-all duration-200 outline-none",
+                  "flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 bg-white transition-all duration-200 outline-none",
                   isAct 
-                    ? "border-[#0066ff] bg-[#f0f7ff] shadow-md" 
-                    : "border-transparent bg-white shadow-sm hover:border-blue-100"
+                    ? "border-[#0066ff] bg-[#f0f7ff] shadow-sm scale-[1.02]" 
+                    : "border-gray-100 bg-white shadow-xs hover:border-blue-100"
                 )}
               >
                 <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
+                  className="w-7 h-7 rounded-full flex items-center justify-center mb-1 transition-transform"
                   style={{backgroundColor: mode.iconBg}}
                 >
-                  <i className={cn("fa-solid text-white text-[16px]", mode.icon)}></i>
+                  <i className={cn("fa-solid text-white text-[11.5px]", mode.icon)}></i>
                 </div>
-                <span className={cn("text-[9px] font-black uppercase tracking-tight text-center leading-tight", isAct ? "text-[#0040cc]" : "text-[#374151]")}>{mode.label}</span>
+                <span className={cn("text-[8.5px] font-black uppercase tracking-tight text-center leading-tight", isAct ? "text-[#0040cc]" : "text-[#374151]")}>{mode.label}</span>
               </button>
             )
           })}
@@ -1764,7 +1863,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
         {activeMode === 'TARIK' && (
-          <div className="mb-2 px-4">
+          <div className="mb-2 px-3">
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1"><i className="fa-solid fa-credit-card text-emerald-500"></i> Pilih Sumber Masuk:</p>
             </div>
@@ -2977,14 +3076,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           onClick={() => {
                             if (isEditingPopup) {
                                if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP') {
+                                 const currentName = item.name || '';
                                  const currentFee = item.fee || 0;
-                                 const newFeeStr = window.prompt(`Atur Fee Aplikasi untuk ${item.name}:\n(Kosongkan atau isi 0 jika tidak ada fee)`, currentFee.toString());
-                                 if (newFeeStr !== null) {
-                                   const newFee = parseInt(newFeeStr.replace(/\D/g, ''), 10) || 0;
-                                   const list = popupLists[classicPopupMode] || [];
-                                   const newList = list.map((x: any) => x.id === item.id ? { ...x, fee: newFee } : x);
-                                   handleUpdatePopupList(classicPopupMode, newList);
-                                 }
+                                 const newName = window.prompt(`Ubah nama pilihan (kosongkan jika tidak ingin diubah):\nSebelumnya: "${currentName}"`, currentName);
+                                 if (newName === null) return; // user klik Batal
+                                 const validName = newName.trim() ? newName.trim().toUpperCase() : currentName;
+
+                                 const newFeeStr = window.prompt(`Atur Fee Aplikasi untuk "${validName}":\n(Kosongkan atau isi 0 jika tidak ada fee tambahan)`, currentFee.toString());
+                                 if (newFeeStr === null) return; // user klik Batal
+                                 const newFee = parseInt(newFeeStr.replace(/\D/g, ''), 10) || 0;
+
+                                 const list = popupLists[classicPopupMode] || [];
+                                 const newList = list.map((x: any) => x.id === item.id ? { ...x, id: validName, name: validName, fee: newFee } : x);
+                                 handleUpdatePopupList(classicPopupMode, newList);
                                } else {
                                  const newName = window.prompt(`Ubah nama pilihan "${item.name}":`, item.name);
                                  if (newName && newName.trim()) {
@@ -3051,9 +3155,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         onClick={() => {
                           const name = window.prompt(classicPopupMode === 'AKSESORIS' ? "Masukkan nama aksesoris baru:" : "Masukkan nama pilihan baru:");
                           if (name && name.trim()) {
+                             const trimmedName = name.trim().toUpperCase();
+                             let fee = 0;
+                             if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP') {
+                               const feeStr = window.prompt(`Atur Fee Aplikasi untuk "${trimmedName}":\n(Opsional, isi 0 jika tidak ada fee)`, "0");
+                               fee = parseInt((feeStr || '0').replace(/\D/g, ''), 10) || 0;
+                             }
                              const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : 'fa-star';
                              const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : 'text-amber-500';
-                             const newItem = { id: name.trim().toUpperCase(), name: name.trim().toUpperCase(), icon, color };
+                             const newItem = { id: trimmedName, name: trimmedName, icon, color, fee };
                              handleUpdatePopupList(classicPopupMode, [...list, newItem]);
                           }
                         }}
