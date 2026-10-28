@@ -16,27 +16,27 @@ const SUBCATEGORIES = [
   { id: 'PPOB', label: 'PPOB', icon: 'fa-bolt', color: 'bg-amber-100 text-amber-600', active: 'bg-amber-500 text-white', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.4)]' },
 ];
 
-const ITEMS: Record<string, { id: string, name: string, icon: string, color: string }[]> = {
+const ITEMS: Record<string, { id: string, name: string, icon: string, color: string, fee?: number }[]> = {
   'TRANSFER_BANK': [
-    { id: 'BANK BRI', name: 'BRI', icon: 'fa-building-columns', color: 'text-blue-600' },
-    { id: 'BANK BNI', name: 'BNI', icon: 'fa-building-columns', color: 'text-orange-600' },
-    { id: 'BANK BCA', name: 'BCA', icon: 'fa-building-columns', color: 'text-blue-800' },
-    { id: 'BANK MANDIRI', name: 'MANDIRI', icon: 'fa-building-columns', color: 'text-yellow-600' },
-    { id: 'BANK LAINNYA', name: 'LAINNYA', icon: 'fa-building-columns', color: 'text-slate-600' }
+    { id: 'BANK BRI', name: 'BRI', icon: 'fa-building-columns', color: 'text-blue-600', fee: 0 },
+    { id: 'BANK BNI', name: 'BNI', icon: 'fa-building-columns', color: 'text-orange-600', fee: 0 },
+    { id: 'BANK BCA', name: 'BCA', icon: 'fa-building-columns', color: 'text-blue-800', fee: 0 },
+    { id: 'BANK MANDIRI', name: 'MANDIRI', icon: 'fa-building-columns', color: 'text-yellow-600', fee: 0 },
+    { id: 'BANK LAINNYA', name: 'LAINNYA', icon: 'fa-building-columns', color: 'text-slate-600', fee: 0 }
   ],
   'TOPUP_EWALLET': [
-    { id: 'DANA', name: 'DANA', icon: 'fa-wallet', color: 'text-blue-500' },
-    { id: 'GOPAY', name: 'GOPAY', icon: 'fa-wallet', color: 'text-green-500' },
-    { id: 'OVO', name: 'OVO', icon: 'fa-wallet', color: 'text-purple-500' },
-    { id: 'SHOPEEPAY', name: 'SHOPEEPAY', icon: 'fa-wallet', color: 'text-orange-500' },
-    { id: 'LINKAJA', name: 'LINKAJA', icon: 'fa-wallet', color: 'text-red-500' }
+    { id: 'DANA', name: 'DANA', icon: 'fa-wallet', color: 'text-blue-500', fee: 200 },
+    { id: 'GOPAY', name: 'GOPAY', icon: 'fa-wallet', color: 'text-green-500', fee: 900 },
+    { id: 'OVO', name: 'OVO', icon: 'fa-wallet', color: 'text-purple-500', fee: 700 },
+    { id: 'SHOPEEPAY', name: 'SHOPEEPAY', icon: 'fa-wallet', color: 'text-orange-500', fee: 100 },
+    { id: 'LINKAJA', name: 'LINKAJA', icon: 'fa-wallet', color: 'text-red-500', fee: 800 }
   ],
   'PPOB': [
-    { id: 'MAXIM', name: 'MAXIM', icon: 'fa-car', color: 'text-yellow-500' },
-    { id: 'PULSA', name: 'PULSA', icon: 'fa-mobile-screen', color: 'text-amber-500' },
-    { id: 'TOKEN LISTRIK', name: 'TOKEN LISTRIK', icon: 'fa-bolt', color: 'text-amber-500' },
-    { id: 'PDAM', name: 'PDAM', icon: 'fa-faucet-drip', color: 'text-blue-400' },
-    { id: 'TAGIHAN LAIN', name: 'TAGIHAN LAIN', icon: 'fa-file-invoice', color: 'text-slate-500' }
+    { id: 'MAXIM', name: 'MAXIM', icon: 'fa-car', color: 'text-yellow-500', fee: 2200 },
+    { id: 'PULSA', name: 'PULSA', icon: 'fa-mobile-screen', color: 'text-amber-500', fee: 0 },
+    { id: 'TOKEN LISTRIK', name: 'TOKEN LISTRIK', icon: 'fa-bolt', color: 'text-amber-500', fee: 1850 },
+    { id: 'PDAM', name: 'PDAM', icon: 'fa-faucet-drip', color: 'text-blue-400', fee: 0 },
+    { id: 'TAGIHAN LAIN', name: 'TAGIHAN LAIN', icon: 'fa-file-invoice', color: 'text-slate-500', fee: 0 }
   ],
   'TARIK_TUNAI': [
     { id: 'EDC / ATM', name: 'EDC/ATM', icon: 'fa-credit-card', color: 'text-slate-600' },
@@ -351,83 +351,125 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
   const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
 
+  const effectiveStoreId = (activeStoreId && activeStoreId !== 'all') 
+    ? activeStoreId 
+    : (localStorage.getItem('alphaPro_active_store_id') && localStorage.getItem('alphaPro_active_store_id') !== 'all'
+        ? localStorage.getItem('alphaPro_active_store_id')
+        : (localStorage.getItem('alphaPro_pantau_store_id') || null));
+
+  const DEFAULT_POPUP_LISTS: Record<string, any[]> = React.useMemo(() => ({
+    BANK: ITEMS['TRANSFER_BANK'],
+    ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
+    FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
+    AKSESORIS: ITEMS['AKSESORIS']
+  }), []);
+
+  const mergePopupListWithDefaults = React.useCallback((sourceLists: Record<string, any[]>) => {
+    const res: Record<string, any[]> = { ...DEFAULT_POPUP_LISTS };
+    for (const key of ['BANK', 'ORDER_KUOTA', 'FLIP', 'AKSESORIS']) {
+      const src = sourceLists[key];
+      const def = DEFAULT_POPUP_LISTS[key] || [];
+      if (Array.isArray(src) && src.length > 0) {
+        res[key] = src.map(item => {
+          const defaultItem = def.find((d: any) => d.id === item.id || d.name === item.name);
+          return {
+            ...(defaultItem || {}),
+            ...item,
+            fee: (item.fee !== undefined && item.fee !== null && item.fee > 0) ? item.fee : (defaultItem?.fee || 0)
+          };
+        });
+      } else {
+        res[key] = def;
+      }
+    }
+    return res;
+  }, [DEFAULT_POPUP_LISTS]);
+
   const [popupLists, setPopupLists] = useState<Record<string, any[]>>(() => {
-    const defaultLists = {
-      BANK: ITEMS['TRANSFER_BANK'],
-      ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
-      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
-      AKSESORIS: ITEMS['AKSESORIS']
-    };
     try {
       const popupPreset = presets?.find((p: any) => p && p.id === '_POPUP_LISTS_');
       if (popupPreset && popupPreset.data) {
-        return {
-          ...defaultLists,
-          ...popupPreset.data,
-          AKSESORIS: popupPreset.data.AKSESORIS || ITEMS['AKSESORIS']
-        };
+        return mergePopupListWithDefaults(popupPreset.data);
       }
     } catch(e) {}
     
-    const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_popup_lists` : 'alphaPro_popup_lists';
+    const storeKey = effectiveStoreId ? `alphaPro_${effectiveStoreId}_popup_lists` : 'alphaPro_popup_lists';
     const saved = localStorage.getItem(storeKey) || localStorage.getItem('alphaPro_popup_lists');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return {
-          ...defaultLists,
-          ...parsed,
-          AKSESORIS: parsed.AKSESORIS || ITEMS['AKSESORIS']
-        };
+        return mergePopupListWithDefaults(parsed);
       } catch (e) {}
     }
-    return defaultLists;
+    return DEFAULT_POPUP_LISTS;
   });
 
-  // Sync popupLists saat presets atau activeStoreId berubah (isolasi per toko)
+  // Sync popupLists saat presets atau effectiveStoreId berubah
   React.useEffect(() => {
-    const defaultLists = {
-      BANK: ITEMS['TRANSFER_BANK'],
-      ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
-      FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
-      AKSESORIS: ITEMS['AKSESORIS']
-    };
-
     const popupPreset = presets?.find((p: any) => p && p.id === '_POPUP_LISTS_');
     if (popupPreset && popupPreset.data) {
-      setPopupLists({
-        ...defaultLists,
-        ...popupPreset.data,
-        AKSESORIS: popupPreset.data.AKSESORIS || ITEMS['AKSESORIS']
-      });
-      if (activeStoreId) {
-        localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(popupPreset.data));
+      const merged = mergePopupListWithDefaults(popupPreset.data);
+      setPopupLists(merged);
+      if (effectiveStoreId) {
+        localStorage.setItem(`alphaPro_${effectiveStoreId}_popup_lists`, JSON.stringify(merged));
       }
       return;
     }
 
-    if (activeStoreId) {
-      const saved = localStorage.getItem(`alphaPro_${activeStoreId}_popup_lists`);
+    if (effectiveStoreId) {
+      const saved = localStorage.getItem(`alphaPro_${effectiveStoreId}_popup_lists`);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setPopupLists({
-            ...defaultLists,
-            ...parsed,
-            AKSESORIS: parsed.AKSESORIS || ITEMS['AKSESORIS']
-          });
+          setPopupLists(mergePopupListWithDefaults(parsed));
           return;
         } catch (e) {}
       }
     }
-  }, [presets, activeStoreId]);
+  }, [presets, effectiveStoreId, mergePopupListWithDefaults]);
+
+  // Sinkronisasi Online Database Supabase (store_popup_lists) & Realtime
+  React.useEffect(() => {
+    const sId = effectiveStoreId;
+    if (!sId) return;
+
+    // 1. Fetch langsung dari tabel online store_popup_lists
+    supabase.from('store_popup_lists').select('lists').eq('store_id', sId).maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.lists) {
+          const merged = mergePopupListWithDefaults(data.lists);
+          setPopupLists(merged);
+          localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(merged));
+        }
+      });
+
+    // 2. Realtime listener Postgres Changes agar detik itu juga HP 2 terupdate
+    const channel = supabase.channel(`rt_popup_lists_${sId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'store_popup_lists',
+        filter: `store_id=eq.${sId}`
+      }, (payload: any) => {
+        if (payload.new && payload.new.lists) {
+          const merged = mergePopupListWithDefaults(payload.new.lists);
+          setPopupLists(merged);
+          localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(merged));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [effectiveStoreId, mergePopupListWithDefaults]);
 
   // Realtime update listener dari App.tsx untuk popupLists per toko
   React.useEffect(() => {
     const handlePopupChanged = (e: any) => {
       const detail = e.detail;
       if (detail && detail.lists) {
-        if (!detail.storeId || !activeStoreId || detail.storeId === activeStoreId) {
+        if (!detail.storeId || !effectiveStoreId || detail.storeId === effectiveStoreId) {
           setPopupLists(prev => ({
             ...prev,
             ...detail.lists,
@@ -438,24 +480,38 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     };
     window.addEventListener('alphaPopupListsChanged', handlePopupChanged);
     return () => window.removeEventListener('alphaPopupListsChanged', handlePopupChanged);
-  }, [activeStoreId]);
+  }, [effectiveStoreId]);
   
   const [isEditingPopup, setIsEditingPopup] = useState(false);
 
-  const handleUpdatePopupList = (mode: string, newList: any[]) => {
+  const handleUpdatePopupList = async (mode: string, newList: any[]) => {
     const updated = { ...popupLists, [mode]: newList };
     setPopupLists(updated);
     
+    const sId = effectiveStoreId;
     // Simpan terisolasi per toko di localStorage
-    if (activeStoreId) {
-      localStorage.setItem(`alphaPro_${activeStoreId}_popup_lists`, JSON.stringify(updated));
+    if (sId) {
+      localStorage.setItem(`alphaPro_${sId}_popup_lists`, JSON.stringify(updated));
     }
     localStorage.setItem('alphaPro_popup_lists', JSON.stringify(updated));
     
     // Dispatch ke App.tsx dengan menyertakan storeId aktif agar disinkronkan ke Supabase per-toko
     window.dispatchEvent(new CustomEvent('alphaUpdatePopupLists', { 
-      detail: { lists: updated, storeId: activeStoreId } 
+      detail: { lists: updated, storeId: sId } 
     }));
+
+    // Simpan langsung ke Supabase store_popup_lists (Online Database)
+    if (sId) {
+      try {
+        await supabase.from('store_popup_lists').upsert({
+          store_id: sId,
+          lists: updated,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' });
+      } catch (e) {
+        console.error('Gagal simpan ke store_popup_lists:', e);
+      }
+    }
   };
 
   // Sync initialMode when it changes externally

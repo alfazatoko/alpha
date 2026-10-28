@@ -1994,14 +1994,22 @@ const MainApp: React.FC<MainAppProps> = ({
         main_announcement: mainAnnouncement,
         is_pin_enabled: isPin,
         updated_at: new Date().toISOString()
-      })
+      }, { onConflict: 'store_id' })
+
+      try {
+        await supabase.from('store_popup_lists').upsert({
+          store_id: targetId,
+          lists: newLists,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch(e) {}
 
       try {
         await supabase.from('store_configs').upsert({
           store_id: targetId,
           presets: combinedPresets,
           updated_at: new Date().toISOString()
-        })
+        }, { onConflict: 'store_id' })
       } catch(e) {}
     }
   }
@@ -2031,6 +2039,14 @@ const MainApp: React.FC<MainAppProps> = ({
       window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
         detail: { labels: newLabels, storeId: targetId }
       }))
+
+      try {
+        await supabase.from('store_custom_labels').upsert({
+          store_id: targetId,
+          labels: newLabels,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch(e) {}
       
       await supabase.from('store_settings').upsert({
         store_id: targetId,
@@ -2040,7 +2056,7 @@ const MainApp: React.FC<MainAppProps> = ({
         main_announcement: mainAnnouncement,
         is_pin_enabled: isPin,
         updated_at: new Date().toISOString()
-      })
+      }, { onConflict: 'store_id' })
 
       try {
         await supabase.from('store_configs').upsert({

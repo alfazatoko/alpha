@@ -102,13 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.3
-          name: "ALFAZA ALPHA POS v1.5.3"
+          tag_name: v1.5.4
+          name: "ALFAZA ALPHA POS v1.5.4"
           body: |
-            ### Pembaruan Aplikasi v1.5.3
-            - **Sinkronisasi Multi-Perangkat Realtime Per Toko:** Sinkronisasi instan antar HP/perangkat saat mengedit pilihan tujuan transaksi (nama & fee aplikasi +200, +900, dll.) dan custom labels tombol kategori layanan yang terisolasi per toko (`store_id`).
-            - **Pengecilan Grid & Tombol Kategori Minimalis:** Desain tombol kategori form transaksi (Transfer, Tarik Tunai, Aksesoris, Voucher) kini lebih kompak dengan ikon proporsional dan jarak lebih rapi & minimalis.
-            - **Penyempurnaan Rincian & Struk Transaksi:** Konsistensi label layanan, pemisahan kas fisik vs non-tunai, dan pemulihan angka denominasi produk pulsa/paket data.
+            ### Pembaruan Aplikasi v1.5.4
+            - **Integrasi Database Online & Built-in Fee Aplikasi Transaksi:** Penanaman langsung (built-in) nilai nominal fee aplikasi untuk pilihan tujuan transaksi PPOB & E-Wallet (DANA +200, GOPAY +900, OVO +700, SHOPEEPAY +100, LINKAJA +800, MAXIM +2200, TOKEN LISTRIK +1850) sehingga langsung muncul di seluruh HP kasir.
+            - **Tabel Khusus & Sinkronisasi Realtime Supabase:** Penyediaan tabel database terisolasi `store_popup_lists` dengan sinkronisasi instan multi-perangkat via Supabase Realtime saat ada perubahan pilihan dan fee aplikasi di form transaksi.
+            - **Desain Grid & Tombol Kategori Minimalis:** Pengecilan lingkaran grid ikon kategori layanan agar lebih rapi, proporsional, dan minimalis.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
