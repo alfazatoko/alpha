@@ -102,13 +102,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.5
-          name: "ALFAZA ALPHA POS v1.5.5"
+          tag_name: v1.5.6
+          name: "ALFAZA ALPHA POS v1.5.6"
           body: |
-            ### Pembaruan Aplikasi v1.5.5
-            - **Perbaikan Crash Realtime Multi-Perangkat:** Mengatasi error "cannot add postgres_changes callbacks after subscribe()" pada tablet/layar transaksi dengan membuat channel realtime unik dan aman (try/catch).
-            - **Pilihan Tujuan Transaksi & Nominal Fee Built-in:** Seluruh pilihan tujuan transaksi (DANA, Gopay, Ovo, ShopeePay, LinkAja, Maxim, Token Listrik) beserta nominal fee aplikasi langsung tampil secara built-in dan tersinkronisasi via database online `store_popup_lists`.
-            - **Desain Grid & Tombol Kategori Minimalis:** Desain kategori lebih kompak, rapi, dan minimalis.
+            ### Pembaruan Aplikasi v1.5.6
+            - **Format Rapi Pemisah ' - ' Antara Tujuan Transaksi & Preset Otomatis:** Menstandarkan format nama layanan/produk pada rincian transaksi, struk thermal, dan riwayat transaksi menjadi `[TUJUAN] - [PRESET]` (contoh: `MAXIM - MAXIM ISI 40`) tanpa penumpukan kata berulang.
+            - **Harmonisasi Fee Aplikasi & Preset Otomatis:** Saat kasir memilih preset otomatis, fee aplikasi otomatis ditiadakan (nol) dan modal-jual terkunci akurat 100% mengikuti preset modal & jual yang telah ditentukan.
+            - **Manajemen Pilihan Tujuan & Fee Toko:** Perbaikan pengaturan fee aplikasi di popup tujuan transaksi, tombol hapus dengan konfirmasi, dan penyimpanan permanen multi-perangkat via Supabase & LocalStorage.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

@@ -68,7 +68,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   // Bersihkan tag teknis internal dari keterangan tampilan
   let rawCleanKet = (t.keterangan || '')
     .replace(/\[\s*(non[_\s]tunai|admin[_\s]dalam|khusus)\s*\]/gi, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+/g, ' ')
     .trim();
 
   // Ekstrak Fee Aplikasi jika ada
@@ -220,6 +220,35 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     let cleanSub = rawSub.trim();
     cleanSub = cleanSub.replace(/^Bank\s+UOB\s+/i, '').trim();
 
+    // Khusus Order Kuota: gabungkan [TUJUAN] - [PRESET] (Pilihan 1)
+    // Nama sub transaksi (tujuan) tetap ditulis, tanda pemisah ' - ', nama preset tetap ditulis
+    // Contoh: MAXIM - MAXIM ISI 15 atau MAXIM - MAXIM ISI 40
+    if (isOrderKuota) {
+      if (manualNotes) {
+        const noteLines = manualNotes.split('\n').map(l => l.trim()).filter(Boolean);
+        let firstNote = noteLines[0] || '';
+        const extraNotes = noteLines.slice(1).join(' ').trim();
+
+        // Jika firstNote sudah memiliki awalan '[TUJUAN] - ', bersihkan agar tidak dobel
+        if (cleanSub && firstNote.toUpperCase().startsWith(`${cleanSub.toUpperCase()} - `)) {
+          firstNote = firstNote.substring(`${cleanSub} - `.length).trim();
+        }
+
+        if (cleanSub && firstNote) {
+          cleanSub = `${cleanSub} - ${firstNote}`;
+        } else if (firstNote) {
+          cleanSub = firstNote;
+        }
+        manualNotes = extraNotes;
+      } else if (cleanSub && !cleanSub.includes(' - ')) {
+        // Jika data berada dalam 1 baris (misal 'MAXIM MAXIM ISI 15' dari data yang sudah tersimpan)
+        const matchDouble = cleanSub.match(/^([A-Za-z0-9_]+)\s+\1(\s+.*)$/i);
+        if (matchDouble) {
+          cleanSub = `${matchDouble[1]} - ${matchDouble[1]}${matchDouble[2]}`;
+        }
+      }
+    }
+
     // Jika cleanSub hanya angka yang sama dengan nominal transaksi, jangan jadikan sub-kategori
     if (cleanSub && cleanDigits(cleanSub) === cleanDigits(t.nominal.toString())) {
       cleanSub = '';
@@ -330,8 +359,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal)) + '\n';
     } else {
-      text += formatReceiptRow('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
-      text += formatReceiptRow('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += formatReceiptRow(t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptRow(t.kategori === 'Order Kuota' ? 'Laba / Admin' : 'Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))) + '\n';
     }
@@ -535,12 +564,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 ) : (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">Nominal:</span>
+                      <span className="text-slate-500 font-bold">{t.kategori === 'Order Kuota' ? 'Harga Modal:' : 'Nominal:'}</span>
                       <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.adminFee)}</span>
+                      <span className="text-slate-500 font-bold">{t.kategori === 'Order Kuota' ? 'Laba / Admin:' : adminFeeLabel}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(t.adminFee)}</span>
                     </div>
                   </>
                 )}
@@ -737,11 +766,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   ) : (
                     <>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">Nominal</span>
+                        <span className="text-slate-600">{t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</span>
                         <span>Rp {formatRp(t.nominal)}</span>
                       </div>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">Biaya Admin</span>
+                        <span className="text-slate-600">{t.kategori === 'Order Kuota' ? 'Laba / Admin' : 'Biaya Admin'}</span>
                         <span>Rp {formatRp(t.adminFee)}</span>
                       </div>
                       <div className="border-b border-dashed border-slate-300 my-1"></div>

@@ -1971,40 +1971,51 @@ const MainApp: React.FC<MainAppProps> = ({
   }
 
   const savePopupLists = async (newLists: Record<string, any[]>, storeIdOverride?: string) => {
-    const targetId = storeIdOverride || (targetStoreId !== 'all' ? targetStoreId : activeStoreId)
+    let targetId = storeIdOverride || (targetStoreId !== 'all' ? targetStoreId : activeStoreId)
+    if (!targetId || targetId === 'all') {
+      const stored = localStorage.getItem('alphaPro_active_store_id') || localStorage.getItem('alphaPro_pantau_store_id');
+      if (stored && stored !== 'all') targetId = stored;
+    }
+
+    localStorage.setItem('alphaPro_popup_lists', JSON.stringify(newLists))
+    if (targetId && targetId !== 'all') {
+      localStorage.setItem(`alphaPro_${targetId}_popup_lists`, JSON.stringify(newLists))
+    }
+
+    const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
+    const combinedPresets = [
+      ...basePresets, 
+      { id: '_ADMIN_RULES_', data: adminRules }, 
+      { id: '_POPUP_LISTS_', data: newLists }
+    ]
+    const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+    if (transferPreset) combinedPresets.push(transferPreset)
+    const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+    if (labelPreset) combinedPresets.push(labelPreset)
+
+    setPresets(combinedPresets)
+
     if (targetId && targetId !== 'all') {
       const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-      const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
-      const combinedPresets = [
-        ...basePresets, 
-        { id: '_ADMIN_RULES_', data: adminRules }, 
-        { id: '_POPUP_LISTS_', data: newLists }
-      ]
-      const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
-      if (transferPreset) combinedPresets.push(transferPreset)
-      const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
-      if (labelPreset) combinedPresets.push(labelPreset)
-
-      setPresets(combinedPresets)
       if (googleUid) {
         localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
       }
-      localStorage.setItem(`alphaPro_${targetId}_popup_lists`, JSON.stringify(newLists))
-      localStorage.setItem('alphaPro_popup_lists', JSON.stringify(newLists))
 
       window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
         detail: { lists: newLists, storeId: targetId }
       }))
       
-      await supabase.from('store_settings').upsert({
-        store_id: targetId,
-        cashiers: kasirList,
-        presets: combinedPresets,
-        running_texts: runningTexts,
-        main_announcement: mainAnnouncement,
-        is_pin_enabled: isPin,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'store_id' })
+      try {
+        await supabase.from('store_settings').upsert({
+          store_id: targetId,
+          cashiers: kasirList,
+          presets: combinedPresets,
+          running_texts: runningTexts,
+          main_announcement: mainAnnouncement,
+          is_pin_enabled: isPin,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch(e) {}
 
       try {
         await supabase.from('store_popup_lists').upsert({
@@ -2021,6 +2032,10 @@ const MainApp: React.FC<MainAppProps> = ({
           updated_at: new Date().toISOString()
         }, { onConflict: 'store_id' })
       } catch(e) {}
+    } else {
+      window.dispatchEvent(new CustomEvent('alphaPopupListsChanged', {
+        detail: { lists: newLists }
+      }))
     }
   }
 
