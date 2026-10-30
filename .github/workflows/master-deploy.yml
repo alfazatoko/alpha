@@ -102,16 +102,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.7
-          name: "ALFAZA ALPHA POS v1.5.7"
+          tag_name: v1.5.8
+          name: "ALFAZA ALPHA POS v1.5.8"
           body: |
-            ### Pembaruan Aplikasi v1.5.7
-            - **Dukungan Sub-Tujuan Kategori E-Wallet / DANA:** Menambahkan sub-tujuan khusus untuk DANA/E-Wallet dengan pengelolaan daftar pilihan mandiri, fee aplikasi, dan sinkronisasi realtime per-toko via Supabase & LocalStorage.
-            - **Navigasi Cerdas Kategori & Sub-Pilihan (Smart Fallback):**
-              - Kategori dengan sub-pilihan (isi > 0): 1x klik langsung membuka popup pilihan sub-tujuan.
-              - Kategori tanpa sub-pilihan (kosong): 1x klik otomatis langsung fokus ke kolom keterangan untuk transaksi super cepat.
-              - Akses Kelola Sub-Pilihan Kosong: Klik 2x (atau klik ulang saat kategori aktif) akan memunculkan popup berisi tombol `+ Tambah Pilihan Baru`.
-            - **Harmonisasi Teks Kategori Riwayat & Struk (FLIP & Transfer Bank):** Pemisahan rapi tampilan transaksi FLIP pada rincian transaksi, struk cetak kasir, dan daftar riwayat.
+            ### Pembaruan Aplikasi v1.5.8
+            - **Popup Keterangan Otomatis untuk Tujuan "LAINNYA":** Setiap kali kasir memilih bank/tujuan LAINNYA, aksesoris LAINNYA, atau TAGIHAN LAIN (PPOB), muncul popup keterangan interaktif.
+            - **Auto-Focus Input:** Kursor langsung aktif berkedip pada kolom teks keterangan tanpa perlu klik mouse.
+            - **Pilihan Cepat (Quick Chips):** Akses instan 1x klik untuk bank populer (Jago, Neo, Permata, CIMB, Danamon, BJB, Muamalat), aksesoris (Tripod, Ring HP, Baterai, Lem LCD, Mic, dll), dan tagihan PPOB (BPJS, Indihome, FIF, Adira, Game, dll).
+            - **Loncat Otomatis ke Nominal:** Menekan `[ENTER]` atau klik Quick Chip langsung mengisi keterangan transaksi dan melompatkan kursor ke kolom Nominal untuk input super cepat.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

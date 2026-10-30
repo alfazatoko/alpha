@@ -294,6 +294,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [selectedTujuanFee, setSelectedTujuanFee] = useState(0)
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
   const [activeSubCategory, setActiveSubCategory] = useState<string>('')
+  const [customInputModal, setCustomInputModal] = useState<{
+    isOpen: boolean;
+    category: 'BANK' | 'AKSESORIS' | 'PPOB' | 'FLIP' | 'DANA';
+    title: string;
+    subtitle: string;
+    placeholder: string;
+    chips: string[];
+    fee?: number;
+    item?: any;
+  } | null>(null)
+  const [customInputValue, setCustomInputValue] = useState('')
+  const [customInputError, setCustomInputError] = useState(false)
+  const customInputRef = useRef<HTMLInputElement>(null)
   const [nominalCashSplit, setNominalCashSplit] = useState('')
   const [nominalNonTunaiSplit, setNominalNonTunaiSplit] = useState('')
   const [isSumberModalOpen, setIsSumberModalOpen] = useState(false)
@@ -614,6 +627,132 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+  const isLainnyaItem = (name: string, id?: string) => {
+    const n = (name || '').toUpperCase().trim();
+    const i = (id || '').toUpperCase().trim();
+    return (
+      n === 'LAINNYA' ||
+      n === 'LAIN NYA' ||
+      n === 'TAGIHAN LAIN' ||
+      n === 'BANK LAINNYA' ||
+      n.includes('LAINNYA') ||
+      n.includes('TAGIHAN LAIN') ||
+      i.includes('LAINNYA') ||
+      i.includes('TAGIHAN LAIN')
+    );
+  };
+
+  const openCustomInputModal = (mode: 'BANK' | 'ORDER_KUOTA' | 'FLIP' | 'DANA' | 'AKSESORIS', item?: any) => {
+    let cat: 'BANK' | 'AKSESORIS' | 'PPOB' | 'FLIP' | 'DANA' = 'BANK';
+    let title = 'TULIS KETERANGAN TUJUAN';
+    let subtitle = 'Tulis nama tujuan transaksi atau pilih tombol cepat';
+    let placeholder = 'Tulis keterangan disini...';
+    let chips: string[] = [];
+
+    if (mode === 'BANK') {
+      cat = 'BANK';
+      title = 'PILIH / TULIS BANK TUJUAN';
+      subtitle = 'Tulis nama Bank lain atau pilih quick chip di bawah';
+      placeholder = 'Tulis keterangan disini... (Contoh: Jago, Neo, Permata)';
+      chips = ['JAGO', 'NEO COMMERCE', 'PERMATA', 'CIMB NIAGA', 'DANAMON', 'BANK BJB', 'MUAMALAT', 'PANIN'];
+    } else if (mode === 'AKSESORIS') {
+      cat = 'AKSESORIS';
+      title = 'TULIS AKSESORIS LAINNYA';
+      subtitle = 'Tulis nama barang aksesoris atau pilih quick chip di bawah';
+      placeholder = 'Tulis keterangan disini... (Contoh: Tripod, Ring HP, Lem LCD)';
+      chips = ['TRIPOD', 'RING HP', 'BATERAI', 'LEM LCD', 'MIC WIRELESS', 'CONNECTOR', 'KARTU MEMORI', 'OTG'];
+    } else if (mode === 'ORDER_KUOTA') {
+      cat = 'PPOB';
+      title = 'PILIH / TULIS TAGIHAN PPOB';
+      subtitle = 'Tulis jenis layanan / tagihan atau pilih quick chip di bawah';
+      placeholder = 'Tulis keterangan disini... (Contoh: BPJS, Indihome, FIF)';
+      chips = ['BPJS', 'INDIHOME', 'FIF', 'ADIRA', 'TOPUP ML', 'FREE FIRE', 'BAF', 'ICONNET', 'MEGA FINANCE'];
+    } else if (mode === 'FLIP') {
+      cat = 'FLIP';
+      title = 'PILIH / TULIS TUJUAN FLIP';
+      subtitle = 'Tulis nama Bank / E-Wallet tujuan transfer via Flip';
+      placeholder = 'Tulis keterangan disini... (Contoh: Jago, SeaBank, OVO)';
+      chips = ['JAGO', 'SEABANK', 'NEO', 'PERMATA', 'CIMB', 'DANAMON', 'OVO', 'SHOPEEPAY'];
+    } else if (mode === 'DANA') {
+      cat = 'DANA';
+      title = 'PILIH / TULIS SUB-TUJUAN DANA';
+      subtitle = 'Tulis nama tujuan transfer via Dana';
+      placeholder = 'Tulis keterangan disini... (Contoh: Rekening Bank, Saldo)';
+      chips = ['REKENING BANK', 'SALDO DANA', 'TARIK TUNAI', 'JAGO', 'SEABANK'];
+    }
+
+    setCustomInputValue('');
+    setCustomInputError(false);
+    setCustomInputModal({
+      isOpen: true,
+      category: cat,
+      title,
+      subtitle,
+      placeholder,
+      chips,
+      fee: item?.fee !== undefined && item?.fee !== null ? Number(item.fee) : 0,
+      item
+    });
+
+    setTimeout(() => {
+      customInputRef.current?.focus();
+    }, 120);
+  };
+
+  const handleCustomInputSubmit = (val: string) => {
+    const cleanVal = (val || '').trim().toUpperCase();
+    if (!cleanVal) {
+      setCustomInputError(true);
+      if (customInputRef.current) {
+        customInputRef.current.focus();
+      }
+      return;
+    }
+
+    if (!customInputModal) return;
+    const { category, item } = customInputModal;
+
+    setIsKetAuto(true);
+
+    if (category === 'AKSESORIS') {
+      setKeterangan(cleanVal);
+      setCustomInputModal(null);
+      setClassicPopupMode(null);
+      setTimeout(() => {
+        nominalRef.current?.focus();
+        nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+      return;
+    }
+
+    if (category === 'BANK') {
+      setSelectedBank('LAINNYA');
+      setKeterangan(cleanVal);
+      setCustomInputModal(null);
+      setClassicPopupMode(null);
+      setTimeout(() => {
+        nominalRef.current?.focus();
+        nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+      return;
+    }
+
+    // PPOB, ORDER_KUOTA, FLIP, DANA
+    setSelectedTujuan(item?.name || 'TAGIHAN LAIN');
+    if (item?.fee !== undefined && item?.fee !== null) {
+      setSelectedTujuanFee(Number(item.fee));
+    } else {
+      setSelectedTujuanFee(0);
+    }
+    setKeterangan(cleanVal);
+    setCustomInputModal(null);
+    setClassicPopupMode(null);
+    setTimeout(() => {
+      nominalRef.current?.focus();
+      nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  };
+
   // Sync initialMode when it changes externally
   React.useEffect(() => {
     if (initialMode) {
@@ -724,7 +863,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         if (e.key === 's' || e.key === 'S') { e.preventDefault(); setIsTujuanModalOpen(true); return; }
         if (['1','2','3','4','5'].includes(e.key)) {
           const idx = parseInt(e.key) - 1;
-          if (activeMode === 'DIGITAL' && sumberAplikasi === 'BANK') { setSelectedBank(BANK_LIST[idx] || 'BRI'); setIsAdminManuallyEdited(false); }
+          if (activeMode === 'DIGITAL' && sumberAplikasi === 'BANK') { 
+            const bName = BANK_LIST[idx] || 'BRI';
+            if (bName === 'LAINNYA') {
+              openCustomInputModal('BANK', { id: 'BANK LAINNYA', name: 'LAINNYA' });
+            } else {
+              setSelectedBank(bName); 
+              setIsAdminManuallyEdited(false); 
+            }
+          }
           else if (activeMode === 'TARIK') setSelectedSumber(SUMBER_LIST[idx] || 'QRIS');
           return;
         }
@@ -3242,6 +3389,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                handleUpdatePopupList(classicPopupMode, newList);
                                return;
                             }
+                            // Cek apakah item adalah pilihan "LAINNYA" atau "TAGIHAN LAIN"
+                            if (isLainnyaItem(item.name, item.id)) {
+                              openCustomInputModal(classicPopupMode, item);
+                              return;
+                            }
+
                             setIsKetAuto(true);
                             if (classicPopupMode === 'AKSESORIS') {
                                setKeterangan(item.name);
@@ -3326,6 +3479,121 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 )
               })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP KETERANGAN KHUSUS "LAINNYA" (AUTO FOCUS + QUICK CHIPS + ENTER JUMP TO NOMINAL) */}
+      {customInputModal && (
+        <div 
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setCustomInputModal(null)}
+        >
+          <div 
+            className="bg-white rounded-[24px] p-5 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="text-[13px] font-black text-[#0c1f44] uppercase tracking-wider flex items-center gap-2">
+                  <div className="w-2 h-4 bg-[#0066ff] rounded-full"></div>
+                  {customInputModal.title}
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
+                  {customInputModal.subtitle}
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setCustomInputModal(null)} 
+                className="w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                title="Batal / Tutup"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Input Form */}
+            <div className="mb-3.5">
+              <div className={cn(
+                "relative flex items-center bg-slate-50 border-2 rounded-2xl px-3 py-2.5 transition-all shadow-inner",
+                customInputError 
+                  ? "border-rose-500 ring-2 ring-rose-200 bg-rose-50/30" 
+                  : "border-blue-500 focus-within:ring-4 focus-within:ring-blue-100"
+              )}>
+                <i className="fa-solid fa-pen-to-square text-[#0066ff] text-sm mr-2 shrink-0"></i>
+                <input
+                  ref={customInputRef}
+                  type="text"
+                  value={customInputValue}
+                  onChange={(e) => {
+                    setCustomInputValue(e.target.value);
+                    if (customInputError) setCustomInputError(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCustomInputSubmit(customInputValue);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setCustomInputModal(null);
+                    }
+                  }}
+                  placeholder={customInputModal.placeholder}
+                  className="text-[13px] font-black text-slate-800 bg-transparent outline-none w-full placeholder:text-slate-400 uppercase tracking-wide"
+                />
+                {customInputValue && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomInputValue('');
+                      customInputRef.current?.focus();
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <i className="fa-solid fa-circle-xmark text-xs"></i>
+                  </button>
+                )}
+              </div>
+              {customInputError && (
+                <p className="text-[10px] font-bold text-rose-500 mt-1 flex items-center gap-1 animate-in fade-in">
+                  <i className="fa-solid fa-triangle-exclamation"></i> Harap tulis keterangan atau klik pilihan cepat di bawah!
+                </p>
+              )}
+            </div>
+
+            {/* Quick Chips Section */}
+            {customInputModal.chips.length > 0 && (
+              <div className="mb-4">
+                <div className="text-[9.5px] font-black uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-1.5">
+                  <i className="fa-solid fa-bolt text-amber-500"></i>
+                  <span>Pilihan Cepat (Klik 1x Langsung Selesai):</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                  {customInputModal.chips.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleCustomInputSubmit(chip)}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-[#0066ff] hover:text-white text-slate-700 font-extrabold text-[10px] uppercase tracking-wide transition-all active:scale-95 cursor-pointer border border-slate-200/80 hover:border-[#0066ff] shadow-xs hover:shadow-md hover:shadow-blue-500/20"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="button"
+              onClick={() => handleCustomInputSubmit(customInputValue)}
+              className="w-full py-2.5 bg-[#0066ff] hover:bg-blue-700 active:scale-98 text-white font-black text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <span>Lanjut ke Nominal</span>
+              <kbd className="bg-white/20 px-1.5 py-0.5 rounded text-[9px] font-mono">ENTER ↵</kbd>
+            </button>
           </div>
         </div>
       )}
