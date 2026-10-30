@@ -164,12 +164,15 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
     // Deteksi awal Jenis Transaksi berdasarkan t.kategori & teks
     const isOrderKuota = /order\s*kuota/i.test(t.kategori) || /order\s*kuota/i.test(line1);
-    const isTransferBank = /transfer|bank/i.test(t.kategori) || /flip/i.test(t.kategori) || /transfer|bank\s*uob|flip/i.test(line1);
+    const isFlip = /flip/i.test(t.kategori) || /^\s*flip\b/i.test(line1);
+    const isTransferBank = !isFlip && (/transfer|bank/i.test(t.kategori) || /transfer|bank\s*uob/i.test(line1));
     const isAksesoris = /aksesoris/i.test(t.kategori) || /aksesoris/i.test(line1);
     const isVoucher = /voucher/i.test(t.kategori) || /voucher/i.test(line1);
 
     if (isOrderKuota) {
       displayJenisTransaksi = 'Order Kuota';
+    } else if (isFlip) {
+      displayJenisTransaksi = 'FLIP';
     } else if (isTransferBank) {
       displayJenisTransaksi = 'Transfer Bank';
     } else if (isAksesoris) {
@@ -189,7 +192,9 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
       if (/order\s*kuota/i.test(left)) {
         displayJenisTransaksi = 'Order Kuota';
-      } else if (/transfer|bank\s*uob|flip/i.test(left)) {
+      } else if (/flip/i.test(left) || /flip/i.test(t.kategori)) {
+        displayJenisTransaksi = 'FLIP';
+      } else if (/transfer|bank\s*uob/i.test(left)) {
         displayJenisTransaksi = 'Transfer Bank';
       } else if (/aksesoris/i.test(left)) {
         displayJenisTransaksi = 'Aksesoris';
@@ -199,7 +204,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
       rawSub = right;
     } else {
-      const catNames = [t.kategori, 'Order Kuota', 'Transfer Bank', 'Transfer', 'Flip', 'Bank UOB', 'Aksesoris', 'Voucher']
+      const catNames = [t.kategori, 'Order Kuota', 'Transfer Bank', 'Transfer', 'FLIP', 'Flip', 'Bank UOB', 'Aksesoris', 'Voucher']
         .filter(Boolean)
         .join('|');
       const catPrefixMatch = line1.match(new RegExp(`^(${catNames})\\s+`, 'i'));
@@ -254,8 +259,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       cleanSub = '';
     }
 
-    // Rapikan penamaan Bank (misal BRI -> Bank BRI) jika transaksi Transfer Bank
-    if (displayJenisTransaksi === 'Transfer Bank' && cleanSub) {
+    // Rapikan penamaan Bank (misal BRI -> Bank BRI) jika transaksi Transfer Bank atau FLIP
+    if ((displayJenisTransaksi === 'Transfer Bank' || displayJenisTransaksi === 'FLIP') && cleanSub) {
       if (/^(BRI|BCA|BNI|MANDIRI|BSI|BTN|CIMB|PERMATA|JAGO|SEABANK|NEO)$/i.test(cleanSub)) {
         cleanSub = 'Bank ' + cleanSub.toUpperCase();
       }
@@ -276,6 +281,9 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     : displayJenisTransaksi;
   let modalKeterangan = displayCatatanTambahan || '-';
   let listKeterangan = displaySubKategori || displayCatatanTambahan || (appFee > 0 ? `Fee App: Rp ${formatRp(appFee)}` : '-');
+
+  // Khusus detail transaksi dan struk: transaksi FLIP tetap berlabel Transfer Bank, sedangkan di list riwayat tetap FLIP
+  const displayDetailTransaksi = (displayJenisTransaksi === 'FLIP') ? 'Transfer Bank' : displayJenisTransaksi;
 
   const effectiveStoreName = storeName || (() => {
     try {
@@ -332,7 +340,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Kasir : ${effectiveKasirName}\n`;
     text += formatReceiptDivider() + '\n';
-    text += `Transaksi : ${displayJenisTransaksi.toUpperCase().substring(0, 20)}\n`;
+    text += `Transaksi : ${displayDetailTransaksi.toUpperCase().substring(0, 20)}\n`;
     if (displaySubKategori) {
       text += `${receiptSubLabel} ${displaySubKategori.toUpperCase().substring(0, 20)}\n`;
     }
@@ -489,7 +497,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
                 <div className="flex justify-between items-center text-[12px]">
                   <span className="text-slate-500 font-bold">Transaksi:</span>
-                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{displayJenisTransaksi}</span>
+                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{displayDetailTransaksi}</span>
                 </div>
                 {displaySubKategori && (
                   <div className="flex justify-between items-center text-[12px]">
@@ -691,7 +699,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 <div className="flex flex-col gap-0.5">
                   <div className="flex justify-between items-start text-[10px]">
                     <span className="text-slate-500 font-sans font-bold">Transaksi:</span>
-                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displayJenisTransaksi}</span>
+                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displayDetailTransaksi}</span>
                   </div>
                   {displaySubKategori && (
                     <div className="flex justify-between items-start text-[10px]">

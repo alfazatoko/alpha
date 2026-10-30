@@ -289,7 +289,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [selectedBank, setSelectedBank] = useState('BRI')
   const [selectedSumber, setSelectedSumber] = useState('QRIS')
   const [sumberAplikasi, setSumberAplikasi] = useState('')
-  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|'AKSESORIS'|null>(null)
+  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|'DANA'|'AKSESORIS'|null>(null)
   const [selectedTujuan, setSelectedTujuan] = useState('')
   const [selectedTujuanFee, setSelectedTujuanFee] = useState(0)
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
@@ -370,13 +370,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     BANK: ITEMS['TRANSFER_BANK'],
     ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
     FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
+    DANA: [],
     AKSESORIS: ITEMS['AKSESORIS']
   }), []);
 
   const mergePopupListWithDefaults = React.useCallback((sourceLists: Record<string, any[]>) => {
     if (!sourceLists || typeof sourceLists !== 'object') return DEFAULT_POPUP_LISTS;
     const res: Record<string, any[]> = { ...DEFAULT_POPUP_LISTS };
-    for (const key of ['BANK', 'ORDER_KUOTA', 'FLIP', 'AKSESORIS']) {
+    for (const key of ['BANK', 'ORDER_KUOTA', 'FLIP', 'DANA', 'AKSESORIS']) {
       const src = sourceLists[key];
       const def = DEFAULT_POPUP_LISTS[key] || [];
       if (Array.isArray(src)) {
@@ -543,6 +544,76 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+  const getPopupMode = (categoryKey: string): 'BANK' | 'ORDER_KUOTA' | 'FLIP' | 'DANA' | null => {
+    if (categoryKey === 'BANK') return 'BANK';
+    if (categoryKey === 'ORDER KUOTA' || categoryKey === 'ORDER_KUOTA') return 'ORDER_KUOTA';
+    if (categoryKey === 'FLIP') return 'FLIP';
+    if (categoryKey === 'DANA') return 'DANA';
+    return null;
+  };
+
+  const handleTransferCategoryClick = (categoryKey: string, isExplicitDoubleClick: boolean = false) => {
+    const mode = getPopupMode(categoryKey);
+    const isAlreadyActive = (sumberAplikasi === categoryKey);
+
+    if (categoryKey !== sumberAplikasi) {
+      setSelectedTujuan('');
+      setSelectedTujuanFee(0);
+    }
+
+    setSumberAplikasi(categoryKey);
+    setIsKetAuto(true);
+    setIsAdminManuallyEdited(false);
+    setActiveSubCategory('');
+
+    if (!mode) return;
+
+    const subList = popupLists[mode] || [];
+    const hasSubList = subList.length > 0;
+
+    if (hasSubList) {
+      // 1. Jika ADA sub pilihan:
+      // Cukup 1x klik -> LANGSUNG muncul popup sub-tujuannya!
+      setClassicPopupMode(mode);
+    } else {
+      // 2. Jika TIDAK ADA sub pilihan (kosong):
+      if (isAlreadyActive || isExplicitDoubleClick) {
+        // Klik 2x (atau klik sekali lagi saat tombol sudah aktif) -> Buka popup sub-tujuan!
+        setClassicPopupMode(mode);
+      } else {
+        // Klik 1x biasa saat tombol belum aktif:
+        // Langsung otomatis masuk & fokus ke kolom keterangan
+        setClassicPopupMode(null);
+        setKeterangan('');
+        setTimeout(() => {
+          keteranganRef.current?.focus();
+          keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      }
+    }
+  };
+
+  const handleAddNewPopupItem = () => {
+    if (!classicPopupMode) return;
+    const name = window.prompt(classicPopupMode === 'AKSESORIS' ? "Masukkan nama aksesoris baru:" : "Masukkan nama pilihan tujuan transaksi baru:");
+    if (name && name.trim()) {
+      const trimmedName = name.trim().toUpperCase();
+      let fee = 0;
+      if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'BANK' || classicPopupMode === 'DANA') {
+        const feeStr = window.prompt(`Atur Fee Aplikasi untuk "${trimmedName}":\n(Isi nominal angka fee, atau isi 0 jika tidak ada fee)`, "0");
+        if (feeStr !== null) {
+          const cleanDigits = feeStr.trim().replace(/[^0-9]/g, '');
+          fee = cleanDigits === '' ? 0 : parseInt(cleanDigits, 10);
+        }
+      }
+      const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : (classicPopupMode === 'BANK' ? 'fa-building-columns' : 'fa-wallet');
+      const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : 'text-blue-500';
+      const newItem = { id: trimmedName, name: trimmedName, icon, color, fee };
+      const currentList = popupLists[classicPopupMode] || [];
+      handleUpdatePopupList(classicPopupMode, [...currentList, newItem]);
+    }
+  };
+
   // Sync initialMode when it changes externally
   React.useEffect(() => {
     if (initialMode) {
@@ -702,7 +773,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       } else if (sumberAplikasi === 'ORDER KUOTA') {
         autoText = selectedTujuan ? `${orderKuotaLabel} > ${selectedTujuan}` : orderKuotaLabel;
       } else if (sumberAplikasi === 'DANA') {
-        autoText = `${danaLabel} > Aplikasi Dana`;
+        autoText = selectedTujuan ? `${danaLabel} > ${selectedTujuan}` : (customLabels['DANA'] ? danaLabel : `${danaLabel} > Aplikasi Dana`);
       } else {
         autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
       }
@@ -1054,10 +1125,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     // Validasi Wajib Keterangan jika subteks tidak dipilih pada mode DIGITAL
     if (activeMode === 'DIGITAL') {
-      const hasSubteks = (sumberAplikasi === 'BANK' && Boolean(selectedBank && selectedBank.trim())) ||
-                         (sumberAplikasi === 'ORDER KUOTA' && Boolean(selectedTujuan && selectedTujuan.trim())) ||
-                         (sumberAplikasi === 'FLIP' && Boolean(selectedTujuan && selectedTujuan.trim())) ||
-                         (sumberAplikasi === 'DANA');
+      const mode = getPopupMode(sumberAplikasi);
+      const subList = mode ? (popupLists[mode] || []) : [];
+      const hasSubList = subList.length > 0;
+
+      const hasSubteks = (sumberAplikasi === 'BANK' && (!hasSubList || Boolean(selectedBank && selectedBank.trim()))) ||
+                         (sumberAplikasi === 'ORDER KUOTA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
+                         (sumberAplikasi === 'FLIP' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
+                         (sumberAplikasi === 'DANA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim())));
 
       if (!hasSubteks && !keterangan.trim()) {
         setErrorMsg('Pilih sub-kategori/tujuan atau isi keterangan transaksi!');
@@ -1071,7 +1146,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
       : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
 
-    if (((kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') || kategori === 'FLIP') && selectedTujuanFee > 0) {
+    if (((kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') || kategori === 'FLIP' || sumberAplikasi === 'DANA') && selectedTujuanFee > 0) {
       finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
     }
 
@@ -1377,24 +1452,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   return (
                     <button
                       key={src.id}
-                      onClick={() => {
-                         setSumberAplikasi(src.id);
-                         setActiveSubCategory('');
-                         if (activeTheme === 'TEMA_1' || activeTheme === 'TEMA_2') {
-                            if (src.id === 'BANK') setClassicPopupMode('BANK');
-                            else if (src.id === 'DANA') {
-                               setIsKetAuto(true);
-                               setKeterangan('');
-                               setClassicPopupMode(null);
-                               setTimeout(() => {
-                                 keteranganRef.current?.focus();
-                                 keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                               }, 150);
-                            }
-                            else if (src.id === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
-                            else if (src.id === 'FLIP') setClassicPopupMode('FLIP');
-                         }
-                      }}
+                      onClick={() => handleTransferCategoryClick(src.id, false)}
+                      onDoubleClick={() => handleTransferCategoryClick(src.id, true)}
                       className={cn(
                         "relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border-2 transition-all duration-300",
                         isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
@@ -1938,23 +1997,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 return (
                   <button
                     key={src.id}
-                    onClick={() => { 
-                      setSumberAplikasi(src.id); 
-                      setIsKetAuto(true); 
-                      setIsAdminManuallyEdited(false); 
-                      if (src.id === 'BANK') setClassicPopupMode('BANK');
-                      else if (src.id === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
-                      else if (src.id === 'FLIP') setClassicPopupMode('FLIP');
-                      else if (src.id === 'DANA') {
-                         setKeterangan('');
-                         setClassicPopupMode(null);
-                         setTimeout(() => keteranganRef.current?.focus(), 100);
-                      }
-                      // Auto-scroll ke area keterangan agar terbaca
-                      setTimeout(() => {
-                        keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 150);
-                    }}
+                    onClick={() => handleTransferCategoryClick(src.id, false)}
+                    onDoubleClick={() => handleTransferCategoryClick(src.id, true)}
                     className={cn(
                       "relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl border-2 transition-all duration-300 bg-white overflow-hidden",
                       isSel ? "border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.4)] scale-[1.03]" : "border-gray-100 shadow-sm hover:border-emerald-200 hover:bg-emerald-50/50"
@@ -2095,10 +2139,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (sumberAplikasi === 'BANK') setClassicPopupMode('BANK');
-                    else if (sumberAplikasi === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
-                    else if (sumberAplikasi === 'FLIP') setClassicPopupMode('FLIP');
-                    else setClassicPopupMode('BANK');
+                    const mode = getPopupMode(sumberAplikasi) || 'BANK';
+                    setClassicPopupMode(mode);
                   }}
                   className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md text-[8px] font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 shadow-sm border border-blue-100"
                 >
@@ -2868,23 +2910,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <button 
                   key={s}
                   onClick={() => {
-                    setSumberAplikasi(s);
-                    setIsKetAuto(true);
-                    setIsAdminManuallyEdited(false);
                     setIsSumberModalOpen(false);
-                    if (activeTheme === 'TEMA_1' || activeTheme === 'TEMA_2') {
-                       if (s === 'BANK') setClassicPopupMode('BANK');
-                       else if (s === 'DANA') {
-                          setKeterangan('');
-                          setClassicPopupMode(null);
-                          setTimeout(() => {
-                            keteranganRef.current?.focus();
-                            keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }, 150);
-                       }
-                       else if (s === 'ORDER KUOTA') setClassicPopupMode('ORDER_KUOTA');
-                       else if (s === 'FLIP') setClassicPopupMode('FLIP');
-                    }
+                    handleTransferCategoryClick(s, false);
+                  }}
+                  onDoubleClick={() => {
+                    setIsSumberModalOpen(false);
+                    handleTransferCategoryClick(s, true);
                   }}
                   className={cn(
                     "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",
@@ -3041,10 +3072,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           data-autofocus={idx === 0 ? "true" : "false"}
                           onClick={() => {
                             setActiveMode('DIGITAL');
-                            setSumberAplikasi(s);
-                            setIsKetAuto(true);
-                            setIsAdminManuallyEdited(false);
                             setIsTema3SheetOpen(false);
+                            handleTransferCategoryClick(s, false);
+                          }}
+                          onDoubleClick={() => {
+                            setActiveMode('DIGITAL');
+                            setIsTema3SheetOpen(false);
+                            handleTransferCategoryClick(s, true);
                           }}
                           className={cn(
                             "group px-4 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-3.5 shadow-sm active:scale-95 outline-none focus:outline-none",
@@ -3121,6 +3155,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </h3>
                 <p className="text-[10px] font-bold text-slate-500 mt-1">
                   {classicPopupMode === 'BANK' && "Silakan pilih nama Bank tujuan"}
+                  {classicPopupMode === 'DANA' && "Silakan pilih sub-tujuan E-Wallet / Dana"}
                   {classicPopupMode === 'ORDER_KUOTA' && "Pilih PPOB atau E-Wallet"}
                   {classicPopupMode === 'FLIP' && "Pilih tujuan transfer via Flip"}
                   {classicPopupMode === 'AKSESORIS' && "Silakan pilih sub-kategori aksesoris"}
@@ -3149,6 +3184,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar pb-2 pt-1">
               {(() => {
                 const list = popupLists[classicPopupMode] || [];
+
+                if (list.length === 0) {
+                  return (
+                    <div className="col-span-4 flex flex-col items-center justify-center py-6 px-3 text-center bg-slate-50/80 rounded-2xl border border-dashed border-slate-200">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-2">
+                        <i className="fa-solid fa-plus text-base"></i>
+                      </div>
+                      <p className="text-[11px] font-black text-slate-700 uppercase tracking-wide">Belum Ada Sub Pilihan</p>
+                      <p className="text-[9.5px] font-medium text-slate-400 mt-0.5 mb-3">Klik tombol di bawah untuk menambahkan pilihan baru</p>
+                      <button
+                        type="button"
+                        onClick={handleAddNewPopupItem}
+                        className="px-4 py-2 bg-[#0066ff] hover:bg-blue-700 active:scale-95 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <i className="fa-solid fa-plus"></i> Tambah Pilihan Baru
+                      </button>
+                    </div>
+                  );
+                }
 
                 return (
                   <>
@@ -3202,7 +3256,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                setSelectedBank(item.name);
                             } else {
                                setSelectedTujuan(item.name);
-                               if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP') && (item.fee !== undefined && item.fee !== null)) {
+                               if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA') && (item.fee !== undefined && item.fee !== null)) {
                                   setSelectedTujuanFee(Number(item.fee));
                                } else {
                                   setSelectedTujuanFee(0);
@@ -3260,23 +3314,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
-                          const name = window.prompt(classicPopupMode === 'AKSESORIS' ? "Masukkan nama aksesoris baru:" : "Masukkan nama pilihan tujuan transaksi baru:");
-                          if (name && name.trim()) {
-                             const trimmedName = name.trim().toUpperCase();
-                             let fee = 0;
-                             if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'BANK') {
-                               const feeStr = window.prompt(`Atur Fee Aplikasi untuk "${trimmedName}":\n(Isi nominal angka fee, atau isi 0 jika tidak ada fee)`, "0");
-                               if (feeStr !== null) {
-                                 const cleanDigits = feeStr.trim().replace(/[^0-9]/g, '');
-                                 fee = cleanDigits === '' ? 0 : parseInt(cleanDigits, 10);
-                               }
-                             }
-                             const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : (classicPopupMode === 'BANK' ? 'fa-building-columns' : 'fa-wallet');
-                             const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : 'text-blue-500';
-                             const newItem = { id: trimmedName, name: trimmedName, icon, color, fee };
-                             const currentList = popupLists[classicPopupMode] || [];
-                             handleUpdatePopupList(classicPopupMode, [...currentList, newItem]);
-                          }
+                          handleAddNewPopupItem();
                         }}
                         className="flex flex-col items-center justify-center p-2 border border-dashed border-slate-300 rounded-[14px] hover:border-blue-400 hover:bg-blue-50 transition-all text-slate-400 hover:text-blue-500 cursor-pointer active:scale-95"
                       >

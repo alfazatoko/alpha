@@ -102,13 +102,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.6
-          name: "ALFAZA ALPHA POS v1.5.6"
+          tag_name: v1.5.7
+          name: "ALFAZA ALPHA POS v1.5.7"
           body: |
-            ### Pembaruan Aplikasi v1.5.6
-            - **Format Rapi Pemisah ' - ' Antara Tujuan Transaksi & Preset Otomatis:** Menstandarkan format nama layanan/produk pada rincian transaksi, struk thermal, dan riwayat transaksi menjadi `[TUJUAN] - [PRESET]` (contoh: `MAXIM - MAXIM ISI 40`) tanpa penumpukan kata berulang.
-            - **Harmonisasi Fee Aplikasi & Preset Otomatis:** Saat kasir memilih preset otomatis, fee aplikasi otomatis ditiadakan (nol) dan modal-jual terkunci akurat 100% mengikuti preset modal & jual yang telah ditentukan.
-            - **Manajemen Pilihan Tujuan & Fee Toko:** Perbaikan pengaturan fee aplikasi di popup tujuan transaksi, tombol hapus dengan konfirmasi, dan penyimpanan permanen multi-perangkat via Supabase & LocalStorage.
+            ### Pembaruan Aplikasi v1.5.7
+            - **Dukungan Sub-Tujuan Kategori E-Wallet / DANA:** Menambahkan sub-tujuan khusus untuk DANA/E-Wallet dengan pengelolaan daftar pilihan mandiri, fee aplikasi, dan sinkronisasi realtime per-toko via Supabase & LocalStorage.
+            - **Navigasi Cerdas Kategori & Sub-Pilihan (Smart Fallback):**
+              - Kategori dengan sub-pilihan (isi > 0): 1x klik langsung membuka popup pilihan sub-tujuan.
+              - Kategori tanpa sub-pilihan (kosong): 1x klik otomatis langsung fokus ke kolom keterangan untuk transaksi super cepat.
+              - Akses Kelola Sub-Pilihan Kosong: Klik 2x (atau klik ulang saat kategori aktif) akan memunculkan popup berisi tombol `+ Tambah Pilihan Baru`.
+            - **Harmonisasi Teks Kategori Riwayat & Struk (FLIP & Transfer Bank):** Pemisahan rapi tampilan transaksi FLIP pada rincian transaksi, struk cetak kasir, dan daftar riwayat.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
