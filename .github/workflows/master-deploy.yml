@@ -102,15 +102,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.5.9
-          name: "ALFAZA ALPHA POS v1.5.9"
+          tag_name: v1.6.0
+          name: "ALFAZA ALPHA POS v1.6.0"
           body: |
-            ### Pembaruan Aplikasi v1.5.9
-            - **Perbaikan Rincian Transaksi Tarik Tunai (Layanan / Produk & Ket. Tambahan):**
-              - Memastikan sub-pilihan layanan produk Tarik Tunai selalu tampil bersih (QRIS, EDC/ATM, DANA, Bank, GoPay) tanpa terpotong atau tertimpa.
-              - Keterangan tambahan (catatan kasir) otomatis dipisahkan dan selalu tampil di baris bawahnya (`Ket. Tambahan`), bukan menggantikan produk layanan.
-              - Sumber Uang Masuk pada Tarik Tunai otomatis disesuaikan secara tepat (QRIS, EDC / Bank, DANA, dll).
-            - **Popup Keterangan Otomatis untuk Tujuan "LAINNYA":** Setiap kali kasir memilih bank/tujuan LAINNYA, aksesoris LAINNYA, atau TAGIHAN LAIN (PPOB), muncul popup keterangan interaktif dengan auto-focus, quick chips, dan enter loncat ke nominal.
+            ### Pembaruan Aplikasi v1.6.0
+            - **Sinkronisasi Otomatis Teks & Admin Otomatis Per-Toko:**
+              - Tabel database mandiri `store_presets` berbasis `store_id` (aturan preset & admin tetap terpisah per-toko).
+              - Sinkronisasi realtime otomatis: saat Owner/Kasir menambah atau menghapus preset, seluruh HP kasir di cabang toko tersebut langsung menerima pembaruan seketika.
+              - Perlindungan dari tumpang tindih data lama saat HP dibuka ulang / ganti toko.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

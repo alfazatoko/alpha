@@ -198,13 +198,13 @@ const OtomatisView: React.FC<OtomatisViewProps> = (props) => {
         "Tindakan ini akan menimpa preset Anda saat ini dengan default 50+ preset. Lanjutkan?",
         () => {
           props.setPresets(generatedPresets as PresetOtomatis[]);
-          props.showToast('Berhasil import 50+ preset. Klik Simpan Preset untuk Upload ke Cloud!');
+          props.showToast('Berhasil import 50+ preset & otomatis tersinkron ke semua HP!');
         }
       )
     } else {
       if (confirm('Tindakan ini akan menimpa preset Anda saat ini dengan default 50+ preset. Lanjutkan?')) {
         props.setPresets(generatedPresets as PresetOtomatis[]);
-        props.showToast('Berhasil import 50+ preset. Jangan lupa sync ke Cloud!');
+        props.showToast('Berhasil import 50+ preset & otomatis tersinkron ke semua HP!');
       }
     }
   }

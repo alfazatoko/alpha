@@ -984,9 +984,35 @@ const MainApp: React.FC<MainAppProps> = ({
       } catch (e) {}
     }
 
-    // 2. Fetch data banner & presets langsung dari Supabase store_settings
+    // 2. Fetch data banner & presets langsung dari Supabase store_settings & store_presets
     const fetchFreshBanners = async () => {
       try {
+        // 2a. Fetch presets & admin rules langsung dari tabel mandiri store_presets (per-toko)
+        try {
+          const { data: pRow } = await supabase
+            .from('store_presets')
+            .select('presets, admin_rules')
+            .eq('store_id', effectiveStoreId)
+            .maybeSingle()
+
+          if (pRow) {
+            if (Array.isArray(pRow.presets)) {
+              setPresets(pRow.presets)
+              if (googleUid) {
+                localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(pRow.presets))
+              }
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_presets`, JSON.stringify(pRow.presets))
+            }
+            if (pRow.admin_rules && typeof pRow.admin_rules === 'object') {
+              setAdminRules(pRow.admin_rules)
+              if (googleUid) {
+                localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_adminRules`, JSON.stringify(pRow.admin_rules))
+              }
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_adminRules`, JSON.stringify(pRow.admin_rules))
+            }
+          }
+        } catch (e) {}
+
         const { data, error } = await supabase
           .from('store_settings')
           .select('promo_banners, presets')
@@ -1016,10 +1042,19 @@ const MainApp: React.FC<MainAppProps> = ({
               detail: { labels: labelObj.data, storeId: effectiveStoreId }
             }))
           }
+          const adminObj = data.presets.find((p: any) => p && p.id === '_ADMIN_RULES_')
+          if (adminObj && adminObj.data) {
+            setAdminRules(adminObj.data)
+            if (googleUid) {
+              localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_adminRules`, JSON.stringify(adminObj.data))
+            }
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_adminRules`, JSON.stringify(adminObj.data))
+          }
           setPresets(data.presets)
           if (googleUid) {
             localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(data.presets))
           }
+          localStorage.setItem(`alphaPro_${effectiveStoreId}_presets`, JSON.stringify(data.presets))
         }
       } catch (err) {}
     }
@@ -1070,10 +1105,45 @@ const MainApp: React.FC<MainAppProps> = ({
               if (googleUid) {
                 localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_adminRules`, JSON.stringify(adminObj.data))
               }
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_adminRules`, JSON.stringify(adminObj.data))
             }
             setPresets(incomingPresets)
             if (googleUid) {
               localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(incomingPresets))
+            }
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_presets`, JSON.stringify(incomingPresets))
+          }
+        }
+      )
+      .subscribe()
+
+    // 3a. Realtime listener khusus tabel store_presets per-toko (Cepat & Akurat tanpa konflik)
+    const presetChannelName = `rt_store_presets_${effectiveStoreId}_${Date.now()}`
+    const presetChannel = supabase
+      .channel(presetChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_presets',
+          filter: `store_id=eq.${effectiveStoreId}`
+        },
+        (payload: any) => {
+          if (payload.new) {
+            if (Array.isArray(payload.new.presets)) {
+              setPresets(payload.new.presets)
+              if (googleUid) {
+                localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(payload.new.presets))
+              }
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_presets`, JSON.stringify(payload.new.presets))
+            }
+            if (payload.new.admin_rules && typeof payload.new.admin_rules === 'object') {
+              setAdminRules(payload.new.admin_rules)
+              if (googleUid) {
+                localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_adminRules`, JSON.stringify(payload.new.admin_rules))
+              }
+              localStorage.setItem(`alphaPro_${effectiveStoreId}_adminRules`, JSON.stringify(payload.new.admin_rules))
             }
           }
         }
@@ -1082,6 +1152,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
     return () => {
       supabase.removeChannel(bannerChannel)
+      supabase.removeChannel(presetChannel)
     }
   }, [activeStoreId, pantauStoreId, activeRole, isLoggedIn, activeStore?.id])
 
@@ -1137,6 +1208,15 @@ const MainApp: React.FC<MainAppProps> = ({
     if (popupPreset) combinedPresets.push(popupPreset)
     const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
     if (transferPreset) combinedPresets.push(transferPreset)
+
+    try {
+      await supabase.from('store_presets').upsert({
+        store_id: targetStoreId,
+        presets: basePresets,
+        admin_rules: adminRules,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'store_id' });
+    } catch (e) {}
 
     try {
       const customFaq = JSON.parse(localStorage.getItem(`alphaPro_${targetStoreId}_custom_faq`) || '[]');
@@ -1412,9 +1492,35 @@ const MainApp: React.FC<MainAppProps> = ({
       let changed = false
       
       try {
+        let directPresetsFound = false
+        try {
+          const { data: spRow } = await supabase
+            .from('store_presets')
+            .select('presets, admin_rules')
+            .eq('store_id', targetStoreId)
+            .maybeSingle()
+
+          if (spRow) {
+            directPresetsFound = true
+            if (Array.isArray(spRow.presets)) {
+              data.presets = spRow.presets
+            }
+            if (spRow.admin_rules && typeof spRow.admin_rules === 'object') {
+              const localAdmin = localStorage.getItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`)
+              const remoteAdminStr = JSON.stringify(spRow.admin_rules)
+              if (localAdmin !== remoteAdminStr) {
+                localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`, remoteAdminStr)
+                localStorage.setItem(`alphaPro_${targetStoreId}_adminRules`, remoteAdminStr)
+                setAdminRules(spRow.admin_rules)
+                changed = true
+              }
+            }
+          }
+        } catch (e) {}
+
         const { data: configData } = await supabase.from('store_configs').select('*').eq('store_id', targetStoreId).maybeSingle();
         if (configData) {
-          if (configData.presets) data.presets = configData.presets;
+          if (!directPresetsFound && configData.presets) data.presets = configData.presets;
           if (configData.running_texts) data.running_texts = configData.running_texts;
           if (configData.main_announcement) data.main_announcement = configData.main_announcement;
           if (configData.is_pin_enabled !== null) data.is_pin_enabled = configData.is_pin_enabled;
@@ -1482,6 +1588,7 @@ const MainApp: React.FC<MainAppProps> = ({
         const remoteStr = JSON.stringify(incomingPresets)
         if (local !== remoteStr) {
           localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_presets`, remoteStr)
+          localStorage.setItem(`alphaPro_${targetStoreId}_presets`, remoteStr)
           setPresets(incomingPresets)
           changed = true
         }
@@ -1491,6 +1598,7 @@ const MainApp: React.FC<MainAppProps> = ({
           const remoteAdminStr = JSON.stringify(incomingAdminRules)
           if (localAdmin !== remoteAdminStr) {
             localStorage.setItem(`alphaPro_${googleUid}_${targetStoreId}_adminRules`, remoteAdminStr)
+            localStorage.setItem(`alphaPro_${targetStoreId}_adminRules`, remoteAdminStr)
             setAdminRules(incomingAdminRules)
             changed = true
           }
@@ -1880,20 +1988,36 @@ const MainApp: React.FC<MainAppProps> = ({
   const savePresets = async (newPresets: any[]) => {
     setPresets(newPresets)
     const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
-    if (googleUid) {
-      const key = targetId !== 'all' ? `alphaPro_${googleUid}_${targetId}_presets` : `alphaPro_${googleUid}_presets`
+    if (targetId && targetId !== 'all') {
+      const key = googleUid ? `alphaPro_${googleUid}_${targetId}_presets` : `alphaPro_${targetId}_presets`
       localStorage.setItem(key, JSON.stringify(newPresets))
+      localStorage.setItem(`alphaPro_${targetId}_presets`, JSON.stringify(newPresets))
       
-      if (targetId && targetId !== 'all') {
+      const basePresets = newPresets.filter(p => p && !p.id?.startsWith?.('_'))
+      
+      // 1. Simpan ke tabel mandiri store_presets (realtime cepat tanpa konflik)
+      try {
+        await supabase.from('store_presets').upsert({
+          store_id: targetId,
+          presets: basePresets,
+          admin_rules: adminRules,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch (e) {
+        console.warn('Gagal upsert store_presets:', e)
+      }
+
+      // 2. Simpan juga ke store_settings & store_configs untuk kompatibilitas penuh
+      try {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = newPresets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
         const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: adminRules }]
-        const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+        const popupPreset = presets.find((p: any) => p && p.id === '_POPUP_LISTS_')
         if (popupPreset) combinedPresets.push(popupPreset)
-        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+        const transferPreset = presets.find((p: any) => p && p.id === '_TRANSFER_METHODS_')
         if (transferPreset) combinedPresets.push(transferPreset)
-        const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+        const labelPreset = presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
         if (labelPreset) combinedPresets.push(labelPreset)
+
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
@@ -1903,7 +2027,13 @@ const MainApp: React.FC<MainAppProps> = ({
           is_pin_enabled: isPin,
           updated_at: new Date().toISOString()
         })
-      }
+
+        await supabase.from('store_configs').upsert({
+          store_id: targetId,
+          presets: combinedPresets,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch (e) {}
     }
   }
 
@@ -2096,20 +2226,36 @@ const MainApp: React.FC<MainAppProps> = ({
   const saveAdminRules = async (newRules: Record<string, any>) => {
     setAdminRules(newRules)
     const targetId = targetStoreId !== 'all' ? targetStoreId : activeStoreId
-    if (googleUid) {
-      const key = targetId !== 'all' ? `alphaPro_${googleUid}_${targetId}_adminRules` : `alphaPro_${googleUid}_adminRules`
+    if (targetId && targetId !== 'all') {
+      const key = googleUid ? `alphaPro_${googleUid}_${targetId}_adminRules` : `alphaPro_${targetId}_adminRules`
       localStorage.setItem(key, JSON.stringify(newRules))
+      localStorage.setItem(`alphaPro_${targetId}_adminRules`, JSON.stringify(newRules))
       
-      if (targetId && targetId !== 'all') {
+      const basePresets = presets.filter(p => p && !p.id?.startsWith?.('_'))
+
+      // 1. Simpan ke tabel mandiri store_presets
+      try {
+        await supabase.from('store_presets').upsert({
+          store_id: targetId,
+          presets: basePresets,
+          admin_rules: newRules,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch (e) {
+        console.warn('Gagal upsert store_presets (admin rules):', e)
+      }
+
+      // 2. Simpan juga ke store_settings & store_configs
+      try {
         const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
-        const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
         const combinedPresets = [...basePresets, { id: '_ADMIN_RULES_', data: newRules }]
-        const popupPreset = presets.find((p: any) => p.id === '_POPUP_LISTS_')
+        const popupPreset = presets.find((p: any) => p && p.id === '_POPUP_LISTS_')
         if (popupPreset) combinedPresets.push(popupPreset)
-        const transferPreset = presets.find((p: any) => p.id === '_TRANSFER_METHODS_')
+        const transferPreset = presets.find((p: any) => p && p.id === '_TRANSFER_METHODS_')
         if (transferPreset) combinedPresets.push(transferPreset)
-        const labelPreset = presets.find((p: any) => p.id === '_CUSTOM_LABELS_')
+        const labelPreset = presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
         if (labelPreset) combinedPresets.push(labelPreset)
+
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
@@ -2119,7 +2265,13 @@ const MainApp: React.FC<MainAppProps> = ({
           is_pin_enabled: isPin,
           updated_at: new Date().toISOString()
         })
-      }
+
+        await supabase.from('store_configs').upsert({
+          store_id: targetId,
+          presets: combinedPresets,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch (e) {}
     }
   }
 
