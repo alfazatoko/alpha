@@ -102,14 +102,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.0
-          name: "ALFAZA ALPHA POS v1.6.0"
+          tag_name: v1.6.1
+          name: "ALFAZA ALPHA POS v1.6.1"
           body: |
-            ### Pembaruan Aplikasi v1.6.0
-            - **Sinkronisasi Otomatis Teks & Admin Otomatis Per-Toko:**
-              - Tabel database mandiri `store_presets` berbasis `store_id` (aturan preset & admin tetap terpisah per-toko).
-              - Sinkronisasi realtime otomatis: saat Owner/Kasir menambah atau menghapus preset, seluruh HP kasir di cabang toko tersebut langsung menerima pembaruan seketika.
-              - Perlindungan dari tumpang tindih data lama saat HP dibuka ulang / ganti toko.
+            ### Pembaruan Aplikasi v1.6.1
+            - **Perbaikan Keterbacaan Nominal & Mode Gelap (Dark Mode):**
+              - Memperbaiki nominal transfer dan transaksi di riwayat agar selalu tampil jelas dan tajam (tidak hilang/putih) saat perangkat tablet atau HP mengaktifkan Dark Mode bawaan Android.
+              - Mengunci sistem Tailwind CSS (`darkMode: 'class'`) agar tema bawaan HP tidak merusak kontras warna di kartu dan tabel aplikasi.
+              - Mempertahankan ketegasan warna nama bank (`text-blue-900`) dan tanggal transaksi agar tidak pudar di mode gelap.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

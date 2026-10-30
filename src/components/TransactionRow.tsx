@@ -478,20 +478,20 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                {displayJenisTransaksi}
             </div>
             {displaySubKategori ? (
-              <div className="text-[10px] text-blue-900 dark:text-blue-300 font-black tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-tight">
+              <div className="text-[10px] text-blue-900 font-black tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-tight">
                  {displaySubKategori}
               </div>
             ) : listKeterangan && listKeterangan !== '-' ? (
-              <div className="text-[9px] text-blue-900 dark:text-blue-300 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
+              <div className="text-[9px] text-blue-900 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
                  {listKeterangan}
               </div>
             ) : null}
             {displaySubKategori && displayCatatanTambahan && (
-              <div className="text-[9px] text-slate-500 dark:text-slate-400 font-medium tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
+              <div className="text-[9px] text-slate-500 font-medium tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
                  {displayCatatanTambahan}
               </div>
             )}
-            <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold tracking-tight leading-none mt-0.5">
+            <div className="text-[9px] text-slate-500 font-bold tracking-tight leading-none mt-0.5">
                {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
@@ -501,20 +501,20 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
         <div className="flex flex-col items-end gap-0.5 pr-1 mt-0.5 shrink-0">
           <div className={cn(
             "text-[13px] font-black tracking-tight leading-tight",
-            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600 dark:text-purple-400" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-black dark:text-white")
+            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-900")
           )}>
             {t.nominal.toLocaleString('id-ID')}
           </div>
           {t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
             isNonTunai ? (
-              <span className="text-[8px] font-black uppercase text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-900/30">
+              <span className="text-[8px] font-black uppercase text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                 NON TUNAI
               </span>
             ) : null
           ) : (
             <div className={cn(
               "text-[11px] font-extrabold uppercase", 
-              isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-600 dark:text-purple-400" : ((t.keterangan || '').includes('[ADMIN_DALAM]') ? "text-[#0066AE]" : "text-emerald-600")
+              isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-600" : ((t.keterangan || '').includes('[ADMIN_DALAM]') ? "text-[#0066AE]" : "text-emerald-600")
             )}>
               Admin: {displayAdminFee.toLocaleString('id-ID')}
             </div>
