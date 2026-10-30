@@ -1289,9 +1289,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
     
     // Combine manual keterangan with auto prefix if needed
-    let finalKeteranganBase = (isKetAuto && autoTextPrefix) 
-      ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
-      : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
+    let finalKeteranganBase = '';
+    if (activeMode === 'TARIK') {
+      const tarikSubLabel = selectedSumber === 'DANA' 
+        ? (customLabels['TARIK_DANA'] || 'DANA') 
+        : (selectedSumber === 'BANK' || selectedSumber === 'TRANSFER')
+        ? 'Bank'
+        : (customLabels[selectedSumber] || selectedSumber);
+      const tarikPrefix = `TARIK TUNAI > ${tarikSubLabel}`.toUpperCase();
+      const cleanManualKet = keterangan.replace(/^TARIK_TUNAI\|/i, '').trim();
+      finalKeteranganBase = cleanManualKet ? `${tarikPrefix}\n${cleanManualKet}` : tarikPrefix;
+    } else {
+      finalKeteranganBase = (isKetAuto && autoTextPrefix) 
+        ? (keterangan.trim() ? `${autoTextPrefix}\n${keterangan.trim()}` : autoTextPrefix)
+        : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
+    }
 
     if (((kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') || kategori === 'FLIP' || sumberAplikasi === 'DANA') && selectedTujuanFee > 0) {
       finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
@@ -1729,11 +1741,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
                 onChange={(e) => {
                   const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
-                  if (activeMode === 'TARIK' && !isKetAuto) {
-                    setKeterangan(`TARIK_TUNAI|${val}`);
-                  } else {
-                    setKeterangan(val);
-                  }
+                  setKeterangan(val);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -2323,12 +2331,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
-                if (activeMode === 'TARIK') {
-                  setKeterangan(`TARIK_TUNAI|${val}`);
-                  setIsKetAuto(false);
-                } else {
-                  setKeterangan(val);
-                }
+                setKeterangan(val);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -2737,12 +2740,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
-                if (activeMode === 'TARIK') {
-                  setKeterangan(`TARIK_TUNAI|${val}`);
-                  setIsKetAuto(false);
-                } else {
-                  setKeterangan(val);
-                }
+                setKeterangan(val);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {

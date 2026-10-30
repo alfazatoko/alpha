@@ -100,7 +100,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const isSplitPayment = (t.keterangan || '').includes('[SPLIT:');
   let modalSumberMasuk = 'Laci Kasir';
   if (t.kategori === 'Tarik Tunai') {
-    modalSumberMasuk = t.keterangan?.split('|')[1]?.replace(/\[.*?\]/g, '').replace(/bank uob/ig, 'Bank').trim() || 'EDC / Bank';
+    modalSumberMasuk = 'EDC / Bank';
   } else if (isSplitPayment) {
     modalSumberMasuk = 'Sebagian Tunai & Non Tunai';
   } else if (isNonTunai) {
@@ -131,24 +131,86 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
   if (t.kategori === 'Tarik Tunai') {
     displayJenisTransaksi = 'Tarik Tunai';
-    let metodeRaw = '';
-    if (t.keterangan?.startsWith('TARIK_TUNAI|')) {
-       metodeRaw = t.keterangan.split('|')[1] || '';
-    } else if (t.keterangan?.toLowerCase().startsWith('tarik tunai :')) {
-       metodeRaw = t.keterangan.split(':')[1] || '';
+
+    const lines = rawCleanKet.split('\n').map(l => l.trim()).filter(Boolean);
+    let line1 = lines[0] || '';
+    let manualNotes = lines.slice(1).join(' ').trim();
+
+    // Hapus tag teknis dari baris pertama
+    line1 = line1
+      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
+      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
+      .replace(/\[\s*khusus\s*\]/gi, '')
+      .trim();
+
+    // 1. Ekstrak bagian sub-pilihan dari format line1 (misal "TARIK TUNAI > QRIS", "TARIK_TUNAI|QRIS", "TARIK TUNAI : QRIS")
+    let rawSub = '';
+    if (line1.startsWith('TARIK_TUNAI|')) {
+      rawSub = line1.substring(12).trim();
+    } else if (line1.match(/tarik\s*tunai\s*(=|:|>)\s*/i)) {
+      rawSub = line1.replace(/tarik\s*tunai\s*(=|:|>)\s*/i, '').trim();
     } else {
-       metodeRaw = rawCleanKet.replace(/tarik\s*tunai/i, '').replace(/=/g, '').trim();
+      rawSub = line1.replace(/tarik\s*tunai/i, '').replace(/[=>:]/g, '').trim();
     }
 
-    metodeRaw = metodeRaw.replace(/\[ADMIN_DALAM\]/ig, '').replace(/\[NON_TUNAI\]/ig, '').trim();
-    if (metodeRaw.toUpperCase() === 'QRIS') metodeRaw = 'QRIS';
-    else if (metodeRaw.toUpperCase() === 'EDC') metodeRaw = 'EDC / ATM';
-    else if (metodeRaw.toUpperCase() === 'ATM') metodeRaw = 'ATM';
-    else if (metodeRaw.toUpperCase().includes('BANK')) metodeRaw = 'BANK';
-    else if (metodeRaw) metodeRaw = metodeRaw.charAt(0).toUpperCase() + metodeRaw.slice(1);
-    else metodeRaw = 'EDC / Tunai';
+    // 2. Deteksi metode valid (QRIS, EDC/ATM, ATM, DANA, GOPAY, BANK)
+    let metode = '';
+    let extraNoteFromLine1 = '';
 
-    displaySubKategori = metodeRaw;
+    const upperSub = rawSub.toUpperCase();
+    if (upperSub.startsWith('QRIS')) {
+      metode = 'QRIS';
+      extraNoteFromLine1 = rawSub.substring(4).trim();
+    } else if (upperSub.startsWith('EDC/ATM') || upperSub.startsWith('EDC / ATM')) {
+      metode = 'EDC / ATM';
+      extraNoteFromLine1 = rawSub.replace(/^EDC\s*\/\s*ATM/i, '').trim();
+    } else if (upperSub.startsWith('ATM/EDC') || upperSub.startsWith('ATM / EDC')) {
+      metode = 'EDC / ATM';
+      extraNoteFromLine1 = rawSub.replace(/^ATM\s*\/\s*EDC/i, '').trim();
+    } else if (upperSub.startsWith('EDC')) {
+      metode = 'EDC / ATM';
+      extraNoteFromLine1 = rawSub.substring(3).trim();
+    } else if (upperSub.startsWith('ATM')) {
+      metode = 'ATM';
+      extraNoteFromLine1 = rawSub.substring(3).trim();
+    } else if (upperSub.startsWith('DANA')) {
+      metode = 'DANA';
+      extraNoteFromLine1 = rawSub.substring(4).trim();
+    } else if (upperSub.startsWith('GOPAY')) {
+      metode = 'GoPay';
+      extraNoteFromLine1 = rawSub.substring(5).trim();
+    } else if (upperSub.startsWith('BANK') || upperSub.startsWith('TRANSFER')) {
+      metode = 'Bank';
+      extraNoteFromLine1 = rawSub.replace(/^(BANK|TRANSFER)/i, '').trim();
+    } else {
+      // Jika rawSub bukan nama metode (misal catatan nama kasir/konsumen "Amin")
+      extraNoteFromLine1 = rawSub;
+      metode = 'EDC / Bank';
+    }
+
+    // Bersihkan karakter pemisah liar di awal catatan jika ada (seperti '>' atau '-' atau ':')
+    extraNoteFromLine1 = extraNoteFromLine1.replace(/^[->:\s]+/, '').trim();
+
+    let finalCatatan = [extraNoteFromLine1, manualNotes].filter(Boolean).join(' ').trim();
+    finalCatatan = finalCatatan.replace(/^[->:\s]+/, '').trim();
+
+    displaySubKategori = metode;
+    if (finalCatatan) {
+      displayCatatanTambahan = finalCatatan;
+    }
+
+    // 3. Tentukan Sumber Uang Masuk yang benar untuk Tarik Tunai
+    if (metode === 'QRIS') {
+      modalSumberMasuk = 'QRIS';
+    } else if (metode === 'DANA') {
+      modalSumberMasuk = 'DANA';
+    } else if (metode === 'GoPay') {
+      modalSumberMasuk = 'GoPay';
+    } else if (metode === 'Bank') {
+      modalSumberMasuk = 'Bank';
+    } else {
+      modalSumberMasuk = 'EDC / Bank';
+    }
   } else {
     const lines = rawCleanKet.split('\n').map(l => l.trim()).filter(Boolean);
     let line1 = lines[0] || '';
