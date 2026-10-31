@@ -71,16 +71,17 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     .replace(/[ \t]+/g, ' ')
     .trim();
 
-  // Ekstrak Fee Aplikasi jika ada
+  // Ekstrak Fee / Biaya Aplikasi jika ada
   let appFee = 0;
-  if ((t.kategori === 'Order Kuota' || t.kategori === 'FLIP') && rawCleanKet.includes('[FEE_APP:')) {
+  if (rawCleanKet.includes('[FEE_APP:')) {
     const feeMatch = rawCleanKet.match(/\[FEE_APP:(\d+)\]/i);
     if (feeMatch) {
       appFee = parseInt(feeMatch[1], 10);
       rawCleanKet = rawCleanKet.replace(/\[fee_app:\d+\]/ig, '').trim();
     }
   }
-  const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+  // t.adminFee sudah merupakan laba bersih kasir (tidak boleh dikurangi appFee lagi)
+  const displayAdminFee = t.adminFee;
 
   let displayJenisTransaksi = t.kategori;
   let displaySubKategori = '';
@@ -92,10 +93,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
   const hasAdminDalam = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
   let adminFeeLabel = hasAdminDalam 
-    ? "Biaya admin ( Potong Dalam ) :" 
+    ? "Admin Toko (Potong Dalam):" 
     : isNonTunai 
-    ? "Biaya Admin (Non Tunai):" 
-    : "Biaya Admin (Tunai):";
+    ? "Admin Toko (Non Tunai):" 
+    : "Admin Toko (Tunai):";
 
   const isSplitPayment = (t.keterangan || '').includes('[SPLIT:');
   let modalSumberMasuk = 'Laci Kasir';
@@ -398,9 +399,9 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += formatReceiptCenter(effectiveStoreSubtext) + '\n';
     }
     text += formatReceiptDoubleDivider() + '\n';
-    text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
-    text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Kasir : ${effectiveKasirName}\n`;
+    text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
+    text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += formatReceiptDivider() + '\n';
     text += `Transaksi : ${displayDetailTransaksi.toUpperCase().substring(0, 20)}\n`;
     if (displaySubKategori) {
@@ -412,12 +413,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     text += formatReceiptDivider() + '\n';
 
     if (appFee > 0) {
-      text += formatReceiptRow('Harga Modal', 'Rp ' + formatRp(t.nominal)) + '\n';
-      text += formatReceiptRow('Fee Aplikasi', 'Rp ' + formatRp(appFee)) + '\n';
-      text += formatReceiptRow('Total Modal', 'Rp ' + formatRp(t.nominal + appFee)) + '\n';
-      text += formatReceiptRow(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
+      text += formatReceiptRow('Nominal', 'Rp ' + formatRp(t.nominal - appFee)) + '\n';
+      text += formatReceiptRow('Biaya Admin', 'Rp ' + formatRp(appFee + t.adminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
-      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + appFee + displayAdminFee)) + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + t.adminFee)) + '\n';
     } else if (t.kategori === 'Tarik Tunai') {
       const totalTarik = t.nominal + (!hasAdminDalam ? t.adminFee : 0);
       text += formatReceiptRow('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
@@ -429,8 +428,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal)) + '\n';
     } else {
-      text += formatReceiptRow(t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
-      text += formatReceiptRow(t.kategori === 'Order Kuota' ? 'Laba / Admin' : 'Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
+      text += formatReceiptRow('Nominal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptRow('Biaya Admin', 'Rp ' + formatRp(t.adminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))) + '\n';
     }
@@ -499,11 +498,18 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
         {/* NOMINAL & ADMIN */}
         <div className="flex flex-col items-end gap-0.5 pr-1 mt-0.5 shrink-0">
-          <div className={cn(
-            "text-[13px] font-black tracking-tight leading-tight",
-            isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-900")
-          )}>
-            {t.nominal.toLocaleString('id-ID')}
+          <div className="flex items-center gap-1">
+            {appFee > 0 && (
+              <span className="text-[7.5px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/40 px-1 py-0.2 rounded leading-none whitespace-nowrap">
+                fee {appFee.toLocaleString('id-ID')}
+              </span>
+            )}
+            <div className={cn(
+              "text-[13px] font-black tracking-tight leading-tight",
+              isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-900")
+            )}>
+              {t.nominal.toLocaleString('id-ID')}
+            </div>
           </div>
           {t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
             isNonTunai ? (
@@ -541,63 +547,39 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             </div>
             
             {/* Body */}
-            <div className="p-3.5 flex flex-col gap-2.5">
-              {/* Waktu & Kasir & Transaksi & Dynamic Sub Label */}
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center text-[12px]">
-                  <span className="text-slate-500 font-bold">Waktu:</span>
-                  <span className="text-slate-800 font-bold">
-                    {dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} {jam}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-[12px]">
-                  <span className="text-slate-500 font-bold">Kasir:</span>
+            <div className="p-3.5 flex flex-col gap-2">
+              {/* BAGIAN ATAS: RATA KANAN KIRI TAPI AGAK KE TENGAH (Kasir, Waktu, Sumber Uang Keluar & Masuk) */}
+              <div className="w-[88%] mx-auto flex flex-col gap-1 pb-2.5 border-b border-slate-100">
+                <div className="flex justify-between items-center text-[11.5px]">
+                  <span className="text-slate-500 font-bold">Kasir :</span>
                   <span className="text-slate-800 font-bold flex items-center gap-1.5">
                     <i className="fa-solid fa-user-circle text-blue-500 text-[11px]"></i>
                     {effectiveKasirName}
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-[12px]">
-                  <span className="text-slate-500 font-bold">Transaksi:</span>
-                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>{displayDetailTransaksi}</span>
-                </div>
-                {displaySubKategori && (
-                  <div className="flex justify-between items-center text-[12px]">
-                    <span className="text-slate-500 font-bold">{subLabelTitle}</span>
-                    <span className="text-slate-900 font-black text-right break-words max-w-[210px]">{displaySubKategori}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Kolom Info Transaksi (Ket Tambahan, Sumber Keluar, Sumber Masuk) - Dibuat Rapat & Rapi */}
-              <div className="flex flex-col gap-1.5">
-                {/* Keterangan Tambahan (Hanya muncul jika kasir isi catatan manual ekstra) */}
-                {displayCatatanTambahan && (
-                  <div className="flex justify-between items-center bg-slate-50/80 rounded-lg py-1.5 px-3 text-[11.5px] border border-slate-100">
-                    <span className="text-slate-500 font-bold min-w-[90px]">Ket. Tambahan:</span>
-                    <span className="text-slate-800 font-black text-right break-words flex-1 leading-tight">{displayCatatanTambahan}</span>
-                  </div>
-                )}
-
-                {/* Sumber Uang (Keluar/Masuk) */}
-                <div className="flex justify-between items-center bg-rose-50/50 rounded-lg py-1.5 px-3 text-[11.5px] border border-rose-100">
-                  <span className="text-rose-600 font-black flex items-center gap-1.5">
-                    <i className="fa-solid fa-arrow-up-right text-[9px]"></i> Sumber Uang Keluar:
+                <div className="flex justify-between items-center text-[11.5px]">
+                  <span className="text-slate-500 font-bold">Waktu :</span>
+                  <span className="text-slate-800 font-bold">
+                    {dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} {jam}
                   </span>
-                  <span className="text-rose-900 font-black text-right">{modalSumberKeluar}</span>
                 </div>
-                <div className={cn(
-                  "flex justify-between items-center rounded-lg py-1.5 px-3 text-[11.5px] border transition-colors",
-                  isNonTunai ? "bg-purple-50/60 border-purple-100" : "bg-emerald-50/50 border-emerald-100"
-                )}>
+                <div className="flex justify-between items-center text-[11.5px]">
+                  <span className="text-rose-600 font-bold flex items-center gap-1">
+                    <i className="fa-solid fa-arrow-up-right text-[8px]"></i> Sumber Uang Keluar :
+                  </span>
+                  <span className="text-rose-900 font-black">
+                    {modalSumberKeluar}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11.5px]">
                   <span className={cn(
-                    "font-black flex items-center gap-1.5",
+                    "font-bold flex items-center gap-1",
                     isNonTunai ? "text-purple-600" : "text-emerald-600"
                   )}>
-                    <i className="fa-solid fa-arrow-down-left text-[9px]"></i> Sumber Uang Masuk:
+                    <i className="fa-solid fa-arrow-down-left text-[8px]"></i> Sumber Uang Masuk :
                   </span>
                   <span className={cn(
-                    "font-black text-right",
+                    "font-black",
                     isNonTunai ? "text-purple-900" : "text-emerald-900"
                   )}>
                     {modalSumberMasuk}
@@ -605,25 +587,51 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
               </div>
 
-              {/* Nominal & Admin */}
+              {/* BAGIAN TENGAH: RATA KANAN-KIRI (Jenis Transaksi, Layanan / Produk) */}
+              <div className="flex flex-col gap-1.5 py-1.5 border-b border-slate-100">
+                <div className="flex justify-between items-center text-[12px]">
+                  <span className="text-slate-500 font-bold">Jenis Transaksi :</span>
+                  <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-blue-600")}>
+                    {displayDetailTransaksi}
+                  </span>
+                </div>
+                {displaySubKategori && (
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-slate-500 font-bold">Layanan / Produk :</span>
+                    <span className="text-slate-900 font-black text-right break-words max-w-[210px]">
+                      {displaySubKategori}
+                    </span>
+                  </div>
+                )}
+                {displayCatatanTambahan && (
+                  <div className="flex justify-between items-center bg-slate-50 rounded-lg py-1 px-2.5 text-[11px] border border-slate-100 mt-0.5">
+                    <span className="text-slate-500 font-bold min-w-[85px]">Ket. Tambahan:</span>
+                    <span className="text-slate-800 font-semibold text-right break-words flex-1 leading-tight">
+                      {displayCatatanTambahan}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* BAGIAN BAWAH: RATA KANAN-KIRI (Nominal, Fee, Total Modal, Admin Toko, Total) */}
               <div className="flex flex-col gap-1 mt-0.5">
                 {appFee > 0 ? (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">Harga Modal:</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal)}</span>
+                      <span className="text-slate-500 font-bold">Nominal:</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal - appFee)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">Fee Aplikasi:</span>
+                      <span className="text-slate-500 font-bold">Fee / Biaya Layanan Aplikasi:</span>
                       <span className="text-rose-600 font-black">Rp {formatRp(appFee)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px] pt-1.5 mt-0.5 border-t border-slate-100">
-                      <span className="text-slate-600 font-black">Total Modal:</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal + appFee)}</span>
+                      <span className="text-slate-700 font-black">Total Modal:</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(displayAdminFee)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(t.adminFee)}</span>
                     </div>
                   </>
                 ) : (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
@@ -634,11 +642,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 ) : (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">{t.kategori === 'Order Kuota' ? 'Harga Modal:' : 'Nominal:'}</span>
+                      <span className="text-slate-500 font-bold">Nominal:</span>
                       <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">{t.kategori === 'Order Kuota' ? 'Laba / Admin:' : adminFeeLabel}</span>
+                      <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
                       <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-emerald-600")}>Rp {formatRp(t.adminFee)}</span>
                     </div>
                   </>
@@ -647,8 +655,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
               {/* Total (Dashed Border) */}
               <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-300 mt-0.5">
-                <span className="text-slate-800 font-black text-[13px]">Total:</span>
-                <span className={cn("font-black text-[14px]", isNonTunai ? "text-purple-600" : "text-blue-600")}>Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
+                <span className="text-slate-800 font-black text-[13px] uppercase">Total:</span>
+                <span className={cn("font-black text-[15px]", isNonTunai ? "text-purple-600" : "text-blue-600")}>Rp {formatRp(t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0))}</span>
               </div>
 
               {/* Edit / Delete Actions */}
@@ -744,16 +752,16 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 <div className="border-b border-dashed border-slate-300 my-2"></div>
 
                 <div className="flex justify-between text-[10px] text-slate-600">
-                  <span>Waktu :</span>
-                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}</span>
+                  <span>Kasir :</span>
+                  <span className="font-semibold text-slate-800">{effectiveKasirName}</span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-600">
                   <span>No    :</span>
                   <span className="font-semibold text-slate-800 truncate max-w-[140px]">{t.id ? t.id.slice(0, 16) : '-'}</span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-600">
-                  <span>Kasir :</span>
-                  <span className="font-semibold text-slate-800">{effectiveKasirName}</span>
+                  <span>Waktu :</span>
+                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}</span>
                 </div>
 
                 <div className="border-b border-dashed border-slate-300 my-2"></div>
@@ -784,25 +792,17 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   {appFee > 0 ? (
                     <>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">Harga Modal</span>
-                        <span>Rp {formatRp(t.nominal)}</span>
-                      </div>
-                      <div className="flex justify-between text-[10px] text-rose-600">
-                        <span>Fee Aplikasi</span>
-                        <span>Rp {formatRp(appFee)}</span>
-                      </div>
-                      <div className="flex justify-between text-[10px] font-bold pt-0.5 border-t border-dotted border-slate-200">
-                        <span>Total Modal</span>
-                        <span>Rp {formatRp(t.nominal + appFee)}</span>
+                        <span className="text-slate-600">Nominal</span>
+                        <span>Rp {formatRp(t.nominal - appFee)}</span>
                       </div>
                       <div className="flex justify-between text-[10px] text-emerald-700">
-                        <span>{adminFeeLabel.replace(' :', '').replace(':', '')}</span>
-                        <span>Rp {formatRp(displayAdminFee)}</span>
+                        <span>Biaya Admin</span>
+                        <span>Rp {formatRp(appFee + t.adminFee)}</span>
                       </div>
                       <div className="border-b border-dashed border-slate-300 my-1"></div>
                       <div className="flex justify-between font-black text-[12px] text-slate-900">
                         <span>TOTAL</span>
-                        <span>Rp {formatRp(t.nominal + appFee + displayAdminFee)}</span>
+                        <span>Rp {formatRp(t.nominal + t.adminFee)}</span>
                       </div>
                     </>
                   ) : t.kategori === 'Tarik Tunai' ? (
@@ -836,11 +836,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   ) : (
                     <>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">{t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</span>
+                        <span className="text-slate-600">Nominal</span>
                         <span>Rp {formatRp(t.nominal)}</span>
                       </div>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">{t.kategori === 'Order Kuota' ? 'Laba / Admin' : 'Biaya Admin'}</span>
+                        <span className="text-slate-600">Biaya Admin</span>
                         <span>Rp {formatRp(t.adminFee)}</span>
                       </div>
                       <div className="border-b border-dashed border-slate-300 my-1"></div>

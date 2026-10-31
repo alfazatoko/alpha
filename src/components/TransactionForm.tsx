@@ -1211,8 +1211,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
     }
 
-    if (((kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') || kategori === 'FLIP' || sumberAplikasi === 'DANA') && selectedTujuanFee > 0) {
-      finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
+    if ((kategori === 'Order Kuota' || kategori === 'FLIP' || sumberAplikasi === 'DANA') && selectedTujuanFee > 0) {
+      if (!finalKeteranganBase.includes('[FEE_APP:')) {
+        finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
+      }
     }
 
     if (activeMode === 'AKSESORIS') {
@@ -1243,14 +1245,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       let saveNominal = nominal;
       let saveAdmin = admin;
 
-      if (kategori === 'Order Kuota' && orderKuotaMode === 'NOMINAL_ADMIN') {
-         const calculatedModal = cleanNominal + selectedTujuanFee;
-         const calculatedJual = cleanNominal + cleanAdmin;
-         
-         cleanNominal = calculatedModal;
-         cleanAdmin = calculatedJual;
-         saveNominal = formatInputRupiah(calculatedModal.toString());
-         saveAdmin = formatInputRupiah(calculatedJual.toString());
+      if (kategori === 'Order Kuota') {
+        if (orderKuotaMode === 'NOMINAL_ADMIN') {
+          const calculatedModal = cleanNominal + selectedTujuanFee;
+          const calculatedJual = cleanNominal + cleanAdmin;
+          
+          cleanNominal = calculatedModal;
+          cleanAdmin = calculatedJual;
+          saveNominal = formatInputRupiah(calculatedModal.toString());
+          saveAdmin = formatInputRupiah(calculatedJual.toString());
+        } else {
+          // Mode MODAL_JUAL: jika ada fee aplikasi, tambahkan ke modal riil
+          if (selectedTujuanFee > 0) {
+            const calculatedModal = cleanNominal + selectedTujuanFee;
+            cleanNominal = calculatedModal;
+            saveNominal = formatInputRupiah(calculatedModal.toString());
+            // saveAdmin tetap cleanAdmin (Harga Jual)
+          }
+        }
       }
       
       if (cleanNominal <= 0 || cleanAdmin <= 0) {
@@ -1502,13 +1514,31 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   PILIH SUMBER APLIKASI BANK
                 </h3>
                 <button 
+                  type="button"
                   onClick={() => setIsTujuanModalOpen(true)}
-                  className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-100 text-[7.5px] font-black uppercase shadow-xs hover:bg-emerald-100 transition-colors"
-                  title="Pilih Tujuan Masuk"
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all shadow-xs cursor-pointer group shrink-0",
+                    tujuanMasuk === 'NON TUNAI'
+                      ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border-purple-300 shadow-purple-50"
+                      : tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'
+                      ? "bg-blue-50 hover:bg-blue-100 text-blue-950 border-blue-300 shadow-blue-50"
+                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border-emerald-300 shadow-emerald-50"
+                  )}
+                  title="Pilih Sumber Uang Masuk"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                  <span>{tujuanMasuk === 'TUNAI LACI KASIR' ? 'Masuk: Laci' : tujuanMasuk}</span>
-                  <i className="fa-solid fa-chevron-down text-[6px] ml-0.5"></i>
+                  <div className={cn(
+                    "w-2 h-2 rounded-full shrink-0 shadow-xs",
+                    tujuanMasuk === 'NON TUNAI'
+                      ? "bg-purple-600"
+                      : tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)'
+                      ? "bg-blue-600"
+                      : "bg-emerald-500 animate-pulse"
+                  )}></div>
+                  <span className="font-extrabold text-[8.5px] opacity-75">MASUK:</span>
+                  <span className="font-black text-[10px] tracking-tight">
+                    {tujuanMasuk}
+                  </span>
+                  <i className="fa-solid fa-chevron-down text-[8px] opacity-70 ml-0.5 group-hover:translate-y-0.5 transition-transform"></i>
                 </button>
               </div>
               <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
@@ -1778,7 +1808,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
                 <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? (orderKuotaMode === 'NOMINAL_ADMIN' ? 'Nominal Asli' : 'Modal') : 'Nominal'}
+                {kategori === 'Order Kuota' ? (orderKuotaMode === 'NOMINAL_ADMIN' ? 'Nominal' : 'Modal') : 'Nominal'}
               </label>
               {true && (
                 <label
@@ -1866,6 +1896,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     if (orderKuotaMode === 'NOMINAL_ADMIN') {
                        j = m + j; // Jual = Nominal + Admin
                        m = m + selectedTujuanFee; // Modal = Nominal + Fee
+                    } else {
+                       m = m + selectedTujuanFee; // Modal = Modal Dasar + Fee
                     }
                     return m > 0 && j > 0 && j <= m
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
@@ -1883,6 +1915,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
                 if (orderKuotaMode === 'NOMINAL_ADMIN') {
                    j = m + j;
+                   m = m + selectedTujuanFee;
+                } else {
                    m = m + selectedTujuanFee;
                 }
                 if (m > 0 && j > 0) {
@@ -1937,6 +1971,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           if (orderKuotaMode === 'NOMINAL_ADMIN') {
              j = m + j; // Jual = Nominal + Admin Kasir
              m = m + selectedTujuanFee; // Modal = Nominal + Fee App
+          } else {
+             m = m + selectedTujuanFee; // Modal = Modal Dasar + Fee App
           }
           if (m > 0 && j > 0 && j <= m) {
             return (
@@ -3027,30 +3063,88 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* Modal Tujuan Masuk */}
       {isTujuanModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsTujuanModalOpen(false)}>
-          <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-col">
-              {['TUNAI LACI KASIR', 'NON TUNAI', '2X BAYAR (TUNAI & NON TUNAI)'].map((t, idx, arr) => (
-                <button
-                  key={t}
-                  onClick={() => {
-                    setTujuanMasuk(t);
-                    setIsTujuanModalOpen(false);
-                  }}
-                  className={cn(
-                    "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",
-                    idx !== arr.length - 1 && "border-b border-gray-100"
-                  )}
-                >
-                  <span className="text-[15px] font-black text-slate-800">{t}</span>
-                  {tujuanMasuk === t ? (
-                    <div className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[3px] border-[#293659]">
-                      <div className="w-[10px] h-[10px] rounded-full bg-[#293659]"></div>
+          <div className="bg-white w-[90%] max-w-[340px] rounded-[24px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-50 border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-[10px] shadow-sm">
+                  <i className="fa-solid fa-arrow-down-left"></i>
+                </div>
+                <div>
+                  <h4 className="text-[11.5px] font-black uppercase text-slate-800 tracking-wider">Sumber Uang Masuk</h4>
+                  <p className="text-[8.5px] font-bold text-slate-400">Pilih kemana uang pembayaran customer masuk</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsTujuanModalOpen(false)} 
+                className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300 flex items-center justify-center text-xs transition-colors"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div className="flex flex-col p-2.5 gap-2">
+              {[
+                { id: 'TUNAI LACI KASIR', desc: 'Uang fisik tunai kasir / cash drawer', icon: 'fa-cash-register', color: 'emerald' },
+                { id: 'NON TUNAI', desc: 'QRIS / Transfer masuk rekening bank', icon: 'fa-qrcode', color: 'purple' },
+                { id: '2X BAYAR (TUNAI & NON TUNAI)', desc: 'Sebagian tunai laci, sebagian non-tunai', icon: 'fa-coins', color: 'blue' }
+              ].map((item) => {
+                const isSelected = tujuanMasuk === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setTujuanMasuk(item.id);
+                      setIsTujuanModalOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-2xl text-left transition-all border-2",
+                      isSelected 
+                        ? item.color === 'purple' 
+                          ? "bg-purple-50/80 border-purple-400 ring-2 ring-purple-100 shadow-sm"
+                          : item.color === 'blue'
+                          ? "bg-blue-50/80 border-blue-400 ring-2 ring-blue-100 shadow-sm"
+                          : "bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-100 shadow-sm"
+                        : "border-gray-100 hover:bg-gray-50 hover:border-gray-200"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center text-[13px] shrink-0 shadow-xs",
+                        isSelected 
+                          ? item.color === 'purple'
+                            ? "bg-purple-600 text-white"
+                            : item.color === 'blue'
+                            ? "bg-blue-600 text-white"
+                            : "bg-emerald-600 text-white"
+                          : "bg-slate-100 text-slate-500"
+                      )}>
+                        <i className={cn("fa-solid", item.icon)}></i>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className={cn(
+                          "text-[12px] font-black leading-tight uppercase tracking-tight",
+                          isSelected ? "text-slate-900" : "text-slate-700"
+                        )}>
+                          {item.id}
+                        </span>
+                        <span className="text-[9.5px] font-bold text-slate-400 mt-0.5">
+                          {item.desc}
+                        </span>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="w-[22px] h-[22px] rounded-full border-2 border-gray-400"></div>
-                  )}
-                </button>
-              ))}
+                    {isSelected ? (
+                      <div className={cn(
+                        "flex items-center justify-center w-5 h-5 rounded-full text-white text-[9px] shrink-0 shadow-sm",
+                        item.color === 'purple' ? "bg-purple-600" : item.color === 'blue' ? "bg-blue-600" : "bg-emerald-600"
+                      )}>
+                        <i className="fa-solid fa-check"></i>
+                      </div>
+                    ) : (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 shrink-0"></div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

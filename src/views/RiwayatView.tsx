@@ -644,9 +644,29 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                           </td>
                           <td className="py-2 px-3">
                             <div className="flex flex-wrap items-center gap-1.5 max-w-[320px]">
-                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={t.keterangan}>
-                                {t.keterangan || '-'}
-                              </span>
+                              {(() => {
+                                const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+                                const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+                                const cleanKet = (t.keterangan || '')
+                                  .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
+                                  .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
+                                  .replace(/\[\s*khusus\s*\]/gi, '')
+                                  .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
+                                  .replace(/\[\s*split:[^\]]*\]/gi, '')
+                                  .trim();
+                                return (
+                                  <>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={t.keterangan}>
+                                      {cleanKet || '-'}
+                                    </span>
+                                    {appFee > 0 && (
+                                      <span className="text-[7px] bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 px-1 py-0.2 rounded font-black border border-amber-200 dark:border-amber-900/30">
+                                        FEE: {appFee.toLocaleString('id-ID')}
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {isKhusus && (
                                 <span className="text-[7px] bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400 px-1 py-0.2 rounded font-black border border-orange-200 dark:border-orange-900/30">KHUSUS</span>
                               )}
@@ -658,7 +678,22 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3 text-xs font-bold text-right text-slate-700 dark:text-slate-300 tabular-nums">{t.nominal.toLocaleString('id-ID')}</td>
+                          <td className="py-2 px-3 text-xs font-bold text-right text-slate-700 dark:text-slate-300 tabular-nums">
+                            {(() => {
+                              const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+                              const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+                              return (
+                                <div>
+                                  <div>{t.nominal.toLocaleString('id-ID')}</div>
+                                  {appFee > 0 && (
+                                    <div className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">
+                                      ({(t.nominal - appFee).toLocaleString('id-ID')} + Fee {appFee.toLocaleString('id-ID')})
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td className="py-2 px-3 text-xs font-bold text-right text-emerald-600 tabular-nums">+{t.adminFee.toLocaleString('id-ID')}</td>
                           <td className="py-2 px-3 text-xs font-black text-right text-slate-900 dark:text-white tabular-nums">{(t.nominal + t.adminFee).toLocaleString('id-ID')}</td>
                           <td className="py-2 px-3">

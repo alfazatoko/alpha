@@ -223,10 +223,29 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
   // Logika pasangan kronologis audit shift (Berkelanjutan Pagi -> Malam -> Pagi Besok)
   const auditShiftPairs = useMemo(() => {
-    const closingTxs = props.transactions.filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
-    const openingTxs = props.transactions.filter(t => t.kategori === 'Isi Saldo Bank')
+    const txs = props.allTransactions || props.transactions || []
 
-    const closingBatchesMap = new Map<string, { id: string, timestamp: string, kasir_id: string, totalNominal: number, items: string[] }>()
+    // 1. Ambil transaksi Saldo Real Aplikasi (Saldo HP/Fisik closing shift kasir)
+    const closingTxs = txs.filter(t => t.kategori === 'Isi Saldo Real Aplikasi')
+
+    // 2. Ambil transaksi yang benar-benar OPERAN SALDO RESMI
+    // Syarat: kategori 'Isi Saldo Bank' yang keterangannya mengandung kata operan
+    // PENTING: Transaksi 'Tambah Saldo Bank' biasa (kasir isi form tambah saldo atau owner topup modal)
+    // TIDAK mengandung kata operan, sehingga 100% DIABAIKAN dari audit serah terima shift ini.
+    const operanTxs = txs.filter(t => {
+      if (t.kategori !== 'Isi Saldo Bank') return false
+      const ket = (t.keterangan || '').toLowerCase()
+      return ket.includes('operan saldo') || ket.includes('operan')
+    })
+
+    // Kelompokkan Saldo Real menjadi batch per sesi (menit + kasir_id)
+    const closingBatchesMap = new Map<string, {
+      id: string,
+      timestamp: string,
+      kasir_id: string,
+      totalNominal: number,
+      items: string[]
+    }>()
 
     closingTxs.forEach(t => {
       const kId = t.kasir_id || 'unknown'
@@ -247,6 +266,34 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
     const closingBatches = Array.from(closingBatchesMap.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
+    // Kelompokkan transaksi operan resmi menjadi batch per penerimaan
+    const operanBatchesMap = new Map<string, {
+      id: string,
+      timestamp: string,
+      kasir_id: string,
+      totalNominal: number,
+      items: string[]
+    }>()
+
+    operanTxs.forEach(t => {
+      const kId = t.kasir_id || 'unknown'
+      const batchKey = `${t.timestamp.substring(0, 16)}_${kId}`
+      if (!operanBatchesMap.has(batchKey)) {
+        operanBatchesMap.set(batchKey, {
+          id: t.id,
+          timestamp: t.timestamp,
+          kasir_id: kId,
+          totalNominal: 0,
+          items: []
+        })
+      }
+      const ob = operanBatchesMap.get(batchKey)!
+      ob.totalNominal += t.nominal
+      if (t.keterangan) ob.items.push(`${t.keterangan}: ${formatRupiah(t.nominal).replace(',00', '')}`)
+    })
+
+    const operanBatches = Array.from(operanBatchesMap.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
     const pairs: {
       id: string
       dateStr: string
@@ -260,21 +307,29 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       details: string[]
     }[] = []
 
+    const usedOperanKeys = new Set<string>()
+    const usedTulisSendiriKeys = new Set<string>()
+
     closingBatches.forEach(cb => {
       const dateStr = cb.timestamp.substring(0, 10)
       const timeStr = cb.timestamp.substring(11, 16)
       const kasirClosingName = props.kasirList?.[cb.kasir_id]?.name || cb.kasir_id
 
-      const operanTxs = openingTxs.filter(t => 
-        t.timestamp.substring(0, 16) === cb.timestamp.substring(0, 16) &&
-        (t.keterangan || '').includes('Operan Saldo Bank Awal')
-      )
+      // CARA 1: Cek apakah ada Operan Saldo Resmi yang diterima kasir lain
+      const matchedOperan = operanBatches.find(ob => {
+        if (usedOperanKeys.has(ob.id)) return false
+        if (ob.kasir_id === cb.kasir_id) return false
+        const obTime = new Date(ob.timestamp).getTime()
+        const cbTime = new Date(cb.timestamp).getTime()
+        const isNearOrAfter = obTime >= cbTime - 30 * 60 * 1000
+        const isSameDateOrAfter = ob.timestamp.substring(0, 10) >= cb.timestamp.substring(0, 10)
+        return isSameDateOrAfter && isNearOrAfter
+      })
 
-      if (operanTxs.length > 0) {
-        const kasirOpeningId = operanTxs[0].kasir_id || ''
-        const kasirOpeningName = props.kasirList?.[kasirOpeningId]?.name || kasirOpeningId || 'Unknown'
-        const totalOpeningNominal = operanTxs.reduce((s, t) => s + t.nominal, 0)
-        const diff = totalOpeningNominal - cb.totalNominal
+      if (matchedOperan) {
+        usedOperanKeys.add(matchedOperan.id)
+        const kasirOpeningName = props.kasirList?.[matchedOperan.kasir_id]?.name || matchedOperan.kasir_id || 'Unknown'
+        const diff = matchedOperan.totalNominal - cb.totalNominal
 
         pairs.push({
           id: cb.id,
@@ -283,51 +338,65 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           kasirClosing: kasirClosingName,
           kasirOpening: kasirOpeningName,
           saldoClosing: cb.totalNominal,
-          saldoOpening: totalOpeningNominal,
+          saldoOpening: matchedOperan.totalNominal,
           selisih: diff,
           isOperan: true,
           details: cb.items
         })
-      } else {
-        const nextOpeningTxs = openingTxs.filter(t => t.timestamp > cb.timestamp && t.kasir_id !== cb.kasir_id)
-        if (nextOpeningTxs.length > 0) {
-          const nextTx = nextOpeningTxs[0]
-          const kasirOpeningId = nextTx.kasir_id || ''
-          const kasirOpeningName = props.kasirList?.[kasirOpeningId]?.name || kasirOpeningId || 'Unknown'
-          const totalOpeningNominal = nextTx.nominal
-          const diff = totalOpeningNominal - cb.totalNominal
-
-          pairs.push({
-            id: cb.id,
-            dateStr,
-            timeStr,
-            kasirClosing: kasirClosingName,
-            kasirOpening: kasirOpeningName,
-            saldoClosing: cb.totalNominal,
-            saldoOpening: totalOpeningNominal,
-            selisih: diff,
-            isOperan: false,
-            details: cb.items
-          })
-        } else {
-          pairs.push({
-            id: cb.id,
-            dateStr,
-            timeStr,
-            kasirClosing: kasirClosingName,
-            kasirOpening: 'Shift Selanjutnya',
-            saldoClosing: cb.totalNominal,
-            saldoOpening: cb.totalNominal,
-            selisih: 0,
-            isOperan: false,
-            details: cb.items
-          })
-        }
+        return
       }
+
+      // CARA 2: Jika tidak pakai tiket operan, cek apakah Kasir 2 'Tulis Sendiri' Saldo Real HP
+      // (Batch Saldo Real Aplikasi berikutnya oleh kasir yang berbeda)
+      const matchedTulisSendiri = closingBatches.find(b => {
+        if (usedTulisSendiriKeys.has(b.id)) return false
+        if (b.kasir_id === cb.kasir_id) return false
+        return new Date(b.timestamp).getTime() >= new Date(cb.timestamp).getTime()
+      })
+
+      if (matchedTulisSendiri) {
+        usedTulisSendiriKeys.add(matchedTulisSendiri.id)
+        const kasirOpeningName = props.kasirList?.[matchedTulisSendiri.kasir_id]?.name || matchedTulisSendiri.kasir_id || 'Unknown'
+        const diff = matchedTulisSendiri.totalNominal - cb.totalNominal
+
+        pairs.push({
+          id: cb.id,
+          dateStr,
+          timeStr,
+          kasirClosing: kasirClosingName,
+          kasirOpening: kasirOpeningName,
+          saldoClosing: cb.totalNominal,
+          saldoOpening: matchedTulisSendiri.totalNominal,
+          selisih: diff,
+          isOperan: false,
+          details: cb.items
+        })
+        return
+      }
+
+      // CARA 3: Belum ada operan dan belum ada kasir 2 tulis saldo real
+      // PENTING: Transaksi Tambah Saldo Bank biasa (kasir/owner) TIDAK BOLEH ditarik ke sini!
+      pairs.push({
+        id: cb.id,
+        dateStr,
+        timeStr,
+        kasirClosing: kasirClosingName,
+        kasirOpening: 'Shift Selanjutnya',
+        saldoClosing: cb.totalNominal,
+        saldoOpening: cb.totalNominal,
+        selisih: 0,
+        isOperan: false,
+        details: cb.items
+      })
     })
 
-    return pairs.reverse()
-  }, [props.transactions, props.kasirList])
+    // Saring sesuai filter tanggal yang dipilih jika ada
+    const filteredPairs = props.filterTanggal
+      ? pairs.filter(p => p.dateStr === props.filterTanggal)
+      : pairs
+
+    return filteredPairs.reverse()
+  }, [props.transactions, props.allTransactions, props.kasirList, props.filterTanggal])
 
   const auditDiscrepancies = useMemo(() => {
     return auditShiftPairs.filter(p => p.selisih !== 0 && p.kasirOpening !== 'Shift Selanjutnya')
@@ -2114,9 +2183,17 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                               <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} • {pair.timeStr}
                             </span>
-                            {pair.isOperan && (
+                            {pair.isOperan ? (
                               <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">
                                 Auto Operan
+                              </span>
+                            ) : pair.kasirOpening !== 'Shift Selanjutnya' ? (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-[8px] font-black uppercase">
+                                Tulis Sendiri
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[8px] font-black uppercase">
+                                Menunggu Serah Terima
                               </span>
                             )}
                           </div>
@@ -2158,7 +2235,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                               {pair.kasirOpening}
                             </p>
                             <p className="text-sm font-black text-blue-600 mt-1">
-                              {formatRupiah(pair.saldoOpening)}
+                              {pair.kasirOpening === 'Shift Selanjutnya' ? 'Menunggu Konfirmasi' : formatRupiah(pair.saldoOpening)}
                             </p>
                           </div>
                         </div>
@@ -3225,9 +3302,17 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                             <i className="fa-regular fa-calendar-check mr-1"></i> {pair.dateStr} • {pair.timeStr}
                           </span>
-                          {pair.isOperan && (
+                          {pair.isOperan ? (
                             <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[8px] font-black uppercase">
                               Auto Operan
+                            </span>
+                          ) : pair.kasirOpening !== 'Shift Selanjutnya' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-[8px] font-black uppercase">
+                              Tulis Sendiri
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[8px] font-black uppercase">
+                              Menunggu Serah Terima
                             </span>
                           )}
                         </div>

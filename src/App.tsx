@@ -2738,16 +2738,14 @@ const MainApp: React.FC<MainAppProps> = ({
         setTodayAbsen(jam)
       }
 
-      // 2. Fetch all attendance for owner view or current store for cashier
-      setAbsensi([]) // CLEAR PREVIOUS STATE TO PREVENT LEAK
-      
+      // 2. Fetch all attendance for owner view or current store for cashier (tanpa blank flicker)
       let allQuery = supabase
         .from('absensi')
         .select('*')
         .eq('user_id', googleUid)
 
       if (targetStoreId !== 'all') {
-        allQuery = allQuery.eq('store_id', targetStoreId)
+        allQuery = allQuery.or(`store_id.eq.${targetStoreId},store_id.is.null`)
       }
 
       const { data: allData } = await allQuery.order('tanggal', { ascending: false })
@@ -2757,10 +2755,10 @@ const MainApp: React.FC<MainAppProps> = ({
 
     manageAbsensi()
 
-    // Realtime attendance updates
+    // Realtime attendance updates (terima semua event perubahan absensi)
     const channel = supabase
       .channel(`absensi-changes-${Date.now()}-${Math.random()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi', filter: `user_id=eq.${googleUid}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, () => {
         manageAbsensi()
       })
       .subscribe()

@@ -94,9 +94,23 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
     console.error('Failed to parse izin', e);
   }
 
+  // Helper pencocokan kasir tahan case-sensitivity dan nama kolom database
+  const uLower = (username || '').toLowerCase().trim();
+  const nLower = (cashierName || '').toLowerCase().trim();
+  const matchCashier = (a: any) => {
+    const aUser = (a.username || '').toLowerCase().trim();
+    const aNama = (a.nama || a.nama_kasir || '').toLowerCase().trim();
+    return (
+      (uLower && aUser === uLower) ||
+      (nLower && aNama === nLower) ||
+      (nLower && aUser === nLower) ||
+      (uLower && aNama === uLower)
+    );
+  };
+
   // Cek apakah kasir sudah ada data absen hari ini
   const hasAbsenToday = (absensiList || []).some(
-    a => (a.username === username || a.nama_kasir === cashierName) && a.tanggal === todayDateStr
+    a => matchCashier(a) && a.tanggal === todayDateStr
   );
 
   // Jika hari ini belum absen, batas hari yang sudah selesai diringkas sampai kemarin (todayDate - 1)
@@ -124,7 +138,7 @@ function calculateAttendanceStats(username: string, cashierName: string, joinDat
 
     // Check check-in
     const hasAbsen = (absensiList || []).some(
-      a => (a.username === username || a.nama_kasir === cashierName) && a.tanggal === dateStr
+      a => matchCashier(a) && a.tanggal === dateStr
     );
 
     if (hasAbsen) {
@@ -3070,9 +3084,19 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             // --- COMPUTATION UNTUK SHIFT & ABSENSI RIIL ---
             const todayD = new Date();
             const currentFilterMonth = todayD.toLocaleDateString('en-CA').substring(0, 7);
-            const myAbsensi = (props.absensiList || []).filter(a => 
-              (a.username === props.currentUsername || a.nama_kasir === myName) && a.tanggal && a.tanggal.startsWith(currentFilterMonth)
-            );
+            const uLower = (props.currentUsername || '').toLowerCase().trim();
+            const nLower = (myName || '').toLowerCase().trim();
+            const myAbsensi = (props.absensiList || []).filter(a => {
+              if (!a.tanggal || !a.tanggal.startsWith(currentFilterMonth)) return false;
+              const aUser = (a.username || '').toLowerCase().trim();
+              const aNama = (a.nama || a.nama_kasir || '').toLowerCase().trim();
+              return (
+                (uLower && aUser === uLower) ||
+                (nLower && aNama === nLower) ||
+                (nLower && aUser === nLower) ||
+                (uLower && aNama === uLower)
+              );
+            });
             const attendedEntries = myAbsensi.filter(a => a.status !== 'Libur' && a.status !== 'Izin');
             const uniqueAttendedDates = new Set(attendedEntries.map(a => a.tanggal));
             const totalHadir = uniqueAttendedDates.size;

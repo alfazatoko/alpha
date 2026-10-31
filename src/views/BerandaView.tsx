@@ -220,10 +220,60 @@ const GajiPanel: React.FC<{
   } | null>(null);
   const [isSavingBonus, setIsSavingBonus] = useState(false);
 
+  // State untuk Live Sync Absensi Instan
+  const [liveAbsensiData, setLiveAbsensiData] = useState<any[] | null>(null);
+  const [isSyncingAbsensi, setIsSyncingAbsensi] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('Live');
+
+  const activeAbsensiList = liveAbsensiData || absensiList || [];
+
   // State untuk Review & Print Struk Gaji
   const [reviewReceiptText, setReviewReceiptText] = useState<string | null>(null);
   const [reviewViewMode, setReviewViewMode] = useState<'visual' | 'raw'>('visual');
   const [autoPrintSetting, setAutoPrintSetting] = useState<boolean>(() => localStorage.getItem('auto_print_gaji') === 'true');
+
+  const handleSyncAbsensiLive = useCallback(async (showNotification = true) => {
+    try {
+      setIsSyncingAbsensi(true);
+      const q = supabase
+        .from('absensi')
+        .select('*')
+        .gte('tanggal', `${month}-01`)
+        .lte('tanggal', `${month}-31`);
+
+      const { data, error } = await q.order('tanggal', { ascending: false });
+      if (!error && data) {
+        setLiveAbsensiData(data);
+        const now = new Date();
+        setLastSyncTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+        if (showNotification) {
+          showToast(`Absensi live tersinkron (${data.length} data)`);
+        }
+      }
+    } catch (e) {
+      console.error('Gagal sync absensi live:', e);
+    } finally {
+      setIsSyncingAbsensi(false);
+    }
+  }, [month, showToast]);
+
+  useEffect(() => {
+    handleSyncAbsensiLive(false);
+  }, [month, selectedKasir, handleSyncAbsensiLive]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`gaji-live-sync-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, () => {
+        handleSyncAbsensiLive(false);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [handleSyncAbsensiLive]);
+
   useEffect(() => {
     const saved = localStorage.getItem(`alphaPro_${activeStoreId}_catatanIzin`)
     if (saved) {
@@ -263,13 +313,22 @@ const GajiPanel: React.FC<{
     daysPassed = 0
   }
 
+  // Filter absensi kasir terpilih (tahan case sensitivity dan mendukung a.nama maupun a.nama_kasir)
   const cashierMonthAbsensi = useMemo(() => {
-    return (absensiList || []).filter(a => 
-      (a.username === selectedKasir || a.nama_kasir === selectedName) && 
-      a.tanggal && 
-      a.tanggal.startsWith(month)
-    )
-  }, [absensiList, selectedKasir, selectedName, month])
+    const sKasirLower = (selectedKasir || '').toLowerCase().trim();
+    const sNameLower = (selectedName || '').toLowerCase().trim();
+    return (activeAbsensiList || []).filter(a => {
+      if (!a.tanggal || !a.tanggal.startsWith(month)) return false;
+      const aUsername = (a.username || '').toLowerCase().trim();
+      const aNama = (a.nama || a.nama_kasir || '').toLowerCase().trim();
+      return (
+        (sKasirLower && aUsername === sKasirLower) ||
+        (sNameLower && aNama === sNameLower) ||
+        (sNameLower && aUsername === sNameLower) ||
+        (sKasirLower && aNama === sKasirLower)
+      );
+    });
+  }, [activeAbsensiList, selectedKasir, selectedName, month])
 
   // 1. Hari Lembur: absensi dengan status 'Lembur'
   const autoLemburDays = useMemo(() => {
@@ -277,11 +336,13 @@ const GajiPanel: React.FC<{
     return new Set(lemburEntries.map(a => a.tanggal)).size
   }, [cashierMonthAbsensi])
 
-  // 2. Hari Hadir Reguler: absensi hadir (status !== 'Libur' && status !== 'Izin' && status !== 'Lembur')
+  // 2. Hari Hadir (Hari Kerja): Lembur TETAP dihitung kerja! (status !== 'Libur' && status !== 'Izin')
   const autoHadirDays = useMemo(() => {
-    const hadirEntries = cashierMonthAbsensi.filter(a => a.status === 'Hadir' || (a.status !== 'Libur' && a.status !== 'Izin' && a.status !== 'Lembur'))
+    const hadirEntries = cashierMonthAbsensi.filter(a => a.status !== 'Libur' && a.status !== 'Izin')
     return new Set(hadirEntries.map(a => a.tanggal)).size
   }, [cashierMonthAbsensi])
+
+  const autoRegulerDays = Math.max(0, autoHadirDays - autoLemburDays)
 
   // 3. Hari Libur (Off):
   const autoLiburDays = useMemo(() => {
@@ -748,6 +809,46 @@ const GajiPanel: React.FC<{
     }
   }
 
+  // Parser detail riwayat gaji (tahan format lama koma, format baru pipe, dan otomatis bersihkan bug 'Rp Rp')
+  const parseGajiDetails = (rawText: string) => {
+    if (!rawText) return { items: [] as { label: string; value: string }[], catatan: '' };
+    let clean = rawText.replace(/^\[GAJI\]\s*/i, '').trim();
+
+    let catatan = '';
+    // Ekstrak catatan jika ada (mendukung "Catatan: ...", "Catatan : ...")
+    const catatanMatch = clean.match(/(?:^|[\n\|,]|\s+)Catatan\s*:\s*([\s\S]+)$/i);
+    if (catatanMatch) {
+      catatan = catatanMatch[1].trim();
+      clean = clean.substring(0, clean.lastIndexOf(catatanMatch[0])).trim();
+    }
+
+    // Tentukan pemisah: pipe ' | ', newline '\n', atau koma ', '
+    let segments: string[] = [];
+    if (clean.includes(' | ')) {
+      segments = clean.split(' | ');
+    } else if (clean.includes('\n')) {
+      segments = clean.split('\n');
+    } else {
+      segments = clean.split(', ');
+    }
+
+    const items: { label: string; value: string }[] = [];
+    segments.forEach(seg => {
+      const colonIdx = seg.indexOf(':');
+      if (colonIdx > 0) {
+        const lbl = seg.substring(0, colonIdx).trim();
+        let val = seg.substring(colonIdx + 1).trim();
+        // Bersihkan bug duplikasi awalan "Rp Rp" atau "Rp Rp " -> "Rp "
+        val = val.replace(/^Rp\s*Rp\s*/i, 'Rp ').trim();
+        if (lbl.toLowerCase() !== 'catatan') {
+          items.push({ label: lbl, value: val });
+        }
+      }
+    });
+
+    return { items, catatan };
+  };
+
   const handleSimpanGaji = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -755,23 +856,50 @@ const GajiPanel: React.FC<{
         showToast("Gagal: Anda belum login!");
         return;
       }
+
+      // Bangun rincian gaji yang lengkap dan persis sama dengan form pencatatan
+      const parts: string[] = [];
+      parts.push(`Periode: ${monthLabel}`);
+      parts.push(`Mode: ${mode === 'harian' ? `Harian (${formatRupiah(ratePerHari)}/hari)` : 'Bulanan'}`);
+      parts.push(`Hadir: ${hariKerja} hari${autoLemburDays > 0 ? ` (${autoRegulerDays} Reg + ${autoLemburDays} Lembur)` : ''}`);
+      parts.push(`Libur: ${hariLibur} hari`);
+      if (hariLembur > 0 || autoLemburDays > 0) {
+        parts.push(`Lembur: ${hariLembur} hari`);
+      }
+      parts.push(`Pokok: ${formatRupiah(gajiPokok)}`);
+      if (uangLemburVal > 0) {
+        parts.push(`Uang Lembur: ${formatRupiah(uangLemburVal)}`);
+      }
+      if (parseNum(bonus) > 0) {
+        parts.push(`Bonus: ${formatRupiah(parseNum(bonus))}`);
+      }
+      if (currentIzin > 0) {
+        parts.push(`Izin: ${currentIzin} hari (-${formatRupiah(potonganIzinVal)})`);
+      }
+      const totalPotongan = potonganIzinVal + parseNum(potonganLain);
+      const ketPot = ketPotongan?.trim();
+      parts.push(`Potongan: ${formatRupiah(totalPotongan)}${ketPot ? ` (${ketPot})` : ''}`);
+      if (catatan?.trim()) {
+        parts.push(`Catatan: ${catatan.trim()}`);
+      }
+
       const newRecord = {
         user_id: user.id,
         store_id: activeStoreId,
         kasir_id: selectedKasir,
         jenis: 'Gaji',
         nominal: totalGaji,
-        keterangan: `Periode: ${monthLabel}, Hadir: ${hariKerja} hari, Libur: ${hariLibur} hari, Lembur: ${hariLembur} hari, Uang Lembur: Rp ${formatRupiah(uangLemburVal)}, Pokok: Rp ${formatRupiah(gajiPokok)}, Bonus: Rp ${formatRupiah(parseNum(bonus))}, Potongan: Rp ${formatRupiah(potonganIzinVal + parseNum(potonganLain))}`,
+        keterangan: parts.join(' | '),
         timestamp: new Date().toISOString()
       };
       const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
       if (error) throw error;
-      showToast("Berhasil menyimpan riwayat gaji ke server!");
+      showToast("Berhasil menyimpan riwayat gaji lengkap ke server!");
       if (fetchGajiBonus) fetchGajiBonus();
     } catch (e: any) {
       showToast("Gagal simpan: " + e.message);
     }
-  }
+  };
 
   const handleShareJPG = async () => {
     try {
@@ -838,7 +966,7 @@ const GajiPanel: React.FC<{
       const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir';
       const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       
-      const details = tx.keterangan.replace('[GAJI] ', '').split(', ');
+      const { items, catatan } = parseGajiDetails(tx.keterangan);
       
       const el = document.createElement('div');
       el.style.width = "400px";
@@ -858,16 +986,18 @@ const GajiPanel: React.FC<{
               <span style="font-size:10px; font-weight:bold; color:#d1fae5;">NAMA</span>
               <span style="font-size:14px; font-weight:900; text-transform:uppercase;">${kasirName}</span>
             </div>
-            ${details.map((item: string) => {
-              const parts = item.split(': ');
-              if(parts.length < 2) return '';
-              const lbl = parts[0];
-              const val = parts.slice(1).join(': ');
+            ${items.map((item) => {
               return '<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">' +
-                '<span style="color:#d1fae5; font-weight:bold; text-transform:uppercase;">' + lbl + '</span>' +
-                '<span style="font-weight:900; text-align:right; white-space:pre-wrap; max-width:60%;">' + val + '</span>' +
+                '<span style="color:#d1fae5; font-weight:bold; text-transform:uppercase;">' + item.label + '</span>' +
+                '<span style="font-weight:900; text-align:right; white-space:pre-wrap; max-width:65%;">' + item.value + '</span>' +
               '</div>';
             }).join('')}
+            ${catatan ? `
+              <div style="margin-top:10px; padding:8px 10px; background:rgba(0,0,0,0.15); border-radius:10px; border:1px solid rgba(255,255,255,0.15); text-align:left;">
+                <span style="font-size:8px; font-weight:bold; color:#a7f3d0; text-transform:uppercase; display:block; margin-bottom:2px;">Catatan:</span>
+                <span style="font-size:10px; font-weight:700; white-space:pre-wrap; color:#ffffff;">${catatan}</span>
+              </div>
+            ` : ''}
           </div>
           <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:flex-end;">
             <div>
@@ -942,7 +1072,70 @@ const GajiPanel: React.FC<{
       showToast(`Gagal share ${format.toUpperCase()}: ` + (e?.message || "Error unknown"));
       console.error(e);
     }
-  }
+  };
+
+  const printHistoryReceipt = (tx: any) => {
+    try {
+      const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir';
+      const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      const timeStr = new Date(tx.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+      const { items, catatan } = parseGajiDetails(tx.keterangan);
+
+      const w = 32;
+      const center = (s: string) => {
+        const txt = (s || '').trim().substring(0, w);
+        return ' '.repeat(Math.max(0, Math.floor((w - txt.length) / 2))) + txt;
+      };
+      const right = (left: string, rightVal: string) => {
+        const l = (left || '').trim();
+        const r = (rightVal || '').trim();
+        const space = w - l.length - r.length;
+        return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
+      };
+
+      let t = '';
+      t += center(storeName || 'ALFAZA CELL') + '\n';
+      t += center('SLIP GAJI KARYAWAN') + '\n';
+      t += '='.repeat(w) + '\n';
+      t += right('Kasir', kasirName) + '\n';
+      t += right('Waktu Simpan', `${dateStr} ${timeStr}`) + '\n';
+      t += '-'.repeat(w) + '\n';
+      t += center('RINCIAN GAJI') + '\n';
+
+      items.forEach(item => {
+        if (item.label.length + item.value.length + 1 <= w) {
+          t += right(item.label, item.value) + '\n';
+        } else {
+          t += item.label + '\n';
+          t += right('  Jumlah', item.value) + '\n';
+        }
+      });
+
+      t += '='.repeat(w) + '\n';
+      t += right('TOTAL DITERIMA', `Rp ${formatNum(tx.nominal)}`) + '\n';
+      t += '='.repeat(w) + '\n';
+
+      if (catatan) {
+        t += `Catatan:\n${catatan}\n`;
+        t += '-'.repeat(w) + '\n';
+      }
+
+      t += '\n';
+      t += center('Tanda Tangan / Penerima') + '\n\n\n';
+      t += center(`( ${kasirName} )`) + '\n\n\n';
+
+      const isAutoPrint = localStorage.getItem('auto_print_gaji') === 'true';
+      const btMac = localStorage.getItem('bluetooth_printer_mac');
+      if (isAutoPrint && (btMac || isAndroidBridgeAvailable())) {
+        executePrintReceipt(t);
+      } else {
+        setReviewReceiptText(t);
+      }
+    } catch (e: any) {
+      console.error("Gagal print struk riwayat:", e);
+      showToast("Gagal print struk riwayat: " + (e?.message || e));
+    }
+  };
 
   const handleSimpanBonus = async () => {
     try {
@@ -1128,6 +1321,34 @@ const GajiPanel: React.FC<{
           </div>
         </div>
 
+        {/* LIVE SYNC STATUS & REFRESH BAR */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3 px-3 py-2 bg-white rounded-xl border border-gray-200/80 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] font-bold text-gray-700">
+              Absen: <strong className="text-emerald-700 font-black">{autoHadirDays} Hari Kerja</strong>
+              {autoLemburDays > 0 ? (
+                <span className="ml-1 text-[9px] text-amber-700 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                  ({autoRegulerDays} Reguler + {autoLemburDays} Lembur)
+                </span>
+              ) : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleSyncAbsensiLive(true)}
+            disabled={isSyncingAbsensi}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-[10px] font-black active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            title="Klik untuk menyinkronkan data absensi terbaru secara live dari server"
+          >
+            <i className={cn("fa-solid fa-arrows-rotate text-[9px]", isSyncingAbsensi && "animate-spin text-blue-600")}></i>
+            <span>{isSyncingAbsensi ? 'Menyinkronkan...' : `Sinkronkan Live (${lastSyncTime})`}</span>
+          </button>
+        </div>
+
         <div className="mb-3">
           <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-2">MODE PENGHITUNGAN</label>
           <div className="flex gap-2">
@@ -1239,7 +1460,9 @@ const GajiPanel: React.FC<{
             ) : (
               <div className="w-full text-xs p-2.5 rounded-lg border border-gray-200 bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
                 <span>{hariKerja} hari</span>
-                <span className="text-[9px] text-teal-600 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">Auto Absen</span>
+                <span className="text-[9px] text-teal-700 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                  {autoLemburDays > 0 ? `${autoRegulerDays} Reg + ${autoLemburDays} Lembur` : 'Auto Absen'}
+                </span>
               </div>
             )}
           </div>
@@ -1527,28 +1750,49 @@ const GajiPanel: React.FC<{
                    </div>
                  </div>
                  {isExpanded && (
-                   <div className="p-4 bg-gray-50 border-t border-gray-100 text-[10px] font-bold text-gray-600 leading-relaxed space-y-1.5">
-                     <p className="text-green-700 font-black text-[9px] uppercase tracking-widest mb-2 border-b border-green-200/50 pb-1">Rincian Slip Gaji:</p>
-                     {tx.keterangan.replace('[GAJI] ', '').split(', ').map((item: string, idx: number) => {
-                       const parts = item.split(': ');
-                       if (parts.length < 2) return null;
-                       const lbl = parts[0];
-                       const val = parts.slice(1).join(': ');
+                   <div className="p-4 bg-gray-50 border-t border-gray-100 text-[10px] font-bold text-gray-600 leading-relaxed space-y-2">
+                     <p className="text-green-700 font-black text-[9px] uppercase tracking-widest mb-1 border-b border-green-200/50 pb-1">Rincian Slip Gaji:</p>
+                     {(() => {
+                       const { items, catatan } = parseGajiDetails(tx.keterangan);
                        return (
-                         <div key={idx} className="flex justify-between items-center">
-                           <span className="text-gray-500 uppercase text-[8px] font-bold tracking-widest">{lbl}</span>
-                           <span className="font-black text-gray-800">{val}</span>
-                         </div>
-                       )
-                     })}
-                     <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200">
-                        <button onClick={() => shareHistoryData(tx, 'jpg')} className="flex-1 py-2 bg-[#0066FF] text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1">
-                          <i className="fa-solid fa-download"></i> UNDUH JPG
-                        </button>
-                        <button onClick={() => shareHistoryData(tx, 'pdf')} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-1">
-                          <i className="fa-solid fa-file-pdf"></i> UNDUH PDF
-                        </button>
-                     </div>
+                         <>
+                           <div className="space-y-1.5 bg-white p-3 rounded-xl border border-gray-200/70 shadow-2xs">
+                             {items.map((item, idx) => (
+                               <div key={idx} className="flex justify-between items-center py-0.5 border-b border-gray-100 last:border-b-0">
+                                 <span className="text-gray-500 uppercase text-[9px] font-bold tracking-wider">{item.label}</span>
+                                 <span className="font-black text-gray-800 text-[10px]">{item.value}</span>
+                               </div>
+                             ))}
+                           </div>
+
+                           {catatan && (
+                             <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200 shadow-2xs">
+                               <span className="text-[8px] font-black uppercase text-amber-800 tracking-wider flex items-center gap-1.5 mb-1">
+                                 <i className="fa-solid fa-note-sticky text-amber-600"></i> CATATAN / KETERANGAN:
+                               </span>
+                               <p className="text-[11px] font-bold text-amber-950 whitespace-pre-wrap leading-relaxed">{catatan}</p>
+                             </div>
+                           )}
+
+                           <div className="flex justify-between items-center p-3 bg-emerald-50/80 rounded-xl border border-emerald-200">
+                             <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">TOTAL DITERIMA</span>
+                             <span className="text-sm font-black text-emerald-700 tabular-nums">{formatRupiah(tx.nominal)}</span>
+                           </div>
+
+                           <div className="flex gap-2 mt-3 pt-2 border-t border-gray-200/80">
+                              <button onClick={() => shareHistoryData(tx, 'jpg')} className="flex-1 py-2.5 bg-[#0066FF] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs">
+                                <i className="fa-solid fa-download"></i> UNDUH JPG
+                              </button>
+                              <button onClick={() => shareHistoryData(tx, 'pdf')} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs">
+                                <i className="fa-solid fa-file-pdf"></i> UNDUH PDF
+                              </button>
+                              <button onClick={() => printHistoryReceipt(tx)} className="flex-1 py-2.5 bg-slate-800 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs">
+                                <i className="fa-solid fa-print"></i> PRINT
+                              </button>
+                           </div>
+                         </>
+                       );
+                     })()}
                    </div>
                  )}
               </div>
@@ -6520,10 +6764,20 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           
                           <div className="flex flex-col gap-3">
                             {cashiers.map(([id, acc]) => {
-                              // Data absensi bulan ini untuk kasir ini
-                              const monthData = effectiveAbsensiList.filter(a => 
-                                (a.username === id || a.nama_kasir === acc.name) && a.tanggal && a.tanggal.startsWith(absenFilterMonth)
-                              )
+                              // Data absensi bulan ini untuk kasir ini (pencocokan kebal case-sensitivity & nama_kasir/nama)
+                              const sIdLower = (id || '').toLowerCase().trim()
+                              const sNameLower = (acc.name || '').toLowerCase().trim()
+                              const monthData = effectiveAbsensiList.filter(a => {
+                                if (!a.tanggal || !a.tanggal.startsWith(absenFilterMonth)) return false
+                                const aUsername = (a.username || '').toLowerCase().trim()
+                                const aNama = (a.nama || a.nama_kasir || '').toLowerCase().trim()
+                                return (
+                                  (sIdLower && aUsername === sIdLower) ||
+                                  (sNameLower && aNama === sNameLower) ||
+                                  (sNameLower && aUsername === sNameLower) ||
+                                  (sIdLower && aNama === sIdLower)
+                                )
+                              })
                               
                               // Hadir berdasarkan tanggal unik (hanya yang statusnya Hadir atau Lembur / bukan Libur dan bukan Izin)
                               const attendedEntries = monthData.filter(a => a.status !== 'Libur' && a.status !== 'Izin')
