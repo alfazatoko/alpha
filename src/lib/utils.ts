@@ -309,6 +309,17 @@ export const getShiftInfo = (
     };
   }
 
+  if (!jam_masuk || jam_masuk === '-' || !jam_masuk.trim()) {
+    return {
+      isLate: false,
+      lateMins: 0,
+      shiftName: '-' as any,
+      isPagi: false,
+      isSiang: false,
+      isMalam: false,
+    };
+  }
+
   const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
   const [hStr, mStr] = safeJam.split(':');
   const hour = parseInt(hStr || '0', 10);

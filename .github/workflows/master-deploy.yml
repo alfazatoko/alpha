@@ -102,14 +102,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.1
-          name: "ALFAZA ALPHA POS v1.6.1"
+          tag_name: v1.6.2
+          name: "ALFAZA ALPHA POS v1.6.2"
           body: |
-            ### Pembaruan Aplikasi v1.6.1
-            - **Perbaikan Keterbacaan Nominal & Mode Gelap (Dark Mode):**
-              - Memperbaiki nominal transfer dan transaksi di riwayat agar selalu tampil jelas dan tajam (tidak hilang/putih) saat perangkat tablet atau HP mengaktifkan Dark Mode bawaan Android.
-              - Mengunci sistem Tailwind CSS (`darkMode: 'class'`) agar tema bawaan HP tidak merusak kontras warna di kartu dan tabel aplikasi.
-              - Mempertahankan ketegasan warna nama bank (`text-blue-900`) dan tanggal transaksi agar tidak pudar di mode gelap.
+            ### Pembaruan Aplikasi v1.6.2
+            - **Perbaikan Preview Foto Share Slip Gaji (JPG):**
+              - Memperbaiki thumbnail preview di dialog share Android agar selalu menampilkan data terkini (mengatasi masalah cache thumbnail Android dengan timestamp unik).
+            - **Perbaikan Kolom Keterangan Potongan Struk:**
+              - Keterangan potongan yang panjang kini otomatis diatur rapi menjadi 2 baris sehingga keterangannya lengkap dan tidak terpotong.
+            - **Tombol Bagikan Foto Struk:**
+              - Menambahkan tombol "Bagikan" di modal Review Struk Gaji untuk langsung berbagi atau mengunduh foto struk thermal.
+              - Memperbaiki rendering garis pemisah pada struk agar tidak menimpa teks "SLIP GAJI KARYAWAN" pada gambar JPG.
+            - **Perbaikan Filter Kehadiran Shift & Status Izin:**
+              - Memastikan status Libur dan Izin tidak tercampur ke dalam perhitungan shift kasir.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

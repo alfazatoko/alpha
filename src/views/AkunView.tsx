@@ -3073,7 +3073,8 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             const myAbsensi = (props.absensiList || []).filter(a => 
               (a.username === props.currentUsername || a.nama_kasir === myName) && a.tanggal && a.tanggal.startsWith(currentFilterMonth)
             );
-            const uniqueAttendedDates = new Set(myAbsensi.map(a => a.tanggal));
+            const attendedEntries = myAbsensi.filter(a => a.status !== 'Libur' && a.status !== 'Izin');
+            const uniqueAttendedDates = new Set(attendedEntries.map(a => a.tanggal));
             const totalHadir = uniqueAttendedDates.size;
             
             const joinD = myJoin ? new Date(myJoin) : new Date(todayD.getFullYear(), todayD.getMonth(), 1);
@@ -3091,20 +3092,20 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
             const latePagiDates: {tanggal: string, jam: string}[] = [];
 
             const dailyFirstEntries = new Map<string, any>();
-            myAbsensi.forEach(entry => {
+            attendedEntries.forEach(entry => {
               if (!dailyFirstEntries.has(entry.tanggal)) {
                 dailyFirstEntries.set(entry.tanggal, entry);
               }
             });
 
             dailyFirstEntries.forEach(entry => {
-              const info = getShiftInfo(entry.jam_masuk, financialSettings);
+              const info = getShiftInfo(entry.jam_masuk, financialSettings, entry.shift);
               if (info.isPagi) {
                 pagi++;
                 if (info.isLate) {
                   latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`});
                 }
-              } else {
+              } else if (info.isSiang || (!info.isPagi && entry.jam_masuk && entry.jam_masuk !== '-')) {
                 siang++;
               }
             });

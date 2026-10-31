@@ -189,6 +189,7 @@ const GajiPanel: React.FC<{
   const [izinManual, setIzinManual] = useState("")
   const [catatan, setCatatan] = useState("")
   const slipRef = React.useRef<HTMLDivElement>(null)
+  const receiptVisualRef = React.useRef<HTMLDivElement>(null)
 
   const [izinList, setIzinList] = useState<any[]>([])
 
@@ -377,6 +378,24 @@ const GajiPanel: React.FC<{
       return l + (space > 0 ? ' '.repeat(space) : ' ') + r;
     };
 
+    const wrapText = (text: string, maxWidth: number = 32): string[] => {
+      const words = (text || '').split(' ');
+      const lines: string[] = [];
+      let cur = '';
+      for (const word of words) {
+        if (!cur) {
+          cur = word;
+        } else if ((cur + ' ' + word).length <= maxWidth) {
+          cur += ' ' + word;
+        } else {
+          lines.push(cur);
+          cur = word;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+
     const now = new Date();
     const dateStr = now.toLocaleDateString('id-ID');
     const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
@@ -411,8 +430,24 @@ const GajiPanel: React.FC<{
       t += right('Potongan Izin', `-Rp ${formatNum(potonganIzinVal)}`) + '\n';
     }
     if (parseNum(potonganLain) > 0) {
-      const ket = ketPotongan ? ` (${ketPotongan})` : '';
-      t += right(`Potongan${ket}`.substring(0, 15), `-Rp ${formatNum(parseNum(potonganLain))}`) + '\n';
+      const val = `-Rp ${formatNum(parseNum(potonganLain))}`;
+      const ket = ketPotongan?.trim();
+      if (ket) {
+        const fullLabel = `Potongan (${ket})`;
+        // Jika muat dalam 1 baris (dengan minimal 1 spasi antar kolom)
+        if (fullLabel.length + val.length + 1 <= w) {
+          t += right(fullLabel, val) + '\n';
+        } else {
+          // Atur menjadi 2 baris agar keterangan lengkap tidak terpotong
+          const lines = wrapText(fullLabel, w);
+          lines.forEach(l => {
+            t += l + '\n';
+          });
+          t += right('  Jumlah Potongan', val) + '\n';
+        }
+      } else {
+        t += right('Potongan Lain', val) + '\n';
+      }
     }
     t += '='.repeat(w) + '\n';
     t += right('TOTAL DITERIMA', `Rp ${formatNum(totalGaji)}`) + '\n';
@@ -476,6 +511,118 @@ const GajiPanel: React.FC<{
     }
   };
 
+  const handleShareReceiptPhoto = async () => {
+    try {
+      if (!reviewReceiptText) return;
+      showToast("Menyiapkan foto struk...");
+
+      if (reviewViewMode !== 'visual') {
+        setReviewViewMode('visual');
+        await new Promise((r) => setTimeout(r, 80));
+      }
+
+      if (!receiptVisualRef.current) {
+        showToast("Gagal memproses tampilan struk");
+        return;
+      }
+
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default;
+      const canvas = await html2canvas(receiptVisualRef.current, {
+        scale: 2.5,
+        useCORS: false,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const timestamp = Date.now();
+      const filename = `struk-gaji-${(selectedName || 'kasir').replace(/\s+/g, '-')}-${month || new Date().toISOString().slice(0, 7)}-${timestamp}.jpg`;
+      const { Capacitor } = await import('@capacitor/core');
+
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+
+        // Bersihkan cache struk/slip lama agar Android tidak menumpuk file
+        try {
+          const { files } = await Filesystem.readdir({ path: '', directory: Directory.Cache });
+          for (const f of files) {
+            const fname = typeof f === 'string' ? f : (f as any).name;
+            if (fname && (fname.startsWith('struk-gaji-') || fname.startsWith('slip-gaji-'))) {
+              await Filesystem.deleteFile({ path: fname, directory: Directory.Cache }).catch(() => {});
+            }
+          }
+        } catch (_) {}
+
+        const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(',')[1];
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+
+        await Share.share({
+          title: `Struk Gaji ${selectedName || 'Kasir'}`,
+          url: result.uri
+        });
+      } else {
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        const triggerDownload = (blob: Blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+
+          // Jika di browser HP, coba gunakan navigator.share
+          if (isMobile && navigator.share && navigator.canShare) {
+            try {
+              const file = new File([blob], filename, { type: "image/jpeg" });
+              if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  title: `Struk Gaji ${selectedName || 'Kasir'}`,
+                  files: [file]
+                });
+                return;
+              }
+            } catch (err: any) {
+              if (err?.name === 'AbortError') return; // User batalkan dialog share
+            }
+          }
+
+          // Di PC (atau jika share HP tidak didukung/gagal), langsung download file
+          triggerDownload(blob);
+          showToast('Foto struk berhasil diunduh');
+
+          // Coba salin gambar ke clipboard di PC agar bisa langsung di-Paste (Ctrl+V) ke WhatsApp Web / Telegram
+          if (!isMobile && navigator.clipboard && (window as any).ClipboardItem) {
+            canvas.toBlob(async (pngBlob) => {
+              if (pngBlob) {
+                try {
+                  await navigator.clipboard.write([
+                    new (window as any).ClipboardItem({ 'image/png': pngBlob })
+                  ]);
+                  showToast('Foto struk diunduh & disalin ke clipboard! (Bisa langsung Ctrl+V di WA)');
+                } catch (_) {}
+              }
+            }, 'image/png');
+          }
+        }, 'image/jpeg', 0.95);
+      }
+    } catch (e: any) {
+      console.error("Gagal share struk photo:", e);
+      showToast("Gagal membagikan foto struk: " + (e?.message || e));
+    }
+  };
+
   const printHistorySlip = (tx: any) => {
     try {
       const w = 32;
@@ -509,7 +656,12 @@ const GajiPanel: React.FC<{
         if (parts.length >= 2) {
           const lbl = parts[0].trim();
           const val = parts.slice(1).join(': ').trim();
-          t += right(lbl.substring(0, 16), val) + '\n';
+          if (lbl.length + val.length + 1 <= w) {
+            t += right(lbl, val) + '\n';
+          } else {
+            t += lbl + '\n';
+            t += right('  Jumlah', val) + '\n';
+          }
         }
       });
 
@@ -629,14 +781,26 @@ const GajiPanel: React.FC<{
       const html2canvas = html2canvasModule.default;
       const canvas = await html2canvas(slipRef.current, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
       
-      const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}.jpg`;
+      const timestamp = Date.now();
+      const filename = `slip-gaji-${selectedName.replace(/\s+/g, '-')}-${month}-${timestamp}.jpg`;
       const { Capacitor } = await import('@capacitor/core');
       
       if (Capacitor.isNativePlatform()) {
         const { Filesystem, Directory } = await import('@capacitor/filesystem');
         const { Share } = await import('@capacitor/share');
         
-        const base64Data = canvas.toDataURL("image/jpeg", 0.9).split(',')[1];
+        // Hapus file cache slip/struk lama agar Android OS Sharesheet tidak menampilkan thumbnail cache usang
+        try {
+          const { files } = await Filesystem.readdir({ path: '', directory: Directory.Cache });
+          for (const f of files) {
+            const fname = typeof f === 'string' ? f : (f as any).name;
+            if (fname && (fname.startsWith('slip-gaji-') || fname.startsWith('struk-gaji-'))) {
+              await Filesystem.deleteFile({ path: fname, directory: Directory.Cache }).catch(() => {});
+            }
+          }
+        } catch (_) {}
+
+        const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(',')[1];
         
         const result = await Filesystem.writeFile({
           path: filename,
@@ -660,7 +824,7 @@ const GajiPanel: React.FC<{
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
           showToast('Gambar berhasil diunduh.');
-        }, 'image/jpeg', 0.9);
+        }, 'image/jpeg', 0.95);
       }
     } catch (e: any) {
       showToast("Gagal share JPG: " + (e?.message || "Error unknown"));
@@ -1801,20 +1965,28 @@ const GajiPanel: React.FC<{
               {/* Thermal Paper Preview Container */}
               <div className="bg-slate-100/80 p-2.5 rounded-2xl border border-slate-200 flex justify-center">
                 {reviewViewMode === 'visual' ? (
-                  <div className="w-full max-w-[285px] bg-white rounded-xl shadow-md border border-slate-200/90 p-3.5 font-mono select-all text-left">
-                    <div className="space-y-0.5">
+                  <div ref={receiptVisualRef} className="w-full max-w-[285px] bg-white rounded-xl shadow-md border border-slate-200/90 p-3.5 font-mono select-all text-left">
+                    <div className="flex flex-col">
                       {reviewReceiptText.split('\n').map((line, idx) => {
                         const trimmed = line.trim();
                         if (!trimmed) {
-                          return <div key={idx} className="h-1.5" />;
+                          return <div key={idx} className="h-1.5 w-full" style={{ minHeight: '6px' }} />;
                         }
 
-                        // Separator lines
+                        // Separator lines - dibuat dengan container BFC (overflow-hidden) dan minHeight agar html2canvas tidak menimpa baris teks di atasnya
                         if (/^={4,}$/.test(trimmed)) {
-                          return <div key={idx} className="border-b-2 border-slate-800 my-1" />;
+                          return (
+                            <div key={idx} className="w-full my-1.5 flex items-center overflow-hidden" style={{ minHeight: '8px' }}>
+                              <div className="w-full border-b-2 border-slate-900" style={{ height: '0px' }} />
+                            </div>
+                          );
                         }
                         if (/^-{4,}$/.test(trimmed)) {
-                          return <div key={idx} className="border-b border-dashed border-slate-400 my-1" />;
+                          return (
+                            <div key={idx} className="w-full my-1 flex items-center overflow-hidden" style={{ minHeight: '6px' }}>
+                              <div className="w-full border-b border-dashed border-slate-400" style={{ height: '0px' }} />
+                            </div>
+                          );
                         }
 
                         // Centered items
@@ -1829,9 +2001,9 @@ const GajiPanel: React.FC<{
                               key={idx} 
                               className={cn(
                                 "text-center uppercase tracking-wide",
-                                isStoreOrTitle ? "font-black text-slate-900 text-[11px] leading-tight" : 
-                                isSectionHeader ? "font-black text-slate-800 text-[10px] my-0.5" :
-                                isSignature ? "font-black text-slate-900 text-[10px] mt-2.5" : "font-semibold text-slate-500 text-[9px]"
+                                isStoreOrTitle ? "font-black text-slate-900 text-[11px] leading-tight py-0.5" : 
+                                isSectionHeader ? "font-black text-slate-800 text-[10px] my-1" :
+                                isSignature ? "font-black text-slate-900 text-[10px] mt-2.5" : "font-semibold text-slate-500 text-[9px] py-0.5"
                               )}
                             >
                               {trimmed}
@@ -1851,7 +2023,7 @@ const GajiPanel: React.FC<{
                               key={idx} 
                               className={cn(
                                 "flex justify-between items-center text-[10.5px] leading-tight py-0.5",
-                                isTotal ? "font-black text-slate-900 text-[11.5px] border-y border-slate-900 my-1 py-1" : "text-slate-800 font-semibold"
+                                isTotal ? "font-black text-slate-900 text-[11.5px] py-0.5" : "text-slate-800 font-semibold"
                               )}
                             >
                               <span className={cn("text-left shrink-0", isTotal ? "text-slate-900 font-black" : "text-slate-600 font-bold")}>
@@ -1864,9 +2036,18 @@ const GajiPanel: React.FC<{
                           );
                         }
 
-                        // Single line (e.g. Catatan)
+                        // Single line (e.g. Catatan atau Keterangan Potongan 2-baris)
+                        const isPotonganHeader = trimmed.startsWith('Potongan (');
                         return (
-                          <div key={idx} className="text-left text-[9.5px] text-slate-700 font-medium leading-tight py-0.5">
+                          <div 
+                            key={idx} 
+                            className={cn(
+                              "text-left leading-tight py-0.5 break-words",
+                              isPotonganHeader 
+                                ? "text-[10px] text-slate-800 font-bold" 
+                                : "text-[9.5px] text-slate-700 font-medium"
+                            )}
+                          >
                             {trimmed}
                           </div>
                         );
@@ -1906,25 +2087,36 @@ const GajiPanel: React.FC<{
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end gap-2 shrink-0">
+            <div className="px-3.5 sm:px-4 py-2.5 border-t border-slate-100 bg-slate-50/90 flex items-center justify-between gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setReviewReceiptText(null)}
-                className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                className="px-3 sm:px-3.5 py-2 text-[11px] sm:text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
               >
                 Tutup
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  executePrintReceipt(reviewReceiptText);
-                  setReviewReceiptText(null);
-                }}
-                className="px-4 py-2 text-xs font-black text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              >
-                <i className="fa-solid fa-print text-xs"></i>
-                <span>Cetak Struk Sekarang</span>
-              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handleShareReceiptPhoto}
+                  className="px-3 sm:px-3.5 py-2 text-[11px] sm:text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all shadow-2xs active:scale-95 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  title="Bagikan struk gaji sebagai foto"
+                >
+                  <i className="fa-solid fa-share-nodes text-xs"></i>
+                  <span>Bagikan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    executePrintReceipt(reviewReceiptText);
+                    setReviewReceiptText(null);
+                  }}
+                  className="px-3.5 sm:px-4 py-2 text-[11px] sm:text-xs font-black text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                >
+                  <i className="fa-solid fa-print text-xs"></i>
+                  <span>Cetak Struk Sekarang</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -6333,8 +6525,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                 (a.username === id || a.nama_kasir === acc.name) && a.tanggal && a.tanggal.startsWith(absenFilterMonth)
                               )
                               
-                              // Hadir berdasarkan tanggal unik
-                              const uniqueAttendedDates = new Set(monthData.filter(a => a.status !== 'Libur' && a.status !== 'Izin').map(a => a.tanggal))
+                              // Hadir berdasarkan tanggal unik (hanya yang statusnya Hadir atau Lembur / bukan Libur dan bukan Izin)
+                              const attendedEntries = monthData.filter(a => a.status !== 'Libur' && a.status !== 'Izin')
+                              const uniqueAttendedDates = new Set(attendedEntries.map(a => a.tanggal))
                               const totalHadir = uniqueAttendedDates.size
 
                               // Evaluasi hari berlalu efektif (jika hari ini belum absen, hari ini tidak dihitung sebagai libur)
@@ -6351,23 +6544,24 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                               let siang = 0
                               const latePagiDates: {tanggal: string, jam: string, alasan_telat?: string}[] = []
                               
-                              // Hitung shift pagi vs siang dari setiap tanggal unik (ambil entri pertama tiap hari)
+                              // Hitung shift pagi vs siang HANYA dari kehadiran yang sah (ambil entri pertama tiap hari)
                               const dailyFirstEntries = new Map<string, any>()
-                              monthData.forEach(entry => {
+                              attendedEntries.forEach(entry => {
                                 if (!dailyFirstEntries.has(entry.tanggal)) {
                                   dailyFirstEntries.set(entry.tanggal, entry)
                                 }
                               })
 
                               dailyFirstEntries.forEach(entry => {
-                                const info = getShiftInfo(entry.jam_masuk, financialSettings);
+                                const info = getShiftInfo(entry.jam_masuk, financialSettings, entry.shift);
                                 if (info.isPagi) {
                                   pagi++
                                   if (info.isLate) {
                                     latePagiDates.push({tanggal: entry.tanggal, jam: `${entry.jam_masuk} (-${info.lateMins}m)`, alasan_telat: entry.alasan_telat})
                                   }
+                                } else if (info.isSiang || (!info.isPagi && entry.jam_masuk && entry.jam_masuk !== '-')) {
+                                  siang++
                                 }
-                                else siang++
                               })
                               
                               // Urutkan riwayat telat dari yang terbaru
@@ -6866,12 +7060,14 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                                             </div>
                                                           </div>
                                                           <div className="flex items-center gap-1.5">
-                                                            <span className={cn(
-                                                              "text-[8.5px] font-black uppercase px-2 py-0.5 rounded shadow-2xs",
-                                                              shiftInf.isPagi ? "bg-orange-100 text-orange-700" : "bg-indigo-100 text-indigo-700"
-                                                            )}>
-                                                              {shiftInf.isPagi ? 'Pagi' : 'Siang'}
-                                                            </span>
+                                                            {entry.status !== 'Libur' && entry.status !== 'Izin' && (
+                                                              <span className={cn(
+                                                                "text-[8.5px] font-black uppercase px-2 py-0.5 rounded shadow-2xs",
+                                                                shiftInf.isPagi ? "bg-orange-100 text-orange-700" : "bg-indigo-100 text-indigo-700"
+                                                              )}>
+                                                                {shiftInf.isPagi ? 'Pagi' : 'Siang'}
+                                                              </span>
+                                                            )}
                                                             {entry.status === 'Lembur' && (
                                                               <span className="text-[8.5px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded shadow-2xs uppercase">
                                                                 Lembur
@@ -6880,6 +7076,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                                             {entry.status === 'Libur' && (
                                                               <span className="text-[8.5px] font-black text-white bg-amber-500 px-2 py-0.5 rounded shadow-2xs uppercase">
                                                                 Libur
+                                                              </span>
+                                                            )}
+                                                            {entry.status === 'Izin' && (
+                                                              <span className="text-[8.5px] font-black text-white bg-blue-500 px-2 py-0.5 rounded shadow-2xs uppercase">
+                                                                Izin
                                                               </span>
                                                             )}
                                                           </div>
