@@ -177,6 +177,17 @@ export const getNormalizedCategory = (rawCategory: string = ''): string => {
   return cat || 'Lainnya';
 };
 
+export const getCleanAdminProfit = (t: { kategori?: string; adminFee?: number; admin_fee?: number; keterangan?: string }): number => {
+  const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+  const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+  const rawAdmin = Number(t.adminFee ?? (t as any).admin_fee ?? 0);
+  const isOrderKuota = (t.kategori || '') === 'Order Kuota' || /order\s*kuota/i.test(t.kategori || '');
+  if (appFee > 0 && !isOrderKuota) {
+    return Math.max(0, rawAdmin - appFee);
+  }
+  return rawAdmin;
+};
+
 export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   transactions,
   allTransactions,
@@ -650,7 +661,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
           const dNum = parseInt(tDate.substring(8, 10), 10);
           const item = dayMap.get(dNum);
           if (item) {
-            const fee = Number(t.adminFee || (t as any).admin_fee || 0);
+            const fee = getCleanAdminProfit(t);
             const nominal = Number(t.nominal || 0);
             const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]') || (t.keterangan || '').includes('[ADMIN_DALAM]');
 
@@ -745,8 +756,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       const normName = getNormalizedCategory(t.kategori);
       const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
       const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-      const rawAdmin = Number(t.adminFee || (t as any).admin_fee || 0);
-      const cleanAdmin = appFee > 0 ? Math.max(0, rawAdmin - appFee) : rawAdmin;
+      const cleanAdmin = getCleanAdminProfit(t);
       const nominal = Number(t.nominal || 0);
 
       const prev = catMap.get(normName) || { count: 0, omzet: 0, profit: 0, totalFeeApp: 0 };
@@ -833,7 +843,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       filteredTransactions.forEach(t => {
         const tDate = t.timestamp.substring(0, 10);
         if (tDate.startsWith(mKey)) {
-          const fee = Number(t.adminFee || (t as any).admin_fee || 0);
+          const fee = getCleanAdminProfit(t);
           const nominal = Number(t.nominal || 0);
           const isNonTunai = (t.keterangan || '').includes('[NON_TUNAI]') || (t.keterangan || '').includes('[ADMIN_DALAM]');
 
@@ -942,7 +952,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     const kasirMap: Record<string, { kasirId: string; name: string; admin: number; trx: number; omzet: number }> = {};
 
     filteredTransactions.forEach(t => {
-      const fee = Number(t.adminFee || (t as any).admin_fee || 0);
+      const fee = getCleanAdminProfit(t);
       const nominal = Number(t.nominal || 0);
       const tDate = t.timestamp.substring(0, 10);
       if (!tDate || tDate.length < 10) return;

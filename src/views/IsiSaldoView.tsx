@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatInputRupiah, cn, formatRupiah } from '../lib/utils'
 import type { OperkanSaldo } from '../types'
+import { supabase } from '../lib/supabase'
 
 interface IsiSaldoViewProps {
   active: boolean
@@ -48,7 +49,137 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
   const fullDate = currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   const clockStr = currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA', 'TAMBAH SALDOBANK']
+  const DEFAULT_ISI_SALDO_OPTIONS = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA', 'TAMBAH SALDOBANK']
+
+  const [quickOptions, setQuickOptions] = useState<string[]>(() => {
+    const storeId = props.activeStoreId || 'default';
+    const saved = localStorage.getItem(`alphaPro_${storeId}_isi_saldo_options`) || localStorage.getItem('alphaPro_isi_saldo_options');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return DEFAULT_ISI_SALDO_OPTIONS;
+  });
+
+  const [showManageOptionsModal, setShowManageOptionsModal] = useState(false);
+  const [editingOptions, setEditingOptions] = useState<string[]>([]);
+  const [newOptionInput, setNewOptionInput] = useState('');
+  const [isSavingOptions, setIsSavingOptions] = useState(false);
+
+  // Sync dari Supabase & Realtime Event
+  useEffect(() => {
+    const storeId = props.activeStoreId;
+    if (!storeId || storeId === 'all') return;
+
+    const fetchCloudOptions = async () => {
+      try {
+        const { data } = await supabase
+          .from('store_custom_labels')
+          .select('labels')
+          .eq('store_id', storeId)
+          .maybeSingle();
+
+        if (data && data.labels && Array.isArray(data.labels.ISI_SALDO_OPTIONS) && data.labels.ISI_SALDO_OPTIONS.length > 0) {
+          setQuickOptions(data.labels.ISI_SALDO_OPTIONS);
+          localStorage.setItem(`alphaPro_${storeId}_isi_saldo_options`, JSON.stringify(data.labels.ISI_SALDO_OPTIONS));
+          localStorage.setItem('alphaPro_isi_saldo_options', JSON.stringify(data.labels.ISI_SALDO_OPTIONS));
+        }
+      } catch (e) {}
+    };
+
+    fetchCloudOptions();
+
+    const handleOptionsUpdated = (e: any) => {
+      if (e.detail?.options && Array.isArray(e.detail.options)) {
+        setQuickOptions(e.detail.options);
+      }
+    };
+
+    window.addEventListener('alphaIsiSaldoOptionsUpdated', handleOptionsUpdated);
+    return () => window.removeEventListener('alphaIsiSaldoOptionsUpdated', handleOptionsUpdated);
+  }, [props.activeStoreId]);
+
+  const handleOpenManageOptions = () => {
+    setEditingOptions([...quickOptions]);
+    setNewOptionInput('');
+    setShowManageOptionsModal(true);
+  };
+
+  const handleAddOption = () => {
+    const trimmed = newOptionInput.trim().toUpperCase();
+    if (!trimmed) return;
+    if (editingOptions.includes(trimmed)) {
+      props.showToast('Nama pilihan sudah ada!');
+      return;
+    }
+    setEditingOptions(prev => [...prev, trimmed]);
+    setNewOptionInput('');
+  };
+
+  const handleRemoveOption = (index: number) => {
+    if (editingOptions.length <= 1) {
+      props.showToast('Minimal harus ada 1 pilihan!');
+      return;
+    }
+    setEditingOptions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditOptionChange = (index: number, val: string) => {
+    setEditingOptions(prev => {
+      const next = [...prev];
+      next[index] = val.toUpperCase();
+      return next;
+    });
+  };
+
+  const handleResetToDefault = () => {
+    setEditingOptions([...DEFAULT_ISI_SALDO_OPTIONS]);
+  };
+
+  const handleSaveManageOptions = async () => {
+    const cleaned = editingOptions.map(o => o.trim().toUpperCase()).filter(Boolean);
+    if (cleaned.length === 0) {
+      props.showToast('Pilihan tidak boleh kosong!');
+      return;
+    }
+    setIsSavingOptions(true);
+    setQuickOptions(cleaned);
+
+    const storeId = props.activeStoreId || 'default';
+    localStorage.setItem(`alphaPro_${storeId}_isi_saldo_options`, JSON.stringify(cleaned));
+    localStorage.setItem('alphaPro_isi_saldo_options', JSON.stringify(cleaned));
+
+    window.dispatchEvent(new CustomEvent('alphaIsiSaldoOptionsUpdated', {
+      detail: { options: cleaned, storeId }
+    }));
+
+    if (props.activeStoreId && props.activeStoreId !== 'all') {
+      try {
+        const { data } = await supabase
+          .from('store_custom_labels')
+          .select('labels')
+          .eq('store_id', props.activeStoreId)
+          .maybeSingle();
+
+        const currentLabels = (data && data.labels && typeof data.labels === 'object') ? data.labels : {};
+        const updatedLabels = { ...currentLabels, ISI_SALDO_OPTIONS: cleaned };
+
+        await supabase.from('store_custom_labels').upsert({
+          store_id: props.activeStoreId,
+          labels: updatedLabels,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' });
+      } catch (err) {
+        console.error('Error saving isi saldo options to cloud:', err);
+      }
+    }
+
+    setIsSavingOptions(false);
+    setShowManageOptionsModal(false);
+    props.showToast('Pilihan cepat Tambah Saldo berhasil disimpan!');
+  };
 
   const toggleOption = (opt: string) => {
     let current = props.isiKeterangan
@@ -72,15 +203,15 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
         return
       }
 
-      if (e.key === '1') { e.preventDefault(); toggleOption('BANK'); }
-      if (e.key === '2') { e.preventDefault(); toggleOption('FLIP'); }
-      if (e.key === '3') { e.preventDefault(); toggleOption('ORDER KUOTA'); }
-      if (e.key === '4') { e.preventDefault(); toggleOption('DANA'); }
-      if (e.key === '5') { e.preventDefault(); toggleOption('TAMBAH SALDOBANK'); }
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= quickOptions.length) {
+        e.preventDefault();
+        toggleOption(quickOptions[num - 1]);
+      }
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [props.active, props.isiKeterangan])
+  }, [props.active, props.isiKeterangan, quickOptions])
 
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<any>, isLast: boolean = false) => {
     if (e.key === 'Enter') {
@@ -384,6 +515,129 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
     )
   }
 
+  const renderManageOptionsModal = () => {
+    if (!showManageOptionsModal) return null;
+
+    return (
+      <div 
+        className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowManageOptionsModal(false);
+        }}
+      >
+        <div 
+          className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] relative z-10"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white p-4 px-5 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                <i className="fa-solid fa-sliders text-sm"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">Atur Pilihan Cepat Saldo</h3>
+                <p className="text-[10px] text-blue-100 font-medium">Khusus Akun Owner Toko</p>
+              </div>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setShowManageOptionsModal(false)}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 block mb-2">
+                Daftar Pilihan Aktif ({editingOptions.length})
+              </label>
+              <div className="space-y-2">
+                {editingOptions.map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <span className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-black text-xs flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <input 
+                      type="text"
+                      value={opt}
+                      onChange={(e) => handleEditOptionChange(idx, e.target.value)}
+                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-black uppercase text-slate-800 dark:text-slate-100 outline-none focus:border-blue-500"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => handleRemoveOption(idx)}
+                      className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-500 hover:text-white text-red-500 flex items-center justify-center transition-all shrink-0"
+                      title="Hapus"
+                    >
+                      <i className="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tambah baru */}
+            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 block mb-1.5">
+                + Tambah Pilihan Baru
+              </label>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  placeholder="Contoh: SINERGI PULSA, GOPAY, dll"
+                  value={newOptionInput}
+                  onChange={e => setNewOptionInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddOption(); } }}
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black uppercase text-slate-800 dark:text-slate-100 outline-none focus:border-blue-500"
+                />
+                <button 
+                  type="button"
+                  onClick={handleAddOption}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-black px-3.5 py-2 rounded-xl text-xs transition-all flex items-center gap-1 shrink-0"
+                >
+                  <i className="fa-solid fa-plus text-xs"></i> Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 shrink-0">
+            <button 
+              type="button"
+              onClick={handleResetToDefault}
+              className="text-[10px] font-bold text-slate-500 hover:text-red-500 underline decoration-dotted"
+            >
+              Reset Default
+            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setShowManageOptionsModal(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveManageOptions}
+                disabled={isSavingOptions}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-blue-600/30 transition-all flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-check"></i> Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (props.isPc) {
     return (
       <div className={cn("flex-grow h-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden", props.active ? "flex" : "hidden")}>
@@ -475,24 +729,42 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {quickOptions.map((opt, idx) => {
-                    const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
-                    return (
-                      <button 
-                        key={opt}
-                        onClick={() => toggleOption(opt)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
-                          isSelected 
-                            ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
-                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400/50"
-                        )}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">
+                      PILIHAN CEPAT (KLIK / TEKAN ANGKA)
+                    </label>
+                    {props.kasirRole === 'owner' && (
+                      <button
+                        type="button"
+                        onClick={handleOpenManageOptions}
+                        className="text-[9px] font-black text-blue-600 hover:text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/50 flex items-center gap-1 transition-all"
+                        title="Atur Nama Pilihan Cepat (Khusus Owner)"
                       >
-                        {idx + 1}. {opt}
+                        <i className="fa-solid fa-pen-to-square text-[8px]" /> Atur Pilihan (Owner)
                       </button>
-                    )
-                  })}
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {quickOptions.map((opt, idx) => {
+                      const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
+                      return (
+                        <button 
+                          key={opt}
+                          type="button"
+                          onClick={() => toggleOption(opt)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                            isSelected 
+                              ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
+                              : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400/50"
+                          )}
+                        >
+                          {idx + 1}. {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div>
@@ -521,13 +793,14 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
                   )}
                   {props.isSaving ? 'MEMPROSES...' : 'SIMPAN SALDO'}
                 </button>
-              </div>
             </div>
           </div>
         </div>
       </div>
-    )
-  }
+      {renderManageOptionsModal()}
+    </div>
+  )
+}
 
   return (
     <div className={cn("page-view hide-scrollbar bg-gray-50/50", props.active && "active")}>
@@ -615,24 +888,41 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
             />
           </div>
 
-          <div className="flex flex-wrap gap-1.5 mt-1">
-            {quickOptions.map((opt, idx) => {
-              const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
-              return (
-                <button 
-                  key={opt}
-                  onClick={() => toggleOption(opt)}
-                  className={cn(
-                    "px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
-                    isSelected 
-                      ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
-                      : "bg-white border-gray-300 text-gray-500 hover:border-blue-400"
-                  )}
+          <div className="space-y-1 mt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                PILIHAN CEPAT
+              </label>
+              {props.kasirRole === 'owner' && (
+                <button
+                  type="button"
+                  onClick={handleOpenManageOptions}
+                  className="text-[9px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 transition-all"
                 >
-                  {idx + 1}. {opt}
+                  <i className="fa-solid fa-pen-to-square text-[8px]" /> Atur (Owner)
                 </button>
-              )
-            })}
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {quickOptions.map((opt, idx) => {
+                const isSelected = props.isiKeterangan.split(',').map(s=>s.trim()).includes(opt)
+                return (
+                  <button 
+                    key={opt}
+                    type="button"
+                    onClick={() => toggleOption(opt)}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
+                      isSelected 
+                        ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
+                        : "bg-white border-gray-300 text-gray-500 hover:border-blue-400"
+                    )}
+                  >
+                    {idx + 1}. {opt}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <div>
@@ -662,6 +952,8 @@ const IsiSaldoView: React.FC<IsiSaldoViewProps> = (props) => {
           </button>
         </div>
       </div>
+      {/* MODAL KELOLA PILIHAN CEPAT (KHUSUS OWNER) */}
+      {renderManageOptionsModal()}
     </div>
   )
 }

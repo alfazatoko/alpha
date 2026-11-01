@@ -80,8 +80,16 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       rawCleanKet = rawCleanKet.replace(/\[fee_app:\d+\]/ig, '').trim();
     }
   }
-  // Jika transaksi memiliki fee aplikasi (Flip, Bank, Dana), fee memotong laba admin toko, bukan nominal
-  const displayAdminFee = appFee > 0 ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+
+  const isOrderKuota = t.kategori === 'Order Kuota';
+  // Untuk Order Kuota: di database t.nominal sudah modal riil (termasuk fee app), dan t.adminFee sudah laba bersih (Jual - Modal Riil).
+  // Untuk kategori lain (Flip, Bank, Dana, Sinergi): t.nominal adalah nominal murni, dan t.adminFee adalah tarif kotor kasir.
+  const displayModalPokok = (appFee > 0 && isOrderKuota) ? Math.max(0, t.nominal - appFee) : t.nominal;
+  const displayTotalModal = (appFee > 0 && !isOrderKuota) ? (t.nominal + appFee) : t.nominal;
+  const displayAdminFee = (appFee > 0 && !isOrderKuota) ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+  const displayTotal = appFee > 0
+    ? (displayTotalModal + displayAdminFee)
+    : (t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0));
 
 
   let displayJenisTransaksi = t.kategori;
@@ -421,12 +429,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     text += formatReceiptDivider() + '\n';
 
     if (appFee > 0) {
-      text += formatReceiptRow('Harga Modal', 'Rp ' + formatRp(t.nominal)) + '\n';
+      text += formatReceiptRow(isOrderKuota ? 'Harga Modal' : 'Nominal', 'Rp ' + formatRp(displayModalPokok)) + '\n';
       text += formatReceiptRow('Fee / Biaya Aplikasi', 'Rp ' + formatRp(appFee)) + '\n';
-      text += formatReceiptRow('Total Modal', 'Rp ' + formatRp(t.nominal + appFee)) + '\n';
+      text += formatReceiptRow('Total Modal', 'Rp ' + formatRp(displayTotalModal)) + '\n';
       text += formatReceiptRow(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
-      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal + appFee + displayAdminFee)) + '\n';
+      text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(displayTotal)) + '\n';
     } else if (t.kategori === 'Tarik Tunai') {
       const totalTarik = t.nominal + (!hasAdminDalam ? t.adminFee : 0);
       text += formatReceiptRow('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
@@ -518,7 +526,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               "text-[13px] font-black tracking-tight leading-tight",
               isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-900")
             )}>
-              {t.nominal.toLocaleString('id-ID')}
+              {(appFee > 0 && isOrderKuota ? displayModalPokok : t.nominal).toLocaleString('id-ID')}
             </div>
           </div>
           {t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
@@ -628,8 +636,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 {appFee > 0 ? (
                   <>
                     <div className="flex justify-between items-center text-[12px]">
-                      <span className="text-slate-500 font-bold">Harga Modal:</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal)}</span>
+                      <span className="text-slate-500 font-bold">{isOrderKuota ? 'Harga Modal:' : 'Nominal:'}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(displayModalPokok)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">Fee / Biaya Aplikasi:</span>
@@ -637,7 +645,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                     </div>
                     <div className="flex justify-between items-center text-[12px] pt-1.5 mt-0.5 border-t border-slate-100">
                       <span className="text-slate-600 font-black">Total Modal:</span>
-                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(t.nominal + appFee)}</span>
+                      <span className={cn("font-black", isNonTunai ? "text-purple-600" : "text-slate-800")}>Rp {formatRp(displayTotalModal)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[12px]">
                       <span className="text-slate-500 font-bold">{adminFeeLabel}</span>
@@ -667,7 +675,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-300 mt-0.5">
                 <span className="text-slate-800 font-black text-[13px] uppercase">Total:</span>
                 <span className={cn("font-black text-[15px]", isNonTunai ? "text-purple-600" : "text-blue-600")}>
-                  Rp {formatRp(appFee > 0 ? (t.nominal + appFee + displayAdminFee) : (t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0)))}
+                  Rp {formatRp(displayTotal)}
                 </span>
               </div>
 
@@ -804,8 +812,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   {appFee > 0 ? (
                     <>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-600">Harga Modal</span>
-                        <span>Rp {formatRp(t.nominal)}</span>
+                        <span className="text-slate-600">{isOrderKuota ? 'Harga Modal' : 'Nominal'}</span>
+                        <span>Rp {formatRp(displayModalPokok)}</span>
                       </div>
                       <div className="flex justify-between text-[10px] text-rose-600">
                         <span>Fee / Biaya Aplikasi</span>
@@ -813,7 +821,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       </div>
                       <div className="flex justify-between text-[10px] font-bold pt-0.5 border-t border-dotted border-slate-200">
                         <span>Total Modal</span>
-                        <span>Rp {formatRp(t.nominal + appFee)}</span>
+                        <span>Rp {formatRp(displayTotalModal)}</span>
                       </div>
                       <div className="flex justify-between text-[10px] text-emerald-700">
                         <span>{adminFeeLabel.replace(' :', '').replace(':', '')}</span>
@@ -822,7 +830,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       <div className="border-b border-dashed border-slate-300 my-1"></div>
                       <div className="flex justify-between font-black text-[12px] text-slate-900">
                         <span>TOTAL</span>
-                        <span>Rp {formatRp(t.nominal + appFee + displayAdminFee)}</span>
+                        <span>Rp {formatRp(displayTotal)}</span>
                       </div>
                     </>
                   ) : t.kategori === 'Tarik Tunai' ? (

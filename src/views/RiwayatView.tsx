@@ -127,7 +127,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     .reduce((s, t) => s + t.nominal, 0)
   const todayAdmin = dateFilteredTransactions
     .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
-    .reduce((s, t) => s + t.adminFee, 0)
+    .reduce((s, t) => {
+      const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+      const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+      const cleanAdmin = (appFee > 0 && t.kategori !== 'Order Kuota') ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+      return s + cleanAdmin;
+    }, 0)
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
@@ -135,7 +140,12 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const paginatedTransactions = filteredTransactions.slice(startIndex, startIndex + itemsPerPage)
 
   const totalNominal = filteredTransactions.reduce((s, t) => s + t.nominal, 0)
-  const totalAdmin = filteredTransactions.reduce((s, t) => s + t.adminFee, 0)
+  const totalAdmin = filteredTransactions.reduce((s, t) => {
+    const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+    const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+    const cleanAdmin = (appFee > 0 && t.kategori !== 'Order Kuota') ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+    return s + cleanAdmin;
+  }, 0)
 
   const filteredSaldoTransactions = props.transactions.filter(t => {
     if (!t.kategori.startsWith('Isi')) return false

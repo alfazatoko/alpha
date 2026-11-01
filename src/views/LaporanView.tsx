@@ -164,7 +164,136 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     {nominal: '', keterangan: ''}
   ])
 
-  const quickOptions = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+  const DEFAULT_CLOSING_SALDO_OPTIONS = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+
+  const [quickOptions, setQuickOptions] = useState<string[]>(() => {
+    const storeId = props.activeStoreId || 'default';
+    const saved = localStorage.getItem(`alphaPro_${storeId}_closing_saldo_options`) || localStorage.getItem('alphaPro_closing_saldo_options');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return DEFAULT_CLOSING_SALDO_OPTIONS;
+  });
+
+  const [showManageClosingOptionsModal, setShowManageClosingOptionsModal] = useState(false);
+  const [editingClosingOptions, setEditingClosingOptions] = useState<string[]>([]);
+  const [newClosingOptionInput, setNewClosingOptionInput] = useState('');
+  const [isSavingClosingOptions, setIsSavingClosingOptions] = useState(false);
+
+  // Sync dari Supabase & Realtime Event
+  useEffect(() => {
+    const storeId = props.activeStoreId;
+    if (!storeId || storeId === 'all') return;
+
+    const fetchCloudOptions = async () => {
+      try {
+        const { data } = await supabase
+          .from('store_custom_labels')
+          .select('labels')
+          .eq('store_id', storeId)
+          .maybeSingle();
+
+        if (data && data.labels && Array.isArray(data.labels.CLOSING_SALDO_OPTIONS) && data.labels.CLOSING_SALDO_OPTIONS.length > 0) {
+          setQuickOptions(data.labels.CLOSING_SALDO_OPTIONS);
+          localStorage.setItem(`alphaPro_${storeId}_closing_saldo_options`, JSON.stringify(data.labels.CLOSING_SALDO_OPTIONS));
+          localStorage.setItem('alphaPro_closing_saldo_options', JSON.stringify(data.labels.CLOSING_SALDO_OPTIONS));
+        }
+      } catch (e) {}
+    };
+
+    fetchCloudOptions();
+
+    const handleOptionsUpdated = (e: any) => {
+      if (e.detail?.options && Array.isArray(e.detail.options)) {
+        setQuickOptions(e.detail.options);
+      }
+    };
+
+    window.addEventListener('alphaClosingSaldoOptionsUpdated', handleOptionsUpdated);
+    return () => window.removeEventListener('alphaClosingSaldoOptionsUpdated', handleOptionsUpdated);
+  }, [props.activeStoreId]);
+
+  const handleOpenManageClosingOptions = () => {
+    setEditingClosingOptions([...quickOptions]);
+    setNewClosingOptionInput('');
+    setShowManageClosingOptionsModal(true);
+  };
+
+  const handleAddClosingOption = () => {
+    const trimmed = newClosingOptionInput.trim().toUpperCase();
+    if (!trimmed) return;
+    if (editingClosingOptions.includes(trimmed)) {
+      alert('Nama pilihan sudah ada!');
+      return;
+    }
+    setEditingClosingOptions(prev => [...prev, trimmed]);
+    setNewClosingOptionInput('');
+  };
+
+  const handleRemoveClosingOption = (index: number) => {
+    if (editingClosingOptions.length <= 1) {
+      alert('Minimal harus ada 1 pilihan!');
+      return;
+    }
+    setEditingClosingOptions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditClosingOptionChange = (index: number, val: string) => {
+    setEditingClosingOptions(prev => {
+      const next = [...prev];
+      next[index] = val.toUpperCase();
+      return next;
+    });
+  };
+
+  const handleResetClosingToDefault = () => {
+    setEditingClosingOptions([...DEFAULT_CLOSING_SALDO_OPTIONS]);
+  };
+
+  const handleSaveManageClosingOptions = async () => {
+    const cleaned = editingClosingOptions.map(o => o.trim().toUpperCase()).filter(Boolean);
+    if (cleaned.length === 0) {
+      alert('Pilihan tidak boleh kosong!');
+      return;
+    }
+    setIsSavingClosingOptions(true);
+    setQuickOptions(cleaned);
+
+    const storeId = props.activeStoreId || 'default';
+    localStorage.setItem(`alphaPro_${storeId}_closing_saldo_options`, JSON.stringify(cleaned));
+    localStorage.setItem('alphaPro_closing_saldo_options', JSON.stringify(cleaned));
+
+    window.dispatchEvent(new CustomEvent('alphaClosingSaldoOptionsUpdated', {
+      detail: { options: cleaned, storeId }
+    }));
+
+    if (props.activeStoreId && props.activeStoreId !== 'all') {
+      try {
+        const { data } = await supabase
+          .from('store_custom_labels')
+          .select('labels')
+          .eq('store_id', props.activeStoreId)
+          .maybeSingle();
+
+        const currentLabels = (data && data.labels && typeof data.labels === 'object') ? data.labels : {};
+        const updatedLabels = { ...currentLabels, CLOSING_SALDO_OPTIONS: cleaned };
+
+        await supabase.from('store_custom_labels').upsert({
+          store_id: props.activeStoreId,
+          labels: updatedLabels,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' });
+      } catch (err) {
+        console.error('Error saving closing saldo options to cloud:', err);
+      }
+    }
+
+    setIsSavingClosingOptions(false);
+    setShowManageClosingOptionsModal(false);
+  };
 
   const toggleRowOption = (opt: string) => {
     setSaldoRealRows(prev => {
@@ -216,7 +345,6 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [confirmSelisih, setConfirmSelisih] = useState(false)
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
   const [isOperkanSaldo, setIsOperkanSaldo] = useState(false)
-  const [editingSaldoIndex, setEditingSaldoIndex] = useState<number | null>(null)
   const [targetKasirId, setTargetKasirId] = useState('')
   const [showKasirPenerimaSheet, setShowKasirPenerimaSheet] = useState(false)
   const [showAuditModal, setShowAuditModal] = useState(false)
@@ -1196,6 +1324,511 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     }
   };
 
+  const handleSaveSaldoReal = (andShareWA = false) => {
+    const finalRows = saldoRealRows
+      .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan.trim() }))
+      .filter(r => r.nominal > 0);
+      
+    if (finalRows.length === 0) {
+      alert('Silakan isi minimal 1 saldo aplikasi!');
+      return;
+    }
+
+    if (isOperkanSaldo && !targetKasirId) {
+      alert('Pilih kasir penerima terlebih dahulu!');
+      return;
+    }
+    
+    const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
+    const currentSelisih = totalNominal - currentSaldoBank;
+    
+    if (currentSelisih < 0 && !confirmSelisih) {
+      setConfirmSelisih(true);
+      setSelisihNotification({ show: true, selisih: currentSelisih });
+      setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
+      return;
+    }
+    
+    props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
+    setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+    setIsOperkanSaldo(false);
+    setTargetKasirId('');
+    setShowSaldoRealModal(false);
+    setConfirmSelisih(false);
+
+    if (andShareWA) {
+      setTimeout(() => {
+        handleShare('share-wa-text');
+      }, 400);
+    }
+  };
+
+  const renderManageClosingOptionsModal = () => {
+    if (!showManageClosingOptionsModal) return null;
+
+    return (
+      <div 
+        className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowManageClosingOptionsModal(false);
+        }}
+      >
+        <div 
+          className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] relative z-10"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white p-4 px-5 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                <i className="fa-solid fa-sliders text-sm"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">Atur Pilihan Cepat Closing</h3>
+                <p className="text-[10px] text-emerald-100 font-medium">Khusus Akun Owner Toko</p>
+              </div>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setShowManageClosingOptionsModal(false)}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 block mb-2">
+                Daftar Pilihan Aktif ({editingClosingOptions.length})
+              </label>
+              <div className="space-y-2">
+                {editingClosingOptions.map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <input 
+                      type="text"
+                      value={opt}
+                      onChange={(e) => handleEditClosingOptionChange(idx, e.target.value)}
+                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-black uppercase text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => handleRemoveClosingOption(idx)}
+                      className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-500 hover:text-white text-red-500 flex items-center justify-center transition-all shrink-0"
+                      title="Hapus"
+                    >
+                      <i className="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tambah baru */}
+            <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 block mb-1.5">
+                + Tambah Pilihan Baru
+              </label>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  placeholder="Contoh: SINERGI PULSA, GOPAY, dll"
+                  value={newClosingOptionInput}
+                  onChange={e => setNewClosingOptionInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddClosingOption(); } }}
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black uppercase text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                />
+                <button 
+                  type="button"
+                  onClick={handleAddClosingOption}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-3.5 py-2 rounded-xl text-xs transition-all flex items-center gap-1 shrink-0"
+                >
+                  <i className="fa-solid fa-plus text-xs"></i> Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 shrink-0">
+            <button 
+              type="button"
+              onClick={handleResetClosingToDefault}
+              className="text-[10px] font-bold text-slate-500 hover:text-red-500 underline decoration-dotted"
+            >
+              Reset Default
+            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={() => setShowManageClosingOptionsModal(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveManageClosingOptions}
+                disabled={isSavingClosingOptions}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-600/30 transition-all flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-check"></i> Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSaldoRealModal = () => {
+    if (!showSaldoRealModal) return renderManageClosingOptionsModal();
+
+    const totalNominal = saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0);
+    const selisihLive = totalNominal - currentSaldoBank;
+    const isKlopLive = totalNominal > 0 && selisihLive === 0;
+    const isSurplusLive = totalNominal > 0 && selisihLive > 0;
+
+    return (
+      <>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+        <div 
+          className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" 
+          onClick={() => !props.isSaving && setShowSaldoRealModal(false)}
+        ></div>
+        
+        <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-xl sm:max-w-2xl overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700/80 flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in zoom-in-95 duration-200">
+          
+          {/* MODAL HEADER */}
+          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-700/80 flex justify-between items-center bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center border border-white/20 shadow-inner">
+                <i className="fa-solid fa-calculator text-lg"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-sm sm:text-base uppercase tracking-wider leading-tight">
+                  Update Saldo Closing & Catatan
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-emerald-100 font-medium">
+                  Sisa saldo riil aplikasi M-Banking & pesan serah terima kasir
+                </p>
+              </div>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setShowSaldoRealModal(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all text-white border border-white/20"
+              disabled={props.isSaving}
+              title="Tutup"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+
+          {/* MODAL BODY (SCROLLABLE) */}
+          <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+            <datalist id="aplikasi-suggestions">
+              {quickOptions.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+
+            {/* QUICK CHIPS */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    Pilihan Cepat Aplikasi:
+                  </span>
+                  {props.kasirRole === 'owner' && (
+                    <button 
+                      type="button" 
+                      onClick={handleOpenManageClosingOptions}
+                      className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 transition-all"
+                      title="Atur Pilihan Cepat (Khusus Owner)"
+                    >
+                      <i className="fa-solid fa-pen-to-square text-[8px]" /> Atur Pilihan (Owner)
+                    </button>
+                  )}
+                </div>
+                <span className="text-[9px] font-bold text-slate-400 italic">
+                  Klik untuk pasang / hapus
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {quickOptions.map((opt, idx) => {
+                  const isSelected = saldoRealRows.some(r => r.keterangan === opt && r.nominal !== '');
+                  return (
+                    <button 
+                      key={opt}
+                      type="button"
+                      onClick={() => toggleRowOption(opt)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95", 
+                        isSelected 
+                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm shadow-emerald-600/30" 
+                          : "bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-500 hover:text-emerald-600"
+                      )}
+                    >
+                      <span className="w-4 h-4 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center text-[9px]">{idx + 1}</span>
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* LIST KOLOM SALDO APLIKASI */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                  Daftar Akun / Aplikasi & Nominal:
+                </span>
+                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                  {saldoRealRows.filter(r => r.nominal).length} Terisi
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {saldoRealRows.map((row, index) => (
+                  <div 
+                    key={index} 
+                    className="p-2 sm:p-2.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-900/40 hover:border-emerald-300/70 dark:hover:border-emerald-600/50 transition-all flex items-center gap-2 group shadow-xs"
+                  >
+                    <div className="w-5 text-center shrink-0">
+                      <span className="text-[10px] font-black text-slate-400">#{index + 1}</span>
+                    </div>
+
+                    {/* Input Nama Aplikasi */}
+                    <div className="flex-[4] min-w-0">
+                      <input 
+                        id={`ket-${index}`}
+                        type="text"
+                        list="aplikasi-suggestions"
+                        value={row.keterangan}
+                        onChange={(e) => {
+                          const newRows = [...saldoRealRows];
+                          newRows[index].keterangan = e.target.value;
+                          setSaldoRealRows(newRows);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            document.getElementById(`nom-${index}`)?.focus();
+                          }
+                        }}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 sm:px-3 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-xs"
+                        placeholder="Nama Akun (BCA, DANA..)"
+                      />
+                    </div>
+
+                    {/* Input Nominal Saldo */}
+                    <div className="flex-[5] min-w-0 relative">
+                      <span className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[11px] font-black text-slate-400 select-none">Rp</span>
+                      <input 
+                        id={`nom-${index}`}
+                        type="text"
+                        inputMode="numeric"
+                        value={row.nominal}
+                        onChange={(e) => {
+                          const newRows = [...saldoRealRows];
+                          newRows[index].nominal = formatInputRupiah(e.target.value);
+                          setSaldoRealRows(newRows);
+                          setConfirmSelisih(false);
+                          setSelisihNotification({show: false, selisih: 0});
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const nextKet = document.getElementById(`ket-${index + 1}`);
+                            if (nextKet) {
+                              nextKet.focus();
+                            } else {
+                              setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
+                              setTimeout(() => document.getElementById(`ket-${index + 1}`)?.focus(), 50);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-xs"
+                        placeholder="0"
+                      />
+                    </div>
+
+                    {/* Tombol Hapus Baris */}
+                    <div className="w-8 shrink-0 flex items-center justify-center">
+                      {saldoRealRows.length > 1 ? (
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const newRows = [...saldoRealRows];
+                            newRows.splice(index, 1);
+                            setSaldoRealRows(newRows);
+                            setConfirmSelisih(false);
+                            setSelisihNotification({show: false, selisih: 0});
+                          }}
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition-all active:scale-95"
+                          title="Hapus baris"
+                        >
+                          <i className="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                      ) : (
+                        <div className="w-7 sm:w-8"></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                type="button"
+                onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 font-black text-[11px] uppercase tracking-wider hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+              >
+                <i className="fa-solid fa-plus text-xs"></i> Tambah Kolom Aplikasi
+              </button>
+            </div>
+
+            {/* CATATAN KASIR / PESAN CLOSING */}
+            <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                  <i className="fa-solid fa-note-sticky text-amber-600"></i>
+                  Catatan Kasir / Pesan Closing
+                </label>
+                <span className="text-[9px] font-bold text-amber-700/70 dark:text-amber-400/70 italic">
+                  Tersinkron ke Laporan & WA
+                </span>
+              </div>
+              <textarea
+                value={catatanKasir}
+                onChange={handleCatatanChange}
+                rows={2}
+                placeholder="Tulis pesan kendala shift, selisih uang, catatan operan saldo, atau info penting..."
+                className="w-full bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-700/70 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none font-medium shadow-xs transition-all"
+              />
+            </div>
+
+            {/* OPERKAN SALDO KE SHIFT SELANJUTNYA */}
+            <div className="p-3 sm:p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl space-y-2">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={isOperkanSaldo}
+                  onChange={(e) => {
+                    setIsOperkanSaldo(e.target.checked);
+                    if (!e.target.checked) setTargetKasirId('');
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                />
+                <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
+                  Operkan Saldo Ini ke Kasir Selanjutnya
+                </span>
+              </label>
+
+              {isOperkanSaldo && (
+                <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
+                  <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
+                    Pilih Kasir Penerima (Shift Selanjutnya)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowKasirPenerimaSheet(true)}
+                    className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-xs hover:bg-slate-50 transition-colors"
+                  >
+                    {targetKasirId ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-xs uppercase">
+                          {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
+                        </div>
+                        <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
+                      </div>
+                    ) : (
+                      <span className="opacity-70">-- Pilih Kasir Penerima --</span>
+                    )}
+                    <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* LIVE SUMMARY / SELISIH */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/70 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500 dark:text-slate-400">Total Input Saldo Kasir:</span>
+                <span className="font-black text-sm text-slate-900 dark:text-white">{formatRupiah(totalNominal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500 dark:text-slate-400">Sisa Saldo Seharusnya (Buku):</span>
+                <span className="font-bold text-xs text-slate-700 dark:text-slate-300">{formatRupiah(currentSaldoBank)}</span>
+              </div>
+              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Status Saldo:</span>
+                {totalNominal === 0 ? (
+                  <span className="text-[11px] font-bold text-slate-400 italic">Belum ada input</span>
+                ) : isKlopLive ? (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-emerald-300 dark:border-emerald-800">
+                    <i className="fa-solid fa-circle-check text-emerald-600"></i> KLOP / PAS (Rp 0)
+                  </span>
+                ) : isSurplusLive ? (
+                  <span className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-blue-300 dark:border-blue-800">
+                    <i className="fa-solid fa-arrow-trend-up text-blue-600"></i> SURPLUS +{formatRupiah(selisihLive)}
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-rose-300 dark:border-rose-800">
+                    <i className="fa-solid fa-triangle-exclamation text-rose-600"></i> MINUS {formatRupiah(selisihLive)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* MODAL FOOTER (ACTION BUTTONS) */}
+          <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-700/80 bg-white dark:bg-slate-800 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleSaveSaldoReal(false)}
+                disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
+                className={cn(
+                  "w-full text-white rounded-xl py-3 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2",
+                  confirmSelisih 
+                    ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/20" 
+                    : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20 hover:from-emerald-700 hover:to-teal-700"
+                )}
+              >
+                {props.isSaving ? (
+                  <><i className="fa-solid fa-spinner fa-spin text-sm"></i> MENYIMPAN...</>
+                ) : confirmSelisih ? (
+                  <><i className="fa-solid fa-triangle-exclamation text-sm"></i> TETAP SIMPAN</>
+                ) : (
+                  <><i className="fa-solid fa-floppy-disk text-sm"></i> SIMPAN SALDO</>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSaveSaldoReal(true)}
+                disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-3 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
+                title="Simpan data dan langsung buka menu kirim teks ke WhatsApp"
+              >
+                <i className="fa-brands fa-whatsapp text-sm text-emerald-300"></i>
+                <span>SIMPAN & BAGIKAN WA</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {renderManageClosingOptionsModal()}
+    </>
+    );
+  };
+
   if (props.isPc) {
     if (!props.active) return null;
     return (
@@ -1847,291 +2480,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         </div>
 
         {/* MODAL UPDATE SALDO REAL APLIKASI (PC View) */}
-        {showSaldoRealModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !props.isSaving && setShowSaldoRealModal(false)}></div>
-            <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700">
-              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-                <div>
-                  <h3 className="font-black text-sm uppercase tracking-widest">Update Saldo Aplikasi</h3>
-                  <p className="text-[10px] text-emerald-100 font-medium mt-0.5">Bisa diinput berkali-kali</p>
-                </div>
-                <button 
-                  onClick={() => setShowSaldoRealModal(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-                  disabled={props.isSaving}
-                >
-                  <i className="fa-solid fa-xmark text-sm"></i>
-                </button>
-              </div>
-              
-              <div className="p-6 flex flex-col max-h-[80vh]">
-                <datalist id="aplikasi-suggestions">
-                  {quickOptions.map(opt => (
-                    <option key={opt} value={opt} />
-                  ))}
-                </datalist>
-
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {quickOptions.map((opt, idx) => {
-                    const isSelected = saldoRealRows.some(r => r.keterangan === opt)
-                    return (
-                      <button 
-                        key={opt}
-                        onClick={() => toggleRowOption(opt)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
-                          isSelected 
-                            ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
-                            : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-400/50"
-                        )}
-                      >
-                        {idx + 1}. {opt}
-                      </button>
-                    )
-                  })}
-                </div>
-                
-                <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
-                  {(() => {
-                    const softColors = [
-                      'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
-                      'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50',
-                      'bg-amber-50/70 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50',
-                      'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
-                      'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
-                    ];
-                    return saldoRealRows.map((row, index) => {
-                      const isFilled = row.keterangan.trim() !== '' && row.nominal.trim() !== '';
-                      const isEditing = editingSaldoIndex === index || !isFilled;
-
-                      if (!isEditing) {
-                        return (
-                          <div 
-                            key={index}
-                            onClick={() => setEditingSaldoIndex(index)}
-                            className={cn("px-4 py-2.5 rounded-xl border relative group flex items-center justify-between cursor-pointer hover:opacity-80 transition-all shadow-sm", softColors[index % softColors.length])}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase">{row.keterangan}</span>
-                              <span className="text-[10px] font-bold text-slate-400">=</span>
-                              <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">Rp {row.nominal}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-100 dark:border-emerald-900/50">
-                                <i className="fa-solid fa-pen text-[10px]"></i>
-                              </span>
-                              {index > 0 && (
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const newRows = [...saldoRealRows];
-                                    newRows.splice(index, 1);
-                                    setSaldoRealRows(newRows);
-                                    setConfirmSelisih(false);
-                                    setSelisihNotification({show: false, selisih: 0});
-                                  }}
-                                  className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all"
-                                >
-                                  <i className="fa-solid fa-xmark text-[11px]"></i>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      return (
-                      <div key={index} className={cn("p-2.5 rounded-xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
-                        {index > 0 && (
-                          <button 
-                            onClick={() => {
-                              const newRows = [...saldoRealRows];
-                              newRows.splice(index, 1);
-                              setSaldoRealRows(newRows);
-                              setConfirmSelisih(false);
-                              setSelisihNotification({show: false, selisih: 0});
-                            }}
-                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
-                          >
-                            <i className="fa-solid fa-xmark text-[9px]"></i>
-                          </button>
-                        )}
-                        
-                        <div className="w-[45%]">
-                          <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest truncate">Aplikasi {index + 1}</label>
-                          <input 
-                            id={`ket-${index}`}
-                            type="text"
-                            list="aplikasi-suggestions"
-                            value={row.keterangan}
-                            onBlur={() => {
-                              setTimeout(() => {
-                                if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
-                              }, 150);
-                            }}
-                            onFocus={() => setEditingSaldoIndex(index)}
-                            onChange={(e) => {
-                              const newRows = [...saldoRealRows];
-                              newRows[index].keterangan = e.target.value;
-                              setSaldoRealRows(newRows);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                document.getElementById(`nom-${index}`)?.focus();
-                              }
-                            }}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
-                            placeholder="BCA, Dana.."
-                            autoFocus={editingSaldoIndex === index}
-                          />
-                        </div>
-
-                        <div className="flex-1">
-                          <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest">Nominal Saldo</label>
-                          <div className="relative">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">Rp</span>
-                            <input 
-                              id={`nom-${index}`}
-                              type="text"
-                              inputMode="numeric"
-                              value={row.nominal}
-                              onBlur={() => {
-                                setTimeout(() => {
-                                  if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
-                                }, 150);
-                              }}
-                              onFocus={() => setEditingSaldoIndex(index)}
-                              onChange={(e) => {
-                                const newRows = [...saldoRealRows];
-                                newRows[index].nominal = formatInputRupiah(e.target.value);
-                                setSaldoRealRows(newRows);
-                                setConfirmSelisih(false);
-                                setSelisihNotification({show: false, selisih: 0});
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  setEditingSaldoIndex(null);
-                                  const nextKet = document.getElementById(`ket-${index + 1}`);
-                                  if (nextKet) {
-                                    nextKet.focus();
-                                  } else {
-                                    setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
-                                    setTimeout(() => document.getElementById(`ket-${index + 1}`)?.focus(), 50);
-                                  }
-                                }
-                              }}
-                              className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl pl-7 pr-2.5 py-2 text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                    });
-                  })()}
-
-                  <button 
-                    onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
-                    className="w-full py-3 rounded-2xl border-2 border-dashed border-emerald-200 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
-                  </button>
-
-                  {/* Pilihan Operkan Saldo ke Kasir Shift Selanjutnya */}
-                  <div className="mt-3 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={isOperkanSaldo}
-                        onChange={(e) => {
-                          setIsOperkanSaldo(e.target.checked);
-                          if (!e.target.checked) setTargetKasirId('');
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      />
-                      <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
-                        Operkan Saldo Ini ke Kasir Selanjutnya
-                      </span>
-                    </label>
-
-                    {isOperkanSaldo && (
-                      <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
-                        <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
-                          Pilih Kasir Penerima (Shift Selanjutnya)
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowKasirPenerimaSheet(true)}
-                          className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
-                        >
-                          {targetKasirId ? (
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-sm uppercase">
-                                {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
-                              </div>
-                              <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
-                            </div>
-                          ) : (
-                            <span className="opacity-70">-- Pilih Kasir Penerima --</span>
-                          )}
-                          <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-                  <div className="flex justify-between items-end mb-4 px-2">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Dihitung Sementara</span>
-                    <span className="text-xl font-black text-emerald-600">
-                      {formatRupiah(saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0))}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      const finalRows = saldoRealRows
-                        .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan }))
-                        .filter(r => r.nominal > 0);
-                        
-                      if (finalRows.length === 0) return;
-
-                      if (isOperkanSaldo && !targetKasirId) {
-                        alert('Pilih kasir penerima terlebih dahulu!');
-                        return;
-                      }
-                      
-                      const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
-                      const currentSelisih = totalNominal - currentSaldoBank;
-                      
-                      if (currentSelisih < 0 && !confirmSelisih) {
-                        setConfirmSelisih(true);
-                        setSelisihNotification({ show: true, selisih: currentSelisih });
-                        setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
-                        return;
-                      }
-                      
-                      props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
-                      setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
-                      setIsOperkanSaldo(false);
-                      setTargetKasirId('');
-                      setShowSaldoRealModal(false);
-                      setConfirmSelisih(false);
-                    }}
-                    disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
-                    className={cn("w-full text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2", confirmSelisih ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/30 hover:shadow-rose-500/40" : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/30 hover:shadow-emerald-500/40")}
-                  >
-                    {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : confirmSelisih ? <><i className="fa-solid fa-triangle-exclamation text-lg"></i> TETAP SIMPAN</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN TOTAL SALDO</>}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderSaldoRealModal()}
 
         {/* MODAL TIMELINE AUDIT SERAH TERIMA SHIFT (PC View) */}
         {showAuditModal && (
@@ -2935,291 +3284,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       </div>
 
       {/* MODAL UPDATE SALDO REAL APLIKASI */}
-      {showSaldoRealModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !props.isSaving && setShowSaldoRealModal(false)}></div>
-          <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700">
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-widest">Update Saldo Aplikasi</h3>
-                <p className="text-[10px] text-emerald-100 font-medium mt-0.5">Bisa diinput berkali-kali</p>
-              </div>
-              <button 
-                onClick={() => setShowSaldoRealModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-                disabled={props.isSaving}
-              >
-                <i className="fa-solid fa-xmark text-sm"></i>
-              </button>
-            </div>
-            
-            <div className="p-6 pb-10 sm:pb-6 flex flex-col max-h-[80vh]">
-              <datalist id="aplikasi-suggestions">
-                {quickOptions.map(opt => (
-                  <option key={opt} value={opt} />
-                ))}
-              </datalist>
-
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {quickOptions.map((opt, idx) => {
-                  const isSelected = saldoRealRows.some(r => r.keterangan === opt)
-                  return (
-                    <button 
-                      key={opt}
-                      onClick={() => toggleRowOption(opt)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all", 
-                        isSelected 
-                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" 
-                          : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-400/50"
-                      )}
-                    >
-                      {idx + 1}. {opt}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
-                {(() => {
-                  const softColors = [
-                    'bg-blue-50/70 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50',
-                    'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50',
-                    'bg-amber-50/70 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50',
-                    'bg-purple-50/70 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50',
-                    'bg-rose-50/70 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50'
-                  ];
-                  return saldoRealRows.map((row, index) => {
-                    const isFilled = row.keterangan.trim() !== '' && row.nominal.trim() !== '';
-                    const isEditing = editingSaldoIndex === index || !isFilled;
-
-                    if (!isEditing) {
-                      return (
-                        <div 
-                          key={index}
-                          onClick={() => setEditingSaldoIndex(index)}
-                          className={cn("px-4 py-2.5 rounded-xl border relative group flex items-center justify-between cursor-pointer hover:opacity-80 transition-all shadow-sm", softColors[index % softColors.length])}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase">{row.keterangan}</span>
-                            <span className="text-[10px] font-bold text-slate-400">=</span>
-                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">Rp {row.nominal}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-100 dark:border-emerald-900/50">
-                              <i className="fa-solid fa-pen text-[10px]"></i>
-                            </span>
-                            {index > 0 && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newRows = [...saldoRealRows];
-                                  newRows.splice(index, 1);
-                                  setSaldoRealRows(newRows);
-                                  setConfirmSelisih(false);
-                                  setSelisihNotification({show: false, selisih: 0});
-                                }}
-                                className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all"
-                              >
-                                <i className="fa-solid fa-xmark text-[11px]"></i>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                    <div key={index} className={cn("p-2.5 rounded-xl border relative group flex gap-2 items-end", softColors[index % softColors.length])}>
-                      {index > 0 && (
-                        <button 
-                          onClick={() => {
-                            const newRows = [...saldoRealRows];
-                            newRows.splice(index, 1);
-                            setSaldoRealRows(newRows);
-                            setConfirmSelisih(false);
-                            setSelisihNotification({show: false, selisih: 0});
-                          }}
-                          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md hover:bg-rose-600 active:scale-95 transition-all z-10"
-                        >
-                          <i className="fa-solid fa-xmark text-[9px]"></i>
-                        </button>
-                      )}
-                      
-                      <div className="w-[45%]">
-                        <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest truncate">Aplikasi {index + 1}</label>
-                        <input 
-                          id={`mobile-ket-${index}`}
-                          type="text"
-                          list="aplikasi-suggestions"
-                          value={row.keterangan}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
-                            }, 150);
-                          }}
-                          onFocus={() => setEditingSaldoIndex(index)}
-                          onChange={(e) => {
-                            const newRows = [...saldoRealRows];
-                            newRows[index].keterangan = e.target.value;
-                            setSaldoRealRows(newRows);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              document.getElementById(`mobile-nom-${index}`)?.focus();
-                            }
-                          }}
-                          className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
-                          placeholder="BCA, Dana.."
-                          autoFocus={editingSaldoIndex === index}
-                        />
-                      </div>
-
-                      <div className="flex-1">
-                        <label className="block text-[9px] font-black text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-widest">Nominal Saldo</label>
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">Rp</span>
-                          <input 
-                            id={`mobile-nom-${index}`}
-                            type="text"
-                            inputMode="numeric"
-                            value={row.nominal}
-                            onBlur={() => {
-                              setTimeout(() => {
-                                if (row.keterangan && row.nominal) setEditingSaldoIndex(null);
-                              }, 150);
-                            }}
-                            onFocus={() => setEditingSaldoIndex(index)}
-                            onChange={(e) => {
-                              const newRows = [...saldoRealRows];
-                              newRows[index].nominal = formatInputRupiah(e.target.value);
-                              setSaldoRealRows(newRows);
-                              setConfirmSelisih(false);
-                              setSelisihNotification({show: false, selisih: 0});
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                setEditingSaldoIndex(null);
-                                const nextKet = document.getElementById(`mobile-ket-${index + 1}`);
-                                if (nextKet) {
-                                  nextKet.focus();
-                                } else {
-                                  setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
-                                  setTimeout(() => document.getElementById(`mobile-ket-${index + 1}`)?.focus(), 50);
-                                }
-                              }
-                            }}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl pl-7 pr-2.5 py-2 text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all shadow-sm"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                  });
-                })()}
-
-                <button 
-                  onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
-                  className="w-full py-3 rounded-2xl border-2 border-dashed border-emerald-200 text-emerald-600 font-black text-xs uppercase tracking-widest hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <i className="fa-solid fa-plus"></i> Tambah Kolom Aplikasi
-                </button>
-
-                {/* Pilihan Operkan Saldo ke Kasir Shift Selanjutnya */}
-                <div className="mt-3 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={isOperkanSaldo}
-                      onChange={(e) => {
-                        setIsOperkanSaldo(e.target.checked);
-                        if (!e.target.checked) setTargetKasirId('');
-                      }}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                    />
-                    <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
-                      Operkan Saldo Ini ke Kasir Selanjutnya
-                    </span>
-                  </label>
-
-                  {isOperkanSaldo && (
-                    <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
-                      <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
-                        Pilih Kasir Penerima (Shift Selanjutnya)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowKasirPenerimaSheet(true)}
-                        className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
-                      >
-                        {targetKasirId ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-sm uppercase">
-                              {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
-                            </div>
-                            <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
-                          </div>
-                        ) : (
-                          <span className="opacity-70">-- Pilih Kasir Penerima --</span>
-                        )}
-                        <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex justify-between items-end mb-4 px-2">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Dihitung Sementara</span>
-                  <span className="text-xl font-black text-emerald-600">
-                    {formatRupiah(saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0))}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => {
-                    const finalRows = saldoRealRows
-                      .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan }))
-                      .filter(r => r.nominal > 0);
-                      
-                    if (finalRows.length === 0) return;
-
-                    if (isOperkanSaldo && !targetKasirId) {
-                      alert('Pilih kasir penerima terlebih dahulu!');
-                      return;
-                    }
-                    
-                    const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
-                    const currentSelisih = totalNominal - currentSaldoBank;
-                    
-                    if (currentSelisih < 0 && !confirmSelisih) {
-                      setConfirmSelisih(true);
-                      setSelisihNotification({ show: true, selisih: currentSelisih });
-                      setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
-                      return;
-                    }
-                    
-                    props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
-                    setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
-                    setIsOperkanSaldo(false);
-                    setTargetKasirId('');
-                    setShowSaldoRealModal(false);
-                    setConfirmSelisih(false);
-                  }}
-                  disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
-                  className={cn("w-full text-white rounded-2xl py-4 text-sm font-black uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2", confirmSelisih ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/30 hover:shadow-rose-500/40" : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/30 hover:shadow-emerald-500/40")}
-                >
-                  {props.isSaving ? <><i className="fa-solid fa-spinner fa-spin text-lg"></i> MENYIMPAN...</> : confirmSelisih ? <><i className="fa-solid fa-triangle-exclamation text-lg"></i> TETAP SIMPAN</> : <><i className="fa-solid fa-save text-lg"></i> SIMPAN TOTAL SALDO</>}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {renderSaldoRealModal()}
 
       {/* SELISIH NOTIFICATION FLOAT */}
       {selisihNotification.show && (

@@ -4338,6 +4338,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       storePhoto={storePhoto}
                       kasirName={account.name}
                       kasirRole={activeRole}
+                      activeStoreId={targetStoreId !== 'all' ? targetStoreId : activeStoreId}
                       setIsSidePanelOpen={setIsSidePanelOpen}
                       pendingOperkan={pendingOperkan}
                       currentUsername={username}
@@ -4644,6 +4645,7 @@ const MainApp: React.FC<MainAppProps> = ({
             storePhoto={storePhoto}
             kasirName={account.name}
             kasirRole={activeRole}
+            activeStoreId={targetStoreId !== 'all' ? targetStoreId : activeStoreId}
             setIsSidePanelOpen={setIsSidePanelOpen}
             pendingOperkan={pendingOperkan}
             currentUsername={username}

@@ -528,6 +528,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [effectiveStoreId]);
   
   const [isEditingPopup, setIsEditingPopup] = useState(false);
+  const [draggedPopupIndex, setDraggedPopupIndex] = useState<number | null>(null);
+  const [dragOverPopupIndex, setDragOverPopupIndex] = useState<number | null>(null);
+  const [showPopupSavedToast, setShowPopupSavedToast] = useState(false);
+  const hasDraggedPopupRef = useRef(false);
+  const popupTouchStartRef = useRef<{ x: number; y: number; index: number } | null>(null);
+  const popupTouchOverIndexRef = useRef<number | null>(null);
+
+  const handleReorderPopupList = (fromIndex: number, toIndex: number) => {
+    if (!classicPopupMode || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const currentList = popupLists[classicPopupMode] || [];
+    if (fromIndex >= currentList.length || toIndex >= currentList.length) return;
+
+    const newList = [...currentList];
+    const [movedItem] = newList.splice(fromIndex, 1);
+    newList.splice(toIndex, 0, movedItem);
+
+    handleUpdatePopupList(classicPopupMode, newList);
+    setShowPopupSavedToast(true);
+    setTimeout(() => setShowPopupSavedToast(false), 2200);
+  };
 
   const handleUpdatePopupList = async (mode: string, newList: any[]) => {
     const updated = { ...popupLists, [mode]: newList };
@@ -3431,14 +3451,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       {/* POPUP MELAYANG (CLASSIC THEME) */}
       {classicPopupMode && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-[24px] p-5 w-full max-w-sm shadow-2xl animate-in zoom-in-95 border border-white">
-            <div className="flex justify-between items-center mb-4">
+          <div className="bg-white rounded-[24px] p-5 w-full max-w-sm shadow-2xl animate-in zoom-in-95 border border-white relative">
+            {/* Toast Notifikasi Tersimpan */}
+            {showPopupSavedToast && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 bg-[#0c1f44] text-white text-[10px] font-black px-3.5 py-1.5 rounded-full shadow-xl flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2 border border-emerald-400/30 whitespace-nowrap">
+                <i className="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
+                <span>Urutan berhasil disimpan!</span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mb-3">
               <div>
                 <h3 className="text-[13px] font-black text-[#0c1f44] uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-4 bg-[#0066ff] rounded-full"></div>
                   {classicPopupMode === 'AKSESORIS' ? 'Pilih Jenis Aksesoris' : 'Pilih Tujuan Transaksi'}
                 </h3>
-                <p className="text-[10px] font-bold text-slate-500 mt-1">
+                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
                   {classicPopupMode === 'BANK' && "Silakan pilih nama Bank tujuan"}
                   {classicPopupMode === 'DANA' && "Silakan pilih sub-tujuan E-Wallet / Dana"}
                   {classicPopupMode === 'ORDER_KUOTA' && "Pilih PPOB atau E-Wallet"}
@@ -3450,15 +3478,37 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="flex gap-2">
                 <button 
                   type="button"
-                  onClick={() => setIsEditingPopup(!isEditingPopup)} 
-                  className={cn("w-8 h-8 rounded-full transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm", isEditingPopup ? "bg-amber-500 text-white ring-2 ring-amber-300" : "bg-slate-100 text-slate-500 hover:bg-slate-200")}
-                  title={isEditingPopup ? "Selesai Edit" : "Ubah Fee / Kelola Pilihan"}
+                  onClick={() => {
+                    if (isEditingPopup) {
+                      const currentList = popupLists[classicPopupMode] || [];
+                      handleUpdatePopupList(classicPopupMode, currentList);
+                      setShowPopupSavedToast(true);
+                      setTimeout(() => setShowPopupSavedToast(false), 2200);
+                    }
+                    setIsEditingPopup(!isEditingPopup);
+                    setDraggedPopupIndex(null);
+                    setDragOverPopupIndex(null);
+                  }} 
+                  className={cn(
+                    "w-8 h-8 rounded-full transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm", 
+                    isEditingPopup ? "bg-emerald-500 text-white ring-2 ring-emerald-300" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  )}
+                  title={isEditingPopup ? "Selesai & Simpan Urutan" : "Ubah Urutan / Fee"}
                 >
                   <i className={cn("fa-solid text-[11px]", isEditingPopup ? "fa-check" : "fa-pen")}></i>
                 </button>
                 <button 
                   type="button"
-                  onClick={() => { setClassicPopupMode(null); setIsEditingPopup(false); }} 
+                  onClick={() => { 
+                    if (isEditingPopup && classicPopupMode) {
+                      const currentList = popupLists[classicPopupMode] || [];
+                      handleUpdatePopupList(classicPopupMode, currentList);
+                    }
+                    setClassicPopupMode(null); 
+                    setIsEditingPopup(false);
+                    setDraggedPopupIndex(null);
+                    setDragOverPopupIndex(null);
+                  }} 
                   className="w-8 h-8 bg-slate-100 rounded-full text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all flex items-center justify-center shrink-0 cursor-pointer"
                   title="Tutup"
                 >
@@ -3466,6 +3516,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Banner Panduan Mode Geser saat Edit */}
+            {isEditingPopup && (
+              <div className="mb-3 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-2xl flex items-center justify-between text-amber-900 shadow-xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-amber-400/30 text-amber-800 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-up-down-left-right text-[10px]"></i>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black leading-tight text-amber-950">Atur Urutan & Fee</p>
+                    <p className="text-[8.5px] font-semibold text-amber-800/80 leading-tight">Klik tahan & geser posisi, klik untuk atur fee</p>
+                  </div>
+                </div>
+                <span className="text-[7.5px] font-black bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md uppercase tracking-wide shrink-0">
+                  Mode Geser
+                </span>
+              </div>
+            )}
             
             <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar pb-2 pt-1">
               {(() => {
@@ -3492,12 +3560,122 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
                 return (
                   <>
-                    {list.map(item => (
-                      <div key={item.id || item.name} className="relative">
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            if (isEditingPopup) {
+                    {list.map((item, index) => {
+                      const isDragging = draggedPopupIndex === index;
+                      const isDragOver = dragOverPopupIndex === index && draggedPopupIndex !== index;
+
+                      return (
+                        <div 
+                          key={item.id || item.name || index} 
+                          data-drag-index={index}
+                          draggable={isEditingPopup}
+                          onDragStart={(e) => {
+                            if (!isEditingPopup) return;
+                            e.dataTransfer.setData('text/plain', String(index));
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggedPopupIndex(index);
+                            hasDraggedPopupRef.current = true;
+                          }}
+                          onDragOver={(e) => {
+                            if (!isEditingPopup) return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverPopupIndex !== index) {
+                              setDragOverPopupIndex(index);
+                            }
+                          }}
+                          onDragEnter={(e) => {
+                            if (!isEditingPopup) return;
+                            e.preventDefault();
+                            if (dragOverPopupIndex !== index) {
+                              setDragOverPopupIndex(index);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            if (!isEditingPopup) return;
+                            e.preventDefault();
+                            if (draggedPopupIndex !== null && draggedPopupIndex !== index) {
+                              handleReorderPopupList(draggedPopupIndex, index);
+                            }
+                            setDraggedPopupIndex(null);
+                            setDragOverPopupIndex(null);
+                            setTimeout(() => {
+                              hasDraggedPopupRef.current = false;
+                            }, 150);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedPopupIndex(null);
+                            setDragOverPopupIndex(null);
+                            setTimeout(() => {
+                              hasDraggedPopupRef.current = false;
+                            }, 150);
+                          }}
+                          onTouchStart={(e) => {
+                            if (!isEditingPopup) return;
+                            const touch = e.touches[0];
+                            popupTouchStartRef.current = { x: touch.clientX, y: touch.clientY, index };
+                            popupTouchOverIndexRef.current = index;
+                            hasDraggedPopupRef.current = false;
+                          }}
+                          onTouchMove={(e) => {
+                            if (!isEditingPopup || !popupTouchStartRef.current) return;
+                            const touch = e.touches[0];
+                            const dx = touch.clientX - popupTouchStartRef.current.x;
+                            const dy = touch.clientY - popupTouchStartRef.current.y;
+                            if (Math.hypot(dx, dy) > 8) {
+                              hasDraggedPopupRef.current = true;
+                              if (draggedPopupIndex !== popupTouchStartRef.current.index) {
+                                setDraggedPopupIndex(popupTouchStartRef.current.index);
+                              }
+                              const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                              const cardEl = el?.closest('[data-drag-index]');
+                              if (cardEl) {
+                                const targetIdx = parseInt(cardEl.getAttribute('data-drag-index') || '-1', 10);
+                                if (targetIdx >= 0 && targetIdx !== dragOverPopupIndex) {
+                                  setDragOverPopupIndex(targetIdx);
+                                  popupTouchOverIndexRef.current = targetIdx;
+                                }
+                              }
+                            }
+                          }}
+                          onTouchEnd={() => {
+                            if (!isEditingPopup) return;
+                            if (hasDraggedPopupRef.current && popupTouchStartRef.current !== null && popupTouchOverIndexRef.current !== null) {
+                              const fromIdx = popupTouchStartRef.current.index;
+                              const toIdx = popupTouchOverIndexRef.current;
+                              if (fromIdx !== toIdx) {
+                                handleReorderPopupList(fromIdx, toIdx);
+                              }
+                            }
+                            setDraggedPopupIndex(null);
+                            setDragOverPopupIndex(null);
+                            popupTouchStartRef.current = null;
+                            popupTouchOverIndexRef.current = null;
+                            setTimeout(() => {
+                              hasDraggedPopupRef.current = false;
+                            }, 150);
+                          }}
+                          onTouchCancel={() => {
+                            setDraggedPopupIndex(null);
+                            setDragOverPopupIndex(null);
+                            popupTouchStartRef.current = null;
+                            popupTouchOverIndexRef.current = null;
+                            setTimeout(() => {
+                              hasDraggedPopupRef.current = false;
+                            }, 150);
+                          }}
+                          className={cn(
+                            "relative transition-all duration-200 select-none",
+                            isEditingPopup ? "cursor-grab active:cursor-grabbing touch-none" : "",
+                            isDragging && "opacity-35 scale-95",
+                            isDragOver && "scale-105 z-20 ring-2 ring-blue-500 rounded-[14px]"
+                          )}
+                        >
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              if (hasDraggedPopupRef.current) return;
+                              if (isEditingPopup) {
                                if (classicPopupMode === 'AKSESORIS') {
                                  const newName = window.prompt(`Ubah nama aksesoris "${item.name}":`, item.name);
                                  if (newName && newName.trim()) {
@@ -3590,14 +3768,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             }, 150);
                           }} 
                           className={cn(
-                            "w-full flex flex-col items-center justify-center p-2 border rounded-[14px] transition-all group shadow-sm bg-white cursor-pointer relative",
+                            "w-full flex flex-col items-center justify-center p-2 border rounded-[14px] transition-all group shadow-sm bg-white relative",
                             isEditingPopup 
-                              ? "border-amber-300 hover:border-amber-500 hover:bg-amber-50/60 ring-1 ring-amber-200" 
-                              : "border-slate-100 hover:border-blue-300 hover:bg-blue-50"
+                              ? "border-amber-300 hover:border-amber-500 hover:bg-amber-50/60 ring-1 ring-amber-200 cursor-grab active:cursor-grabbing" 
+                              : "border-slate-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer active:scale-95",
+                            isDragOver && "border-blue-500 bg-blue-50/80 shadow-md",
+                            isDragging && "border-dashed border-amber-400 bg-amber-50/50"
                           )}
                         >
                           <i className={cn("fa-solid text-[18px] mb-1.5 transition-transform group-hover:scale-110", item.color, item.icon)}></i>
-                          <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide">{item.name}</span>
+                          <span className="text-[8px] font-black text-center text-slate-700 leading-tight uppercase tracking-wide truncate w-full px-0.5">{item.name}</span>
                           {item.fee !== undefined && item.fee !== null && Number(item.fee) > 0 ? (
                             <span className="absolute top-1 left-1 bg-amber-100 text-amber-700 text-[7px] font-black px-1.5 py-0.5 rounded shadow-sm">
                               +{item.fee}
@@ -3607,11 +3787,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                               +0
                             </span>
                           ) : null}
+
+                          {/* Indikator Geser saat Mode Edit */}
+                          {isEditingPopup && (
+                            <div className="mt-1 flex items-center justify-center text-slate-300 group-hover:text-amber-500 transition-colors">
+                              <i className="fa-solid fa-up-down-left-right text-[8px]"></i>
+                            </div>
+                          )}
                         </button>
                         {isEditingPopup && (
                           <button 
                             type="button"
                             title={`Hapus ${item.name}`}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               e.preventDefault();
@@ -3627,7 +3816,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           </button>
                         )}
                       </div>
-                    ))}
+                    );
+                  })}
                     {isEditingPopup && (
                       <button 
                         type="button"
@@ -3646,6 +3836,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 )
               })()}
             </div>
+
+            {/* Tombol Simpan Urutan saat Mode Edit Aktif */}
+            {isEditingPopup && (
+              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentList = popupLists[classicPopupMode] || [];
+                    handleUpdatePopupList(classicPopupMode, currentList);
+                    setIsEditingPopup(false);
+                    setShowPopupSavedToast(true);
+                    setTimeout(() => setShowPopupSavedToast(false), 2200);
+                  }}
+                  className="flex-1 py-2 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 text-white font-black text-[11px] rounded-xl shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-wider"
+                >
+                  <i className="fa-solid fa-check text-xs"></i>
+                  <span>Simpan Urutan</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
