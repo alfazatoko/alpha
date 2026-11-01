@@ -682,19 +682,40 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                             {(() => {
                               const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
                               const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+                              const isOrderKuota = t.kategori === 'Order Kuota';
                               return (
                                 <div>
                                   <div>{t.nominal.toLocaleString('id-ID')}</div>
                                   {appFee > 0 && (
                                     <div className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">
-                                      ({(t.nominal - appFee).toLocaleString('id-ID')} + Fee {appFee.toLocaleString('id-ID')})
+                                      {isOrderKuota
+                                        ? `(${(t.nominal - appFee).toLocaleString('id-ID')} + Fee ${appFee.toLocaleString('id-ID')})`
+                                        : `Total Modal: ${(t.nominal + appFee).toLocaleString('id-ID')}`}
                                     </div>
                                   )}
                                 </div>
                               );
                             })()}
                           </td>
-                          <td className="py-2 px-3 text-xs font-bold text-right text-emerald-600 tabular-nums">+{t.adminFee.toLocaleString('id-ID')}</td>
+                          <td className="py-2 px-3 text-xs font-bold text-right text-emerald-600 tabular-nums">
+                            {(() => {
+                              const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+                              const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+                              const effectiveAdmin = (appFee > 0 && t.kategori !== 'Order Kuota')
+                                ? Math.max(0, t.adminFee - appFee)
+                                : t.adminFee;
+                              return (
+                                <div>
+                                  <div>+{effectiveAdmin.toLocaleString('id-ID')}</div>
+                                  {appFee > 0 && t.kategori !== 'Order Kuota' && (
+                                    <div className="text-[8px] text-slate-400 dark:text-slate-500 font-normal">
+                                      (Tarif: {t.adminFee.toLocaleString('id-ID')})
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td className="py-2 px-3 text-xs font-black text-right text-slate-900 dark:text-white tabular-nums">{(t.nominal + t.adminFee).toLocaleString('id-ID')}</td>
                           <td className="py-2 px-3">
                             <div className="flex items-center justify-center gap-1.5">

@@ -102,19 +102,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.3
-          name: "ALFAZA ALPHA POS v1.6.3"
+          tag_name: v1.6.4
+          name: "ALFAZA ALPHA POS v1.6.4"
           body: |
-            ### Pembaruan Aplikasi v1.6.3
-            - **Tata Letak Rincian Transaksi:**
-              - Format bagian atas (Kasir, Waktu, Sumber Uang Keluar/Masuk) kini rapi rata kanan-kiri dengan posisi simetris ke tengah.
-              - Format informasi jenis transaksi dan produk terorganisir rapi.
-              - Rincian finansial (Nominal, Fee Layanan, Total Modal, Admin Toko, dan Total) terstruktur presisi.
-            - **Penyederhanaan Struk Cetak Thermal Kasir:**
-              - Nama Kasir diposisikan di baris teratas metadata transaksi sebelum Nomor dan Waktu.
-              - Menyembunyikan rincian modal dan fee aplikasi pada struk pelanggan demi menjaga kerahasiaan modal toko.
-            - **Penyempurnaan Halaman Transaksi Classic:**
-              - Menghilangkan tombol manual fee dan teks (+Fee) di input transaksi karena kasir telah mengetahui fee saat memilih tujuan transaksi.
+            ### Pembaruan Aplikasi v1.6.4
+            - **Real-Time Preview Finansial (Laba Bersih & Total):**
+              - Menampilkan preview Total Transaksi dan Laba Bersih yang telah dipotong Fee Aplikasi secara langsung untuk semua kategori transaksi dan semua tema (Classic & Utama).
+            - **Penyempurnaan Mode Input Transaksi:**
+              - Menggunakan sistem Nominal + Admin Toko secara default pada Tema Utama dan Tema Classic demi kemudahan, akurasi, dan kecepatan pencatatan transaksi kasir.
+            - **Penambahan Sumber Transfer ke-5 'Sinergi Pulsa':**
+              - Menambahkan tombol sumber transfer ke-5 yaitu 'Sinergi Pulsa' (default status disembunyikan/bisa ditampilkan via modal pengaturan).
+              - Mendukung sub-pilihan kategori dan deteksi otomatis pemotongan fee aplikasi [FEE_APP:...].
+              - Mengoptimalkan tata letak tombol transfer menjadi 5 kolom sejejer dalam 1 baris yang rapi dan proporsional saat seluruh tombol ditampilkan.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

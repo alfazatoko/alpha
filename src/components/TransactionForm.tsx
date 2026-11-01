@@ -8,6 +8,7 @@ const SUMBER_APLIKASI_BANK = [
   { id: 'DANA', label: 'DANA', sub: 'E-Wallet', icon: 'fa-wallet' },
   { id: 'ORDER KUOTA', label: 'Order Kuota', sub: 'PPOB', icon: 'fa-bolt' },
   { id: 'FLIP', label: 'Flip', sub: 'Transfer', icon: 'fa-arrow-right-arrow-left' },
+  { id: 'SINERGI PULSA', label: 'Sinergi Pulsa', sub: 'PPOB', icon: 'fa-tower-cell' },
 ];
 
 const SUBCATEGORIES = [
@@ -59,7 +60,7 @@ const ITEMS: Record<string, { id: string, name: string, icon: string, color: str
   ]
 };
 
-export const DEFAULT_CUSTOM_BUTTON_LABELS: Record<string, string> = {
+export const DEFAULT_CUSTOM_BUTTON_LABELS: Record<string, string | boolean> = {
   'DIGITAL': 'Transfer',
   'TARIK': 'Tarik Tunai',
   'AKSESORIS': 'Aksesoris',
@@ -68,6 +69,8 @@ export const DEFAULT_CUSTOM_BUTTON_LABELS: Record<string, string> = {
   'DANA': 'DANA',
   'ORDER KUOTA': 'Order Kuota',
   'FLIP': 'Flip',
+  'SINERGI PULSA': 'Sinergi Pulsa',
+  'HIDE_SINERGI PULSA': true,
   'EDC / ATM': 'EDC/ATM',
   'QRIS': 'QRIS',
   'TRANSFER BANK': 'TRANSFER',
@@ -226,7 +229,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         detail: { labels: tempLabels, storeId: activeStoreId } 
       }));
 
-      const visibleTransfer = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].filter(m => !tempLabels['HIDE_' + m]);
+      const visibleTransfer = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'].filter(m => !tempLabels['HIDE_' + m]);
       if (visibleTransfer.length > 0) {
         setActiveTransferMethods(visibleTransfer);
         if (tempLabels['HIDE_' + sumberAplikasi]) {
@@ -265,8 +268,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleResetCustomLabels = () => {
     const resetObj: Record<string, any> = { ...DEFAULT_CUSTOM_BUTTON_LABELS };
-    ['BANK', 'DANA', 'ORDER KUOTA', 'FLIP', 'EDC / ATM', 'QRIS', 'TRANSFER BANK', 'TARIK_DANA', 'GOPAY'].forEach(k => {
-      resetObj['HIDE_' + k] = false;
+    ['BANK', 'DANA', 'ORDER KUOTA', 'FLIP', 'SINERGI PULSA', 'EDC / ATM', 'QRIS', 'TRANSFER BANK', 'TARIK_DANA', 'GOPAY'].forEach(k => {
+      resetObj['HIDE_' + k] = (k === 'SINERGI PULSA');
     });
     setTempLabels(resetObj);
   };
@@ -289,7 +292,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [selectedBank, setSelectedBank] = useState('BRI')
   const [selectedSumber, setSelectedSumber] = useState('QRIS')
   const [sumberAplikasi, setSumberAplikasi] = useState('')
-  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|'DANA'|'AKSESORIS'|null>(null)
+  const [classicPopupMode, setClassicPopupMode] = useState<'BANK'|'ORDER_KUOTA'|'FLIP'|'DANA'|'SINERGI_PULSA'|'AKSESORIS'|null>(null)
   const [selectedTujuan, setSelectedTujuan] = useState('')
   const [selectedTujuanFee, setSelectedTujuanFee] = useState(0)
   const [tujuanMasuk, setTujuanMasuk] = useState('TUNAI LACI KASIR')
@@ -301,8 +304,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false)
   const [orderKuotaMode, setOrderKuotaMode] = useState<'MODAL_JUAL' | 'NOMINAL_ADMIN'>(() => {
     const username = localStorage.getItem('alphaPro_username') || 'unknown';
+    const isExplicit = localStorage.getItem(`app_order_kuota_explicit_${username}`) === 'true';
+    if (!isExplicit) {
+      return 'NOMINAL_ADMIN';
+    }
     const saved = localStorage.getItem(`app_order_kuota_mode_${username}`);
-    return (saved === 'MODAL_JUAL' || saved === 'NOMINAL_ADMIN') ? saved : 'MODAL_JUAL';
+    return (saved === 'MODAL_JUAL' || saved === 'NOMINAL_ADMIN') ? saved : 'NOMINAL_ADMIN';
   })
 
   const [activeTheme, setActiveTheme] = useState(() => {
@@ -310,6 +317,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const saved = localStorage.getItem(`app_active_theme_${username}`);
     return saved ? saved : 'TEMA_2';
   });
+
+  // Helper: Cek apakah saat ini menggunakan sistem Nominal & Admin
+  // Tema 2 (Utama) SELALU menggunakan sistem Nominal & Admin saja
+  // Tema 1 (Classic) default-nya Nominal & Admin, namun kasir dapat memilih Jual & Modal
+  const isCurrentNominalAdmin = activeTheme === 'TEMA_2' || orderKuotaMode === 'NOMINAL_ADMIN';
 
   // Ambil data dari Supabase saat pertama kali load
   useEffect(() => {
@@ -324,9 +336,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         }
         if (data && data.preferences) {
            const prefs = data.preferences as any;
-           if (prefs.orderKuotaMode) {
+           if (prefs.orderKuotaMode && prefs.orderKuotaModeExplicit) {
               setOrderKuotaMode(prefs.orderKuotaMode);
               localStorage.setItem(`app_order_kuota_mode_${username}`, prefs.orderKuotaMode);
+              localStorage.setItem(`app_order_kuota_explicit_${username}`, 'true');
            }
            if (prefs.activeTheme) {
               setActiveTheme(prefs.activeTheme);
@@ -349,7 +362,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     localStorage.setItem(`app_order_kuota_mode_${username}`, orderKuotaMode);
     localStorage.setItem(`app_active_theme_${username}`, activeTheme);
 
-    const preferences = { orderKuotaMode, activeTheme };
+    const isExplicit = localStorage.getItem(`app_order_kuota_explicit_${username}`) === 'true';
+    const preferences = { orderKuotaMode, activeTheme, orderKuotaModeExplicit: isExplicit };
     supabase.from('cashier_settings').upsert({ username, preferences }, { onConflict: 'username' })
       .then(({ error }) => {
         if (error) console.error("Gagal simpan setting kasir ke Supabase", error);
@@ -358,7 +372,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [orderKuotaMode, activeTheme]);
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
-  const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'])
+  const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'])
 
   const effectiveStoreId = (activeStoreId && activeStoreId !== 'all') 
     ? activeStoreId 
@@ -371,13 +385,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     ORDER_KUOTA: [...ITEMS['TOPUP_EWALLET'], ...ITEMS['PPOB']],
     FLIP: [...ITEMS['TRANSFER_BANK'], ...ITEMS['TOPUP_EWALLET']],
     DANA: [],
+    SINERGI_PULSA: [...ITEMS['PPOB'], ...ITEMS['TOPUP_EWALLET']],
     AKSESORIS: ITEMS['AKSESORIS']
   }), []);
 
   const mergePopupListWithDefaults = React.useCallback((sourceLists: Record<string, any[]>) => {
     if (!sourceLists || typeof sourceLists !== 'object') return DEFAULT_POPUP_LISTS;
     const res: Record<string, any[]> = { ...DEFAULT_POPUP_LISTS };
-    for (const key of ['BANK', 'ORDER_KUOTA', 'FLIP', 'DANA', 'AKSESORIS']) {
+    for (const key of ['BANK', 'ORDER_KUOTA', 'FLIP', 'DANA', 'SINERGI_PULSA', 'AKSESORIS']) {
       const src = sourceLists[key];
       const def = DEFAULT_POPUP_LISTS[key] || [];
       if (Array.isArray(src)) {
@@ -544,11 +559,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
-  const getPopupMode = (categoryKey: string): 'BANK' | 'ORDER_KUOTA' | 'FLIP' | 'DANA' | null => {
+  const getPopupMode = (categoryKey: string): 'BANK' | 'ORDER_KUOTA' | 'FLIP' | 'DANA' | 'SINERGI_PULSA' | null => {
     if (categoryKey === 'BANK') return 'BANK';
     if (categoryKey === 'ORDER KUOTA' || categoryKey === 'ORDER_KUOTA') return 'ORDER_KUOTA';
     if (categoryKey === 'FLIP') return 'FLIP';
     if (categoryKey === 'DANA') return 'DANA';
+    if (categoryKey === 'SINERGI PULSA' || categoryKey === 'SINERGI_PULSA') return 'SINERGI_PULSA';
     return null;
   };
 
@@ -562,6 +578,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
 
     setSumberAplikasi(categoryKey);
+    setKategori(sumberToKategori[categoryKey] || categoryKey);
     setIsKetAuto(true);
     setIsAdminManuallyEdited(false);
     setActiveSubCategory('');
@@ -599,15 +616,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (name && name.trim()) {
       const trimmedName = name.trim().toUpperCase();
       let fee = 0;
-      if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'BANK' || classicPopupMode === 'DANA') {
+      if (classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'BANK' || classicPopupMode === 'DANA' || classicPopupMode === 'SINERGI_PULSA') {
         const feeStr = window.prompt(`Atur Fee Aplikasi untuk "${trimmedName}":\n(Isi nominal angka fee, atau isi 0 jika tidak ada fee)`, "0");
         if (feeStr !== null) {
           const cleanDigits = feeStr.trim().replace(/[^0-9]/g, '');
           fee = cleanDigits === '' ? 0 : parseInt(cleanDigits, 10);
         }
       }
-      const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : (classicPopupMode === 'BANK' ? 'fa-building-columns' : 'fa-wallet');
-      const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : 'text-blue-500';
+      const icon = classicPopupMode === 'AKSESORIS' ? 'fa-headset' : (classicPopupMode === 'BANK' ? 'fa-building-columns' : (classicPopupMode === 'SINERGI_PULSA' ? 'fa-tower-cell' : 'fa-wallet'));
+      const color = classicPopupMode === 'AKSESORIS' ? 'text-purple-500' : (classicPopupMode === 'SINERGI_PULSA' ? 'text-teal-500' : 'text-blue-500');
       const newItem = { id: trimmedName, name: trimmedName, icon, color, fee };
       const currentList = popupLists[classicPopupMode] || [];
       handleUpdatePopupList(classicPopupMode, [...currentList, newItem]);
@@ -655,7 +672,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const handleUpdate = () => {
       try {
         const transferPreset = presets?.find((p: any) => p.id === '_TRANSFER_METHODS_');
-        let methods = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'];
+        let methods = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'];
         if (transferPreset && transferPreset.data) {
           methods = transferPreset.data;
         } else {
@@ -667,8 +684,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         setActiveTransferMethods(finalMethods);
         setSumberAplikasi(prev => finalMethods.includes(prev) ? prev : (finalMethods[0] || 'BANK'));
       } catch (e) {
-        const fallback = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA'].filter(m => !customLabels['HIDE_' + m]);
-        setActiveTransferMethods(fallback.length > 0 ? fallback : ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA']);
+        const fallback = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'].filter(m => !customLabels['HIDE_' + m]);
+        setActiveTransferMethods(fallback.length > 0 ? fallback : ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA']);
       }
     };
     handleUpdate();
@@ -721,7 +738,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
   const SUMBER_LIST = ['BANK','GoPay','QRIS','DANA','ATM/EDC']
-  const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA' }
+  const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA','SINERGI PULSA':'Sinergi Pulsa' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
   React.useEffect(() => {
@@ -799,6 +816,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const flipLabel = customLabels['FLIP'] || 'Flip';
     const orderKuotaLabel = customLabels['ORDER KUOTA'] || 'Order Kuota';
     const danaLabel = customLabels['DANA'] || 'DANA';
+    const sinergiLabel = customLabels['SINERGI PULSA'] || 'Sinergi Pulsa';
     const tarikLabel = customLabels['TARIK'] || 'Tarik Tunai';
     const tarikSubLabel = selectedSumber === 'DANA' 
       ? (customLabels['TARIK_DANA'] || 'DANA') 
@@ -816,6 +834,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         autoText = selectedTujuan ? `${orderKuotaLabel} > ${selectedTujuan}` : orderKuotaLabel;
       } else if (sumberAplikasi === 'DANA') {
         autoText = selectedTujuan ? `${danaLabel} > ${selectedTujuan}` : (customLabels['DANA'] ? danaLabel : `${danaLabel} > Aplikasi Dana`);
+      } else if (sumberAplikasi === 'SINERGI PULSA') {
+        autoText = selectedTujuan ? `${sinergiLabel} > ${selectedTujuan}` : sinergiLabel;
       } else {
         autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
       }
@@ -848,6 +868,78 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const remain = Math.max(0, tot - numVal)
     setNominalCashSplit(formatInputRupiah(remain.toString()))
   }
+
+  // Real-time Preview: Total Jual / Transaksi & Laba Bersih (setelah dipotong Fee Aplikasi)
+  // Berlaku untuk SEMUA Kategori (Order Kuota, Flip, Dana, Bank, Tarik Tunai, dll) dan SEMUA Tema Transaksi
+  const renderRealtimeProfitPreview = (containerClassName = "-mt-1 mb-2 px-4 animate-in fade-in duration-200") => {
+    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+    const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+
+    // Untuk Aksesoris (admin tidak dipakai)
+    if (activeMode === 'AKSESORIS') {
+      if (m > 0) {
+        return (
+          <div className={containerClassName}>
+            <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+                Total Bayar: Rp {m.toLocaleString('id-ID')}
+              </span>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wide">
+                Aksesoris ✓
+              </span>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    }
+
+    if (m <= 0 || a <= 0) return null;
+
+    let totalJual = 0;
+    let labaBersih = 0;
+
+    // Mode MODAL_JUAL khusus Order Kuota pada Tema 1 (jika kasir memilih Jual & Modal)
+    if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) {
+      totalJual = a; // Harga Jual
+      const modalRiil = m + selectedTujuanFee; // Modal Dasar + Fee Aplikasi
+      labaBersih = a - modalRiil;
+    } else {
+      // Sistem Nominal & Admin (Flip, Transfer Bank, DANA, Order Kuota, Tarik Tunai, dll)
+      totalJual = m + a;
+      labaBersih = a - selectedTujuanFee;
+    }
+
+    const labelTotal = activeMode === 'TARIK' ? 'Total Transaksi' : 'Total Jual';
+
+    if (labaBersih <= 0) {
+      return (
+        <div className={containerClassName}>
+          <div className="bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+            <span className="text-[10px] font-black text-red-800 uppercase tracking-wide">
+              {labelTotal}: Rp {totalJual.toLocaleString('id-ID')}
+            </span>
+            <span className="text-[10px] font-black text-red-600 uppercase tracking-wide">
+              {labaBersih < 0 ? `Rugi: Rp ${Math.abs(labaBersih).toLocaleString('id-ID')} ⚠️` : `Laba: Rp 0 ⚠️`}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={containerClassName}>
+        <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+          <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+            {labelTotal}: Rp {totalJual.toLocaleString('id-ID')}
+          </span>
+          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wide">
+            Laba: Rp {labaBersih.toLocaleString('id-ID')} ✓
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   // Auto Admin Logic
   const [isAdminManuallyEdited, setIsAdminManuallyEdited] = useState(false);
@@ -1149,12 +1241,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
     // 4. Set Nominal & Admin (Modal & Jual)
     if (isOrderKuota) {
-      if (orderKuotaMode === 'NOMINAL_ADMIN') {
-        setOrderKuotaMode('MODAL_JUAL');
+      if (isCurrentNominalAdmin) {
+        setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+        const calculatedAdmin = Math.max(0, pJual - pModal);
+        setAdmin(calculatedAdmin.toLocaleString('id-ID').replace(/,/g, '.'));
+        setTimeout(() => adminRef.current?.focus(), 50);
+      } else {
+        setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
+        setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
+        setTimeout(() => adminRef.current?.focus(), 50);
       }
-      setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
-      setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
-      setTimeout(() => adminRef.current?.focus(), 50);
     } else {
       setNominal(pModal.toLocaleString('id-ID').replace(/,/g, '.'));
       if (pJual > 0) setAdmin(pJual.toLocaleString('id-ID').replace(/,/g, '.'));
@@ -1174,7 +1270,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       const hasSubteks = (sumberAplikasi === 'BANK' && (!hasSubList || Boolean(selectedBank && selectedBank.trim()))) ||
                          (sumberAplikasi === 'ORDER KUOTA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
                          (sumberAplikasi === 'FLIP' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
-                         (sumberAplikasi === 'DANA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim())));
+                         (sumberAplikasi === 'DANA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
+                         (sumberAplikasi === 'SINERGI PULSA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim())));
 
       if (!hasSubteks && !keterangan.trim()) {
         setErrorMsg('Pilih sub-kategori/tujuan atau isi keterangan transaksi!');
@@ -1211,7 +1308,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
     }
 
-    if ((kategori === 'Order Kuota' || kategori === 'FLIP' || sumberAplikasi === 'DANA') && selectedTujuanFee > 0) {
+    if ((kategori === 'Order Kuota' || kategori === 'FLIP' || sumberAplikasi === 'DANA' || sumberAplikasi === 'BANK' || kategori === 'Transfer Bank' || sumberAplikasi === 'SINERGI PULSA' || kategori === 'Sinergi Pulsa') && selectedTujuanFee > 0) {
       if (!finalKeteranganBase.includes('[FEE_APP:')) {
         finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
       }
@@ -1246,7 +1343,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       let saveAdmin = admin;
 
       if (kategori === 'Order Kuota') {
-        if (orderKuotaMode === 'NOMINAL_ADMIN') {
+        if (isCurrentNominalAdmin) {
           const calculatedModal = cleanNominal + selectedTujuanFee;
           const calculatedJual = cleanNominal + cleanAdmin;
           
@@ -1541,7 +1638,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <i className="fa-solid fa-chevron-down text-[8px] opacity-70 ml-0.5 group-hover:translate-y-0.5 transition-transform"></i>
                 </button>
               </div>
-              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
+              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
                 {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
                   const isSel = sumberAplikasi === src.id;
                   return (
@@ -1550,20 +1647,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       onClick={() => handleTransferCategoryClick(src.id, false)}
                       onDoubleClick={() => handleTransferCategoryClick(src.id, true)}
                       className={cn(
-                        "relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border-2 transition-all duration-300",
+                        "relative flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl border-2 transition-all duration-300 min-w-0",
                         isSel ? "border-[#0c1f44] shadow-sm scale-[1.02]" : "border-gray-100 hover:border-gray-300"
                       )}
                     >
                       {isSel && (
-                         <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center border border-white shadow-sm">
+                         <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center border border-white shadow-sm z-10">
                            <i className="fa-solid fa-check text-[6.5px]"></i>
                          </div>
                       )}
-                      <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center mb-0.5", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
-                        <i className={cn("fa-solid text-xs", src.icon)}></i>
+                      <div className={cn("w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5 shrink-0", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
+                        <i className={cn("fa-solid text-[10px] sm:text-xs", src.icon)}></i>
                       </div>
-                      <span className={cn("text-[8.5px] font-black leading-tight text-center", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{customLabels[src.id] || src.label}</span>
-                      <span className="text-[6.5px] font-bold text-gray-400 leading-none">{src.sub}</span>
+                      <span className={cn("text-[7.5px] sm:text-[8.5px] font-black leading-tight text-center truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{customLabels[src.id] || src.label}</span>
+                      <span className="text-[6px] sm:text-[6.5px] font-bold text-gray-400 leading-none truncate">{src.sub}</span>
                     </button>
                   )
                 })}
@@ -1744,7 +1841,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-md transition-all text-left cursor-pointer"
                     >
                       {isOrderKuota
-                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        ? (orderKuotaMode === 'NOMINAL_ADMIN' 
+                            ? `${pKet} (Nom:${pModal / 1000}k Adm:${Math.max(0, pJual - pModal) / 1000}k)` 
+                            : `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)`)
                         : pKet}
                     </button>
                   );
@@ -1792,13 +1891,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
              <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Mode Input:</span>
              <div className="flex gap-1 bg-white rounded-lg p-1 border border-blue-100 shadow-sm">
                 <button 
-                  onClick={() => { setOrderKuotaMode('MODAL_JUAL'); setNominal(''); setAdmin(''); }}
-                  className={cn("px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all", orderKuotaMode === 'MODAL_JUAL' ? "bg-[#0066ff] text-white shadow-sm" : "text-gray-500 hover:bg-gray-50")}
-                >Modal & Jual</button>
-                <button 
-                  onClick={() => { setOrderKuotaMode('NOMINAL_ADMIN'); setNominal(''); setAdmin(''); }}
+                  onClick={() => { 
+                    setOrderKuotaMode('NOMINAL_ADMIN'); 
+                    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+                    localStorage.setItem(`app_order_kuota_explicit_${username}`, 'true');
+                    setNominal(''); 
+                    setAdmin(''); 
+                  }}
                   className={cn("px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all", orderKuotaMode === 'NOMINAL_ADMIN' ? "bg-[#0066ff] text-white shadow-sm" : "text-gray-500 hover:bg-gray-50")}
                 >Nominal & Admin</button>
+                <button 
+                  onClick={() => { 
+                    setOrderKuotaMode('MODAL_JUAL'); 
+                    const username = localStorage.getItem('alphaPro_username') || 'unknown';
+                    localStorage.setItem(`app_order_kuota_explicit_${username}`, 'true');
+                    setNominal(''); 
+                    setAdmin(''); 
+                  }}
+                  className={cn("px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all", orderKuotaMode === 'MODAL_JUAL' ? "bg-[#0066ff] text-white shadow-sm" : "text-gray-500 hover:bg-gray-50")}
+                >Jual & Modal</button>
              </div>
           </div>
         )}
@@ -1890,51 +2001,44 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 }}
                 className={cn(
                   "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
-                  kategori === 'Order Kuota' && (() => {
-                    let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                    let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                    if (orderKuotaMode === 'NOMINAL_ADMIN') {
-                       j = m + j; // Jual = Nominal + Admin
-                       m = m + selectedTujuanFee; // Modal = Nominal + Fee
-                    } else {
-                       m = m + selectedTujuanFee; // Modal = Modal Dasar + Fee
+                  (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                    const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                    if (m <= 0 || a <= 0) {
+                      return isAdminNonTunai 
+                        ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-blue-400 focus:ring-blue-50";
                     }
-                    return m > 0 && j > 0 && j <= m
+                    const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
+                      ? a - (m + selectedTujuanFee)
+                      : a - selectedTujuanFee;
+                    return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                      : m > 0 && j > m
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
-                  })() || (isAdminNonTunai 
-                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
-                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
+                      : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                  })()
                 )}
               />
-              {/* Indikator real-time untuk Order Kuota */}
-              {kategori === 'Order Kuota' && (() => {
-                let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                if (orderKuotaMode === 'NOMINAL_ADMIN') {
-                   j = m + j;
-                   m = m + selectedTujuanFee;
+              {/* Indikator real-time untuk SEMUA Kategori */}
+              {(() => {
+                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                if (m <= 0 || a <= 0) return null;
+                const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
+                  ? a - (m + selectedTujuanFee)
+                  : a - selectedTujuanFee;
+                if (laba > 0) {
+                  return (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                      <i className="fa-solid fa-check text-white text-[10px]"></i>
+                    </div>
+                  );
                 } else {
-                   m = m + selectedTujuanFee;
+                  return (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                      <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                    </div>
+                  );
                 }
-                if (m > 0 && j > 0) {
-                  if (j > m) {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
-                        <i className="fa-solid fa-check text-white text-[10px]"></i>
-                      </div>
-                    )
-                  } else {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
-                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
-                      </div>
-                    )
-                  }
-                }
-                return null
               })()}
             </div>
           </div>
@@ -1964,54 +2068,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
 
-        {/* Peringatan real-time Order Kuota: Jual < Modal */}
-        {kategori === 'Order Kuota' && (() => {
-          let m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-          let j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-          if (orderKuotaMode === 'NOMINAL_ADMIN') {
-             j = m + j; // Jual = Nominal + Admin Kasir
-             m = m + selectedTujuanFee; // Modal = Nominal + Fee App
-          } else {
-             m = m + selectedTujuanFee; // Modal = Modal Dasar + Fee App
-          }
-          if (m > 0 && j > 0 && j <= m) {
-            return (
-              <div className="-mt-1 bg-red-50 border border-red-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                <i className="fa-solid fa-triangle-exclamation text-red-500 text-sm shrink-0"></i>
-                <p className="text-[10px] font-black text-red-700 uppercase tracking-wide leading-tight">
-                  Harga JUAL ({j.toLocaleString('id-ID')}) harus lebih besar dari MODAL ({m.toLocaleString('id-ID')})!
-                </p>
-              </div>
-            )
-          }
-          if (m > 0 && j > m) {
-            return (
-              <div className="-mt-1 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in duration-200">
-                <i className="fa-solid fa-circle-check text-emerald-500 text-sm shrink-0"></i>
-                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-wide">
-                  Laba: Rp {(j - m).toLocaleString('id-ID')} ✓
-                </p>
-              </div>
-            )
-          }
-          return null
-        })()}
-        {/* Reminder untuk kategori BUKAN Order Kuota */}
-        {kategori !== 'Order Kuota' && activeMode === 'DIGITAL' && (() => {
-          const n = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-          const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-          if (n > 0 && a >= n) {
-            return (
-              <div className="-mt-1 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                <i className="fa-solid fa-triangle-exclamation text-amber-500 text-sm shrink-0"></i>
-                <p className="text-[10px] font-black text-amber-700 uppercase tracking-wide leading-tight">
-                  Admin ({a.toLocaleString('id-ID')}) harusnya lebih kecil dari Nominal ({n.toLocaleString('id-ID')}). Cek kembali!
-                </p>
-              </div>
-            )
-          }
-          return null
-        })()}
+        {/* Preview Total Jual & Laba Bersih untuk SEMUA Kategori di Tema 1 */}
+        {renderRealtimeProfitPreview("-mt-1 mb-2 px-3 animate-in fade-in duration-200")}
 
         {errorMsg && (
           <div className="bg-red-50/80 border border-red-200 p-2.5 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-300 backdrop-blur-sm shadow-sm">
@@ -2036,7 +2094,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <i className="fa-solid fa-paper-plane text-sm"></i>
             </div>
           )}
-          {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
+          {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => {
+            const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0;
+            if (activeMode === 'AKSESORIS') {
+              return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
+            }
+            if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) {
+              const j = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
+              return j > 0 ? ` (Rp ${j.toLocaleString('id-ID')})` : '';
+            }
+            const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
+            return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');
+          })()}`}
         </button>
       </div>
       </>
@@ -2091,7 +2160,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="mb-2 px-3">
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
               {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
                 const isSel = sumberAplikasi === src.id;
                 // Warna icon per sumber
@@ -2100,6 +2169,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   'DANA': 'bg-blue-500',
                   'ORDER KUOTA': 'bg-amber-500',
                   'FLIP': 'bg-orange-500',
+                  'SINERGI PULSA': 'bg-teal-500',
                 };
                 return (
                   <button
@@ -2107,22 +2177,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     onClick={() => handleTransferCategoryClick(src.id, false)}
                     onDoubleClick={() => handleTransferCategoryClick(src.id, true)}
                     className={cn(
-                      "relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl border-2 transition-all duration-300 bg-white overflow-hidden",
+                      "relative flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-1.5 px-0.5 rounded-xl border-2 transition-all duration-300 bg-white overflow-hidden min-w-0",
                       isSel ? "border-emerald-500 shadow-[0_4px_12px_-4px_rgba(16,185,129,0.4)] scale-[1.03]" : "border-gray-100 shadow-sm hover:border-emerald-200 hover:bg-emerald-50/50"
                     )}
                   >
                     {isSel && (
-                      <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rotate-45 translate-x-4 -translate-y-4">
-                        <i className="fa-solid fa-check text-white text-[8px] absolute bottom-1 left-3.5 -rotate-45"></i>
+                      <div className="absolute top-0 right-0 w-7 h-7 bg-emerald-500 rotate-45 translate-x-3.5 -translate-y-3.5 z-10">
+                        <i className="fa-solid fa-check text-white text-[7px] absolute bottom-0.5 left-3 -rotate-45"></i>
                       </div>
                     )}
                     <div className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center transition-all",
-                      isSel ? "bg-emerald-500 text-white" : 'bg-gray-100 text-gray-400'
+                      "w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all shrink-0",
+                      isSel ? (iconColors[src.id] || "bg-emerald-500 text-white") : 'bg-gray-100 text-gray-400'
                     )}>
-                      <i className={cn("fa-solid text-[11px]", src.icon, isSel ? "text-white" : "text-gray-500")}></i>
+                      <i className={cn("fa-solid text-[10px] sm:text-[11px]", src.icon, isSel ? "text-white" : "text-gray-500")}></i>
                     </div>
-                    <span className={cn("text-[8px] font-black uppercase tracking-tight text-center leading-tight", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{customLabels[src.id] || src.label}</span>
+                    <span className={cn("text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{customLabels[src.id] || src.label}</span>
                   </button>
                 )
               })}
@@ -2345,7 +2415,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[11px] font-black uppercase tracking-wide px-3 py-1.5 rounded-xl transition-all text-left shadow-sm cursor-pointer"
                     >
                       {isOrderKuota
-                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        ? `${pKet} (Nom:${pModal / 1000}k Adm:${Math.max(0, pJual - pModal) / 1000}k)` 
                         : pKet}
                     </button>
                   );
@@ -2390,8 +2460,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
+                <i className="fa-solid fa-coins text-blue-500"></i>
+                Nominal
               </label>
               {true && (
                 <label
@@ -2426,8 +2496,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     e.preventDefault();
                     setTimeout(() => {
                       if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
-                      else adminRef.current?.focus();
+                      else {
+                        adminRef.current?.focus();
+                        adminRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
                     }, 10);
                   }
                 }}
@@ -2439,8 +2511,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative group flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
+                <i className="fa-solid fa-hand-holding-dollar text-blue-500 text-[10px]"></i>
+                Admin
               </label>
               <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                 <input
@@ -2473,44 +2545,48 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 }}
                 className={cn(
                   "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
-                  kategori === 'Order Kuota' && (() => {
-                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                    const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                    return m > 0 && j > 0 && j <= m
+                  (() => {
+                    const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                    const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                    if (m <= 0 || a <= 0) {
+                      return isAdminNonTunai 
+                        ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50";
+                    }
+                    const laba = a - selectedTujuanFee;
+                    return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                      : m > 0 && j > m
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                        : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50"
-                  })() || (isAdminNonTunai 
-                    ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
-                    : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
+                      : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                  })()
                 )}
               />
-              {/* Indikator real-time untuk Order Kuota */}
-              {kategori === 'Order Kuota' && (() => {
-                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0
-                const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0
-                if (m > 0 && j > 0) {
-                  if (j > m) {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
-                        <i className="fa-solid fa-check text-white text-[10px]"></i>
-                      </div>
-                    )
-                  } else {
-                    return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
-                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
-                      </div>
-                    )
-                  }
+              {/* Indikator real-time laba admin untuk SEMUA Kategori di Tema 2 */}
+              {(() => {
+                const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
+                const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                if (m <= 0 || a <= 0) return null;
+                const laba = a - selectedTujuanFee;
+                if (laba > 0) {
+                  return (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                      <i className="fa-solid fa-check text-white text-[10px]"></i>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                      <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                    </div>
+                  );
                 }
-                return null
               })()}
             </div>
           </div>
           )}
         </div>
+
+        {/* Real-time Preview: Total Jual & Laba Bersih untuk SEMUA Kategori di Tema 2 */}
+        {renderRealtimeProfitPreview("-mt-1 mb-2 px-4 animate-in fade-in duration-200")}
 
 
 
@@ -2561,7 +2637,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <i className="fa-solid fa-paper-plane text-sm"></i>
               </div>
             )}
-            {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
+            {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => {
+              const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0;
+              if (activeMode === 'AKSESORIS') {
+                return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
+              }
+              const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
+              return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');
+            })()}`}
           </button>
         </div>
       </>
@@ -2765,7 +2848,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       className="bg-[#faf5ff] hover:bg-purple-100 border border-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-wide px-2.5 py-1.5 rounded-xl transition-all text-left shadow-sm cursor-pointer"
                     >
                       {isOrderKuota 
-                        ? `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)` 
+                        ? (isCurrentNominalAdmin 
+                            ? `${pKet} (Nom:${pModal / 1000}k Adm:${Math.max(0, pJual - pModal) / 1000}k)` 
+                            : `${pKet} (M:${pModal / 1000}k J:${pJual / 1000}k)`)
                         : pKet}
                     </button>
                   );
@@ -2812,8 +2897,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="relative group flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5 px-1">
               <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                <i className={cn("fa-solid", kategori === 'Order Kuota' ? "fa-box text-blue-500" : "fa-coins text-blue-500")}></i>
-                {kategori === 'Order Kuota' ? 'Modal' : 'Nominal'}
+                <i className={cn("fa-solid", kategori === 'Order Kuota' ? (isCurrentNominalAdmin ? "fa-coins text-blue-500" : "fa-box text-blue-500") : "fa-coins text-blue-500")}></i>
+                {kategori === 'Order Kuota' ? (isCurrentNominalAdmin ? 'Nominal' : 'Modal') : 'Nominal'}
               </label>
               {true && (
                 <label
@@ -2844,7 +2929,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     e.preventDefault();
                     setTimeout(() => {
                       if (activeMode === 'AKSESORIS') btnSimpanRef.current?.click();
-                      else if (kategori === 'Order Kuota') btnSimpanRef.current?.click();
+                      else if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) btnSimpanRef.current?.click();
                       else adminRef.current?.focus();
                     }, 10);
                   }
@@ -2858,8 +2943,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             <div className="relative group flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 px-1">
                 <label className="flex items-center text-[10px] font-black text-gray-700 uppercase tracking-widest gap-1.5 whitespace-nowrap">
-                  <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? "fa-tag text-blue-500" : "fa-hand-holding-dollar text-blue-500")}></i>
-                  {kategori === 'Order Kuota' ? 'Jual' : 'Admin'}
+                  <i className={cn("fa-solid text-[10px]", kategori === 'Order Kuota' ? (isCurrentNominalAdmin ? "fa-hand-holding-dollar text-blue-500" : "fa-tag text-blue-500") : "fa-hand-holding-dollar text-blue-500")}></i>
+                  {kategori === 'Order Kuota' ? (isCurrentNominalAdmin ? 'Admin' : 'Jual') : 'Admin'}
                 </label>
                 <label className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md shadow-sm transition-colors ml-auto ${isAdminNonTunai ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#0066ff] hover:bg-blue-700'}`}>
                   <input
@@ -2892,43 +2977,51 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   }}
                   className={cn(
                     "w-full text-[14px] font-black h-[36px] pl-9 pr-3 rounded-xl border outline-none transition-all shadow-sm focus:ring-4",
-                    kategori === 'Order Kuota' && (() => {
+                    (() => {
                       const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
-                      const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
-                      return m > 0 && j > 0 && j <= m
+                      const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                      if (m <= 0 || a <= 0) {
+                        return isAdminNonTunai 
+                          ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
+                          : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50";
+                      }
+                      const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
+                        ? a - (m + selectedTujuanFee)
+                        : a - selectedTujuanFee;
+                      return laba <= 0
                         ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                        : m > 0 && j > m
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100"
-                          : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-emerald-400 focus:ring-emerald-50";
-                    })() || (isAdminNonTunai 
-                      ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
-                      : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50")
+                        : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                    })()
                   )}
                 />
-                {kategori === 'Order Kuota' && (() => {
+                {(() => {
                   const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
-                  const j = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
-                  if (m > 0 && j > 0) {
-                    if (j > m) {
-                      return (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
-                          <i className="fa-solid fa-check text-white text-[10px]"></i>
-                        </div>
-                      )
-                    } else {
-                      return (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
-                          <i className="fa-solid fa-xmark text-white text-[10px]"></i>
-                        </div>
-                      )
-                    }
+                  const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
+                  if (m <= 0 || a <= 0) return null;
+                  const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
+                    ? a - (m + selectedTujuanFee)
+                    : a - selectedTujuanFee;
+                  if (laba > 0) {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                        <i className="fa-solid fa-check text-white text-[10px]"></i>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow animate-pulse">
+                        <i className="fa-solid fa-xmark text-white text-[10px]"></i>
+                      </div>
+                    );
                   }
-                  return null;
                 })()}
               </div>
             </div>
           )}
         </div>
+
+        {/* Real-time Preview: Total Jual & Laba Bersih untuk SEMUA Kategori di Tema 3 */}
+        {renderRealtimeProfitPreview("-mt-1 mb-3 px-5 animate-in fade-in duration-200")}
 
         {/* 2X BAYAR SPLIT (MOVED BELOW NOMINAL ROW) */}
         {tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)' && (
@@ -2978,7 +3071,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <i className="fa-solid fa-paper-plane text-sm"></i>
             </div>
           )}
-          {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => { const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0; return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '' })()}`}
+          {isSaving ? 'MEMPROSES...' : `SIMPAN TRANSAKSI${(() => {
+            const n = parseInt(nominal.replace(/[^0-9]/g,'')) || 0;
+            if (activeMode === 'AKSESORIS') {
+              return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
+            }
+            if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) {
+              const j = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
+              return j > 0 ? ` (Rp ${j.toLocaleString('id-ID')})` : '';
+            }
+            const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
+            return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');
+          })()}`}
         </button>
       </>
       )}
@@ -3245,7 +3349,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     {tema3Step === 'DIGITAL' && activeTransferMethods.filter(s => !customLabels['HIDE_' + s]).map((s, idx) => {
                       const isAct = sumberAplikasi === s;
                       const label = s === 'BANK' ? (customLabels['BANK'] || 'BANK') : (customLabels[s] || s);
-                      const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-bolt' : 'fa-wifi';
+                      const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-arrow-right-arrow-left' : s === 'SINERGI PULSA' ? 'fa-tower-cell' : 'fa-bolt';
                       const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;
                       return (
                         <button 
@@ -3339,6 +3443,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   {classicPopupMode === 'DANA' && "Silakan pilih sub-tujuan E-Wallet / Dana"}
                   {classicPopupMode === 'ORDER_KUOTA' && "Pilih PPOB atau E-Wallet"}
                   {classicPopupMode === 'FLIP' && "Pilih tujuan transfer via Flip"}
+                  {classicPopupMode === 'SINERGI_PULSA' && "Pilih produk / tujuan Sinergi Pulsa"}
                   {classicPopupMode === 'AKSESORIS' && "Silakan pilih sub-kategori aksesoris"}
                 </p>
               </div>
@@ -3428,11 +3533,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                               setIsKetAuto(true);
                               if (classicPopupMode === 'BANK') {
                                 setSelectedBank('LAINNYA');
+                                if (item.fee !== undefined && item.fee !== null) {
+                                  setSelectedTujuanFee(Number(item.fee));
+                                } else {
+                                  setSelectedTujuanFee(0);
+                                }
                               } else if (classicPopupMode === 'AKSESORIS') {
                                 setSelectedTujuan('LAINNYA');
                               } else {
                                 setSelectedTujuan(item.name);
-                                if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA') && (item.fee !== undefined && item.fee !== null)) {
+                                if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA' || classicPopupMode === 'SINERGI_PULSA') && (item.fee !== undefined && item.fee !== null)) {
                                   setSelectedTujuanFee(Number(item.fee));
                                 } else {
                                   setSelectedTujuanFee(0);
@@ -3459,9 +3569,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             }
                             if (classicPopupMode === 'BANK') {
                                setSelectedBank(item.name);
+                               if (item.fee !== undefined && item.fee !== null) {
+                                  setSelectedTujuanFee(Number(item.fee));
+                               } else {
+                                  setSelectedTujuanFee(0);
+                               }
                             } else {
                                setSelectedTujuan(item.name);
-                               if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA') && (item.fee !== undefined && item.fee !== null)) {
+                               if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA' || classicPopupMode === 'SINERGI_PULSA') && (item.fee !== undefined && item.fee !== null)) {
                                   setSelectedTujuanFee(Number(item.fee));
                                } else {
                                   setSelectedTujuanFee(0);
@@ -3626,14 +3741,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     { key: 'BANK', defaultName: 'Bank UOB', icon: 'fa-building-columns' },
                     { key: 'DANA', defaultName: 'DANA', icon: 'fa-wallet' },
                     { key: 'ORDER KUOTA', defaultName: 'Order Kuota', icon: 'fa-bolt' },
-                    { key: 'FLIP', defaultName: 'Flip', icon: 'fa-arrow-right-arrow-left' }
-                  ].map(({ key, defaultName, icon }) => {
+                    { key: 'FLIP', defaultName: 'Flip', icon: 'fa-arrow-right-arrow-left' },
+                    { key: 'SINERGI PULSA', defaultName: 'Sinergi Pulsa', icon: 'fa-tower-cell' }
+                  ].map(({ key, defaultName, icon }, index) => {
                     const isHidden = !!tempLabels['HIDE_' + key];
                     return (
                       <div 
                         key={key} 
                         className={cn(
                           "p-2.5 rounded-xl border transition-all flex flex-col justify-between",
+                          index === 4 ? "col-span-2 sm:col-span-1" : "",
                           isHidden 
                             ? "bg-red-50/50 border-red-200" 
                             : "bg-white border-slate-200/80 shadow-xs"

@@ -70,6 +70,113 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
+export interface MonthCategoryBreakdown {
+  category: string;
+  count: number;
+  omzet: number;
+  profit: number;
+  totalFeeApp: number;
+  omzetPct: number;
+  profitPct: number;
+  trxPct: number;
+}
+
+export const CATEGORY_STYLES: Record<string, { icon: string; bg: string; text: string; bar: string; border: string }> = {
+  'Tarik Tunai': {
+    icon: 'fa-money-bill-wave',
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-700',
+    bar: 'from-emerald-500 to-teal-500',
+    border: 'border-emerald-200'
+  },
+  'FLIP': {
+    icon: 'fa-bolt',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    bar: 'from-amber-500 to-orange-500',
+    border: 'border-amber-200'
+  },
+  'Order Kuota': {
+    icon: 'fa-mobile-screen-button',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    bar: 'from-blue-500 to-cyan-500',
+    border: 'border-blue-200'
+  },
+  'Transfer Bank': {
+    icon: 'fa-building-columns',
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    bar: 'from-indigo-500 to-violet-500',
+    border: 'border-indigo-200'
+  },
+  'DANA': {
+    icon: 'fa-wallet',
+    bg: 'bg-sky-50',
+    text: 'text-sky-700',
+    bar: 'from-sky-500 to-blue-600',
+    border: 'border-sky-200'
+  },
+  'Aksesoris': {
+    icon: 'fa-headphones',
+    bg: 'bg-purple-50',
+    text: 'text-purple-700',
+    bar: 'from-purple-500 to-fuchsia-500',
+    border: 'border-purple-200'
+  },
+  'Voucher': {
+    icon: 'fa-ticket',
+    bg: 'bg-rose-50',
+    text: 'text-rose-700',
+    bar: 'from-rose-500 to-pink-500',
+    border: 'border-rose-200'
+  },
+  'Sinergi Pulsa': {
+    icon: 'fa-tower-cell',
+    bg: 'bg-teal-50',
+    text: 'text-teal-700',
+    bar: 'from-teal-500 to-emerald-500',
+    border: 'border-teal-200'
+  },
+  'Lainnya': {
+    icon: 'fa-box-open',
+    bg: 'bg-slate-50',
+    text: 'text-slate-700',
+    bar: 'from-slate-500 to-slate-600',
+    border: 'border-slate-200'
+  }
+};
+
+export const CATEGORY_COLORS: Record<string, string> = {
+  'Tarik Tunai': '#10b981',
+  'FLIP': '#3b82f6',
+  'Order Kuota': '#f59e0b',
+  'Sinergi Pulsa': '#0d9488',
+  'Transfer Bank': '#8b5cf6',
+  'Aksesoris': '#ec4899',
+  'DANA': '#0284c7',
+  'Voucher': '#f97316',
+  'Lainnya': '#64748b'
+};
+
+export const PALETTE_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'
+];
+
+export const getNormalizedCategory = (rawCategory: string = ''): string => {
+  const cat = (rawCategory || '').trim();
+  const lower = cat.toLowerCase();
+  if (lower.includes('tarik tunai') || lower === 'tarik') return 'Tarik Tunai';
+  if (lower === 'flip') return 'FLIP';
+  if (lower.includes('order kuota') || lower === 'kuota') return 'Order Kuota';
+  if (lower.includes('sinergi')) return 'Sinergi Pulsa';
+  if (lower.includes('dana')) return 'DANA';
+  if (lower.includes('transfer') || lower.includes('bank')) return 'Transfer Bank';
+  if (lower.includes('aksesoris')) return 'Aksesoris';
+  if (lower.includes('voucher')) return 'Voucher';
+  return cat || 'Lainnya';
+};
+
 export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   transactions,
   allTransactions,
@@ -130,6 +237,85 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   // Remote transactions fetched from Supabase (hanya jika SQL belum terisi / fallback)
   const [remoteTransactions, setRemoteTransactions] = useState<Transaction[]>([]);
   const [isFetchingRemote, setIsFetchingRemote] = useState<boolean>(false);
+
+  // Display mode for Monthly Category breakdown: 'omzet' (default, seperti photo), 'laba', 'trx'
+  const [categoryMode, setCategoryMode] = useState<'omzet' | 'laba' | 'trx'>('omzet');
+  const [showAllCategories, setShowAllCategories] = useState<boolean>(false);
+
+  // Fetch transactions for the currently selected month to compute accurate category breakdown
+  const fetchTransactionsForMonth = useCallback(async (year: number, month: number) => {
+    setIsFetchingRemote(true);
+    try {
+      let uid = userId;
+      if (!uid) {
+        const { data: authData } = await supabase.auth.getUser();
+        uid = authData.user?.id || '';
+      }
+
+      const mKey = `${year}-${String(month).padStart(2, '0')}`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const startStr = `${mKey}-01T00:00:00`;
+      const endStr = `${mKey}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
+      let allRawData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from('transactions')
+          .select('id, kasir_id, nominal, admin_fee, timestamp, kategori, store_id, keterangan')
+          .gte('timestamp', startStr)
+          .lte('timestamp', endStr)
+          .order('timestamp', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (uid) {
+          query = query.eq('user_id', uid);
+        }
+
+        if (effectiveStoreId !== 'all') {
+          query = query.eq('store_id', effectiveStoreId);
+        }
+
+        const { data, error } = await query;
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allRawData.push(...data);
+          from += step;
+          if (data.length < step) hasMore = false;
+        }
+
+        if (from >= 15000) hasMore = false;
+      }
+
+      if (allRawData.length > 0) {
+        const formatted: Transaction[] = allRawData.map(r => ({
+          id: r.id,
+          kategori: r.kategori,
+          nominal: Number(r.nominal || 0),
+          adminFee: Number(r.admin_fee ?? (r as any).adminFee ?? 0),
+          keterangan: r.keterangan || '',
+          timestamp: r.timestamp,
+          kasir_id: r.kasir_id,
+          store_id: r.store_id
+        }));
+
+        setRemoteTransactions(prev => {
+          const map = new Map<string, Transaction>();
+          prev.forEach(t => { if (t.id) map.set(t.id, t); });
+          formatted.forEach(t => { if (t.id) map.set(t.id, t); });
+          return Array.from(map.values());
+        });
+      }
+    } catch (e) {
+      console.warn('Gagal mengambil riwayat transaksi bulan ini dari Supabase:', e);
+    } finally {
+      setIsFetchingRemote(false);
+    }
+  }, [userId, effectiveStoreId]);
 
   // Fetch older transactions for the selected year from Supabase with pagination (FALLBACK ONLY)
   const fetchTransactionsForYear = useCallback(async (year: number) => {
@@ -361,6 +547,11 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
     };
   }, [fetchSQLProfitData]);
 
+  // Fetch transactions for selected month to compute accurate category breakdown
+  useEffect(() => {
+    fetchTransactionsForMonth(selectedYear, selectedMonth);
+  }, [fetchTransactionsForMonth, selectedYear, selectedMonth]);
+
   // Combined transactions pool: local props + remote fetched
   const allTxPool = useMemo(() => {
     const map = new Map<string, Transaction>();
@@ -537,6 +728,70 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   const maxDayAdmin = useMemo(() => {
     return Math.max(...dailyProfitList.map(d => d.totalAdmin), 1);
   }, [dailyProfitList]);
+
+  // =========================================================================
+  // 1b. DATA RINCIAN KATEGORI PENJUALAN & PROFIT BULAN BERJALAN
+  // =========================================================================
+  const monthCategoryStats = useMemo(() => {
+    const catMap = new Map<string, { count: number; omzet: number; profit: number; totalFeeApp: number }>();
+    let totalOmzet = 0;
+    let totalProfit = 0;
+    let totalTrx = 0;
+
+    filteredTransactions.forEach(t => {
+      const tDate = t.timestamp ? t.timestamp.substring(0, 10) : '';
+      if (!tDate.startsWith(monthKeySelected)) return;
+
+      const normName = getNormalizedCategory(t.kategori);
+      const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+      const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+      const rawAdmin = Number(t.adminFee || (t as any).admin_fee || 0);
+      const cleanAdmin = appFee > 0 ? Math.max(0, rawAdmin - appFee) : rawAdmin;
+      const nominal = Number(t.nominal || 0);
+
+      const prev = catMap.get(normName) || { count: 0, omzet: 0, profit: 0, totalFeeApp: 0 };
+      catMap.set(normName, {
+        count: prev.count + 1,
+        omzet: prev.omzet + nominal,
+        profit: prev.profit + cleanAdmin,
+        totalFeeApp: prev.totalFeeApp + appFee
+      });
+
+      totalOmzet += nominal;
+      totalProfit += cleanAdmin;
+      totalTrx += 1;
+    });
+
+    const list: MonthCategoryBreakdown[] = Array.from(catMap.entries()).map(([name, stats]) => ({
+      category: name,
+      count: stats.count,
+      omzet: stats.omzet,
+      profit: stats.profit,
+      totalFeeApp: stats.totalFeeApp,
+      omzetPct: totalOmzet > 0 ? (stats.omzet / totalOmzet) * 100 : 0,
+      profitPct: totalProfit > 0 ? (stats.profit / totalProfit) * 100 : 0,
+      trxPct: totalTrx > 0 ? (stats.count / totalTrx) * 100 : 0,
+    }));
+
+    return {
+      items: list,
+      totalOmzet,
+      totalProfit,
+      totalTrx,
+      categoryCount: list.length
+    };
+  }, [filteredTransactions, monthKeySelected]);
+
+  const sortedMonthCategoryData = useMemo(() => {
+    const items = [...monthCategoryStats.items];
+    if (categoryMode === 'laba') {
+      return items.sort((a, b) => b.profit - a.profit);
+    }
+    if (categoryMode === 'trx') {
+      return items.sort((a, b) => b.count - a.count);
+    }
+    return items.sort((a, b) => b.omzet - a.omzet);
+  }, [monthCategoryStats.items, categoryMode]);
 
   // =========================================================================
   // 2. DATA REKAP TAHUNAN (Januari s/d Desember)
@@ -841,14 +1096,17 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       if (!error) {
         if (showToast) showToast('Database Profit SQL berhasil direkap otomatis!');
         await fetchSQLProfitData();
+        await fetchTransactionsForMonth(selectedYear, selectedMonth);
       } else {
         // 2. Fallback jika function SQL belum di-create: sync via client
         await handleSyncToOnlineCloud(false);
         await fetchSQLProfitData();
+        await fetchTransactionsForMonth(selectedYear, selectedMonth);
       }
     } catch (e: any) {
       await handleSyncToOnlineCloud(false);
       await fetchSQLProfitData();
+      await fetchTransactionsForMonth(selectedYear, selectedMonth);
     } finally {
       setIsManualSyncing(false);
     }
@@ -1211,6 +1469,137 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ── KARTU 5: KATEGORI TERLARIS (MINIMALIS & RAPI PERSIS PHOTO) ── */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex flex-col">
+            {/* Header: Title, Subtitle, Filter Buttons (Omset | Laba | Trx), & Jenis Badge */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2 mb-3.5">
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                  <i className="fa-solid fa-chart-pie text-emerald-500"></i> Kategori Terlaris
+                </h4>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                  {categoryMode === 'laba'
+                    ? 'Kontribusi laba bersih per kategori'
+                    : categoryMode === 'trx'
+                    ? 'Kontribusi frekuensi transaksi'
+                    : 'Kontribusi omzet per kategori'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {/* Minimalist Segmented Filter: Omset | Laba | Trx */}
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[9px] font-black uppercase">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMode('omzet')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all",
+                      categoryMode === 'omzet'
+                        ? "bg-white text-emerald-700 shadow-xs"
+                        : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    Omset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMode('laba')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all",
+                      categoryMode === 'laba'
+                        ? "bg-white text-emerald-700 shadow-xs"
+                        : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    Laba
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMode('trx')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-all",
+                      categoryMode === 'trx'
+                        ? "bg-white text-emerald-700 shadow-xs"
+                        : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    Trx
+                  </button>
+                </div>
+
+                {/* Badge 6 Jenis */}
+                <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl shrink-0">
+                  {monthCategoryStats.categoryCount} Jenis
+                </span>
+              </div>
+            </div>
+
+            {/* List Items persis seperti di photo */}
+            {sortedMonthCategoryData.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">
+                <i className="fa-solid fa-tags text-2xl mb-2 text-slate-300"></i>
+                <p className="text-[10px] font-bold">Belum ada kategori penjualan pada bulan ini</p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {(showAllCategories ? sortedMonthCategoryData : sortedMonthCategoryData.slice(0, 6)).map((cat, idx) => {
+                  const color = CATEGORY_COLORS[cat.category] || PALETTE_COLORS[idx % PALETTE_COLORS.length];
+                  const pct = categoryMode === 'laba' ? cat.profitPct : categoryMode === 'trx' ? cat.trxPct : cat.omzetPct;
+                  const displayVal = categoryMode === 'laba'
+                    ? formatRupiah(cat.profit)
+                    : categoryMode === 'trx'
+                    ? `${cat.count} trx`
+                    : formatRupiah(cat.omzet);
+
+                  return (
+                    <div key={cat.category} className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] sm:text-xs">
+                        {/* Kiri: Titik Warna + Nama Kategori + (X trx) */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: color }}
+                          ></span>
+                          <span className="font-black text-slate-800 truncate">{cat.category}</span>
+                          <span className="text-[9px] font-bold text-slate-400 shrink-0">({cat.count} trx)</span>
+                        </div>
+
+                        {/* Kanan: Nilai Nominal + (Persentase) */}
+                        <div className="text-right shrink-0">
+                          <span className="font-black text-slate-900 tabular-nums">{displayVal}</span>
+                          <span className="text-[9px] font-black text-emerald-600 ml-1.5">({pct.toFixed(1)}%)</span>
+                        </div>
+                      </div>
+
+                      {/* Bar Persentase Ramping Identik Photo */}
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: color }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tombol Lihat Semua jika > 6 jenis */}
+            {sortedMonthCategoryData.length > 6 && (
+              <div className="pt-3 mt-3 border-t border-slate-100 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAllCategories(prev => !prev)}
+                  className="px-3 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-[9px] font-black uppercase text-slate-600 transition-all active:scale-95"
+                >
+                  {showAllCategories
+                    ? 'Sembunyikan Sebagian'
+                    : `Lihat Semua (${sortedMonthCategoryData.length} Kategori)`}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── LIST BREAKDOWN HARI 1 s/d 31 (RESPONSIF HP & TAB) ── */}
