@@ -1,7 +1,7 @@
 import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
-import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo, APP_VERSION, formatLocalISO } from '../lib/utils'
+import { formatRupiah, formatInputRupiah, cn, getLocalISOString, getLocalDateString, parseLocalISO, getShiftInfo, APP_VERSION, formatLocalISO, compressImage } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import TransactionForm from '../components/TransactionForm'
 import SummaryCards from '../components/SummaryCards'
@@ -2841,171 +2841,331 @@ const PengaturanPanel: React.FC<{
 
 // Extra panels removed to resolve duplicate declaration error
 
-interface Catatan {
+export interface Catatan {
   id: string;
+  store_id: string;
   judul: string;
   isi: string;
   kategori: string;
   tanggal: string;
   selesai: boolean;
+  favorit?: boolean;
+  foto?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const CatatanPanel: React.FC<{
-  showToast: (m: string) => void,
-  onConfirm: (t: string, m: string, c: () => void) => void
-}> = ({ showToast, onConfirm }) => {
-  const STORAGE_KEY = 'alphaPro_global_catatanOwner';
+  showToast: (m: string) => void;
+  onConfirm: (t: string, m: string, c: () => void) => void;
+  activeStoreId?: string;
+  isPc?: boolean;
+  storeLabel?: string;
+}> = ({ showToast, onConfirm, activeStoreId = 'all', isPc = false, storeLabel }) => {
   const [catatanList, setCatatanList] = useState<Catatan[]>([]);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  
-  const [judul, setJudul] = useState('');
-  const [isi, setIsi] = useState('');
-  const [kategori, setKategori] = useState('Penting');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
-  const loadAllNotes = useCallback(() => {
+  const [activeFolder, setActiveFolder] = useState<'semua' | 'favorit' | 'done'>('semua');
+
+  // Modal Buat Catatan Baru
+  const [isModalBaruOpen, setIsModalBaruOpen] = useState(false);
+  const [baruJudul, setBaruJudul] = useState('');
+  const [baruIsi, setBaruIsi] = useState('');
+  const [baruKategori, setBaruKategori] = useState('Penting');
+  const [baruFavorit, setBaruFavorit] = useState(false);
+  const [baruFoto, setBaruFoto] = useState('');
+
+  // Modal Edit Catatan
+  const [modalEditCatatan, setModalEditCatatan] = useState<Catatan | null>(null);
+  const [editJudul, setEditJudul] = useState('');
+  const [editIsi, setEditIsi] = useState('');
+  const [editKategori, setEditKategori] = useState('Penting');
+  const [editFavorit, setEditFavorit] = useState(false);
+  const [editFoto, setEditFoto] = useState('');
+
+  // Modal Lightbox Foto Layar Penuh
+  const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null);
+
+  // Bagikan Sebagai Foto (Capture Element Ref)
+  const shareCardRef = React.useRef<HTMLDivElement>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareNoteData, setShareNoteData] = useState<Catatan | null>(null);
+
+  // File Input Refs
+  const fileInputBaruRef = React.useRef<HTMLInputElement>(null);
+  const fileInputEditRef = React.useRef<HTMLInputElement>(null);
+
+  const targetSid = activeStoreId && activeStoreId !== 'all' ? activeStoreId : 'all';
+
+  // 1. Memuat Catatan Langsung Online dari Supabase
+  const loadOnlineNotes = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
+    else setIsSyncing(true);
+
     try {
-      const map = new Map<string, Catatan>();
-      const addNote = (item: any) => {
-        if (!item || typeof item !== 'object' || !item.judul) return;
-        const uKey = item.id || `${item.judul}-${item.tanggal}`;
-        if (!map.has(uKey)) {
-          map.set(uKey, {
-            id: item.id || Date.now().toString() + Math.random(),
-            judul: item.judul || '',
-            isi: item.isi || '',
-            kategori: item.kategori || 'Penting',
-            tanggal: item.tanggal || new Date().toISOString(),
-            selesai: !!item.selesai
-          });
-        }
-      };
+      // Ambil SEMUA catatan dari tabel online Supabase owner_notes
+      const { data: sqlNotes, error: sqlErr } = await supabase
+        .from('owner_notes')
+        .select('*')
+        .order('tanggal', { ascending: false });
 
-      // 1. Baca dari global key
-      const globalRaw = localStorage.getItem(STORAGE_KEY);
-      if (globalRaw) {
-        try {
-          const parsed = JSON.parse(globalRaw);
-          if (Array.isArray(parsed)) parsed.forEach(addNote);
-        } catch(e) {}
-      }
-
-      // 2. Scan semua kunci toko lokal
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i) || '';
-        if (k.includes('catatan_owner') || k.includes('catatanOwner')) {
+      if (sqlErr) {
+        console.warn("Gagal memuat owner_notes dari Supabase:", sqlErr.message);
+        const local = localStorage.getItem('alphaPro_global_catatanOwner') || localStorage.getItem(`alphaPro_${targetSid}_catatan_owner`);
+        if (local) {
           try {
-            const raw = localStorage.getItem(k);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) parsed.forEach(addNote);
-            }
-          } catch(e) {}
+            setCatatanList(JSON.parse(local));
+          } catch (_) {}
         }
+      } else if (Array.isArray(sqlNotes)) {
+        const mapped: Catatan[] = sqlNotes.map((item: any) => ({
+          id: String(item.id),
+          store_id: item.store_id || 'all',
+          judul: item.judul || '',
+          isi: item.isi || '',
+          kategori: item.kategori || 'Penting',
+          tanggal: item.tanggal || new Date().toISOString(),
+          selesai: !!item.selesai,
+          favorit: !!item.favorit,
+          foto: item.foto || ''
+        }));
+        setCatatanList(mapped);
+
+        // Cache lokal untuk cadangan
+        localStorage.setItem(`alphaPro_${targetSid}_catatan_owner`, JSON.stringify(mapped));
+        localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(mapped));
       }
+    } catch (err: any) {
+      console.warn("Fetch notes exception:", err?.message || err);
+      const local = localStorage.getItem('alphaPro_global_catatanOwner');
+      if (local) {
+        try { setCatatanList(JSON.parse(local)); } catch (_) {}
+      }
+    } finally {
+      setIsLoading(false);
+      setIsSyncing(false);
+    }
+  }, [targetSid]);
 
-      const list = Array.from(map.values());
-      list.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
-      setCatatanList(list);
-    } catch(e) {}
-  }, []);
-
+  // Efek inisialisasi & Realtime Supabase (tanpa loop rekursif)
   useEffect(() => {
-    loadAllNotes();
-    const handleUpdate = () => loadAllNotes();
-    window.addEventListener('alphaSyncUpdate', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    loadOnlineNotes();
+
+    const channel = supabase
+      .channel('realtime_owner_notes_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'owner_notes' }, () => {
+        loadOnlineNotes(true);
+      })
+      .subscribe();
+
     return () => {
-      window.removeEventListener('alphaSyncUpdate', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      supabase.removeChannel(channel);
     };
-  }, [loadAllNotes]);
+  }, [loadOnlineNotes]);
 
-  const saveToStorage = (data: Catatan[]) => {
-    setCatatanList(data);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Helper hitung perkiraan ukuran Base64 dalam KB
+  const getApproxKb = (base64Str?: string) => {
+    if (!base64Str) return 0;
+    return Math.round((base64Str.length * 3 / 4) / 1024);
+  };
+
+  // Handle Upload & Kompresi Foto Otomatis sebelum simpan ke database
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      return showToast('Format file harus berupa gambar/foto');
+    }
+
     try {
-      const activeSid = localStorage.getItem('alphaPro_activeStoreId');
-      if (activeSid && activeSid !== 'all') {
-        localStorage.setItem(`alphaPro_${activeSid}_catatan_owner`, JSON.stringify(data));
-        if (data.length > 0) {
-          const mapped = data.map(c => ({
-            id: c.id,
-            store_id: activeSid,
-            judul: c.judul,
-            isi: c.isi,
-            kategori: c.kategori || 'Penting',
-            tanggal: c.tanggal,
-            selesai: !!c.selesai,
-            updated_at: new Date().toISOString()
-          }));
-          supabase.from('owner_notes').upsert(mapped).then();
-        }
+      showToast('Mengompres foto agar sangat ringan...');
+      const compressed = await compressImage(file, 720, 720, 0.6);
+      const kb = getApproxKb(compressed);
+
+      if (isEdit) {
+        setEditFoto(compressed);
+      } else {
+        setBaruFoto(compressed);
       }
-    } catch(e) {}
-    window.dispatchEvent(new Event('alphaSyncUpdate'));
+      showToast(`Foto berhasil dikompres super ringan (${kb} KB) ✓`);
+    } catch (err: any) {
+      showToast('Gagal memproses foto: ' + (err?.message || 'Error'));
+    } finally {
+      if (e.target) e.target.value = '';
+    }
   };
 
-  const handleSimpan = () => {
-    if (!judul.trim() || !isi.trim()) {
-      return showToast('Judul dan isi catatan harus diisi!');
+  // 2. Simpan Catatan Baru ke Supabase Online
+  const handleSimpanBaru = async () => {
+    if (!baruJudul.trim() || !baruIsi.trim()) {
+      return showToast('Judul dan rincian catatan harus diisi!');
     }
-    
-    if (editId) {
-      const updated = catatanList.map(c => 
-        c.id === editId 
-          ? { ...c, judul: judul.trim(), isi: isi.trim(), kategori }
-          : c
-      );
-      saveToStorage(updated);
-      showToast('Catatan berhasil diperbarui');
-    } else {
-      const baru: Catatan = {
-        id: Date.now().toString(),
-        judul: judul.trim(),
-        isi: isi.trim(),
-        kategori,
-        tanggal: new Date().toISOString(),
-        selesai: false
+
+    const baru: Catatan = {
+      id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      store_id: targetSid,
+      judul: baruJudul.trim(),
+      isi: baruIsi.trim(),
+      kategori: baruKategori,
+      tanggal: new Date().toISOString(),
+      selesai: false,
+      favorit: baruFavorit,
+      foto: baruFoto || undefined
+    };
+
+    setCatatanList(prev => {
+      const next = [baru, ...prev];
+      localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(next));
+      return next;
+    });
+    setIsModalBaruOpen(false);
+    setBaruJudul('');
+    setBaruIsi('');
+    setBaruKategori('Penting');
+    setBaruFavorit(false);
+    setBaruFoto('');
+    showToast('Menyimpan ke cloud Supabase...');
+
+    try {
+      const { error } = await supabase.from('owner_notes').insert({
+        id: baru.id,
+        store_id: baru.store_id,
+        judul: baru.judul,
+        isi: baru.isi,
+        kategori: baru.kategori,
+        tanggal: baru.tanggal,
+        selesai: baru.selesai,
+        favorit: baru.favorit,
+        foto: baru.foto || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      if (error) {
+        console.error('Supabase insert error:', error);
+        showToast('Catatan tersimpan lokal (Gagal cloud: ' + error.message + ')');
+      } else {
+        showToast('Catatan berhasil disimpan online ✓');
+      }
+    } catch (err: any) {
+      console.warn('Network catch error:', err);
+      showToast('Catatan tersimpan di perangkat ✓');
+    }
+  };
+
+  // Buka Modal Edit
+  const openEditModal = (c: Catatan) => {
+    setModalEditCatatan(c);
+    setEditJudul(c.judul);
+    setEditIsi(c.isi);
+    setEditKategori(c.kategori);
+    setEditFavorit(!!c.favorit);
+    setEditFoto(c.foto || '');
+  };
+
+  // 3. Simpan Perubahan Edit ke Supabase Online
+  const handleSimpanEdit = async () => {
+    if (!modalEditCatatan) return;
+    if (!editJudul.trim() || !editIsi.trim()) {
+      return showToast('Judul dan isi catatan tidak boleh kosong!');
+    }
+
+    const updatedItem: Catatan = {
+      ...modalEditCatatan,
+      judul: editJudul.trim(),
+      isi: editIsi.trim(),
+      kategori: editKategori,
+      favorit: editFavorit,
+      foto: editFoto || undefined,
+      updated_at: new Date().toISOString()
+    };
+
+    // Update UI seketika & simpan ke cache lokal
+    setCatatanList(prev => {
+      const next = prev.map(c => c.id === updatedItem.id ? updatedItem : c);
+      localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(next));
+      return next;
+    });
+    setModalEditCatatan(null);
+    showToast('Memperbarui catatan ke cloud Supabase...');
+
+    try {
+      const payload = {
+        id: updatedItem.id,
+        store_id: updatedItem.store_id || 'all',
+        judul: updatedItem.judul,
+        isi: updatedItem.isi,
+        kategori: updatedItem.kategori,
+        tanggal: updatedItem.tanggal ? new Date(updatedItem.tanggal).toISOString() : new Date().toISOString(),
+        selesai: !!updatedItem.selesai,
+        favorit: !!updatedItem.favorit,
+        foto: updatedItem.foto || null,
+        updated_at: new Date().toISOString()
       };
-      saveToStorage([baru, ...catatanList]);
-      showToast('Catatan berhasil disimpan');
+
+      const { error } = await supabase.from('owner_notes').upsert(payload);
+      if (error) {
+        console.error('Supabase upsert error:', error);
+        showToast('Catatan diperbarui lokal (Cloud error: ' + error.message + ')');
+      } else {
+        showToast('Catatan berhasil diperbarui di cloud ✓');
+      }
+    } catch (err: any) {
+      console.warn('Network catch error:', err);
+      showToast('Catatan diperbarui di perangkat ✓');
     }
-    
-    setJudul('');
-    setIsi('');
-    setEditId(null);
-    setFormOpen(false);
   };
 
-  const handleEdit = (c: Catatan) => {
-    setJudul(c.judul);
-    setIsi(c.isi);
-    setKategori(c.kategori);
-    setEditId(c.id);
-    setFormOpen(true);
+  // 4. Toggle Tampil / Sembunyikan (Tombol Tampil/Sembunyikan)
+  const toggleSelesai = async (c: Catatan) => {
+    const nextSelesai = !c.selesai;
+    setCatatanList(prev => {
+      const next = prev.map(item => item.id === c.id ? { ...item, selesai: nextSelesai } : item);
+      localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(next));
+      return next;
+    });
+    showToast(nextSelesai ? 'Catatan disembunyikan (masuk ke Ceklis Done) ✓' : 'Catatan kembali ditampilkan di Semua Aktif ✓');
+
+    try {
+      await supabase.from('owner_notes').update({
+        selesai: nextSelesai,
+        updated_at: new Date().toISOString()
+      }).eq('id', c.id);
+    } catch (_) {}
   };
 
+  // 5. Hapus Catatan Permanen (Dari dalam Modal Edit)
   const hapusCatatan = (id: string) => {
-    onConfirm('HAPUS CATATAN', 'Apakah Anda yakin ingin menghapus catatan ini?', () => {
-      const updated = catatanList.filter(c => c.id !== id);
-      saveToStorage(updated);
-      showToast('Catatan dihapus');
+    onConfirm('HAPUS CATATAN', 'Apakah Anda yakin ingin menghapus catatan ini secara permanen dari server online?', async () => {
+      setCatatanList(prev => {
+        const next = prev.filter(c => c.id !== id);
+        localStorage.setItem('alphaPro_global_catatanOwner', JSON.stringify(next));
+        return next;
+      });
+      if (modalEditCatatan?.id === id) {
+        setModalEditCatatan(null);
+      }
+      showToast('Menghapus dari cloud...');
+
+      try {
+        const { error } = await supabase.from('owner_notes').delete().eq('id', id);
+        if (error) throw error;
+        showToast('Catatan berhasil dihapus dari cloud ✓');
+      } catch (err: any) {
+        showToast('Catatan dihapus dari perangkat ✓');
+      }
     });
   };
 
-  const toggleSelesai = (id: string) => {
-    const updated = catatanList.map(c => c.id === id ? { ...c, selesai: !c.selesai } : c);
-    saveToStorage(updated);
-  };
-
+  // 6. Salin Catatan ke Clipboard (Dari dalam Modal Edit)
   const copyCatatan = async (c: Catatan) => {
-    const text = `*${c.judul}*\nKategori: ${c.kategori}\nTanggal: ${new Date(c.tanggal).toLocaleDateString('id-ID')}\n\n${c.isi}`;
+    const statusText = c.selesai ? '[CEKLIS DONE / DISEMBUNYIKAN]' : '[SEMUA AKTIF]';
+    const text = `*${c.judul.toUpperCase()}* ${statusText}\nKategori: ${c.kategori}\nTanggal: ${new Date(c.tanggal).toLocaleDateString('id-ID', { dateStyle: 'long' })}\n\n${c.isi}`;
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
-        showToast('Teks disalin ke clipboard');
+        showToast('Rincian catatan berhasil disalin ke clipboard ✓');
       } else {
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -3014,157 +3174,867 @@ const CatatanPanel: React.FC<{
         textArea.select();
         document.execCommand('copy');
         textArea.remove();
-        showToast('Teks disalin ke clipboard');
+        showToast('Rincian catatan berhasil disalin ke clipboard ✓');
       }
-    } catch(err) {
-      showToast('Gagal menyalin teks');
+    } catch (_) {
+      showToast('Gagal menyalin teks catatan');
     }
   };
 
-  const getCatIcon = (kat: string) => {
-    if (kat === 'Belanja') return 'fa-cart-shopping text-blue-500 bg-blue-100';
-    if (kat === 'Ide') return 'fa-lightbulb text-amber-500 bg-amber-100';
-    return 'fa-circle-exclamation text-rose-500 bg-rose-100';
+  // 7. Bagikan Catatan Menjadi Foto / Gambar
+  const handleBagikanFoto = async (c: Catatan) => {
+    setShareNoteData(c);
+    setIsSharing(true);
+    showToast('Merender gambar catatan...');
+
+    setTimeout(async () => {
+      try {
+        if (!shareCardRef.current) {
+          throw new Error('Elemen render gambar tidak ditemukan');
+        }
+
+        const html2canvasModule = await import('html2canvas');
+        const html2canvas = html2canvasModule.default;
+        const canvas = await html2canvas(shareCardRef.current, {
+          scale: 2.5,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+
+        const filename = `catatan-owner-${c.judul.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20)}-${Date.now()}.jpg`;
+        const { Capacitor } = await import('@capacitor/core');
+
+        if (Capacitor.isNativePlatform()) {
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          const { Share } = await import('@capacitor/share');
+
+          const base64Data = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
+          const result = await Filesystem.writeFile({
+            path: filename,
+            data: base64Data,
+            directory: Directory.Cache
+          });
+
+          await Share.share({
+            title: `Catatan Owner: ${c.judul}`,
+            text: `${c.judul} - ${c.isi.substring(0, 80)}...`,
+            url: result.uri
+          });
+          showToast('Gambar siap dibagikan ✓');
+        } else {
+          canvas.toBlob((blob) => {
+            if (!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Foto catatan berhasil diunduh ke perangkat ✓');
+          }, 'image/jpeg', 0.95);
+        }
+      } catch (err: any) {
+        showToast('Gagal memproses gambar: ' + (err?.message || 'Error'));
+      } finally {
+        setIsSharing(false);
+      }
+    }, 250);
+  };
+
+  // Helper Ikon & Warna Kategori
+  const getCatStyle = (kat: string) => {
+    switch (kat) {
+      case 'Belanja': return { icon: 'fa-cart-shopping', color: 'bg-blue-50 text-blue-600 border-blue-200' };
+      case 'Ide': return { icon: 'fa-lightbulb', color: 'bg-amber-50 text-amber-600 border-amber-200' };
+      case 'Keuangan': return { icon: 'fa-money-bill-wave', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
+      case 'Pribadi': return { icon: 'fa-user-lock', color: 'bg-purple-50 text-purple-600 border-purple-200' };
+      default: return { icon: 'fa-triangle-exclamation', color: 'bg-rose-50 text-rose-600 border-rose-200' };
+    }
+  };
+
+  // Filter 3 Kolom
+  // 1. Catatan Biasa / Semua Aktif (belum diceklis, dibedakan icon favorit jika favorit)
+  const catatanBiasaList = catatanList.filter(c => !c.selesai);
+  // 2. Catatan Favorit Aktif
+  const catatanFavoritList = catatanList.filter(c => c.favorit && !c.selesai);
+  // 3. Catatan Selesai / Tersembunyi (Ceklis Done)
+  const catatanSelesaiList = catatanList.filter(c => c.selesai);
+
+  // Render Tabel Catatan (Mode Tabel Rapi)
+  const renderCatatanTable = (items: Catatan[], emptyMessage: string) => {
+    if (items.length === 0) {
+      return (
+        <div className="py-8 px-4 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs font-semibold">
+          {emptyMessage}
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+        <table className="w-full text-left border-collapse min-w-[320px]">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+              <th className="py-2.5 px-3 w-10 text-center">No</th>
+              <th className="py-2.5 px-3">Catatan & Rincian</th>
+              <th className="py-2.5 px-3 w-28 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs">
+            {items.map((c, idx) => {
+              const isExpanded = expandedId === c.id;
+              const cat = getCatStyle(c.kategori);
+
+              return (
+                <tr
+                  key={c.id}
+                  className={cn(
+                    "transition-colors hover:bg-slate-50/80",
+                    c.selesai
+                      ? "bg-slate-50/50"
+                      : c.favorit
+                      ? "bg-amber-50/25"
+                      : "bg-white"
+                  )}
+                >
+                  {/* Kolom 1: No Urut */}
+                  <td className="py-3 px-2 text-center align-top">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className="font-black text-xs text-slate-400">
+                        {idx + 1}
+                      </span>
+                      {c.favorit && (
+                        <i className="fa-solid fa-star text-[9px] text-amber-500" title="Catatan Favorit"></i>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Kolom 2: Catatan, Rincian, Kategori & Foto */}
+                  <td className="py-3 px-3 align-top space-y-1.5">
+                    {/* Header Baris: Kategori & Tanggal (Tanda Lunas dihapus sesuai permintaan) */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={cn("text-[8.5px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-1", cat.color)}>
+                        <i className={`fa-solid ${cat.icon} text-[7.5px]`}></i>
+                        <span>{c.kategori}</span>
+                      </span>
+
+                      {c.favorit && (
+                        <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.5 rounded-md border border-amber-300 flex items-center gap-1">
+                          <i className="fa-solid fa-star text-[7.5px] text-amber-500"></i>
+                          <span>Favorit</span>
+                        </span>
+                      )}
+
+                      <span className="text-[9.5px] font-medium text-slate-400 ml-auto whitespace-nowrap">
+                        {new Date(c.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+
+                    {/* Judul Catatan */}
+                    <h4 className={cn(
+                      "font-black text-sm tracking-tight leading-snug break-words",
+                      c.selesai ? "text-slate-400 line-through" : "text-slate-800"
+                    )}>
+                      {c.judul}
+                    </h4>
+
+                    {/* Isi Rincian */}
+                    <div
+                      onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                      className={cn(
+                        "text-xs leading-relaxed cursor-pointer break-words",
+                        c.selesai ? "text-slate-400 line-through font-normal" : "text-slate-600 font-medium",
+                        isExpanded ? "whitespace-pre-wrap" : "line-clamp-2"
+                      )}
+                      title="Ketuk untuk melihat rincian"
+                    >
+                      {c.isi}
+                    </div>
+
+                    {c.isi.length > 90 && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                        className="text-[10px] font-bold text-amber-600 hover:underline"
+                      >
+                        {isExpanded ? 'Tutup rincian ▲' : 'Baca selengkapnya ▼'}
+                      </button>
+                    )}
+
+                    {/* Thumbnail Foto (jika ada) */}
+                    {c.foto && (
+                      <div className="pt-1 flex items-center gap-2">
+                        <div
+                          onClick={() => setLightboxFotoUrl(c.foto || null)}
+                          className="w-11 h-11 rounded-lg border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shrink-0 hover:scale-105 transition-transform"
+                          title="Ketuk untuk memperbesar foto"
+                        >
+                          <img src={c.foto} alt="Lampiran" className="w-full h-full object-cover" />
+                        </div>
+                        <span 
+                          onClick={() => setLightboxFotoUrl(c.foto || null)}
+                          className="text-[10px] text-amber-600 font-bold cursor-pointer hover:underline flex items-center gap-1"
+                        >
+                          <i className="fa-solid fa-camera"></i>
+                          <span>Lihat Foto ({getApproxKb(c.foto)} KB)</span>
+                        </span>
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Kolom 3: Dua Tombol Aksi (Tampil/Sembunyikan & Edit) */}
+                  <td className="py-3 px-2 align-top text-center">
+                    <div className="flex flex-col gap-1.5 w-full">
+                      {/* Tombol 1: Tampil / Sembunyikan */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSelesai(c)}
+                        className={cn(
+                          "w-full py-1.5 px-2 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all active:scale-95 whitespace-nowrap",
+                          c.selesai
+                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                        )}
+                        title={c.selesai ? "Tampilkan kembali ke Semua Aktif" : "Sembunyikan catatan (masuk ke Ceklis Done)"}
+                      >
+                        <i className={cn("fa-solid text-[9px]", c.selesai ? "fa-eye" : "fa-eye-slash")}></i>
+                        <span>{c.selesai ? 'Tampilkan' : 'Sembunyikan'}</span>
+                      </button>
+
+                      {/* Tombol 2: Edit */}
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(c)}
+                        className="w-full py-1.5 px-2 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all active:scale-95 bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white border border-amber-200/80 whitespace-nowrap"
+                        title="Edit rincian, kelola foto, salin & bagikan"
+                      >
+                        <i className="fa-solid fa-pen-to-square text-[9px]"></i>
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   return (
-    <div className="space-y-4 pb-10">
-      {!formOpen ? (
-        <>
-          <button
-            onClick={() => {
-              setJudul('');
-              setIsi('');
-              setKategori('Penting');
-              setEditId(null);
-              setFormOpen(true);
-            }}
-            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-orange-200/50 active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            <i className="fa-solid fa-plus"></i> Buat Catatan Baru
-          </button>
-          
-          {catatanList.length === 0 ? (
-            <div className="p-8 text-center bg-gray-50 border border-gray-100 rounded-3xl mt-4">
-              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
-                <i className="fa-solid fa-clipboard-list text-2xl text-gray-400"></i>
-              </div>
-              <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Belum Ada Catatan</p>
-              <p className="text-[10px] text-gray-400 font-bold mt-1">Catatan Anda akan tampil di sini.</p>
+    <div className="space-y-4 pb-16">
+      {/* Hidden File Input untuk Unggah Foto */}
+      <input
+        ref={fileInputBaruRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleFileChange(e, false)}
+      />
+      <input
+        ref={fileInputEditRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleFileChange(e, true)}
+      />
+
+      {/* Header Aksi Atas: Buat Catatan Baru, Status Cloud Sync, & Refresh (Rapi, Tidak Terpotong) */}
+      <div className="flex flex-col gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-sm shrink-0">
+              <i className="fa-solid fa-clipboard-list text-base"></i>
             </div>
-          ) : (
-            <div className="space-y-3 mt-4">
-              {catatanList.map(c => (
-                <div key={c.id} className={cn("bg-white border rounded-2xl p-4 shadow-sm transition-all", c.selesai ? "border-gray-200 bg-gray-50/50" : "border-orange-100")}>
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={cn("w-10 h-10 shrink-0 rounded-xl flex items-center justify-center", getCatIcon(c.kategori), c.selesai && "opacity-50 grayscale")}>
-                        <i className={`fa-solid ${getCatIcon(c.kategori).split(' ')[0]} text-lg`}></i>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={cn("text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md", c.selesai ? "bg-gray-200 text-gray-500" : "bg-orange-100 text-orange-700")}>
-                            {c.kategori}
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-black text-xs sm:text-sm text-slate-800 uppercase tracking-tight">CATATAN OWNER</h3>
+                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                  Cloud
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold">
+                Toko: <span className="text-slate-600 uppercase font-black">{storeLabel || targetSid}</span>
+                {isSyncing && <span className="ml-2 text-amber-500 font-black animate-pulse">Menyinkronkan...</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* Tombol Reload Data */}
+          <button
+            type="button"
+            onClick={() => loadOnlineNotes(false)}
+            disabled={isLoading || isSyncing}
+            className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-90 transition-all font-bold text-xs shrink-0"
+            title="Muat Ulang Data Online"
+          >
+            <i className={cn("fa-solid fa-rotate", (isLoading || isSyncing) && "animate-spin text-amber-500")}></i>
+          </button>
+        </div>
+
+        {/* Tombol Buat Catatan Baru (Lebar Penuh, Tidak Akan Terpotong di HP!) */}
+        <button
+          type="button"
+          onClick={() => {
+            setBaruJudul('');
+            setBaruIsi('');
+            setBaruKategori('Penting');
+            setBaruFavorit(false);
+            setBaruFoto('');
+            setIsModalBaruOpen(true);
+          }}
+          className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider shadow-sm shadow-amber-200 active:scale-98 transition-all flex items-center justify-center gap-2"
+        >
+          <i className="fa-solid fa-plus text-xs"></i>
+          <span>+ Buat Catatan Baru</span>
+        </button>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3 PILIHAN FOLDER MENYAMPING                              */}
+      {/* 1. Semua Aktif                                           */}
+      {/* 2. Favorit                                               */}
+      {/* 3. Ceklis Done                                           */}
+      {/* ======================================================== */}
+      <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+        {/* 1. Folder: Semua Aktif */}
+        <button
+          type="button"
+          onClick={() => setActiveFolder('semua')}
+          className={cn(
+            "py-2.5 px-1 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap active:scale-95",
+            activeFolder === 'semua'
+              ? "bg-white text-slate-800 shadow-sm border border-slate-200"
+              : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <i className="fa-solid fa-folder-open text-[10px] text-amber-500"></i>
+          <span>Semua Aktif</span>
+          <span className={cn(
+            "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
+            activeFolder === 'semua' ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
+          )}>
+            {catatanBiasaList.length}
+          </span>
+        </button>
+
+        {/* 2. Folder: Favorit */}
+        <button
+          type="button"
+          onClick={() => setActiveFolder('favorit')}
+          className={cn(
+            "py-2.5 px-1 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap active:scale-95",
+            activeFolder === 'favorit'
+              ? "bg-white text-amber-600 shadow-sm border border-amber-200"
+              : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <i className="fa-solid fa-star text-[10px] text-amber-500"></i>
+          <span>Favorit</span>
+          <span className={cn(
+            "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
+            activeFolder === 'favorit' ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
+          )}>
+            {catatanFavoritList.length}
+          </span>
+        </button>
+
+        {/* 3. Folder: Ceklis Done */}
+        <button
+          type="button"
+          onClick={() => setActiveFolder('done')}
+          className={cn(
+            "py-2.5 px-1 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap active:scale-95",
+            activeFolder === 'done'
+              ? "bg-white text-emerald-600 shadow-sm border border-emerald-200"
+              : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <i className="fa-solid fa-circle-check text-[10px] text-emerald-500"></i>
+          <span>Ceklis Done</span>
+          <span className={cn(
+            "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
+            activeFolder === 'done' ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+          )}>
+            {catatanSelesaiList.length}
+          </span>
+        </button>
+      </div>
+
+      {/* ======================================================== */}
+      {/* KONTEN TABEL SESUAI FOLDER AKTIF                         */}
+      {/* ======================================================== */}
+      {isLoading ? (
+        <div className="p-12 text-center bg-white rounded-3xl border border-slate-100">
+          <i className="fa-solid fa-spinner text-3xl text-amber-500 animate-spin mb-3"></i>
+          <p className="text-xs font-black text-slate-600 uppercase tracking-wider">Memuat Catatan dari Cloud Supabase...</p>
+        </div>
+      ) : activeFolder === 'semua' ? (
+        renderCatatanTable(catatanBiasaList, "Belum ada catatan aktif di folder Semua Aktif")
+      ) : activeFolder === 'favorit' ? (
+        renderCatatanTable(catatanFavoritList, "Belum ada catatan favorit. Beri tanda bintang ⭐ saat buat/edit catatan.")
+      ) : (
+        renderCatatanTable(catatanSelesaiList, "Belum ada catatan di folder Ceklis Done")
+      )}
+
+      {/* ======================================================== */}
+      {/* POPUP MODAL: BUAT CATATAN BARU                           */}
+      {/* Diatur posisinya lebih tinggi dengan pb-20 agar tidak     */}
+      {/* bertabrakan atau terlindung oleh navbar bawah             */}
+      {/* ======================================================== */}
+      {isModalBaruOpen && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 pt-3 sm:pt-6 pb-20 sm:pb-24 animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-80px)] sm:max-h-[82vh] border border-slate-100">
+            {/* Header Modal */}
+            <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500 to-orange-500 text-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <i className="fa-solid fa-plus text-xs"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-xs sm:text-sm tracking-wide uppercase">BUAT CATATAN OWNER</h3>
+                  <p className="text-[8.5px] text-white/80 font-bold uppercase">Disimpan langsung ke Cloud Supabase</p>
+                </div>
+              </div>
+
+              {/* Toggle Favorit Star */}
+              <button
+                type="button"
+                onClick={() => setBaruFavorit(!baruFavorit)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all",
+                  baruFavorit ? "bg-amber-400 text-amber-950 shadow-md" : "bg-white/20 text-white hover:bg-white/30"
+                )}
+                title="Tandai sebagai Favorit"
+              >
+                <i className={cn("fa-solid fa-star", baruFavorit ? "text-amber-900" : "text-white")}></i>
+                <span>{baruFavorit ? 'Favorit ⭐' : 'Jadikan Favorit'}</span>
+              </button>
+            </div>
+
+            {/* Body Form */}
+            <div className="p-3.5 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+              {/* Judul Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Judul Catatan</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Belanja Stok Voucher & Perdana"
+                  value={baruJudul}
+                  onChange={e => setBaruJudul(e.target.value)}
+                  className="w-full text-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200 font-bold bg-slate-50 focus:bg-white focus:border-amber-500 outline-none transition-all"
+                />
+              </div>
+
+              {/* Kategori Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Kategori</label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {['Penting', 'Belanja', 'Ide', 'Keuangan', 'Pribadi'].map(kat => (
+                    <button
+                      type="button"
+                      key={kat}
+                      onClick={() => setBaruKategori(kat)}
+                      className={cn(
+                        "py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border text-center",
+                        baruKategori === kat
+                          ? "bg-amber-50 border-amber-500 text-amber-700 shadow-sm"
+                          : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                      )}
+                    >
+                      {kat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lampiran Foto */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Lampiran Foto (Opsional)</label>
+                {baruFoto ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <img src={baruFoto} alt="Lampiran" className="w-12 h-12 object-cover rounded-xl border" />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-black text-slate-800">Foto Terlampir</p>
+                          <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md">
+                            {getApproxKb(baruFoto)} KB
                           </span>
-                          <span className="text-[8px] font-bold text-gray-400">{new Date(c.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
                         </div>
-                        <h4 className={cn("font-black text-sm text-gray-800 truncate", c.selesai && "line-through text-gray-400")}>{c.judul}</h4>
+                        <p className="text-[8.5px] text-emerald-600 font-bold">✓ Terkompresi ringan untuk database</p>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => toggleSelesai(c.id)} className={cn("w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all", c.selesai ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500")}>
-                        <i className="fa-solid fa-check"></i>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => fileInputBaruRef.current?.click()}
+                        className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"
+                        title="Ganti Foto"
+                      >
+                        <i className="fa-solid fa-camera"></i>
                       </button>
-                      <button onClick={() => copyCatatan(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 text-blue-500 active:scale-90 transition-all">
-                        <i className="fa-regular fa-copy"></i>
-                      </button>
-                      <button onClick={() => handleEdit(c)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-amber-50 text-amber-500 active:scale-90 transition-all">
-                        <i className="fa-solid fa-pen"></i>
-                      </button>
-                      <button onClick={() => hapusCatatan(c.id)} className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500 active:scale-90 transition-all">
+                      <button
+                        type="button"
+                        onClick={() => setBaruFoto('')}
+                        className="p-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-600 text-xs font-bold"
+                        title="Hapus Foto"
+                      >
                         <i className="fa-solid fa-trash-can"></i>
                       </button>
                     </div>
                   </div>
-                  
-                  <div 
-                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                    className={cn(
-                      "mt-3 pt-3 border-t text-xs font-bold leading-relaxed cursor-pointer transition-all",
-                      c.selesai ? "border-gray-200 text-gray-400 line-through decoration-gray-300" : "border-orange-50 text-gray-600",
-                      expandedId === c.id ? "whitespace-pre-wrap" : "truncate"
-                    )}
-                    title="Klik untuk melihat catatan lengkap"
-                  >
-                    {c.isi}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="bg-white border border-orange-100 rounded-[2rem] p-5 shadow-sm animate-in fade-in duration-200">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-black text-orange-600 text-[13px] tracking-widest uppercase">{editId ? 'EDIT CATATAN' : 'CATATAN BARU'}</h3>
-            <button onClick={() => { setFormOpen(false); setEditId(null); setJudul(''); setIsi(''); setKategori('Penting'); }} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90">
-              <i className="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-          
-          <div className="space-y-3">
-            <div>
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">JUDUL CATATAN</label>
-              <input
-                type="text"
-                placeholder="Cth: Belanja Stok XL"
-                value={judul}
-                onChange={e => setJudul(e.target.value)}
-                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 focus:border-orange-400 focus:bg-white transition-colors"
-              />
-            </div>
-            
-            <div>
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">KATEGORI</label>
-              <div className="grid grid-cols-3 gap-2">
-                {['Penting', 'Belanja', 'Ide'].map(kat => (
+                ) : (
                   <button
-                    key={kat}
-                    onClick={() => setKategori(kat)}
-                    className={cn(
-                      "py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                      kategori === kat 
-                        ? "bg-orange-50 border-orange-400 text-orange-600 shadow-sm" 
-                        : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"
-                    )}
+                    type="button"
+                    onClick={() => fileInputBaruRef.current?.click()}
+                    className="w-full py-2.5 px-3 border-2 border-dashed border-slate-200 hover:border-amber-400 rounded-2xl bg-slate-50 hover:bg-amber-50/50 flex items-center justify-center gap-2 text-slate-500 hover:text-amber-700 transition-all font-bold text-xs"
                   >
-                    {kat}
+                    <i className="fa-solid fa-camera text-amber-500"></i>
+                    <span>+ Tambah Foto Bukti / Dokumen Penting</span>
                   </button>
-                ))}
+                )}
+              </div>
+
+              {/* Isi Rincian Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Isi Rincian Catatan</label>
+                <textarea
+                  placeholder="Ketik rincian pengingat atau daftar di sini..."
+                  value={baruIsi}
+                  onChange={e => setBaruIsi(e.target.value)}
+                  rows={3}
+                  className="w-full text-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200 font-bold bg-slate-50 focus:bg-white focus:border-amber-500 outline-none resize-none transition-all min-h-[70px]"
+                ></textarea>
               </div>
             </div>
-            
-            <div>
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">ISI CATATAN</label>
-              <textarea
-                placeholder="Ketik rincian di sini..."
-                value={isi}
-                onChange={e => setIsi(e.target.value)}
-                rows={5}
-                className="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none font-bold bg-gray-50 resize-none focus:border-orange-400 focus:bg-white transition-colors"
-              ></textarea>
+
+            {/* Footer Modal */}
+            <div className="p-3 sm:p-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsModalBaruOpen(false)}
+                className="px-3.5 py-2 rounded-xl font-black text-xs text-slate-500 hover:bg-slate-200 active:scale-95 transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSimpanBaru}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-200 active:scale-95 transition-all flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-floppy-disk"></i>
+                <span>Simpan ke Cloud</span>
+              </button>
             </div>
-            
-            <button
-              onClick={handleSimpan}
-              className="w-full bg-green-600 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-all mt-2"
-            >
-              SIMPAN CATATAN
-            </button>
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* POPUP MODAL: EDIT CATATAN OWNER (PUSAT KONTROL)         */}
+      {/* Diatur posisinya lebih tinggi dengan pb-20 agar tidak     */}
+      {/* bertabrakan atau terlindung oleh navbar bawah             */}
+      {/* ======================================================== */}
+      {modalEditCatatan && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 pt-3 sm:pt-6 pb-20 sm:pb-24 animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-80px)] sm:max-h-[82vh] border border-slate-100">
+            {/* Header Modal Edit */}
+            <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-600 to-orange-600 text-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <i className="fa-solid fa-pen-to-square text-xs"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-xs sm:text-sm tracking-wide uppercase">EDIT CATATAN OWNER</h3>
+                  <p className="text-[8.5px] text-white/80 font-bold uppercase">
+                    ID: {modalEditCatatan.id.substring(0, 14)}...
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Favorit Star */}
+              <button
+                type="button"
+                onClick={() => setEditFavorit(!editFavorit)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all",
+                  editFavorit ? "bg-amber-400 text-amber-950 shadow-md" : "bg-white/20 text-white hover:bg-white/30"
+                )}
+                title="Tandai sebagai Favorit"
+              >
+                <i className={cn("fa-solid fa-star", editFavorit ? "text-amber-900" : "text-white")}></i>
+                <span>{editFavorit ? 'Favorit ⭐' : 'Jadikan Favorit'}</span>
+              </button>
+            </div>
+
+            {/* Body Form Edit */}
+            <div className="p-3.5 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+              {/* Judul Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Judul Catatan</label>
+                <input
+                  type="text"
+                  value={editJudul}
+                  onChange={e => setEditJudul(e.target.value)}
+                  className="w-full text-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200 font-bold bg-slate-50 focus:bg-white focus:border-amber-500 outline-none transition-all"
+                />
+              </div>
+
+              {/* Kategori Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Kategori</label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {['Penting', 'Belanja', 'Ide', 'Keuangan', 'Pribadi'].map(kat => (
+                    <button
+                      type="button"
+                      key={kat}
+                      onClick={() => setEditKategori(kat)}
+                      className={cn(
+                        "py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border text-center",
+                        editKategori === kat
+                          ? "bg-amber-50 border-amber-500 text-amber-700 shadow-sm"
+                          : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                      )}
+                    >
+                      {kat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lampiran Foto */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Foto Terlampir</label>
+                {editFoto ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <img src={editFoto} alt="Lampiran" className="w-12 h-12 object-cover rounded-xl border cursor-pointer" onClick={() => setLightboxFotoUrl(editFoto)} />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-black text-slate-800">Foto Terlampir</p>
+                          <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md">
+                            {getApproxKb(editFoto)} KB
+                          </span>
+                        </div>
+                        <p className="text-[8.5px] text-emerald-600 font-bold">✓ Terkompresi ringan untuk database</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => fileInputEditRef.current?.click()}
+                        className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"
+                        title="Ganti Foto"
+                      >
+                        <i className="fa-solid fa-camera"></i>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditFoto('')}
+                        className="p-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-600 text-xs font-bold"
+                        title="Hapus Foto"
+                      >
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputEditRef.current?.click()}
+                    className="w-full py-2.5 px-3 border-2 border-dashed border-slate-200 hover:border-amber-400 rounded-2xl bg-slate-50 hover:bg-amber-50/50 flex items-center justify-center gap-2 text-slate-500 hover:text-amber-700 transition-all font-bold text-xs"
+                  >
+                    <i className="fa-solid fa-camera text-amber-500"></i>
+                    <span>+ Tambah Foto Bukti / Dokumen Penting</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Isi Rincian Catatan */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Isi Rincian Catatan</label>
+                <textarea
+                  value={editIsi}
+                  onChange={e => setEditIsi(e.target.value)}
+                  rows={3}
+                  className="w-full text-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200 font-bold bg-slate-50 focus:bg-white focus:border-amber-500 outline-none resize-none transition-all min-h-[70px]"
+                ></textarea>
+              </div>
+            </div>
+
+            {/* ======================================================== */}
+            {/* ACTION FOOTER DI DALAM MODAL:                           */}
+            {/* 1. HAPUS  2. SALIN  3. BAGIKAN FOTO  4. SIMPAN          */}
+            {/* ======================================================== */}
+            <div className="p-3 sm:p-3.5 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-1.5">
+                {/* 1. Tombol Hapus */}
+                <button
+                  type="button"
+                  onClick={() => hapusCatatan(modalEditCatatan.id)}
+                  className="p-2 sm:p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-[11px] sm:text-xs active:scale-95 transition-all flex items-center gap-1 border border-rose-200"
+                  title="Hapus Catatan Permanen"
+                >
+                  <i className="fa-solid fa-trash-can text-xs"></i>
+                  <span className="hidden sm:inline">Hapus</span>
+                </button>
+
+                {/* 2. Tombol Salin Teks */}
+                <button
+                  type="button"
+                  onClick={() => copyCatatan({ ...modalEditCatatan, judul: editJudul, isi: editIsi, kategori: editKategori })}
+                  className="p-2 sm:p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[11px] sm:text-xs active:scale-95 transition-all flex items-center gap-1 border border-blue-200"
+                  title="Salin Rincian Teks Catatan"
+                >
+                  <i className="fa-regular fa-copy text-xs"></i>
+                  <span className="hidden sm:inline">Salin</span>
+                </button>
+
+                {/* 3. Tombol Bagikan Menjadi Foto */}
+                <button
+                  type="button"
+                  disabled={isSharing}
+                  onClick={() => handleBagikanFoto({ ...modalEditCatatan, judul: editJudul, isi: editIsi, kategori: editKategori, foto: editFoto, favorit: editFavorit })}
+                  className="p-2 sm:p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-[11px] sm:text-xs active:scale-95 transition-all flex items-center gap-1 border border-indigo-200"
+                  title="Bagikan Catatan Sebagai Gambar Foto"
+                >
+                  <i className={cn("fa-solid text-xs", isSharing ? "fa-spinner animate-spin" : "fa-share-nodes")}></i>
+                  <span>{isSharing ? '...' : 'Bagikan'}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setModalEditCatatan(null)}
+                  className="px-3 py-2 rounded-xl font-black text-xs text-slate-500 hover:bg-slate-200 active:scale-95 transition-all"
+                >
+                  Tutup
+                </button>
+
+                {/* 4. Tombol Simpan Perubahan */}
+                <button
+                  type="button"
+                  onClick={handleSimpanEdit}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 sm:px-5 py-2 rounded-xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-200 active:scale-95 transition-all flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-floppy-disk text-xs"></i>
+                  <span>Simpan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL LIGHTBOX FOTO PENUH (PREVIEW GAMBAR)               */}
+      {/* ======================================================== */}
+      {lightboxFotoUrl && (
+        <div
+          onClick={() => setLightboxFotoUrl(null)}
+          className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-3xl max-h-[90vh] flex flex-col items-center">
+            <button
+              onClick={() => setLightboxFotoUrl(null)}
+              className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/40 active:scale-90 transition-all"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+            <img
+              src={lightboxFotoUrl}
+              alt="Preview Penuh"
+              className="max-w-full max-h-[82vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* ELEMEN RENDERING GAMBAR (SHARE CATATAN JADI FOTO)        */}
+      {/* Disembunyikan di luar layar, dipakai oleh html2canvas     */}
+      {/* ======================================================== */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '480px' }}>
+        {shareNoteData && (
+          <div
+            ref={shareCardRef}
+            className="bg-white p-7 rounded-[2rem] border-4 border-amber-500 shadow-2xl font-sans"
+            style={{ width: '480px' }}
+          >
+            {/* Header Slip Catatan */}
+            <div className="flex items-center justify-between pb-4 border-b-2 border-amber-100 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-xl font-black shadow-md shadow-amber-200">
+                  <i className="fa-solid fa-clipboard-list"></i>
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-800 uppercase tracking-tight">CATATAN OWNER</h2>
+                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider">
+                    {storeLabel || targetSid || 'ALFA PRO'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                  {new Date(shareNoteData.tanggal).toLocaleDateString('id-ID', { dateStyle: 'long' })}
+                </span>
+                <span className={cn(
+                  "inline-block mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md",
+                  shareNoteData.selesai ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                )}>
+                  {shareNoteData.selesai ? 'LUNAS / SELESAI' : 'CATATAN AKTIF'}
+                </span>
+              </div>
+            </div>
+
+            {/* Badge Kategori & Bintang */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border border-slate-200">
+                Kategori: {shareNoteData.kategori}
+              </span>
+              {shareNoteData.favorit && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border border-amber-300 flex items-center gap-1">
+                  ⭐ Catatan Favorit
+                </span>
+              )}
+            </div>
+
+            {/* Judul Catatan */}
+            <h3 className="text-lg font-black text-slate-900 tracking-tight leading-snug mb-3">
+              {shareNoteData.judul}
+            </h3>
+
+            {/* Foto Lampiran Jika Ada */}
+            {shareNoteData.foto && (
+              <div className="mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow-sm max-h-64 flex items-center justify-center bg-slate-50">
+                <img
+                  src={shareNoteData.foto}
+                  alt={shareNoteData.judul}
+                  className="w-full h-56 object-cover"
+                />
+              </div>
+            )}
+
+            {/* Isi Catatan */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-700 leading-relaxed font-semibold whitespace-pre-wrap mb-4">
+              {shareNoteData.isi}
+            </div>
+
+            {/* Footer Slip Catatan */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              <span>ALPHA PRO • OWNER MANAGEMENT</span>
+              <span>{new Date().toLocaleDateString('id-ID')}</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -9258,7 +10128,13 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 </div>
               )}
               {activeOwnerSubView === 'catatan' && (
-                <CatatanPanel showToast={props.showToast} onConfirm={props.onConfirm} />
+                <CatatanPanel
+                  showToast={props.showToast}
+                  onConfirm={props.onConfirm}
+                  activeStoreId={currentTargetStoreId}
+                  isPc={props.isPc}
+                  storeLabel={storeLabel || props.storeName}
+                />
               )}
               {activeOwnerSubView === 'profit' && (
                 <NotificationLogPanel

@@ -1762,7 +1762,7 @@ const MainApp: React.FC<MainAppProps> = ({
       
       // Sync Catatan Owner
       try {
-        const { data: notesData, error: notesErr } = await supabase.from('owner_notes').select('*').eq('store_id', targetStoreId);
+        const { data: notesData, error: notesErr } = await supabase.from('owner_notes').select('*').or(`store_id.eq.${targetStoreId},store_id.eq.all`);
         let mergedNotes: any[] = [];
         
         if (!notesErr && notesData) {
@@ -1772,7 +1772,9 @@ const MainApp: React.FC<MainAppProps> = ({
             isi: n.isi,
             kategori: n.kategori || 'Penting',
             tanggal: n.tanggal,
-            selesai: n.selesai || false
+            selesai: n.selesai || false,
+            favorit: !!n.favorit,
+            foto: n.foto || undefined
           }));
         }
 
@@ -5208,6 +5210,8 @@ const MainApp: React.FC<MainAppProps> = ({
                 kategori: c.kategori || 'Penting',
                 tanggal: c.tanggal,
                 selesai: !!c.selesai,
+                favorit: !!c.favorit,
+                foto: c.foto || null,
                 updated_at: new Date().toISOString()
               }));
               supabase.from('owner_notes').upsert(mapped).then()
