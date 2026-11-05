@@ -11,6 +11,7 @@ import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 import ProfitOwnerView from './ProfitOwnerView'
 import { printThermalReceipt, isAndroidBridgeAvailable } from '../lib/printerService'
 import { AbsenSelfieGalleryModal } from '../components/AbsenSelfieGalleryModal'
+import { isDigitalTransferTx, getStoredCustomLabels, getTransactionDisplayTitle } from '../lib/categoryHelper'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -201,11 +202,32 @@ const GajiPanel: React.FC<{
   const [filterGajiKasir, setFilterGajiKasir] = useState<string>('semua')
   const [filterBonusKasir, setFilterBonusKasir] = useState<string>('semua')
   
+  const DAFTAR_BULAN = [
+    { val: '01', label: 'Januari' },
+    { val: '02', label: 'Februari' },
+    { val: '03', label: 'Maret' },
+    { val: '04', label: 'April' },
+    { val: '05', label: 'Mei' },
+    { val: '06', label: 'Juni' },
+    { val: '07', label: 'Juli' },
+    { val: '08', label: 'Agustus' },
+    { val: '09', label: 'September' },
+    { val: '10', label: 'Oktober' },
+    { val: '11', label: 'November' },
+    { val: '12', label: 'Desember' }
+  ];
+  const DAFTAR_TAHUN = ['2023', '2024', '2025', '2026', '2027', '2028', '2029', '2030'];
+
   // State untuk Form Bonus
   const [bonusKasir, setBonusKasir] = useState<string>('')
-  const [bonusPeriode, setBonusPeriode] = useState<string>(() => {
+  // bonusPeriodeBulan: 'YYYY-MM' = bulan hak bonus (mis. '2026-03' utk Maret 2026)
+  const [bonusPeriodeBulan, setBonusPeriodeBulan] = useState<string>(() => {
     const d = new Date();
-    return d.toISOString().split('T')[0];
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  })
+  // bonusTanggalBayar: 'YYYY-MM-DD' = tanggal uang riil diserahkan ke kasir
+  const [bonusTanggalBayar, setBonusTanggalBayar] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
   })
   const [bonusNominal, setBonusNominal] = useState<string>('')
   const [bonusIsPaid, setBonusIsPaid] = useState<boolean>(true)
@@ -214,11 +236,54 @@ const GajiPanel: React.FC<{
   const [editingBonus, setEditingBonus] = useState<{
     id: any;
     kasir_id: string;
-    periode: string;
+    periode: string;     // 'YYYY-MM' bulan hak bonus
+    tglBayar: string;   // 'YYYY-MM-DD' tanggal riil dibayar
     nominal: string;
     isPaid: boolean;
   } | null>(null);
   const [isSavingBonus, setIsSavingBonus] = useState(false);
+
+  // Jadwal kelipatan 6 bulan untuk kasir terpilih di Form Bonus
+  const jadwalBonusKasir = useMemo(() => {
+    const kData = kasirList[bonusKasir];
+    if (!kData || !kData.tanggalJoin) return null;
+    try {
+      const joinDateObj = new Date(kData.tanggalJoin);
+      const joinDay = joinDateObj.getDate();
+      const now = new Date();
+      let targetBonus = new Date(joinDateObj.getFullYear(), joinDateObj.getMonth() + 6, joinDay);
+      while (targetBonus.getTime() < now.getTime() - (15 * 1000 * 3600 * 24)) {
+        targetBonus.setMonth(targetBonus.getMonth() + 6);
+      }
+      const y = String(targetBonus.getFullYear());
+      const m = String(targetBonus.getMonth() + 1).padStart(2, '0');
+      const bObj = DAFTAR_BULAN.find(b => b.val === m);
+      return {
+        ym: `${y}-${m}`,
+        label: `${bObj ? bObj.label : m} ${y}`
+      };
+    } catch (e) {
+      return null;
+    }
+  }, [bonusKasir]);
+
+  // Otomatis arahkan bulan bonus ke jadwal kelipatan 6 bulan kasir saat kasir dipilih
+  useEffect(() => {
+    if (jadwalBonusKasir?.ym) {
+      setBonusPeriodeBulan(jadwalBonusKasir.ym);
+    }
+  }, [bonusKasir, jadwalBonusKasir]);
+
+  const [selectedBonusYear, selectedBonusMonth] = useMemo(() => {
+    const parts = (bonusPeriodeBulan || '').split('-');
+    const y = parts[0] || String(new Date().getFullYear());
+    const m = parts[1] || String(new Date().getMonth() + 1).padStart(2, '0');
+    return [y, m];
+  }, [bonusPeriodeBulan]);
+
+  const currentBonusMonthLabel = useMemo(() => {
+    return DAFTAR_BULAN.find(b => b.val === selectedBonusMonth)?.label || 'Bulan';
+  }, [selectedBonusMonth]);
 
   // State untuk Live Sync Absensi Instan
   const [liveAbsensiData, setLiveAbsensiData] = useState<any[] | null>(null);
@@ -1139,8 +1204,8 @@ const GajiPanel: React.FC<{
 
   const handleSimpanBonus = async () => {
     try {
-      if (!bonusKasir || !bonusPeriode || !bonusNominal) {
-         showToast("Harap lengkapi form bonus!"); return;
+      if (!bonusKasir || !bonusPeriodeBulan || !bonusNominal) {
+         showToast("Harap lengkapi semua kolom form bonus!"); return;
       }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -1148,19 +1213,25 @@ const GajiPanel: React.FC<{
         return;
       }
       const numBonus = parseNum(bonusNominal);
+      // Format bulan hak bonus: "Maret 2026"
+      const [byear, bmon] = bonusPeriodeBulan.split('-');
+      const periodeLabel = new Date(Number(byear), Number(bmon) - 1, 1)
+        .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
       const newRecord = {
         user_id: user.id,
         store_id: activeStoreId,
         kasir_id: bonusKasir,
         jenis: 'Bonus',
         nominal: bonusIsPaid ? numBonus : 0,
-        keterangan: `Periode: ${bonusPeriode}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${bonusIsPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`,
+        keterangan: `BonusBulan: ${bonusPeriodeBulan}, PeriodeLabel: ${periodeLabel}, TglBayar: ${bonusIsPaid ? bonusTanggalBayar : '-'}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${bonusIsPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`,
         timestamp: new Date().toISOString()
       };
       const { error } = await supabase.from('gaji_bonus').insert([newRecord]);
       if (error) throw error;
       showToast("Berhasil menyimpan data bonus ke server!");
-      setBonusPeriode(""); setBonusNominal("");
+      setBonusPeriodeBulan(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
+      setBonusTanggalBayar(new Date().toISOString().split('T')[0]);
+      setBonusNominal('');
       if (fetchGajiBonus) fetchGajiBonus();
     } catch (e: any) {
       showToast("Gagal simpan bonus: " + e.message);
@@ -1174,8 +1245,14 @@ const GajiPanel: React.FC<{
        if (match) {
          targetNominal = parseNum(match[1]);
        }
-       const newKeterangan = tx.keterangan.replace('Belum Dibayar', 'Sudah Dibayar');
-       
+       const todayStr = new Date().toISOString().split('T')[0];
+       let newKeterangan = tx.keterangan.replace('Belum Dibayar', 'Sudah Dibayar');
+       // Update TglBayar jika sebelumnya '-'
+       newKeterangan = newKeterangan.replace('TglBayar: -', 'TglBayar: ' + todayStr);
+       // Jika format lama (tidak ada TglBayar), tambahkan
+       if (!newKeterangan.includes('TglBayar:')) {
+         newKeterangan += ', TglBayar: ' + todayStr;
+       }
        const { error } = await supabase.from('gaji_bonus').update({
           nominal: targetNominal,
           keterangan: newKeterangan
@@ -1191,14 +1268,28 @@ const GajiPanel: React.FC<{
   const handleOpenEditBonus = (tx: any) => {
     const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
     const nominalVal = targetMatch ? targetMatch[1].replace(/\D/g, '') : String(tx.nominal || 0);
-    const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
-    const periodeVal = periodeMatch ? periodeMatch[1].trim() : (tx.timestamp ? tx.timestamp.split('T')[0] : '');
+    // Coba parse BonusBulan baru dulu, fallback ke format lama
+    const bonusBulanMatch = tx.keterangan.match(/BonusBulan:\s*([\d]{4}-[\d]{2})/);
+    const periodeMatchLama = tx.keterangan.match(/Periode:\s*([^,]+)/);
+    let periodeVal = '';
+    if (bonusBulanMatch) {
+      periodeVal = bonusBulanMatch[1].trim(); // 'YYYY-MM'
+    } else if (periodeMatchLama) {
+      // Format lama: tanggal penuh "YYYY-MM-DD" -> ambil YYYY-MM
+      const rawPeriode = periodeMatchLama[1].trim();
+      periodeVal = rawPeriode.length >= 7 ? rawPeriode.substring(0, 7) : rawPeriode;
+    } else {
+      periodeVal = tx.timestamp ? tx.timestamp.substring(0, 7) : '';
+    }
+    const tglBayarMatch = tx.keterangan.match(/TglBayar:\s*([\d]{4}-[\d]{2}-[\d]{2})/);
+    const tglBayarVal = tglBayarMatch ? tglBayarMatch[1] : (tx.timestamp ? tx.timestamp.split('T')[0] : new Date().toISOString().split('T')[0]);
     const isPaid = tx.keterangan.includes('Sudah Dibayar') || (tx.nominal && tx.nominal > 0);
 
     setEditingBonus({
       id: tx.id,
       kasir_id: tx.kasir_id || '',
       periode: periodeVal,
+      tglBayar: tglBayarVal,
       nominal: parseInt(nominalVal || '0').toLocaleString('id-ID'),
       isPaid: !!isPaid
     });
@@ -1213,7 +1304,12 @@ const GajiPanel: React.FC<{
     setIsSavingBonus(true);
     try {
       const numBonus = parseNum(editingBonus.nominal);
-      const updatedKeterangan = `Periode: ${editingBonus.periode}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${editingBonus.isPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`;
+      const [byear, bmon] = (editingBonus.periode || '').split('-');
+      const periodeLabel = (byear && bmon)
+        ? new Date(Number(byear), Number(bmon) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+        : editingBonus.periode;
+      const tglBayarStr = editingBonus.tglBayar || new Date().toISOString().split('T')[0];
+      const updatedKeterangan = `BonusBulan: ${editingBonus.periode}, PeriodeLabel: ${periodeLabel}, TglBayar: ${editingBonus.isPaid ? tglBayarStr : '-'}, Nominal Target: Rp ${formatRupiah(numBonus)}, Status: ${editingBonus.isPaid ? 'Sudah Dibayar' : 'Belum Dibayar'}`;
       
       const { error } = await supabase.from('gaji_bonus').update({
         kasir_id: editingBonus.kasir_id,
@@ -1891,17 +1987,70 @@ const GajiPanel: React.FC<{
                 );
               })()}
               
-              <div>
-                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">TANGGAL BONUS</label>
-                <input
-                  type="date"
-                  value={bonusPeriode}
-                  onChange={e => setBonusPeriode(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
-                />
+              {/* KOLOM 2: Bonus Bulan Sekian (Periode Hak) */}
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className="text-[9px] font-black text-amber-900 uppercase tracking-widest flex items-center gap-1.5">
+                    <i className="fa-solid fa-gift text-amber-600 text-xs"></i>
+                    BONUS BULAN SEKIAN (PERIODE HAK)
+                  </label>
+                  {jadwalBonusKasir && (
+                    <button
+                      type="button"
+                      onClick={() => setBonusPeriodeBulan(jadwalBonusKasir.ym)}
+                      className="text-[8px] font-black bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-lg active:scale-95 transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                      title="Klik untuk memilih sesuai jadwal kelipatan 6 bulan kasir ini"
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles"></i> Jadwal: {jadwalBonusKasir.label}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[8px] font-black text-amber-800/80 uppercase tracking-wider block mb-1">Pilih Bulan</label>
+                    <select
+                      value={selectedBonusMonth}
+                      onChange={e => setBonusPeriodeBulan(`${selectedBonusYear}-${e.target.value}`)}
+                      className="w-full text-xs p-2.5 rounded-xl border border-amber-200 font-black bg-white text-slate-800 outline-none focus:border-amber-400 cursor-pointer shadow-2xs"
+                    >
+                      {DAFTAR_BULAN.map(b => (
+                        <option key={b.val} value={b.val}>{b.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-black text-amber-800/80 uppercase tracking-wider block mb-1">Pilih Tahun</label>
+                    <select
+                      value={selectedBonusYear}
+                      onChange={e => setBonusPeriodeBulan(`${e.target.value}-${selectedBonusMonth}`)}
+                      className="w-full text-xs p-2.5 rounded-xl border border-amber-200 font-black bg-white text-slate-800 outline-none focus:border-amber-400 cursor-pointer shadow-2xs"
+                    >
+                      {DAFTAR_TAHUN.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* KOTAK DISPLAY TEKS EKSPLISIT */}
+                <div className="p-3 bg-gradient-to-r from-amber-100 to-amber-50 rounded-xl border border-amber-300 flex items-center gap-3 text-amber-950 shadow-xs">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs text-sm">
+                    🎁
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-wide leading-tight text-amber-950">
+                      🎁 Bonus Bulan: <span className="text-amber-800 underline decoration-amber-500 font-black">{currentBonusMonthLabel} {selectedBonusYear}</span>
+                    </p>
+                                      </div>
+                </div>
               </div>
+
+              {/* KOLOM 3: Jumlah Bonus */}
               <div>
-                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">NOMINAL BONUS</label>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                  <i className="fa-solid fa-money-bill-wave text-green-500 mr-1"></i>JUMLAH BONUS
+                </label>
                 <div className="relative">
                   <span className="absolute left-2.5 top-2.5 text-xs font-bold text-gray-400">Rp</span>
                   <input
@@ -1910,18 +2059,59 @@ const GajiPanel: React.FC<{
                     value={bonusNominal}
                     onChange={e => setBonusNominal(formatNum(e.target.value))}
                     className="w-full text-xs py-2.5 pl-8 pr-3 rounded-lg border border-gray-200 outline-none font-bold bg-white focus:border-blue-400"
+                    placeholder="0"
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer bg-white p-2.5 rounded-lg border border-gray-200">
-                <input 
-                  type="checkbox" 
-                  checked={bonusIsPaid} 
-                  onChange={e => setBonusIsPaid(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600 rounded"
-                />
-                <span className="text-[10px] font-black text-gray-700 uppercase tracking-widest">Sudah Dibayarkan Lunas</span>
-              </label>
+
+              {/* KOLOM 4: Status + Tanggal Dibayar */}
+              <div>
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1.5">
+                  <i className="fa-solid fa-calendar-check text-blue-500 mr-1"></i>STATUS PEMBAYARAN
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setBonusIsPaid(true)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-lg text-center font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer border",
+                      bonusIsPaid
+                        ? "bg-green-600 text-white border-green-600 shadow-sm"
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                    )}
+                  >
+                    <i className="fa-solid fa-check mr-1"></i>Sudah Dibayar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBonusIsPaid(false)}
+                    className={cn(
+                      "flex-1 py-2 px-2 rounded-lg text-center font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer border",
+                      !bonusIsPaid
+                        ? "bg-red-500 text-white border-red-500 shadow-sm"
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                    )}
+                  >
+                    <i className="fa-solid fa-clock mr-1"></i>Belum Dibayar
+                  </button>
+                </div>
+                {bonusIsPaid && (
+                  <div>
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                      TANGGAL DIBAYAR
+                    </label>
+                    <input
+                      type="date"
+                      value={bonusTanggalBayar}
+                      onChange={e => setBonusTanggalBayar(e.target.value)}
+                      className="w-full text-xs p-2.5 rounded-lg border border-blue-200 outline-none font-bold bg-blue-50 focus:border-blue-400 focus:bg-white"
+                    />
+                    <p className="text-[8px] text-blue-500 font-bold mt-1 pl-0.5">
+                      Tanggal uang riil diserahkan ke kasir
+                    </p>
+                  </div>
+                )}
+              </div>
               
               <button
                 onClick={handleSimpanBonus}
@@ -1946,25 +2136,48 @@ const GajiPanel: React.FC<{
             </div>
             {(gajiBonusList || [])?.filter((t: any) => t.jenis === 'Bonus' && (filterBonusKasir === 'semua' || t.kasir_id === filterBonusKasir)).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((tx: any) => {
               const kasirName = kasirList[tx.kasir_id || '']?.name || 'Kasir Terhapus';
-              const dateStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+              const tglInputStr = new Date(tx.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
               const isPaid = tx.keterangan.includes('Sudah Dibayar');
               const targetMatch = tx.keterangan.match(/Nominal Target:\s*Rp\s*([\d\.,]+)/);
               const targetNominal = targetMatch ? targetMatch[1] : formatRupiah(tx.nominal);
               const cleanNominal = targetNominal.replace(/^Rp\s*/i, '');
-              const periodeMatch = tx.keterangan.match(/Periode:\s*([^,]+)/);
-              const periode = periodeMatch ? periodeMatch[1] : "-";
+              // Parse bonus bulan (format baru BonusBulan atau lama Periode)
+              const bonusBulanMatch = tx.keterangan.match(/BonusBulan:\s*([\d]{4}-[\d]{2})/);
+              const periodeLabelMatch = tx.keterangan.match(/PeriodeLabel:\s*([^,]+)/);
+              const periodeMatchLama = tx.keterangan.match(/Periode:\s*([^,]+)/);
+              let bonusBulanLabel = '-';
+              if (periodeLabelMatch) {
+                bonusBulanLabel = periodeLabelMatch[1].trim();
+              } else if (bonusBulanMatch) {
+                const [by, bm] = bonusBulanMatch[1].split('-');
+                bonusBulanLabel = new Date(Number(by), Number(bm) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+              } else if (periodeMatchLama) {
+                bonusBulanLabel = periodeMatchLama[1].trim();
+              }
+              // Parse tanggal dibayar
+              const tglBayarMatch = tx.keterangan.match(/TglBayar:\s*([\d]{4}-[\d]{2}-[\d]{2})/);
+              const tglBayarStr = tglBayarMatch
+                ? new Date(tglBayarMatch[1]).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                : (isPaid ? tglInputStr : '—');
               
               return (
-                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-center justify-between gap-3">
+                <div key={tx.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex items-start justify-between gap-3">
                    <div className="flex-1 min-w-0">
-                     <div className="flex items-center gap-2 mb-1 flex-wrap">
+                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                        <p className="text-xs font-black text-gray-800 uppercase tracking-widest">{kasirName}</p>
                        <span className={cn("px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest", isPaid ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                         {isPaid ? "LUNAS" : "BELUM DIBAYAR"}
+                         {isPaid ? "✓ LUNAS" : "BELUM DIBAYAR"}
                        </span>
                      </div>
-                     <p className="text-[10px] text-gray-500 font-bold truncate"><i className="fa-regular fa-clock text-blue-500 mr-1"></i> Periode {periode}</p>
-                     <p className="text-[9px] text-gray-400 font-bold mt-0.5">Tgl Input: {dateStr}</p>
+                     <p className="text-[11px] text-amber-900 font-black flex items-center gap-1.5 mb-0.5">
+                       <span className="text-sm">🎁</span>
+                       Bonus Bulan: <span className="underline decoration-amber-400 font-black text-amber-800">{bonusBulanLabel}</span>
+                     </p>
+                                          <p className="text-[10px] text-gray-600 font-bold flex items-center gap-1 mb-0.5">
+                       <i className="fa-solid fa-calendar-check text-blue-500 text-[10px]"></i>
+                       Tanggal Dibayar: <span className="font-semibold text-gray-800">{tglBayarStr}</span>
+                     </p>
+                     <p className="text-[9px] text-gray-400 font-bold mt-0.5">Tgl Input: {tglInputStr}</p>
                    </div>
                    <div className="text-right flex flex-col items-end shrink-0">
                      <p className="text-xs font-black text-blue-600 tabular-nums mb-2">Rp {cleanNominal}</p>
@@ -2053,15 +2266,64 @@ const GajiPanel: React.FC<{
                 </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">Tanggal / Periode Bonus</label>
-                <input
-                  type="date"
-                  value={editingBonus.periode}
-                  onChange={e => setEditingBonus(prev => prev ? { ...prev, periode: e.target.value } : null)}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold bg-white outline-none focus:border-blue-400"
-                />
+              {/* Bulan Hak Bonus */}
+              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 space-y-2">
+                <label className="text-[9px] font-black text-amber-900 uppercase tracking-widest flex items-center gap-1.5">
+                  <i className="fa-solid fa-gift text-amber-600 text-xs"></i>
+                  Bonus Bulan (Periode Hak)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[8px] font-black text-amber-800 uppercase tracking-wider block mb-1">Pilih Bulan</label>
+                    <select
+                      value={(editingBonus.periode || '').split('-')[1] || '01'}
+                      onChange={e => {
+                        const y = (editingBonus.periode || '').split('-')[0] || String(new Date().getFullYear());
+                        setEditingBonus(prev => prev ? { ...prev, periode: `${y}-${e.target.value}` } : null);
+                      }}
+                      className="w-full text-xs p-2 rounded-xl border border-amber-200 font-black bg-white outline-none cursor-pointer"
+                    >
+                      {DAFTAR_BULAN.map(b => (
+                        <option key={b.val} value={b.val}>{b.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-black text-amber-800 uppercase tracking-wider block mb-1">Pilih Tahun</label>
+                    <select
+                      value={(editingBonus.periode || '').split('-')[0] || String(new Date().getFullYear())}
+                      onChange={e => {
+                        const m = (editingBonus.periode || '').split('-')[1] || '01';
+                        setEditingBonus(prev => prev ? { ...prev, periode: `${e.target.value}-${m}` } : null);
+                      }}
+                      className="w-full text-xs p-2 rounded-xl border border-amber-200 font-black bg-white outline-none cursor-pointer"
+                    >
+                      {DAFTAR_TAHUN.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="p-2 bg-amber-100 rounded-lg border border-amber-300 text-amber-950">
+                  <p className="text-[10px] font-black">
+                    🎁 Bonus Bulan: {DAFTAR_BULAN.find(b => b.val === (editingBonus.periode || '').split('-')[1])?.label || ''} {(editingBonus.periode || '').split('-')[0]}
+                  </p>
+                                  </div>
               </div>
+              {editingBonus.isPaid && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">
+                    <i className="fa-solid fa-calendar-check text-blue-500 mr-1"></i>Tanggal Dibayar
+                  </label>
+                  <input
+                    type="date"
+                    value={editingBonus.tglBayar || ''}
+                    onChange={e => setEditingBonus(prev => prev ? { ...prev, tglBayar: e.target.value } : null)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-blue-200 font-bold bg-blue-50 outline-none focus:border-blue-400"
+                  />
+                  <p className="text-[8px] text-blue-500 font-bold mt-0.5">Tanggal riil uang diserahkan</p>
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">Nominal Bonus</label>
@@ -4517,15 +4779,33 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const bonusKasirList = useMemo(() => {
     if (props.kasirRole !== 'owner' || !props.kasirList) return []
     const list: string[] = []
+    const currentYearMonth = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
     Object.entries(props.kasirList).forEach(([username, kData]) => {
       if (username === 'owner') return
       const tenure = kData.tanggalJoin ? calculateTenure(kData.tanggalJoin) : null
       if (tenure && tenure.totalMonths > 0 && tenure.totalMonths % 6 === 0) {
-        list.push(kData.name)
+        // Cek apakah bonus bulan ini sudah ada yang lunas di riwayat
+        const sudahLunas = (props.gajiBonusList || []).some((tx: any) => {
+          if (!tx.kasir_id) return false;
+          if (props.kasirList[tx.kasir_id]?.name !== kData.name && tx.kasir_id !== username) return false;
+          if (!tx.keterangan?.includes('Sudah Dibayar')) return false;
+          // Cek apakah bonus bulan ini (periode kelipatan 6 bln) sudah tercatat lunas
+          const bonusBulanMatch = tx.keterangan.match(/BonusBulan:\s*([\d]{4}-[\d]{2})/);
+          if (bonusBulanMatch) {
+            return bonusBulanMatch[1] === currentYearMonth;
+          }
+          // Fallback: cek Periode lama (berdasarkan bulan input)
+          const periodeMatchLama = tx.keterangan.match(/Periode:\s*([\d]{4}-[\d]{2})/);
+          if (periodeMatchLama) return periodeMatchLama[1] === currentYearMonth;
+          return false;
+        });
+        if (!sudahLunas) {
+          list.push(kData.name)
+        }
       }
     })
     return list
-  }, [props.kasirList, props.kasirRole])
+  }, [props.kasirList, props.kasirRole, props.gajiBonusList])
   const [currentTime, setCurrentTime] = useState(new Date())
 
   // Controls for Owner Notification Banners (Minimize '_' & Dismiss 'X')
@@ -5199,7 +5479,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
                     todayAggregated[key].omzet_penjualan += Number(t.nominal || 0);
                   }
-                  const cat = t.kategori || 'Lainnya';
+                  const cat = getTransactionDisplayTitle(t, ownerCustomLabels);
                   todayAggregated[key].kategori_breakdown[cat] = (todayAggregated[key].kategori_breakdown[cat] || 0) + Number(t.nominal || 0);
                 });
 
@@ -5271,7 +5551,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     if ((t.kategori || '').toLowerCase() !== 'tarik tunai') {
                       todayAggregated[key].omzet_penjualan += Number(t.nominal || 0);
                     }
-                    const cat = t.kategori || 'Lainnya';
+                    const cat = getTransactionDisplayTitle(t, ownerCustomLabels);
                     todayAggregated[key].kategori_breakdown[cat] = (todayAggregated[key].kategori_breakdown[cat] || 0) + Number(t.nominal || 0);
                   });
 
@@ -5521,7 +5801,11 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const ownerTotalUangMasuk = ownerTodayTxs
     .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0);
+  const ownerEffectiveStoreId = (props.pantauStoreId && props.pantauStoreId !== 'all') ? props.pantauStoreId : (props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : undefined);
+  const ownerCustomLabels = getStoredCustomLabels(ownerEffectiveStoreId);
+
   const ownerTotalAdmin = ownerTodayTxs.filter(t => 
+    !(t.keterangan || '').includes('[ADMIN_DALAM]') &&
     !(t.keterangan || '').includes('[KHUSUS]') && 
     !(t.keterangan || '').includes('[NON_TUNAI]')
   ).reduce((s, t) => s + t.adminFee, 0)
@@ -5543,7 +5827,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   ).reduce((s, t) => s + t.nominal, 0)
   
   const ownerPenjualanDigital = ownerTodayTxs.filter(t => 
-    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && 
+    isDigitalTransferTx(t, ownerCustomLabels) && 
     !(t.keterangan || '').includes('[KHUSUS]') && 
     !(t.keterangan || '').includes('[NON_TUNAI]')
   ).reduce((s, t) => s + t.nominal, 0)
@@ -5565,7 +5849,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   
   // ownerSaldoBank calculation (Contribution to bank balance/plafon)
   const ownerTotalBankOut = ownerTodayTxs.filter(t => 
-    ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)
+    isDigitalTransferTx(t, ownerCustomLabels)
   ).reduce((s, t) => s + t.nominal, 0)
   
   const ownerIsiBank = ownerDisplayTxs.filter(t => t.timestamp.startsWith(todayISO) && t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
@@ -6104,12 +6388,20 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 <button onClick={() => setShowNotifModal(false)} className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs flex items-center justify-center">✕</button>
               </div>
               <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {bonusKasirList.length > 0 && (
-                  <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-                    <p className="text-xs font-black text-emerald-800 dark:text-emerald-300">🎉 Bonus Kasir 6 Bulan Tercapai</p>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">{bonusKasirList.join(', ')}</p>
+                {bonusKasirList.length > 0 && bonusKasirList.map((kasirName, idx) => (
+                  <div key={idx} className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-black text-emerald-800 dark:text-emerald-300">🎉 Bonus 6 Bulan: <span className="text-emerald-700">{kasirName}</span></p>
+                      <p className="text-[9px] text-emerald-600 dark:text-emerald-400 mt-0.5">Kasir telah mencapai kelipatan 6 bulan. Berikan bonus apresiasi.</p>
+                    </div>
+                    <button
+                      onClick={() => markNotifAsRead(`bonus_${kasirName}_6m_${currentTodayStr.substring(0, 7)}`)}
+                      className="shrink-0 flex items-center gap-1 text-[9px] font-black bg-emerald-600 text-white px-2.5 py-1.5 rounded-lg active:scale-95 cursor-pointer whitespace-nowrap"
+                    >
+                      <i className="fa-solid fa-check text-[9px]"></i> Telah Dibayar
+                    </button>
                   </div>
-                )}
+                ))}
                 {ownerLateKasirs.length > 0 && (
                   <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800">
                     <p className="text-xs font-black text-rose-800 dark:text-rose-300">⏰ Kasir Terlambat Masuk Shift</p>
@@ -6641,34 +6933,45 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
               {/* Quick Notification List */}
               <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                {bonusKasirList.length > 0 && (
-                  <div 
-                    onClick={() => bonusKasirList.forEach(name => markNotifAsRead(`bonus_${name}_6m_${currentTodayStr.substring(0, 7)}`))}
-                    className={cn(
-                      "p-3 rounded-2xl flex items-start gap-3 transition-all cursor-pointer border",
-                      unreadBonusKasirList.length > 0
-                        ? "bg-emerald-50 border-emerald-300 shadow-xs"
-                        : "bg-slate-50 border-slate-200 opacity-75"
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                      <i className="fa-solid fa-gift text-xs"></i>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="text-[11px] font-black text-emerald-900">🎉 Bonus 6 Bulan Kasir</p>
-                        {unreadBonusKasirList.length > 0 ? (
-                          <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">BARU</span>
-                        ) : (
-                          <span className="text-slate-400 text-[8px] font-bold">DIBACA</span>
-                        )}
+                {bonusKasirList.length > 0 && bonusKasirList.map((kasirName, idx) => {
+                  const bonusId = `bonus_${kasirName}_6m_${currentTodayStr.substring(0, 7)}`;
+                  const isUnread = unreadBonusKasirList.includes(kasirName);
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "p-3 rounded-2xl flex items-center gap-3 transition-all border",
+                        isUnread ? "bg-emerald-50 border-emerald-300 shadow-xs" : "bg-slate-50 border-slate-200 opacity-75"
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-gift text-xs"></i>
                       </div>
-                      <p className="text-[10px] font-semibold text-emerald-700 mt-0.5">
-                        Kasir <span className="font-black">{bonusKasirList.join(', ')}</span> mencapai kelipatan 6 bulan kerja!
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className="text-[11px] font-black text-emerald-900">🎉 Bonus 6 Bulan</p>
+                          {isUnread ? (
+                            <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs">BARU</span>
+                          ) : (
+                            <span className="text-emerald-600 text-[8px] font-black flex items-center gap-0.5"><i className="fa-solid fa-check-double text-[8px]"></i> LUNAS</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-semibold text-emerald-700 truncate">
+                          Kasir <span className="font-black">{kasirName}</span> mencapai kelipatan 6 bulan!
+                        </p>
+                      </div>
+                      {isUnread && (
+                        <button
+                          onClick={() => markNotifAsRead(bonusId)}
+                          className="shrink-0 flex items-center gap-1 text-[8px] font-black bg-emerald-600 text-white px-2 py-1.5 rounded-lg active:scale-95 cursor-pointer"
+                          title="Tandai telah dibayar"
+                        >
+                          <i className="fa-solid fa-check text-[9px]"></i>
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })}
 
 
               </div>
@@ -9100,7 +9403,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   filteredRawTxs.forEach(t => {
                     if (!isPureSalesTx(t)) return;
                     if (!isDateInActiveRange(t.timestamp)) return;
-                    const cat = t.kategori || 'Lainnya';
+                    const cat = getTransactionDisplayTitle(t, ownerCustomLabels);
                     const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
                     kategoriMap.set(cat, {
                       nominal: prev.nominal + (Number(t.nominal) || 0),
@@ -9111,7 +9414,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   filteredAnalytics.forEach(r => {
                     if (!isDateInActiveRange(r.tanggal)) return;
                     if (r.kategori_breakdown && typeof r.kategori_breakdown === 'object') {
-                      Object.entries(r.kategori_breakdown).forEach(([cat, val]) => {
+                      Object.entries(r.kategori_breakdown).forEach(([rawCat, val]) => {
+                        const cat = getTransactionDisplayTitle({ kategori: rawCat }, ownerCustomLabels);
                         const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
                         kategoriMap.set(cat, {
                           nominal: prev.nominal + Number(val || 0),
@@ -10169,7 +10473,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
               }, 300);
             }}
-            activeStoreId={props.activeStoreId === 'all' ? undefined : props.activeStoreId}
+            activeStoreId={props.activeStoreId === 'all' ? (props.pantauStoreId !== 'all' ? props.pantauStoreId : undefined) : props.activeStoreId}
             adminRules={props.adminRules}
           />
           {props.kasirRole === 'owner' && (

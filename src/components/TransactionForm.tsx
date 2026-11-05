@@ -2,14 +2,23 @@ import React, { useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { formatInputRupiah, cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { 
+  TRANSFER_CHANNELS, 
+  DEFAULT_CUSTOM_BUTTON_LABELS, 
+  getChannelDisplayLabel, 
+  isChannelHidden, 
+  getTransactionSystemId, 
+  isPpobTx, 
+  TransferSystemId 
+} from '../lib/categoryHelper'
 
-const SUMBER_APLIKASI_BANK = [
-  { id: 'BANK', label: 'Bank UOB', sub: 'Bank', icon: 'fa-building-columns' },
-  { id: 'DANA', label: 'DANA', sub: 'E-Wallet', icon: 'fa-wallet' },
-  { id: 'ORDER KUOTA', label: 'Order Kuota', sub: 'PPOB', icon: 'fa-bolt' },
-  { id: 'FLIP', label: 'Flip', sub: 'Transfer', icon: 'fa-arrow-right-arrow-left' },
-  { id: 'SINERGI PULSA', label: 'Sinergi Pulsa', sub: 'PPOB', icon: 'fa-tower-cell' },
-];
+const SUMBER_APLIKASI_BANK = TRANSFER_CHANNELS.map(c => ({
+  id: c.id,
+  label: c.defaultLabel,
+  sub: c.defaultSub,
+  icon: c.icon,
+  hideKey: c.hideKey
+}));
 
 const SUBCATEGORIES = [
   { id: 'TRANSFER_BANK', label: 'TRANSFER\nBANK', icon: 'fa-building-columns', color: 'bg-blue-100 text-blue-600', active: 'bg-[#0066ff] text-white', glow: 'shadow-[0_0_15px_rgba(0,102,255,0.4)]' },
@@ -58,24 +67,6 @@ const ITEMS: Record<string, { id: string, name: string, icon: string, color: str
     { id: 'HOLDER HP', name: 'HOLDER HP', icon: 'fa-mobile', color: 'text-orange-500' },
     { id: 'LAINNYA', name: 'LAINNYA', icon: 'fa-box-open', color: 'text-slate-600' }
   ]
-};
-
-export const DEFAULT_CUSTOM_BUTTON_LABELS: Record<string, string | boolean> = {
-  'DIGITAL': 'Transfer',
-  'TARIK': 'Tarik Tunai',
-  'AKSESORIS': 'Aksesoris',
-  'VOUCHER': 'Voucher',
-  'BANK': 'Bank UOB',
-  'DANA': 'DANA',
-  'ORDER KUOTA': 'Order Kuota',
-  'FLIP': 'Flip',
-  'SINERGI PULSA': 'Sinergi Pulsa',
-  'HIDE_SINERGI PULSA': true,
-  'EDC / ATM': 'EDC/ATM',
-  'QRIS': 'QRIS',
-  'TRANSFER BANK': 'TRANSFER',
-  'TARIK_DANA': 'DANA',
-  'GOPAY': 'GOPAY'
 };
 
 interface TransactionFormProps {
@@ -222,38 +213,90 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleSaveCustomLabels = async () => {
     setIsSavingLabels(true);
     try {
-      const storeKey = activeStoreId ? `alphaPro_${activeStoreId}_custom_labels` : 'alphaPro_custom_labels';
-      setCustomLabels(tempLabels);
-      localStorage.setItem(storeKey, JSON.stringify(tempLabels));
+      const effectiveStoreId = (activeStoreId && activeStoreId !== 'all')
+        ? activeStoreId
+        : (localStorage.getItem('alphaPro_pantau_store_id') && localStorage.getItem('alphaPro_pantau_store_id') !== 'all')
+          ? localStorage.getItem('alphaPro_pantau_store_id')!
+          : (localStorage.getItem('alphaPro_active_store_id') && localStorage.getItem('alphaPro_active_store_id') !== 'all')
+            ? localStorage.getItem('alphaPro_active_store_id')!
+            : undefined;
+
+      // Pastikan sync dua arah antara System ID dan legacy keys
+      const syncedLabels = { ...tempLabels };
+      if (syncedLabels.ewallet) syncedLabels.DANA = syncedLabels.ewallet;
+      else if (syncedLabels.DANA) syncedLabels.ewallet = syncedLabels.DANA;
+
+      if (syncedLabels.PPOB) syncedLabels['ORDER KUOTA'] = syncedLabels.PPOB;
+      else if (syncedLabels['ORDER KUOTA']) syncedLabels.PPOB = syncedLabels['ORDER KUOTA'];
+
+      if (syncedLabels.BANK_2) syncedLabels.FLIP = syncedLabels.BANK_2;
+      else if (syncedLabels.FLIP) syncedLabels.BANK_2 = syncedLabels.FLIP;
+
+      if (syncedLabels.PPOB_2) syncedLabels['SINERGI PULSA'] = syncedLabels.PPOB_2;
+      else if (syncedLabels['SINERGI PULSA']) syncedLabels.PPOB_2 = syncedLabels['SINERGI PULSA'];
+
+      // Hide flags sync
+      if (syncedLabels.HIDE_ewallet !== undefined) syncedLabels.HIDE_DANA = syncedLabels.HIDE_ewallet;
+      if (syncedLabels.HIDE_PPOB !== undefined) syncedLabels['HIDE_ORDER KUOTA'] = syncedLabels.HIDE_PPOB;
+      if (syncedLabels.HIDE_BANK_2 !== undefined) syncedLabels.HIDE_FLIP = syncedLabels.HIDE_BANK_2;
+      if (syncedLabels.HIDE_PPOB_2 !== undefined) syncedLabels['HIDE_SINERGI PULSA'] = syncedLabels.HIDE_PPOB_2;
+
+      const storeKey = effectiveStoreId ? `alphaPro_${effectiveStoreId}_custom_labels` : 'alphaPro_custom_labels';
+      setCustomLabels(syncedLabels);
+      setTempLabels(syncedLabels);
+      localStorage.setItem(storeKey, JSON.stringify(syncedLabels));
+
       window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', { 
-        detail: { labels: tempLabels, storeId: activeStoreId } 
+        detail: { labels: syncedLabels, storeId: effectiveStoreId } 
       }));
 
-      const visibleTransfer = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'].filter(m => !tempLabels['HIDE_' + m]);
+      const visibleTransfer = ['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'].filter(m => !isChannelHidden(m as any, syncedLabels));
       if (visibleTransfer.length > 0) {
         setActiveTransferMethods(visibleTransfer);
-        if (tempLabels['HIDE_' + sumberAplikasi]) {
+        if (isChannelHidden(sumberAplikasi as any, syncedLabels)) {
           setSumberAplikasi(visibleTransfer[0]);
+          setKategori(getKategoriForSumber(visibleTransfer[0]));
         }
       }
 
-      if (activeStoreId && activeStoreId !== 'all') {
-        localStorage.setItem(`alphaPro_${activeStoreId}_transferMethods`, JSON.stringify(visibleTransfer));
+      if (effectiveStoreId) {
+        localStorage.setItem(`alphaPro_${effectiveStoreId}_transferMethods`, JSON.stringify(visibleTransfer));
         window.dispatchEvent(new CustomEvent('alphaUpdateTransferMethods', { detail: visibleTransfer }));
 
-        // Simpan juga ke App.tsx agar tersimpan ke cloud Supabase store_settings.presets._CUSTOM_LABELS_
+        // Simpan juga ke App.tsx agar tersimpan ke cloud Supabase
         window.dispatchEvent(new CustomEvent('alphaUpdateCustomLabels', { 
-          detail: { labels: tempLabels, storeId: activeStoreId } 
+          detail: { labels: syncedLabels, storeId: effectiveStoreId } 
         }));
 
+        // 1. Simpan ke store_custom_labels
         try {
           await supabase
             .from('store_custom_labels')
             .upsert({
-              store_id: activeStoreId,
-              labels: tempLabels,
+              store_id: effectiveStoreId,
+              labels: syncedLabels,
               updated_at: new Date().toISOString()
             });
+        } catch (e) {}
+
+        // 2. Simpan ke store_presets (Cadangan kuat & anti-timpa)
+        try {
+          const { data: spRow } = await supabase
+            .from('store_presets')
+            .select('presets')
+            .eq('store_id', effectiveStoreId)
+            .maybeSingle();
+
+          const curPresets = Array.isArray(spRow?.presets) ? spRow.presets : [];
+          const filtered = curPresets.filter((p: any) => p && p.id !== '_CUSTOM_LABELS_');
+          filtered.push({ id: '_CUSTOM_LABELS_', data: syncedLabels });
+          await supabase
+            .from('store_presets')
+            .upsert({
+              store_id: effectiveStoreId,
+              presets: filtered,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'store_id' });
         } catch (e) {}
       }
 
@@ -268,8 +311,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const handleResetCustomLabels = () => {
     const resetObj: Record<string, any> = { ...DEFAULT_CUSTOM_BUTTON_LABELS };
-    ['BANK', 'DANA', 'ORDER KUOTA', 'FLIP', 'SINERGI PULSA', 'EDC / ATM', 'QRIS', 'TRANSFER BANK', 'TARIK_DANA', 'GOPAY'].forEach(k => {
-      resetObj['HIDE_' + k] = (k === 'SINERGI PULSA');
+    ['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2', 'DANA', 'ORDER KUOTA', 'FLIP', 'SINERGI PULSA', 'EDC / ATM', 'QRIS', 'TRANSFER BANK', 'TARIK_DANA', 'GOPAY'].forEach(k => {
+      resetObj['HIDE_' + k] = (k === 'PPOB_2' || k === 'SINERGI PULSA');
     });
     setTempLabels(resetObj);
   };
@@ -282,10 +325,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [activeMode, setActiveModeState] = useState<'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | ''>(initialMode || '')
   const setActiveMode = (mode: 'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | '') => {
     setActiveModeState(mode)
+    if (mode === 'TARIK') {
+      setIsAdminNonTunai(true)
+    } else if (mode === 'DIGITAL' || mode === 'AKSESORIS' || mode === 'VOUCHER') {
+      setIsAdminNonTunai(false)
+    }
     if (onModeChange && mode) onModeChange(mode)
   }
   const [subMode, setSubMode] = useState<'NORMAL' | 'KHUSUS' | 'NON_TUNAI'>('NORMAL')
-  const [isAdminNonTunai, setIsAdminNonTunai] = useState(false)
+  const [isAdminNonTunai, setIsAdminNonTunai] = useState(() => initialMode === 'TARIK')
   const [aksesorisPayMode, setAksesorisPayMode] = useState<'TUNAI' | 'QRIS'>('TUNAI')
   const [isKetAuto, setIsKetAuto] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -372,7 +420,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   }, [orderKuotaMode, activeTheme]);
   const [isTema3SheetOpen, setIsTema3SheetOpen] = useState(false)
   const [tema3Step, setTema3Step] = useState<'MAIN' | 'DIGITAL' | 'TARIK' | 'BANK_SELECTION'>('MAIN')
-  const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'])
+  const [activeTransferMethods, setActiveTransferMethods] = useState<string[]>(['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'])
 
   const effectiveStoreId = (activeStoreId && activeStoreId !== 'all') 
     ? activeStoreId 
@@ -579,26 +627,41 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+  const getKategoriForSumber = (src: string): string => {
+    if (src === 'BANK') return (customLabels['BANK'] || 'Bank UOB');
+    if (src === 'ewallet' || src === 'DANA') return (customLabels['ewallet'] || customLabels['DANA'] || 'DANA');
+    if (src === 'PPOB' || src === 'ORDER KUOTA') return (customLabels['PPOB'] || customLabels['ORDER KUOTA'] || 'Order Kuota');
+    if (src === 'BANK_2' || src === 'FLIP') return (customLabels['BANK_2'] || customLabels['FLIP'] || 'Flip');
+    if (src === 'PPOB_2' || src === 'SINERGI PULSA') return (customLabels['PPOB_2'] || customLabels['SINERGI PULSA'] || 'Sinergi Pulsa');
+    return src || 'Transfer Bank';
+  };
+
   const getPopupMode = (categoryKey: string): 'BANK' | 'ORDER_KUOTA' | 'FLIP' | 'DANA' | 'SINERGI_PULSA' | null => {
     if (categoryKey === 'BANK') return 'BANK';
-    if (categoryKey === 'ORDER KUOTA' || categoryKey === 'ORDER_KUOTA') return 'ORDER_KUOTA';
-    if (categoryKey === 'FLIP') return 'FLIP';
-    if (categoryKey === 'DANA') return 'DANA';
-    if (categoryKey === 'SINERGI PULSA' || categoryKey === 'SINERGI_PULSA') return 'SINERGI_PULSA';
+    if (categoryKey === 'PPOB' || categoryKey === 'ORDER KUOTA' || categoryKey === 'ORDER_KUOTA') return 'ORDER_KUOTA';
+    if (categoryKey === 'BANK_2' || categoryKey === 'FLIP') return 'FLIP';
+    if (categoryKey === 'ewallet' || categoryKey === 'DANA') return 'DANA';
+    if (categoryKey === 'PPOB_2' || categoryKey === 'SINERGI PULSA' || categoryKey === 'SINERGI_PULSA') return 'SINERGI_PULSA';
     return null;
   };
 
   const handleTransferCategoryClick = (categoryKey: string, isExplicitDoubleClick: boolean = false) => {
-    const mode = getPopupMode(categoryKey);
-    const isAlreadyActive = (sumberAplikasi === categoryKey);
+    let sysKey = categoryKey;
+    if (categoryKey === 'DANA') sysKey = 'ewallet';
+    if (categoryKey === 'ORDER KUOTA') sysKey = 'PPOB';
+    if (categoryKey === 'FLIP') sysKey = 'BANK_2';
+    if (categoryKey === 'SINERGI PULSA') sysKey = 'PPOB_2';
 
-    if (categoryKey !== sumberAplikasi) {
+    const mode = getPopupMode(sysKey);
+    const isAlreadyActive = (sumberAplikasi === sysKey);
+
+    if (sysKey !== sumberAplikasi) {
       setSelectedTujuan('');
       setSelectedTujuanFee(0);
     }
 
-    setSumberAplikasi(categoryKey);
-    setKategori(sumberToKategori[categoryKey] || categoryKey);
+    setSumberAplikasi(sysKey);
+    setKategori(getKategoriForSumber(sysKey));
     setIsKetAuto(true);
     setIsAdminManuallyEdited(false);
     setActiveSubCategory('');
@@ -692,20 +755,46 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const handleUpdate = () => {
       try {
         const transferPreset = presets?.find((p: any) => p.id === '_TRANSFER_METHODS_');
-        let methods = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'];
-        if (transferPreset && transferPreset.data) {
+        let methods: string[] = ['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'];
+        if (transferPreset && transferPreset.data && Array.isArray(transferPreset.data) && transferPreset.data.length > 0) {
           methods = transferPreset.data;
         } else {
-          const saved = localStorage.getItem(`alphaPro_${activeStoreId}_transferMethods`);
-          if (saved) methods = JSON.parse(saved);
+          const storeKey = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_transferMethods` : 'alphaPro_transferMethods';
+          const saved = localStorage.getItem(storeKey) || localStorage.getItem('alphaPro_transferMethods');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed) && parsed.length > 0) methods = parsed;
+            } catch (e) {}
+          }
         }
-        const filtered = methods.filter((m: string) => !customLabels['HIDE_' + m]);
-        const finalMethods = filtered.length > 0 ? filtered : methods;
+
+        // Normalize any legacy names to System IDs
+        const normalized = Array.from(new Set(methods.map(m => {
+          if (m === 'DANA' || m === 'ewallet') return 'ewallet';
+          if (m === 'ORDER KUOTA' || m === 'Order Kuota' || m === 'PPOB') return 'PPOB';
+          if (m === 'FLIP' || m === 'Flip' || m === 'BANK_2') return 'BANK_2';
+          if (m === 'SINERGI PULSA' || m === 'Sinergi Pulsa' || m === 'PPOB_2') return 'PPOB_2';
+          if (m === 'TRANSFER BANK' || m === 'Transfer Bank' || m === 'BANK') return 'BANK';
+          return m;
+        })));
+
+        // Pastikan seluruh 5 channel default ada
+        const fullList: TransferSystemId[] = ['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'];
+        fullList.forEach(ch => {
+          if (!normalized.includes(ch)) normalized.push(ch);
+        });
+
+        const visible = normalized.filter(m => !isChannelHidden(m as TransferSystemId, customLabels));
+        const finalMethods = visible.length > 0 ? visible : fullList;
         setActiveTransferMethods(finalMethods);
-        setSumberAplikasi(prev => finalMethods.includes(prev) ? prev : (finalMethods[0] || 'BANK'));
+        setSumberAplikasi(prev => {
+          const normPrev = prev === 'DANA' ? 'ewallet' : prev === 'ORDER KUOTA' ? 'PPOB' : prev === 'FLIP' ? 'BANK_2' : prev === 'SINERGI PULSA' ? 'PPOB_2' : prev;
+          return finalMethods.includes(normPrev) ? normPrev : (finalMethods[0] || 'BANK');
+        });
       } catch (e) {
-        const fallback = ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA'].filter(m => !customLabels['HIDE_' + m]);
-        setActiveTransferMethods(fallback.length > 0 ? fallback : ['BANK', 'DANA', 'FLIP', 'ORDER KUOTA', 'SINERGI PULSA']);
+        const fallback = (['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'] as TransferSystemId[]).filter(m => !isChannelHidden(m, customLabels));
+        setActiveTransferMethods(fallback.length > 0 ? fallback : ['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2']);
       }
     };
     handleUpdate();
@@ -758,7 +847,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   const BANK_LIST = ['BRI','BNI','BCA','MANDIRI','LAINNYA']
   const SUMBER_LIST = ['BANK','GoPay','QRIS','DANA','ATM/EDC']
-  const sumberToKategori: Record<string,string> = { 'BANK':'Transfer Bank','FLIP':'FLIP','ORDER KUOTA':'Order Kuota','DANA':'DANA','SINERGI PULSA':'Sinergi Pulsa' }
 
   // Global Keyboard Shortcuts (berlaku di mana saja di halaman beranda)
   React.useEffect(() => {
@@ -778,7 +866,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             if (isTema3SheetOpen) setIsTema3SheetOpen(false);
             else { setTema3Step('MAIN'); setIsTema3SheetOpen(true); }
           } else {
-            setActiveMode('DIGITAL'); setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank'); setIsAdminManuallyEdited(false);
+            setActiveMode('DIGITAL'); setKategori(getKategoriForSumber(sumberAplikasi)); setIsAdminManuallyEdited(false);
           }
           return;
         }
@@ -819,8 +907,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
   // Sync sumberAplikasi → kategori
   React.useEffect(() => {
-    if (activeMode === 'DIGITAL') setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank')
-  }, [sumberAplikasi, activeMode])
+    if (activeMode === 'DIGITAL') setKategori(getKategoriForSumber(sumberAplikasi))
+  }, [sumberAplikasi, activeMode, customLabels])
 
   // Sync tujuanMasuk → subMode
   React.useEffect(() => {
@@ -965,12 +1053,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const [isAdminManuallyEdited, setIsAdminManuallyEdited] = useState(false);
 
   React.useEffect(() => {
-    if (kategori === 'Order Kuota' || !kategori || !activeStoreId) return;
+    if (isPpobTx({ kategori }, customLabels) || !kategori || !activeStoreId) return;
     if (isAdminManuallyEdited) return; // Prevent overwriting if user typed manually
     
     try {
       if (adminRules) {
-        const catRules = adminRules[kategori] || [];
+        const sysId = getTransactionSystemId({ kategori }, customLabels);
+        const catRules = adminRules[kategori] || 
+          (sysId ? adminRules[sysId] : undefined) || 
+          (sysId === 'ewallet' ? adminRules['DANA'] : undefined) || 
+          (sysId === 'BANK' ? adminRules['Transfer Bank'] : undefined) || 
+          (sysId === 'BANK_2' ? adminRules['FLIP'] : undefined) || 
+          (sysId === 'PPOB_2' ? adminRules['Sinergi Pulsa'] : undefined) || [];
         const numNominal = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
         
         let foundAdmin = 0;
@@ -1362,7 +1456,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       let saveNominal = nominal;
       let saveAdmin = admin;
 
-      if (kategori === 'Order Kuota') {
+      const isPpob = isPpobTx({ kategori }, customLabels);
+      if (isPpob) {
         if (isCurrentNominalAdmin) {
           const calculatedModal = cleanNominal + selectedTujuanFee;
           const calculatedJual = cleanNominal + cleanAdmin;
@@ -1387,8 +1482,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         return
       }
 
-      // Validasi khusus Order Kuota: Jual HARUS lebih besar dari Modal
-      if (kategori === 'Order Kuota') {
+      // Validasi khusus PPOB / Order Kuota: Jual HARUS lebih besar dari Modal
+      if (isPpob) {
         if (cleanAdmin <= cleanNominal) {
           setErrorMsg(`Harga JUAL (${saveAdmin}) harus lebih besar dari MODAL (${saveNominal})!`)
           adminRef.current?.focus()
@@ -1405,6 +1500,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       // Lanjutkan dengan saveNominal dan saveAdmin
       const activeTab = subMode === 'NORMAL' ? 'BARU' : 'LAIN'
       const subTab = subMode === 'NORMAL' ? 'KHUSUS' : subMode
+
+      let withSysKet = finalKeteranganBase;
+      if (activeMode === 'DIGITAL' && sumberAplikasi && !withSysKet.includes('[SYS:')) {
+        withSysKet = `${withSysKet} [SYS:${sumberAplikasi}]`.trim();
+      }
       
       if (tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)') {
         const nonTunaiAmount = parseInt(nominalNonTunaiSplit.replace(/\D/g, '') || '0', 10)
@@ -1416,10 +1516,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           return
         }
         
-        const splitKeterangan = `${finalKeteranganBase} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
+        const splitKeterangan = `${withSysKet} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
         onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
       } else {
-        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: finalKeteranganBase }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
+        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: withSysKet }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
       }
       setIsKetAuto(true)
       return;
@@ -1658,9 +1758,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   <i className="fa-solid fa-chevron-down text-[8px] opacity-70 ml-0.5 group-hover:translate-y-0.5 transition-transform"></i>
                 </button>
               </div>
-              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
-                {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
-                  const isSel = sumberAplikasi === src.id;
+              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).length)}, minmax(0, 1fr))` }}>
+                {SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).map(src => {
+                  const isSel = (sumberAplikasi === src.id) || (src.id === 'ewallet' && sumberAplikasi === 'DANA') || (src.id === 'PPOB' && sumberAplikasi === 'ORDER KUOTA') || (src.id === 'BANK_2' && sumberAplikasi === 'FLIP') || (src.id === 'PPOB_2' && sumberAplikasi === 'SINERGI PULSA');
                   return (
                     <button
                       key={src.id}
@@ -1679,7 +1779,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       <div className={cn("w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center mb-0.5 shrink-0", isSel ? "bg-[#0c1f44] text-white" : "bg-blue-50 text-[#0066ff]")}>
                         <i className={cn("fa-solid text-[10px] sm:text-xs", src.icon)}></i>
                       </div>
-                      <span className={cn("text-[7.5px] sm:text-[8.5px] font-black leading-tight text-center truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{customLabels[src.id] || src.label}</span>
+                      <span className={cn("text-[7.5px] sm:text-[8.5px] font-black leading-tight text-center truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-700")}>{getChannelDisplayLabel(src.id, customLabels)}</span>
                       <span className="text-[6px] sm:text-[6.5px] font-bold text-gray-400 leading-none truncate">{src.sub}</span>
                     </button>
                   )
@@ -2156,7 +2256,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     setKategori('Aksesoris');
                     setClassicPopupMode('AKSESORIS');
                   }
-                  else setKategori(sumberToKategori[sumberAplikasi] || 'Transfer Bank');
+                  else setKategori(getKategoriForSumber(sumberAplikasi));
                 }}
                 className={cn(
                   "flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 bg-white transition-all duration-200 outline-none",
@@ -2180,15 +2280,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         {/* SUMBER / METODE */}
         {activeMode === 'DIGITAL' && (
           <div className="mb-2 px-3">
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).length)}, minmax(0, 1fr))` }}>
-              {SUMBER_APLIKASI_BANK.filter(src => activeTransferMethods.includes(src.id) && !customLabels['HIDE_' + src.id]).map(src => {
-                const isSel = sumberAplikasi === src.id;
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).length)}, minmax(0, 1fr))` }}>
+              {SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).map(src => {
+                const isSel = (sumberAplikasi === src.id) || (src.id === 'ewallet' && sumberAplikasi === 'DANA') || (src.id === 'PPOB' && sumberAplikasi === 'ORDER KUOTA') || (src.id === 'BANK_2' && sumberAplikasi === 'FLIP') || (src.id === 'PPOB_2' && sumberAplikasi === 'SINERGI PULSA');
                 // Warna icon per sumber
                 const iconColors: Record<string, string> = {
                   'BANK': 'bg-[#0066ff]',
+                  'ewallet': 'bg-blue-500',
                   'DANA': 'bg-blue-500',
+                  'PPOB': 'bg-amber-500',
                   'ORDER KUOTA': 'bg-amber-500',
+                  'BANK_2': 'bg-orange-500',
                   'FLIP': 'bg-orange-500',
+                  'PPOB_2': 'bg-teal-500',
                   'SINERGI PULSA': 'bg-teal-500',
                 };
                 return (
@@ -2212,7 +2316,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     )}>
                       <i className={cn("fa-solid text-[10px] sm:text-[11px]", src.icon, isSel ? "text-white" : "text-gray-500")}></i>
                     </div>
-                    <span className={cn("text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{customLabels[src.id] || src.label}</span>
+                    <span className={cn("text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight text-center leading-tight truncate w-full px-0.5", isSel ? "text-[#0c1f44]" : "text-gray-600")}>{getChannelDisplayLabel(src.id, customLabels)}</span>
                   </button>
                 )
               })}
@@ -3149,28 +3253,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       )}
 
       {/* Modal Sumber Aplikasi */}
-      {isSumberModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSumberModalOpen(false)}>
+      {isSumberModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSumberModalOpen(false)}>
           <div className="bg-white w-[85%] max-w-[280px] rounded-[20px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col py-2">
-              {activeTransferMethods.filter(s => !customLabels['HIDE_' + s]).map((s, idx, arr) => (
+              {SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).map((src, idx, arr) => (
                 <button 
-                  key={s}
+                  key={src.id}
                   onClick={() => {
                     setIsSumberModalOpen(false);
-                    handleTransferCategoryClick(s, false);
+                    handleTransferCategoryClick(src.id, false);
                   }}
                   onDoubleClick={() => {
                     setIsSumberModalOpen(false);
-                    handleTransferCategoryClick(s, true);
+                    handleTransferCategoryClick(src.id, true);
                   }}
                   className={cn(
                     "flex items-center justify-between p-3.5 text-left transition-colors hover:bg-gray-50",
                     idx !== arr.length - 1 && "border-b border-gray-100"
                   )}
                 >
-                  <span className="text-[15px] font-black text-slate-800">{s}</span>
-                  {sumberAplikasi === s ? (
+                  <span className="text-[15px] font-black text-slate-800">{getChannelDisplayLabel(src.id, customLabels)}</span>
+                  {(sumberAplikasi === src.id || (src.id === 'ewallet' && sumberAplikasi === 'DANA') || (src.id === 'PPOB' && sumberAplikasi === 'ORDER KUOTA') || (src.id === 'BANK_2' && sumberAplikasi === 'FLIP') || (src.id === 'PPOB_2' && sumberAplikasi === 'SINERGI PULSA')) ? (
                     <div className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[3px] border-[#293659]">
                       <div className="w-[10px] h-[10px] rounded-full bg-[#293659]"></div>
                     </div>
@@ -3181,12 +3285,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Tujuan Masuk */}
-      {isTujuanModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsTujuanModalOpen(false)}>
+      {isTujuanModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsTujuanModalOpen(false)}>
           <div className="bg-white w-[90%] max-w-[340px] rounded-[24px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100" onClick={(e) => e.stopPropagation()}>
             <div className="bg-slate-50 border-b border-gray-100 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -3271,12 +3376,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Tema 3 Bottom Sheet / Drill-down Modal */}
-      {isTema3SheetOpen && (
-        <div id="tema3-bottom-sheet" className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsTema3SheetOpen(false)}>
+      {isTema3SheetOpen && typeof document !== 'undefined' && createPortal(
+        <div id="tema3-bottom-sheet" className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsTema3SheetOpen(false)}>
           <div 
             className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl transform transition-transform animate-in slide-in-from-bottom-full duration-300 relative overflow-hidden flex flex-col" 
             onClick={(e) => e.stopPropagation()}
@@ -3366,24 +3472,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 {/* Kolom Kanan: Pilihan Menu */}
                 <div className="flex-1 flex flex-col overflow-y-auto pt-4 pb-4 px-4">
                   <div className="flex flex-col gap-2 mb-6">
-                    {tema3Step === 'DIGITAL' && activeTransferMethods.filter(s => !customLabels['HIDE_' + s]).map((s, idx) => {
-                      const isAct = sumberAplikasi === s;
-                      const label = s === 'BANK' ? (customLabels['BANK'] || 'BANK') : (customLabels[s] || s);
-                      const icon = s === 'BANK' ? 'fa-building-columns' : s === 'DANA' ? 'fa-wallet' : s === 'FLIP' ? 'fa-arrow-right-arrow-left' : s === 'SINERGI PULSA' ? 'fa-tower-cell' : 'fa-bolt';
-                      const isSelected = activeMode === 'DIGITAL' && sumberAplikasi === s;
+                    {tema3Step === 'DIGITAL' && SUMBER_APLIKASI_BANK.filter(src => !isChannelHidden(src.id, customLabels)).map((src, idx) => {
+                      const isAct = (sumberAplikasi === src.id) || (src.id === 'ewallet' && sumberAplikasi === 'DANA') || (src.id === 'PPOB' && sumberAplikasi === 'ORDER KUOTA') || (src.id === 'BANK_2' && sumberAplikasi === 'FLIP') || (src.id === 'PPOB_2' && sumberAplikasi === 'SINERGI PULSA');
+                      const label = getChannelDisplayLabel(src.id, customLabels);
+                      const icon = src.icon;
+                      const isSelected = activeMode === 'DIGITAL' && isAct;
                       return (
                         <button 
-                          key={s}
+                          key={src.id}
                           data-autofocus={idx === 0 ? "true" : "false"}
                           onClick={() => {
                             setActiveMode('DIGITAL');
                             setIsTema3SheetOpen(false);
-                            handleTransferCategoryClick(s, false);
+                            handleTransferCategoryClick(src.id, false);
                           }}
                           onDoubleClick={() => {
                             setActiveMode('DIGITAL');
                             setIsTema3SheetOpen(false);
-                            handleTransferCategoryClick(s, true);
+                            handleTransferCategoryClick(src.id, true);
                           }}
                           className={cn(
                             "group px-4 py-3.5 rounded-[16px] border transition-all text-left flex items-center gap-3.5 shadow-sm active:scale-95 outline-none focus:outline-none",
@@ -3446,11 +3552,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* POPUP MELAYANG (CLASSIC THEME) */}
-      {classicPopupMode && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+      {classicPopupMode && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-[24px] p-5 w-full max-w-sm shadow-2xl animate-in zoom-in-95 border border-white relative">
             {/* Toast Notifikasi Tersimpan */}
             {showPopupSavedToast && (
@@ -3857,7 +3964,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
 
@@ -3948,13 +4056,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { key: 'BANK', defaultName: 'Bank UOB', icon: 'fa-building-columns' },
-                    { key: 'DANA', defaultName: 'DANA', icon: 'fa-wallet' },
-                    { key: 'ORDER KUOTA', defaultName: 'Order Kuota', icon: 'fa-bolt' },
-                    { key: 'FLIP', defaultName: 'Flip', icon: 'fa-arrow-right-arrow-left' },
-                    { key: 'SINERGI PULSA', defaultName: 'Sinergi Pulsa', icon: 'fa-tower-cell' }
-                  ].map(({ key, defaultName, icon }, index) => {
-                    const isHidden = !!tempLabels['HIDE_' + key];
+                    { key: 'BANK', systemId: 'BANK', defaultName: 'Bank UOB', sub: 'Bank', icon: 'fa-building-columns' },
+                    { key: 'ewallet', systemId: 'ewallet', defaultName: 'DANA', sub: 'E-Wallet', icon: 'fa-wallet' },
+                    { key: 'PPOB', systemId: 'PPOB', defaultName: 'Order Kuota', sub: 'PPOB', icon: 'fa-bolt' },
+                    { key: 'BANK_2', systemId: 'BANK_2', defaultName: 'Flip', sub: 'Transfer', icon: 'fa-arrow-right-arrow-left' },
+                    { key: 'PPOB_2', systemId: 'PPOB_2', defaultName: 'Sinergi Pulsa', sub: 'PPOB', icon: 'fa-tower-cell' }
+                  ].map(({ key, systemId, defaultName, sub, icon }, index) => {
+                    const isHidden = isChannelHidden(systemId as any, tempLabels);
+                    const currentVal = (tempLabels[key] || (key === 'ewallet' ? tempLabels['DANA'] : key === 'PPOB' ? tempLabels['ORDER KUOTA'] : key === 'BANK_2' ? tempLabels['FLIP'] : key === 'PPOB_2' ? tempLabels['SINERGI PULSA'] : '') || '') as string;
                     return (
                       <div 
                         key={key} 
@@ -3969,20 +4078,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <i className={cn("fa-solid text-[10px]", icon, isHidden ? "text-red-400" : "text-emerald-600")}></i>
-                            <span className={cn(
-                              "text-[9px] font-black uppercase tracking-wider truncate",
-                              isHidden ? "text-red-500 line-through" : "text-slate-700"
-                            )}>
-                              {defaultName}
-                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className={cn(
+                                "text-[9px] font-black uppercase tracking-wider truncate",
+                                isHidden ? "text-red-500 line-through" : "text-slate-700"
+                              )}>
+                                {defaultName}
+                              </span>
+                              <span className="text-[7.5px] font-bold text-slate-400 leading-none">{sub}</span>
+                            </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
-                              setTempLabels(prev => ({
-                                ...prev,
-                                ['HIDE_' + key]: !prev['HIDE_' + key]
-                              }));
+                              setTempLabels(prev => {
+                                const nextHidden = !isChannelHidden(systemId as any, prev);
+                                const next = { ...prev, ['HIDE_' + key]: nextHidden };
+                                if (key === 'ewallet') next['HIDE_DANA'] = nextHidden;
+                                if (key === 'PPOB') next['HIDE_ORDER KUOTA'] = nextHidden;
+                                if (key === 'BANK_2') next['HIDE_FLIP'] = nextHidden;
+                                if (key === 'PPOB_2') next['HIDE_SINERGI PULSA'] = nextHidden;
+                                return next;
+                              });
                             }}
                             className={cn(
                               "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 shrink-0",
@@ -3998,8 +4115,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         </div>
                         <input
                           type="text"
-                          value={tempLabels[key] ?? ''}
-                          onChange={(e) => setTempLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                          value={currentVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTempLabels(prev => {
+                              const next = { ...prev, [key]: val };
+                              if (key === 'ewallet') next['DANA'] = val;
+                              if (key === 'PPOB') next['ORDER KUOTA'] = val;
+                              if (key === 'BANK_2') next['FLIP'] = val;
+                              if (key === 'PPOB_2') next['SINERGI PULSA'] = val;
+                              return next;
+                            });
+                          }}
                           placeholder={defaultName}
                           disabled={isHidden}
                           className={cn(

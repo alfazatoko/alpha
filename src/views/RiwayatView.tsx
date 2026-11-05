@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { Transaction } from '../types'
 import TransactionRow from '../components/TransactionRow'
 import type { KasirAccount } from '../components/LoginScreen'
+import { 
+  getStoredCustomLabels, 
+  getChannelDisplayLabel, 
+  getTransactionSystemId, 
+  resolveSystemId,
+  isPpobTx 
+} from '../lib/categoryHelper'
 
 interface RiwayatViewProps {
   active: boolean
@@ -32,11 +39,55 @@ interface RiwayatViewProps {
   kasirName?: string
   setIsSidePanelOpen?: (v: boolean) => void
   isPc?: boolean
+  activeStoreId?: string
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
+
+  const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(props.activeStoreId))
+
+  // Sinkronkan customLabels setiap kali toko aktif berubah
+  useEffect(() => {
+    setCustomLabels(getStoredCustomLabels(props.activeStoreId));
+  }, [props.activeStoreId]);
+
+  useEffect(() => {
+    const handleLabelsUpdate = (e: any) => {
+      const detail = e.detail;
+      const targetStoreId = detail?.storeId;
+      // Hanya terima update jika untuk toko aktif saat ini atau toko global
+      if (!targetStoreId || !props.activeStoreId || props.activeStoreId === 'all' || targetStoreId === props.activeStoreId) {
+        const labels = detail?.labels || detail;
+        if (labels && typeof labels === 'object') {
+          setCustomLabels(labels);
+        }
+      }
+    };
+    window.addEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+    return () => window.removeEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+  }, [props.activeStoreId]);
+
+  const availableCategories = useMemo(() => {
+    const labels = customLabels || getStoredCustomLabels(props.activeStoreId);
+    const channels: string[] = [
+      getChannelDisplayLabel('BANK', labels),
+      getChannelDisplayLabel('ewallet', labels),
+      getChannelDisplayLabel('BANK_2', labels),
+      getChannelDisplayLabel('PPOB', labels)
+    ];
+    if (!labels.HIDE_PPOB_2 && !labels['HIDE_SINERGI PULSA']) {
+      channels.push(getChannelDisplayLabel('PPOB_2', labels));
+    }
+    channels.push('Tarik Tunai', 'Aksesoris');
+
+    const list = ['Semua'];
+    channels.forEach(ch => {
+      if (ch && !list.includes(ch)) list.push(ch);
+    });
+    return list;
+  }, [props.activeStoreId, customLabels]);
 
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activePcTab, setActivePcTab] = useState<'transaksi' | 'tambah-saldo'>('transaksi')
@@ -105,7 +156,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
   // 2. Filter berdasarkan Kategori, Pencarian, & Kasir (Untuk List & Footer Bawah)
   const filteredTransactions = dateFilteredTransactions.filter(t => {
-    const matchKategori = props.filterKategori.includes('Semua') || props.filterKategori.includes(t.kategori)
+    const matchKategori = props.filterKategori.includes('Semua') || props.filterKategori.some(selCat => {
+      if (t.kategori === selCat) return true;
+      const selSysId = resolveSystemId(selCat, customLabels);
+      const txSysId = getTransactionSystemId(t, customLabels);
+      if (selSysId !== 'OTHER' && selSysId === txSysId) return true;
+      return false;
+    })
     const matchSearch = !props.filterPencarian || 
                       t.keterangan.toLowerCase().includes(props.filterPencarian.toLowerCase()) ||
                       t.nominal.toString().includes(props.filterPencarian)
@@ -130,7 +187,8 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     .reduce((s, t) => {
       const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
       const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-      const cleanAdmin = (appFee > 0 && t.kategori !== 'Order Kuota') ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+      const isPpob = isPpobTx(t, customLabels);
+      const cleanAdmin = (appFee > 0 && !isPpob) ? Math.max(0, t.adminFee - appFee) : t.adminFee;
       return s + cleanAdmin;
     }, 0)
 
@@ -454,7 +512,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                         <div className="fixed inset-0 z-30" onClick={() => setIsPcKategoriOpen(false)} />
                         
                         <div className="absolute top-full left-0 mt-1 w-[180px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-2.5 z-40 space-y-1 max-h-[250px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
-                          {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+                          {availableCategories.map(cat => {
                             const isChecked = props.filterKategori.includes(cat);
                             return (
                               <label key={cat} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 rounded-lg transition-colors text-left">
@@ -637,13 +695,16 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                           <td className="py-2 px-3 text-xs font-bold text-slate-700 dark:text-slate-300">{kasirNameStr}</td>
                           <td className="py-2 px-3">
                             {(() => {
+                              const sysId = getTransactionSystemId(t, customLabels);
                               let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
-                              if (t.kategori === 'Transfer Bank') badgeStyle = "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30";
-                              else if (t.kategori === 'DANA') badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30";
-                              else if (t.kategori === 'FLIP') badgeStyle = "bg-cyan-50 text-cyan-700 border-cyan-100 dark:bg-cyan-950/30 dark:text-cyan-400 dark:border-cyan-900/30";
-                              else if (t.kategori === 'Order Kuota') badgeStyle = "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30";
-                              else if (t.kategori === 'Tarik Tunai') badgeStyle = "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30";
-                              else if (t.kategori === 'Aksesoris') badgeStyle = "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100 dark:bg-fuchsia-950/30 dark:text-fuchsia-400 dark:border-fuchsia-900/30";
+                              if (sysId === 'BANK') badgeStyle = "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30";
+                              else if (sysId === 'ewallet') badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30";
+                              else if (sysId === 'BANK_2') badgeStyle = "bg-cyan-50 text-cyan-700 border-cyan-100 dark:bg-cyan-950/30 dark:text-cyan-400 dark:border-cyan-900/30";
+                              else if (sysId === 'PPOB') badgeStyle = "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30";
+                              else if (sysId === 'PPOB_2') badgeStyle = "bg-teal-50 text-teal-700 border-teal-100 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-900/30";
+                              else if (sysId === 'TARIK') badgeStyle = "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30";
+                              else if (sysId === 'AKSESORIS') badgeStyle = "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100 dark:bg-fuchsia-950/30 dark:text-fuchsia-400 dark:border-fuchsia-900/30";
+                              else if (sysId === 'VOUCHER') badgeStyle = "bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-900/30";
                               
                               return (
                                 <span className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border whitespace-nowrap", badgeStyle)}>
@@ -663,6 +724,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                                   .replace(/\[\s*khusus\s*\]/gi, '')
                                   .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
                                   .replace(/\[\s*split:[^\]]*\]/gi, '')
+                                  .replace(/\[\s*sys:[^\]]*\]/gi, '')
                                   .trim();
                                 return (
                                   <>
@@ -692,7 +754,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                             {(() => {
                               const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
                               const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-                              const isOrderKuota = t.kategori === 'Order Kuota';
+                              const isOrderKuota = isPpobTx(t, customLabels);
                               return (
                                 <div>
                                   <div>{t.nominal.toLocaleString('id-ID')}</div>
@@ -711,13 +773,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                             {(() => {
                               const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
                               const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-                              const effectiveAdmin = (appFee > 0 && t.kategori !== 'Order Kuota')
+                              const effectiveAdmin = (appFee > 0 && !isPpobTx(t, customLabels))
                                 ? Math.max(0, t.adminFee - appFee)
                                 : t.adminFee;
                               return (
                                 <div>
                                   <div>+{effectiveAdmin.toLocaleString('id-ID')}</div>
-                                  {appFee > 0 && t.kategori !== 'Order Kuota' && (
+                                  {appFee > 0 && !isPpobTx(t, customLabels) && (
                                     <div className="text-[8px] text-slate-400 dark:text-slate-500 font-normal">
                                       (Tarif: {t.adminFee.toLocaleString('id-ID')})
                                     </div>
@@ -1132,7 +1194,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               <i className="fa-solid fa-chevron-left text-[10px]"></i>
             </button>
             <div ref={scrollRef} className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 w-full px-2 scroll-smooth">
-              {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+              {availableCategories.map(cat => {
                 const isActive = props.filterKategori.includes(cat);
                 return (
                   <button 
@@ -1358,7 +1420,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               <div>
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Jenis Kategori</label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                  {['Semua', 'Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris'].map(cat => {
+                  {availableCategories.map(cat => {
                     const isChecked = localKategori.includes(cat);
                     return (
                       <label 

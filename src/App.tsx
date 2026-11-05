@@ -22,6 +22,7 @@ import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
 import { PrinterReconnectModal } from './components/PrinterReconnectModal'
+import { isDigitalTransferTx, getStoredCustomLabels } from './lib/categoryHelper'
 
 
 // Views
@@ -376,7 +377,6 @@ const App: React.FC = () => {
             const labelObj = data.presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_');
             if (labelObj && labelObj.data) {
               localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data));
-              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data));
               window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
                 detail: { labels: labelObj.data, storeId: activeStoreId }
               }));
@@ -440,7 +440,6 @@ const App: React.FC = () => {
               const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
               if (labelObj && labelObj.data) {
                 localStorage.setItem(`alphaPro_${activeStoreId}_custom_labels`, JSON.stringify(labelObj.data))
-                localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
                 window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
                   detail: { labels: labelObj.data, storeId: activeStoreId }
                 }))
@@ -1037,7 +1036,6 @@ const MainApp: React.FC<MainAppProps> = ({
           const labelObj = data.presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
           if (labelObj && labelObj.data) {
             localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(labelObj.data))
-            localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
             window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
               detail: { labels: labelObj.data, storeId: effectiveStoreId }
             }))
@@ -1056,6 +1054,21 @@ const MainApp: React.FC<MainAppProps> = ({
           }
           localStorage.setItem(`alphaPro_${effectiveStoreId}_presets`, JSON.stringify(data.presets))
         }
+
+        // Ambil label toko dari store_custom_labels (Prioritas Utama untuk tombol & kategori per toko)
+        try {
+          const { data: clData } = await supabase
+            .from('store_custom_labels')
+            .select('labels')
+            .eq('store_id', effectiveStoreId)
+            .maybeSingle()
+          if (clData?.labels && typeof clData.labels === 'object') {
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(clData.labels))
+            window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+              detail: { labels: clData.labels, storeId: effectiveStoreId }
+            }))
+          }
+        } catch (e) {}
       } catch (err) {}
     }
 
@@ -1094,7 +1107,6 @@ const MainApp: React.FC<MainAppProps> = ({
             const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
             if (labelObj && labelObj.data) {
               localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(labelObj.data))
-              localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
               window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
                 detail: { labels: labelObj.data, storeId: effectiveStoreId }
               }))
@@ -1133,6 +1145,13 @@ const MainApp: React.FC<MainAppProps> = ({
           if (payload.new) {
             if (Array.isArray(payload.new.presets)) {
               setPresets(payload.new.presets)
+              const labelObj = payload.new.presets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
+              if (labelObj && labelObj.data && typeof labelObj.data === 'object') {
+                localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(labelObj.data))
+                window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+                  detail: { labels: labelObj.data, storeId: effectiveStoreId }
+                }))
+              }
               if (googleUid) {
                 localStorage.setItem(`alphaPro_${googleUid}_${effectiveStoreId}_presets`, JSON.stringify(payload.new.presets))
               }
@@ -1150,9 +1169,33 @@ const MainApp: React.FC<MainAppProps> = ({
       )
       .subscribe()
 
+    // 3b. Realtime listener khusus tabel store_custom_labels per-toko
+    const clChannelName = `rt_store_custom_labels_${effectiveStoreId}_${Date.now()}`
+    const clChannel = supabase
+      .channel(clChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'store_custom_labels',
+          filter: `store_id=eq.${effectiveStoreId}`
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.labels && typeof payload.new.labels === 'object') {
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(payload.new.labels))
+            window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
+              detail: { labels: payload.new.labels, storeId: effectiveStoreId }
+            }))
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(bannerChannel)
       supabase.removeChannel(presetChannel)
+      supabase.removeChannel(clChannel)
     }
   }, [activeStoreId, pantauStoreId, activeRole, isLoggedIn, activeStore?.id])
 
@@ -1502,7 +1545,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
           if (spRow) {
             directPresetsFound = true
-            if (Array.isArray(spRow.presets)) {
+            if (Array.isArray(spRow.presets) && spRow.presets.length > 0) {
               data.presets = spRow.presets
             }
             if (spRow.admin_rules && typeof spRow.admin_rules === 'object') {
@@ -1515,6 +1558,14 @@ const MainApp: React.FC<MainAppProps> = ({
                 changed = true
               }
             }
+          }
+        } catch (e) {}
+
+        try {
+          const { data: clRow } = await supabase.from('store_custom_labels').select('labels').eq('store_id', targetStoreId).maybeSingle();
+          if (clRow && clRow.labels && typeof clRow.labels === 'object') {
+            localStorage.setItem(`alphaPro_${targetStoreId}_custom_labels`, JSON.stringify(clRow.labels));
+            window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', { detail: { labels: clRow.labels, storeId: targetStoreId } }));
           }
         } catch (e) {}
 
@@ -1572,7 +1623,6 @@ const MainApp: React.FC<MainAppProps> = ({
           const labelObj = incomingPresets.find((p: any) => p && p.id === '_CUSTOM_LABELS_')
           if (labelObj && labelObj.data) {
             localStorage.setItem(`alphaPro_${targetStoreId}_custom_labels`, JSON.stringify(labelObj.data))
-            localStorage.setItem('alphaPro_custom_labels', JSON.stringify(labelObj.data))
             window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
               detail: { labels: labelObj.data, storeId: targetStoreId }
             }))
@@ -2089,6 +2139,15 @@ const MainApp: React.FC<MainAppProps> = ({
         setPresets(combinedPresets)
         localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
         
+        try {
+          await supabase.from('store_presets').upsert({
+            store_id: targetId,
+            presets: combinedPresets,
+            admin_rules: adminRules,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'store_id' })
+        } catch(e) {}
+
         await supabase.from('store_settings').upsert({
           store_id: targetId,
           cashiers: kasirList,
@@ -2172,7 +2231,12 @@ const MainApp: React.FC<MainAppProps> = ({
   }
 
   const saveCustomLabels = async (newLabels: Record<string, any>, storeIdOverride?: string) => {
-    const targetId = storeIdOverride || (targetStoreId !== 'all' ? targetStoreId : activeStoreId)
+    let targetId = storeIdOverride || (activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId)
+    if (!targetId || targetId === 'all') {
+      const stored = localStorage.getItem('alphaPro_active_store_id') || localStorage.getItem('alphaPro_pantau_store_id');
+      if (stored && stored !== 'all') targetId = stored;
+    }
+
     if (targetId && targetId !== 'all') {
       const isPin = localStorage.getItem(`alphaPro_${targetId}_isPinEnabled`) !== 'false'
       const basePresets = presets.filter(p => p.id !== '_ADMIN_RULES_' && p.id !== '_POPUP_LISTS_' && p.id !== '_TRANSFER_METHODS_' && p.id !== '_CUSTOM_LABELS_')
@@ -2191,12 +2255,12 @@ const MainApp: React.FC<MainAppProps> = ({
         localStorage.setItem(`alphaPro_${googleUid}_${targetId}_presets`, JSON.stringify(combinedPresets))
       }
       localStorage.setItem(`alphaPro_${targetId}_custom_labels`, JSON.stringify(newLabels))
-      localStorage.setItem('alphaPro_custom_labels', JSON.stringify(newLabels))
 
       window.dispatchEvent(new CustomEvent('alphaCustomLabelsUpdated', {
         detail: { labels: newLabels, storeId: targetId }
       }))
 
+      // 1. Simpan ke store_custom_labels
       try {
         await supabase.from('store_custom_labels').upsert({
           store_id: targetId,
@@ -2205,6 +2269,17 @@ const MainApp: React.FC<MainAppProps> = ({
         }, { onConflict: 'store_id' })
       } catch(e) {}
       
+      // 2. Simpan ke store_presets (Cadangan kuat & anti-timpa)
+      try {
+        await supabase.from('store_presets').upsert({
+          store_id: targetId,
+          presets: combinedPresets,
+          admin_rules: adminRules,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'store_id' })
+      } catch(e) {}
+
+      // 3. Simpan ke store_settings
       await supabase.from('store_settings').upsert({
         store_id: targetId,
         cashiers: kasirList,
@@ -3780,7 +3855,7 @@ const MainApp: React.FC<MainAppProps> = ({
     .reduce((s, t) => s + t.nominal, 0)
 
   const totalAdmin = todayTransactions
-    .filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.adminFee, 0)
 
   const totalAksesoris = todayTransactions
@@ -3791,7 +3866,7 @@ const MainApp: React.FC<MainAppProps> = ({
   
   // Penjualan Digital: Transfer + DANA + FLIP + Kuota (Today Only, Cashier drawer only)
   const penjualanDigital = todayTransactions
-    .filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+    .filter(t => isDigitalTransferTx(t, getStoredCustomLabels(targetStoreId)) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0)
 
   // Saldo Real Aplikasi: Akumulasi dari input manual di Isi Saldo (Today Only)
@@ -4058,7 +4133,7 @@ const MainApp: React.FC<MainAppProps> = ({
                           </div>
                           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar pb-6">
                             <TransactionForm 
-                              onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeStoreId} adminRules={adminRules}
+                              onSave={handleSimpanTransaksi as any} isSaving={isSaving} presets={presets} activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId} adminRules={adminRules}
                               isOwner={activeRole === 'owner'}
                               lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}
                               onOpenVoucherJualCepat={() => {
@@ -4219,6 +4294,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       activeView={activeView}
                       isPc={screenSize === 'pc'}
                       setActiveView={setActiveView}
+                      activeStoreId={targetStoreId}
                       transactions={displayTransactions}
                       filterTanggalMulai={filterTanggalMulai}
                       setFilterTanggalMulai={setFilterTanggalMulai}
@@ -4530,6 +4606,7 @@ const MainApp: React.FC<MainAppProps> = ({
           <RiwayatView 
             active={activeView === 'view-transaksi'}
             setActiveView={setActiveView}
+            activeStoreId={targetStoreId}
             transactions={displayTransactions}
             filterTanggalMulai={filterTanggalMulai}
             setFilterTanggalMulai={setFilterTanggalMulai}
@@ -4719,7 +4796,7 @@ const MainApp: React.FC<MainAppProps> = ({
                   onSave={handleSimpanTransaksi as any} 
                   isSaving={isSaving} 
                   presets={presets} 
-                  activeStoreId={activeStoreId} 
+                  activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId} 
                   adminRules={adminRules}
                   isOwner={activeRole === 'owner'}
                   lastTx={todayTransactions.find(t => !t.kategori.startsWith('Isi'))}

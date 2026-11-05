@@ -3,6 +3,13 @@ import { formatRupiah, cn, getLocalDateString } from '../lib/utils';
 import type { Transaction } from '../types';
 import { supabase } from '../lib/supabase';
 import { fetchLaporanHarianRPC, fetchLaporanBulananRPC } from '../lib/laporanService';
+import {
+  getStoredCustomLabels,
+  getChannelDisplayLabel,
+  getTransactionSystemId,
+  isPpobTx,
+  resolveSystemId
+} from '../lib/categoryHelper';
 
 interface ProfitOwnerViewProps {
   transactions: Transaction[];
@@ -163,25 +170,56 @@ export const PALETTE_COLORS = [
   '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'
 ];
 
-export const getNormalizedCategory = (rawCategory: string = ''): string => {
+export const getNormalizedCategory = (
+  rawCategory: string = '',
+  tx?: { kategori?: string; keterangan?: string } | null,
+  customLabels?: Record<string, any>
+): string => {
+  const sysId = getTransactionSystemId(tx || { kategori: rawCategory }, customLabels);
+  if (sysId === 'BANK') return getChannelDisplayLabel('BANK', customLabels);
+  if (sysId === 'ewallet') return getChannelDisplayLabel('ewallet', customLabels);
+  if (sysId === 'PPOB') return getChannelDisplayLabel('PPOB', customLabels);
+  if (sysId === 'BANK_2') return getChannelDisplayLabel('BANK_2', customLabels);
+  if (sysId === 'PPOB_2') return getChannelDisplayLabel('PPOB_2', customLabels);
+  if (sysId === 'TARIK') return 'Tarik Tunai';
+  if (sysId === 'AKSESORIS') return 'Aksesoris';
+  if (sysId === 'VOUCHER') return 'Voucher';
+
   const cat = (rawCategory || '').trim();
   const lower = cat.toLowerCase();
   if (lower.includes('tarik tunai') || lower === 'tarik') return 'Tarik Tunai';
-  if (lower === 'flip') return 'FLIP';
-  if (lower.includes('order kuota') || lower === 'kuota') return 'Order Kuota';
-  if (lower.includes('sinergi')) return 'Sinergi Pulsa';
-  if (lower.includes('dana')) return 'DANA';
-  if (lower.includes('transfer') || lower.includes('bank')) return 'Transfer Bank';
+  if (lower === 'flip') return getChannelDisplayLabel('BANK_2', customLabels);
+  if (lower.includes('order kuota') || lower === 'kuota') return getChannelDisplayLabel('PPOB', customLabels);
+  if (lower.includes('sinergi')) return getChannelDisplayLabel('PPOB_2', customLabels);
+  if (lower.includes('dana') || lower.includes('gopay') || lower.includes('ovo')) return getChannelDisplayLabel('ewallet', customLabels);
+  if (lower.includes('transfer') || lower.includes('bank') || lower.includes('uob')) return getChannelDisplayLabel('BANK', customLabels);
   if (lower.includes('aksesoris')) return 'Aksesoris';
   if (lower.includes('voucher')) return 'Voucher';
   return cat || 'Lainnya';
 };
 
-export const getCleanAdminProfit = (t: { kategori?: string; adminFee?: number; admin_fee?: number; keterangan?: string }): number => {
+export const getCategoryColor = (categoryName: string, customLabels?: Record<string, any>): string => {
+  if (CATEGORY_COLORS[categoryName]) return CATEGORY_COLORS[categoryName];
+  const sysId = resolveSystemId(categoryName, customLabels);
+  if (sysId === 'BANK') return CATEGORY_COLORS['Transfer Bank'] || '#8b5cf6';
+  if (sysId === 'ewallet') return CATEGORY_COLORS['DANA'] || '#0284c7';
+  if (sysId === 'PPOB') return CATEGORY_COLORS['Order Kuota'] || '#f59e0b';
+  if (sysId === 'BANK_2') return CATEGORY_COLORS['FLIP'] || '#3b82f6';
+  if (sysId === 'PPOB_2') return CATEGORY_COLORS['Sinergi Pulsa'] || '#0d9488';
+  if (sysId === 'TARIK') return CATEGORY_COLORS['Tarik Tunai'] || '#10b981';
+  if (sysId === 'AKSESORIS') return CATEGORY_COLORS['Aksesoris'] || '#ec4899';
+  if (sysId === 'VOUCHER') return CATEGORY_COLORS['Voucher'] || '#f97316';
+  return '#64748b';
+};
+
+export const getCleanAdminProfit = (
+  t: { kategori?: string; adminFee?: number; admin_fee?: number; keterangan?: string },
+  customLabels?: Record<string, any>
+): number => {
   const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
   const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
   const rawAdmin = Number(t.adminFee ?? (t as any).admin_fee ?? 0);
-  const isOrderKuota = (t.kategori || '') === 'Order Kuota' || /order\s*kuota/i.test(t.kategori || '');
+  const isOrderKuota = isPpobTx(t, customLabels);
   if (appFee > 0 && !isOrderKuota) {
     return Math.max(0, rawAdmin - appFee);
   }
@@ -237,6 +275,24 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
   const effectiveStoreId = (pantauStoreId && pantauStoreId !== 'all')
     ? pantauStoreId
     : (activeStoreId && activeStoreId !== 'all' ? activeStoreId : 'all');
+
+  const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(effectiveStoreId));
+
+  useEffect(() => {
+    setCustomLabels(getStoredCustomLabels(effectiveStoreId));
+  }, [effectiveStoreId]);
+
+  useEffect(() => {
+    const handleLabelsUpdate = (e: any) => {
+      const detail = e.detail;
+      const labels = detail?.labels || detail;
+      if (labels && typeof labels === 'object') {
+        setCustomLabels(labels);
+      }
+    };
+    window.addEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+    return () => window.removeEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+  }, []);
 
   // Pre-aggregated states from SQL database (Instan 0.1s, tidak tarik ribuan transaksi)
   const [sqlDailyMap, setSqlDailyMap] = useState<Record<string, any>>({});
@@ -753,10 +809,10 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       const tDate = t.timestamp ? t.timestamp.substring(0, 10) : '';
       if (!tDate.startsWith(monthKeySelected)) return;
 
-      const normName = getNormalizedCategory(t.kategori);
+      const normName = getNormalizedCategory(t.kategori, t, customLabels);
       const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
       const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-      const cleanAdmin = getCleanAdminProfit(t);
+      const cleanAdmin = getCleanAdminProfit(t, customLabels);
       const nominal = Number(t.nominal || 0);
 
       const prev = catMap.get(normName) || { count: 0, omzet: 0, profit: 0, totalFeeApp: 0 };
@@ -790,7 +846,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       totalTrx,
       categoryCount: list.length
     };
-  }, [filteredTransactions, monthKeySelected]);
+  }, [filteredTransactions, monthKeySelected, customLabels]);
 
   const sortedMonthCategoryData = useMemo(() => {
     const items = [...monthCategoryStats.items];
@@ -1555,7 +1611,7 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
             ) : (
               <div className="space-y-3.5">
                 {(showAllCategories ? sortedMonthCategoryData : sortedMonthCategoryData.slice(0, 6)).map((cat, idx) => {
-                  const color = CATEGORY_COLORS[cat.category] || PALETTE_COLORS[idx % PALETTE_COLORS.length];
+                  const color = getCategoryColor(cat.category, customLabels) || PALETTE_COLORS[idx % PALETTE_COLORS.length];
                   const pct = categoryMode === 'laba' ? cat.profitPct : categoryMode === 'trx' ? cat.trxPct : cat.omzetPct;
                   const displayVal = categoryMode === 'laba'
                     ? formatRupiah(cat.profit)

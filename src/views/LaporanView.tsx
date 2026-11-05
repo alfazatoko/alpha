@@ -4,6 +4,14 @@ import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, formatInputRupiah, cn } from '../lib/utils'
 import type { Transaction } from '../types'
 import { supabase } from '../lib/supabase'
+import { 
+  getStoredCustomLabels, 
+  getChannelDisplayLabel, 
+  getTransactionSystemId, 
+  isDigitalTransferTx, 
+  isPpobTx,
+  resolveSystemId 
+} from '../lib/categoryHelper'
 
 interface LaporanViewProps {
   active: boolean
@@ -164,7 +172,26 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     {nominal: '', keterangan: ''}
   ])
 
-  const DEFAULT_CLOSING_SALDO_OPTIONS = ['BANK', 'FLIP', 'ORDER KUOTA', 'DANA']
+  const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(props.activeStoreId));
+
+  useEffect(() => {
+    const handleLabelsUpdate = (e: any) => {
+      const detail = e.detail;
+      const labels = detail?.labels || detail;
+      if (labels && typeof labels === 'object') {
+        setCustomLabels(labels);
+      }
+    };
+    window.addEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+    return () => window.removeEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+  }, []);
+
+  const DEFAULT_CLOSING_SALDO_OPTIONS = useMemo(() => [
+    getChannelDisplayLabel('BANK', customLabels),
+    getChannelDisplayLabel('BANK_2', customLabels),
+    getChannelDisplayLabel('PPOB', customLabels),
+    getChannelDisplayLabel('ewallet', customLabels)
+  ], [customLabels]);
 
   const [quickOptions, setQuickOptions] = useState<string[]>(() => {
     const storeId = props.activeStoreId || 'default';
@@ -323,14 +350,14 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
-      if (e.key === '1') { e.preventDefault(); toggleRowOption('BANK'); }
-      if (e.key === '2') { e.preventDefault(); toggleRowOption('FLIP'); }
-      if (e.key === '3') { e.preventDefault(); toggleRowOption('ORDER KUOTA'); }
-      if (e.key === '4') { e.preventDefault(); toggleRowOption('DANA'); }
+      if (e.key === '1') { e.preventDefault(); toggleRowOption(quickOptions[0] || getChannelDisplayLabel('BANK', customLabels)); }
+      if (e.key === '2') { e.preventDefault(); toggleRowOption(quickOptions[1] || getChannelDisplayLabel('BANK_2', customLabels)); }
+      if (e.key === '3') { e.preventDefault(); toggleRowOption(quickOptions[2] || getChannelDisplayLabel('PPOB', customLabels)); }
+      if (e.key === '4') { e.preventDefault(); toggleRowOption(quickOptions[3] || getChannelDisplayLabel('ewallet', customLabels)); }
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [showSaldoRealModal])
+  }, [showSaldoRealModal, quickOptions, customLabels])
 
   // Hanya buka jurnal modal jika ada trigger baru setelah halaman terbuka (bukan auto-open saat pertama masuk)
   const lastJurnalTriggerRef = React.useRef(props.openJurnalModal || 0)
@@ -690,11 +717,11 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const sumAdmin = (txs: Transaction[]) => txs.reduce((s, t) => s + t.adminFee, 0)
   
   const currentIsiBank = sum(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank'))
-  const currentPenjualanDigital = sum(props.transactions.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  const currentSaldoBank = currentIsiBank - sum(props.transactions.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori)))
+  const currentPenjualanDigital = sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentSaldoBank = currentIsiBank - sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels)))
   
-  const currentTotalAksesoris = sum(props.transactions.filter(t => t.kategori === 'Aksesoris' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  const currentTotalTarik = sum(props.transactions.filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentTotalAksesoris = sum(props.transactions.filter(t => (t.kategori === 'Aksesoris' || getTransactionSystemId(t, customLabels) === 'AKSESORIS') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentTotalTarik = sum(props.transactions.filter(t => (t.kategori === 'Tarik Tunai' || getTransactionSystemId(t, customLabels) === 'TARIK') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
   
   // Kas Lain Nya Calculations
   const txsAdminDalam = props.transactions.filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
@@ -713,7 +740,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const currentTotalSaldoKas = currentTotalSaldoKasLama + totalTunaiVoucher
   
   const currentTxCount = props.transactions.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length
-  const currentUangMasuk = sum(props.transactions.filter(t => t.kategori !== 'Tarik Tunai' && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+  const currentUangMasuk = sum(props.transactions.filter(t => (t.kategori !== 'Tarik Tunai' && getTransactionSystemId(t, customLabels) !== 'TARIK') && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
 
   const yesterdayStats = useMemo(() => {
     if (!props.allTransactions || !props.filterTanggal) return null;
@@ -736,9 +763,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     
     // Calculate stats
     const yAdmin = sumAdmin(yTxs.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
-    const yTarik = sum(yTxs.filter(t => t.kategori === 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const yTarik = sum(yTxs.filter(t => (t.kategori === 'Tarik Tunai' || getTransactionSystemId(t, customLabels) === 'TARIK') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
     const yTxCount = yTxs.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length;
-    const yUangMasuk = sum(yTxs.filter(t => t.kategori !== 'Tarik Tunai' && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const yUangMasuk = sum(yTxs.filter(t => (t.kategori !== 'Tarik Tunai' && getTransactionSystemId(t, customLabels) !== 'TARIK') && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
     
     return {
       admin: yAdmin,
@@ -746,7 +773,89 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
       txCount: yTxCount,
       uangMasuk: yUangMasuk
     };
-  }, [props.allTransactions, props.filterTanggal]);
+  }, [props.allTransactions, props.filterTanggal, customLabels]);
+
+  const categoryBreakdown = useMemo(() => {
+    const channelConfigs: { sysId: string; label: string; icon: string; color: string; printColor: string }[] = [
+      { sysId: 'BANK', label: getChannelDisplayLabel('BANK', customLabels), icon: 'fa-building-columns', color: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200/50', printColor: 'bg-blue-100 text-blue-700' },
+      { sysId: 'ewallet', label: getChannelDisplayLabel('ewallet', customLabels), icon: 'fa-wallet', color: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border border-cyan-200/50', printColor: 'bg-cyan-100 text-cyan-700' },
+      { sysId: 'BANK_2', label: getChannelDisplayLabel('BANK_2', customLabels), icon: 'fa-arrow-right-arrow-left', color: 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200/50', printColor: 'bg-orange-100 text-orange-700' },
+      { sysId: 'PPOB', label: getChannelDisplayLabel('PPOB', customLabels), icon: 'fa-wifi', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200/50', printColor: 'bg-emerald-100 text-emerald-700' },
+      { sysId: 'PPOB_2', label: getChannelDisplayLabel('PPOB_2', customLabels), icon: 'fa-bolt', color: 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border border-teal-200/50', printColor: 'bg-teal-100 text-teal-700' },
+      { sysId: 'TARIK', label: 'Tarik Tunai', icon: 'fa-hand-holding-dollar', color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200/50', printColor: 'bg-rose-100 text-rose-700' },
+      { sysId: 'AKSESORIS', label: 'Aksesoris', icon: 'fa-headphones', color: 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 border border-fuchsia-200/50', printColor: 'bg-fuchsia-100 text-fuchsia-700' },
+      { sysId: 'KHUSUS', label: 'Transaksi Khusus', icon: 'fa-star', color: 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200/50', printColor: 'bg-purple-100 text-purple-700' },
+    ];
+
+    const results: { key: string; label: string; icon: string; color: string; printColor: string; txs: Transaction[]; nominal: number; adminFee: number }[] = [];
+    const assignedTxIds = new Set<string>();
+
+    // 1. First assign Transaksi Khusus
+    const khususTxs = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+    khususTxs.forEach(t => assignedTxIds.add(t.id));
+    if (khususTxs.length > 0) {
+      const cfg = channelConfigs.find(c => c.sysId === 'KHUSUS')!;
+      results.push({
+        key: 'KHUSUS',
+        label: cfg.label,
+        icon: cfg.icon,
+        color: cfg.color,
+        printColor: cfg.printColor,
+        txs: khususTxs,
+        nominal: khususTxs.reduce((s, t) => s + t.nominal, 0),
+        adminFee: khususTxs.reduce((s, t) => s + t.adminFee, 0)
+      });
+    }
+
+    // 2. Assign channel categories (BANK, ewallet, BANK_2, PPOB, PPOB_2, TARIK, AKSESORIS)
+    for (const cfg of channelConfigs) {
+      if (cfg.sysId === 'KHUSUS') continue;
+      const matched = props.transactions.filter(t => {
+        if (assignedTxIds.has(t.id)) return false;
+        if (t.kategori.startsWith('Isi Saldo')) return false;
+        const sId = getTransactionSystemId(t, customLabels);
+        return sId === cfg.sysId;
+      });
+      if (matched.length > 0) {
+        matched.forEach(t => assignedTxIds.add(t.id));
+        results.push({
+          key: cfg.sysId,
+          label: cfg.label,
+          icon: cfg.icon,
+          color: cfg.color,
+          printColor: cfg.printColor,
+          txs: matched,
+          nominal: matched.reduce((s, t) => s + t.nominal, 0),
+          adminFee: matched.reduce((s, t) => s + t.adminFee, 0)
+        });
+      }
+    }
+
+    // 3. Catch any remaining non-isi transactions
+    const remaining = props.transactions.filter(t => !assignedTxIds.has(t.id) && !t.kategori.startsWith('Isi Saldo'));
+    if (remaining.length > 0) {
+      const remByKat = new Map<string, Transaction[]>();
+      for (const t of remaining) {
+        const list = remByKat.get(t.kategori) || [];
+        list.push(t);
+        remByKat.set(t.kategori, list);
+      }
+      for (const [kat, txs] of remByKat.entries()) {
+        results.push({
+          key: kat,
+          label: kat,
+          icon: 'fa-tag',
+          color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
+          printColor: 'bg-gray-100 text-gray-600',
+          txs,
+          nominal: txs.reduce((s, t) => s + t.nominal, 0),
+          adminFee: txs.reduce((s, t) => s + t.adminFee, 0)
+        });
+      }
+    }
+
+    return results;
+  }, [props.transactions, customLabels, props.allTransactions, props.filterTanggal]);
 
   const renderDelta = (current: number, yesterday: number | undefined, isRupiah: boolean = true) => {
     if (yesterday === undefined) return null;
@@ -898,47 +1007,34 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         
         y += 7;
         
-        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
         let rowCount = 0;
-        categories.forEach(cat => {
-          let filtered = [];
-          if (cat === 'Transaksi Khusus') {
-            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-          } else {
-            filtered = props.transactions.filter(t => 
-              t.kategori === cat && 
-              !(t.keterangan || '').includes('[KHUSUS]')
-            );
+        categoryBreakdown.forEach(item => {
+          const qty = item.txs.length;
+          const nom = item.nominal;
+          const laba = item.adminFee;
+          
+          if (rowCount % 2 === 1) {
+            pdf.setFillColor(249, 250, 251);
+            pdf.rect(10, y, 190, 6, 'F');
           }
           
-          if (filtered.length > 0) {
-            const qty = filtered.length;
-            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
-            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
-            
-            if (rowCount % 2 === 1) {
-              pdf.setFillColor(249, 250, 251);
-              pdf.rect(10, y, 190, 6, 'F');
-            }
-            
-            pdf.setFont('helvetica', 'normal');
-            pdf.setFontSize(8);
-            pdf.setTextColor(40, 40, 40);
-            pdf.text(cat, 13, y + 4.2);
-            
-            pdf.setFont('helvetica', 'bold');
-            pdf.text(String(qty), 90, y + 4.2, { align: 'center' });
-            pdf.text(formatRupiah(nom), 140, y + 4.2, { align: 'right' });
-            
-            pdf.setTextColor(16, 185, 129); // green
-            pdf.text(formatRupiah(laba), 195, y + 4.2, { align: 'right' });
-            
-            pdf.setDrawColor(240, 242, 245);
-            pdf.line(10, y + 6, 200, y + 6);
-            
-            y += 6;
-            rowCount++;
-          }
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(40, 40, 40);
+          pdf.text(item.label, 13, y + 4.2);
+          
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(String(qty), 90, y + 4.2, { align: 'center' });
+          pdf.text(formatRupiah(nom), 140, y + 4.2, { align: 'right' });
+          
+          pdf.setTextColor(16, 185, 129); // green
+          pdf.text(formatRupiah(laba), 195, y + 4.2, { align: 'right' });
+          
+          pdf.setDrawColor(240, 242, 245);
+          pdf.line(10, y + 6, 200, y + 6);
+          
+          y += 6;
+          rowCount++;
         });
         
         y += 6;
@@ -1174,23 +1270,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           `📊 *REKAP PER KATEGORI*`
         ].filter(Boolean);
 
-        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
-        categories.forEach(cat => {
-          let filtered = [];
-          if (cat === 'Transaksi Khusus') {
-            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-          } else {
-            filtered = props.transactions.filter(t => 
-              t.kategori === cat && 
-              !(t.keterangan || '').includes('[KHUSUS]')
-            );
-          }
-          if (filtered.length > 0) {
-            const qty = filtered.length;
-            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
-            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
-            lines.push(`• *${cat}* (${qty} Qty)\n  Nominal: ${formatRupiah(nom)}\n  Laba: ${formatRupiah(laba)}`);
-          }
+        categoryBreakdown.forEach(item => {
+          lines.push(`• *${item.label}* (${item.txs.length} Qty)\n  Nominal: ${formatRupiah(item.nominal)}\n  Laba: ${formatRupiah(item.adminFee)}`);
         });
 
         lines.push(`==================================`);
@@ -1255,21 +1336,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
         }
       } else if (type === 'share-excel') {
         let csvContent = "Kategori,Jumlah Transaksi,Nominal,Laba/Admin\n";
-        const categories = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'];
-        
-        categories.forEach(cat => {
-          let filtered = [];
-          if (cat === 'Transaksi Khusus') {
-            filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-          } else {
-            filtered = props.transactions.filter(t => t.kategori === cat && !(t.keterangan || '').includes('[KHUSUS]'));
-          }
-          if (filtered.length > 0) {
-            const qty = filtered.length;
-            const nom = filtered.reduce((s,t) => s + t.nominal, 0);
-            const laba = filtered.reduce((s,t) => s + t.adminFee, 0);
-            csvContent += `"${cat}",${qty},${nom},${laba}\n`;
-          }
+        categoryBreakdown.forEach(item => {
+          csvContent += `"${item.label}",${item.txs.length},${item.nominal},${item.adminFee}\n`;
         });
         
         csvContent += `\nRingkasan Kas\n`;
@@ -2141,55 +2209,7 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-slate-700/40">
                     {(() => {
-                      const categoryRows = ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'].map(cat => {
-                        let filtered = [];
-                        if (cat === 'Transaksi Khusus') {
-                          filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-                        } else {
-                          filtered = props.transactions.filter(t => 
-                            t.kategori === cat && 
-                            !(t.keterangan || '').includes('[KHUSUS]')
-                          );
-                        }
-                        
-                        if (filtered.length === 0) return null;
-                        
-                        let catColor = "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
-                        let catIcon = "fa-tag";
-                        if (cat === 'Transfer Bank') { catColor = "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200/50"; catIcon = "fa-building-columns"; }
-                        if (cat === 'DANA') { catColor = "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border border-cyan-200/50"; catIcon = "fa-wallet"; }
-                        if (cat === 'FLIP') { catColor = "bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200/50"; catIcon = "fa-arrow-right-arrow-left"; }
-                        if (cat === 'Order Kuota') { catColor = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200/50"; catIcon = "fa-wifi"; }
-                        if (cat === 'Tarik Tunai') { catColor = "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200/50"; catIcon = "fa-hand-holding-dollar"; }
-                        if (cat === 'Aksesoris') { catColor = "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 border border-fuchsia-200/50"; catIcon = "fa-headphones"; }
-                        if (cat === 'Transaksi Khusus') { catColor = "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200/50"; catIcon = "fa-star"; }
-
-                        const catNominal = filtered.reduce((s,t) => s + t.nominal, 0);
-                        const catAdmin = filtered.reduce((s,t) => s + t.adminFee, 0);
-                        const totalAllNominal = props.transactions.reduce((s, t) => s + t.nominal, 0) || 1;
-                        const porsiPct = Math.round((catNominal / totalAllNominal) * 100);
-
-                        return (
-                          <tr key={cat} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-all">
-                            <td className="py-2.5 pl-1">
-                              <span className={cn("px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5", catColor)}>
-                                <i className={cn("fa-solid text-[10px]", catIcon)}></i>
-                                {cat}
-                              </span>
-                            </td>
-                            <td className="py-2.5 font-bold text-slate-600 dark:text-slate-300 text-center text-xs">{filtered.length}</td>
-                            <td className="py-2.5 font-black text-slate-800 dark:text-slate-200 text-xs text-right">{formatRupiah(catNominal)}</td>
-                            <td className="py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right text-xs">{formatRupiah(catAdmin)}</td>
-                            <td className="py-2.5 pr-1 text-right">
-                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
-                                {porsiPct}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      }).filter(Boolean);
-
-                      if (categoryRows.length === 0) {
+                      if (categoryBreakdown.length === 0) {
                         return (
                           <tr>
                             <td colSpan={5} className="py-8 text-center text-slate-400">
@@ -2200,7 +2220,30 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                         );
                       }
 
-                      return categoryRows;
+                      const totalAllNominal = props.transactions.reduce((s, t) => s + t.nominal, 0) || 1;
+
+                      return categoryBreakdown.map(item => {
+                        const porsiPct = Math.round((item.nominal / totalAllNominal) * 100);
+
+                        return (
+                          <tr key={item.key} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-all">
+                            <td className="py-2.5 pl-1">
+                              <span className={cn("px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5", item.color)}>
+                                <i className={cn("fa-solid text-[10px]", item.icon)}></i>
+                                {item.label}
+                              </span>
+                            </td>
+                            <td className="py-2.5 font-bold text-slate-600 dark:text-slate-300 text-center text-xs">{item.txs.length}</td>
+                            <td className="py-2.5 font-black text-slate-800 dark:text-slate-200 text-xs text-right">{formatRupiah(item.nominal)}</td>
+                            <td className="py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right text-xs">{formatRupiah(item.adminFee)}</td>
+                            <td className="py-2.5 pr-1 text-right">
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                                {porsiPct}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()}
                   </tbody>
                   {props.transactions.length > 0 && (
@@ -3047,43 +3090,18 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-gray-700">
-                {['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota', 'Tarik Tunai', 'Aksesoris', 'Transaksi Khusus'].map(cat => {
-                  let filtered = [];
-                  if (cat === 'Transaksi Khusus') {
-                    // Group ALL khusus transactions as requested
-                    filtered = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
-                  } else {
-                    // Filter by category and exclude anything already grouped in Khusus or Non Tunai
-                    filtered = props.transactions.filter(t => 
-                      t.kategori === cat && 
-                      !(t.keterangan || '').includes('[KHUSUS]')
-                    );
-                  }
-                  
-                  if (filtered.length === 0) return null
-                  
-                  let catColor = "bg-gray-100 text-gray-600";
-                  if (cat === 'Transfer Bank') catColor = "bg-blue-100 text-blue-700";
-                  if (cat === 'DANA') catColor = "bg-cyan-100 text-cyan-700";
-                  if (cat === 'FLIP') catColor = "bg-orange-100 text-orange-700";
-                  if (cat === 'Order Kuota') catColor = "bg-emerald-100 text-emerald-700";
-                  if (cat === 'Tarik Tunai') catColor = "bg-rose-100 text-rose-700";
-                  if (cat === 'Aksesoris') catColor = "bg-fuchsia-100 text-fuchsia-700";
-                  if (cat === 'Transaksi Khusus') catColor = "bg-purple-100 text-purple-700";
-
-                  return (
-                    <tr key={cat} className="group hover:bg-gray-50/80 transition-all">
-                      <td className="py-1 pr-2">
-                        <span className={cn("px-2 py-0.5 rounded-xl text-xs font-black whitespace-nowrap inline-block", catColor)}>
-                          {cat}
-                        </span>
-                      </td>
-                      <td className="py-1 font-bold text-gray-500 text-center text-xs">{filtered.length}</td>
-                      <td className="py-1 font-black text-gray-800 text-xs">{formatRupiah(filtered.reduce((s,t) => s+t.nominal, 0))}</td>
-                      <td className="py-1 font-black text-emerald-600 text-right text-xs">{formatRupiah(filtered.reduce((s,t) => s+t.adminFee, 0))}</td>
-                    </tr>
-                  )
-                })}
+                {categoryBreakdown.map(item => (
+                  <tr key={item.key} className="group hover:bg-gray-50/80 transition-all">
+                    <td className="py-1 pr-2">
+                      <span className={cn("px-2 py-0.5 rounded-xl text-xs font-black whitespace-nowrap inline-block", item.printColor)}>
+                        {item.label}
+                      </span>
+                    </td>
+                    <td className="py-1 font-bold text-gray-500 text-center text-xs">{item.txs.length}</td>
+                    <td className="py-1 font-black text-gray-800 text-xs">{formatRupiah(item.nominal)}</td>
+                    <td className="py-1 font-black text-emerald-600 text-right text-xs">{formatRupiah(item.adminFee)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
