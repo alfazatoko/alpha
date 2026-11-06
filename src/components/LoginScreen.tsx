@@ -224,10 +224,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         if (!absErr && Array.isArray(absData)) {
           for (const row of absData) {
             if (row.username && row.status !== 'Libur' && row.status !== 'Izin') {
-              newMap[row.username] = {
-                date: row.tanggal,
-                time: row.jam_masuk || '',
-                shift: row.shift || ''
+              const prev = newMap[row.username]
+              const currentTime = row.jam_masuk || ''
+              // Selalu pertahankan absen masuk yang paling awal di hari ini (jangan tertimpa absen ganda siang hari)
+              if (!prev || (currentTime && (!prev.time || currentTime < prev.time))) {
+                newMap[row.username] = {
+                  date: row.tanggal,
+                  time: currentTime,
+                  shift: row.shift || (prev?.shift || '')
+                }
               }
             }
           }
@@ -360,19 +365,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       const [hStr, mStr] = currentTimeStr.split(':')
       const mins = (parseInt(hStr, 10) || 0) * 60 + (parseInt(mStr, 10) || 0)
 
-      let bestShift = activeShifts[0].id
-      if (activeShifts.some(s => s.id === 'PAGI') && mins < 12 * 60) {
-        bestShift = 'PAGI'
-      } else if (activeShifts.some(s => s.id === 'SIANG') && mins >= 12 * 60 && mins < 18 * 60) {
-        bestShift = 'SIANG'
-      } else if (activeShifts.some(s => s.id === 'MALAM') && (mins >= 18 * 60 || mins < 5 * 60)) {
-        bestShift = 'MALAM'
-      } else if (activeShifts.some(s => s.id === 'MALAM') && mins >= 17 * 60 + 30) {
-        bestShift = 'MALAM'
-      } else if (activeShifts.some(s => s.id === 'SIANG')) {
-        bestShift = 'SIANG'
+      const parseMins = (str?: string, def = 0) => {
+        if (!str) return def
+        const [h, m] = str.replace(/\./g, ':').split(':').map(Number)
+        return (h || 0) * 60 + (m || 0)
       }
-      setSelectedShift(bestShift)
+
+      // Cocokkan shift aktif berdasarkan jam kerja (startTime s/d endTime)
+      const matchedShift = activeShifts.find(s => {
+        const sMins = parseMins(s.startTime, 0)
+        const eMins = parseMins(s.endTime, 24 * 60)
+        if (sMins <= eMins) {
+          return mins >= sMins && mins <= eMins
+        } else {
+          return mins >= sMins || mins <= eMins
+        }
+      })
+
+      if (matchedShift) {
+        setSelectedShift(matchedShift.id)
+      } else {
+        // Jika kasir datang lebih awal sebelum jam buka di pagi hari
+        const pagiShift = activeShifts.find(s => s.id === 'PAGI')
+        const siangShift = activeShifts.find(s => s.id === 'SIANG')
+        if (pagiShift && mins < parseMins(siangShift?.startTime, 15 * 60)) {
+          setSelectedShift('PAGI')
+        } else {
+          setSelectedShift(activeShifts[0].id)
+        }
+      }
     }
   }, [activeShifts, currentTimeStr])
 

@@ -2617,7 +2617,16 @@ const MainApp: React.FC<MainAppProps> = ({
     const targetId = activeRole === 'owner' ? (pantauStoreId || activeStoreId) : activeStoreId
     if (!targetId || targetId === 'all') return
 
-    const payloadSettings = {
+    // PENTING: Pertahankan pengaturan shift dan absensi yang sudah ada di toko ini agar tidak terhapus
+    let existingSettings: Record<string, string> = {}
+    try {
+      const stored = localStorage.getItem(`alphaPro_${targetId}_financial`)
+      if (stored) existingSettings = JSON.parse(stored)
+    } catch (e) {}
+
+    const payloadSettings: Record<string, any> = {
+      ...existingSettings,
+      ...(financialSettings || {}),
       ...settings,
       min_app_version: '1.3.2',
       app_version: APP_VERSION,
@@ -2634,12 +2643,12 @@ const MainApp: React.FC<MainAppProps> = ({
     try {
       await supabase.from('store_finances').upsert({
         store_id: targetId,
-        start_date: settings.startDate,
-        rent_period: settings.rentPeriod,
-        rent_amount: settings.rentAmount,
-        rent_due_date: settings.rentDueDate,
-        electricity_bill: settings.electricityBill,
-        wifi_bill: settings.wifiBill,
+        start_date: payloadSettings.startDate || settings.startDate || '',
+        rent_period: payloadSettings.rentPeriod || settings.rentPeriod || 'bulanan',
+        rent_amount: payloadSettings.rentAmount || settings.rentAmount || '',
+        rent_due_date: payloadSettings.rentDueDate || settings.rentDueDate || '',
+        electricity_bill: payloadSettings.electricityBill || settings.electricityBill || '',
+        wifi_bill: payloadSettings.wifiBill || settings.wifiBill || '',
         updated_at: new Date().toISOString()
       })
       // Backup ke store_settings (terhubung realtime ke HP kasir v1.3.2+)
@@ -2765,16 +2774,19 @@ const MainApp: React.FC<MainAppProps> = ({
         checkQuery = checkQuery.eq('user_id', googleUid)
       }
 
-      const { data: current, error: checkError } = await checkQuery.maybeSingle()
+      // Ambil seluruh absen kasir di hari ini yang diurutkan dari jam masuk paling awal
+      // HINDARI .maybeSingle() yang error bila kasir memiliki lebih dari 1 baris di database
+      const { data: existingRows, error: checkError } = await checkQuery.order('jam_masuk', { ascending: true })
 
       if (checkError) {
         console.error("Absensi Fetch Error:", checkError.message || checkError)
       }
 
-      if (current) {
-        setTodayAbsen(current.jam_masuk)
-      } else {
-        // Record new attendance (or fallback local if error)
+      if (existingRows && existingRows.length > 0) {
+        // SUDAH ABSEN HARI INI: Kunci jam masuk yang paling awal di hari ini (jangan pernah ditimpa)
+        setTodayAbsen(existingRows[0].jam_masuk)
+      } else if (account.role === 'kasir' && username.toLowerCase() !== 'owner') {
+        // Hanya kasir yang belum tercatat sama sekali di database yang disinkronkan
         const now = new Date()
         const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
         
@@ -2816,6 +2828,10 @@ const MainApp: React.FC<MainAppProps> = ({
       }
 
       // 2. Fetch all attendance for owner view or current store for cashier (tanpa blank flicker)
+      fetchAttendanceList()
+    }
+
+    const fetchAttendanceList = async () => {
       let allQuery = supabase
         .from('absensi')
         .select('*')
@@ -2826,17 +2842,16 @@ const MainApp: React.FC<MainAppProps> = ({
       }
 
       const { data: allData } = await allQuery.order('tanggal', { ascending: false })
-      
       if (allData) setAbsensi(allData)
     }
 
     manageAbsensi()
 
-    // Realtime attendance updates (terima semua event perubahan absensi)
+    // Realtime attendance updates: HANYA memperbarui daftar absensi (JANGAN re-call manageAbsensi agar tidak insert ulang)
     const channel = supabase
       .channel(`absensi-changes-${Date.now()}-${Math.random()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, () => {
-        manageAbsensi()
+        fetchAttendanceList()
       })
       .subscribe()
 
@@ -3000,10 +3015,12 @@ const MainApp: React.FC<MainAppProps> = ({
       const isAdminDalam = (tx.keterangan || '').includes('[ADMIN_DALAM]');
       const isAksesoris = tx.kategori === 'Aksesoris';
       
+      const storeLabels = getStoredCustomLabels(tx.store_id || targetStoreId);
+
       if (tx.kategori === 'Isi Saldo Bank') calcSaldoBank += tx.nominal
       if (tx.kategori === 'Isi Modal Tunai Kasir') calcKasModal += tx.nominal
       
-      if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
+      if (isDigitalTransferTx(tx, storeLabels)) {
         calcSaldoBank -= tx.nominal
         // Jika KHUSUS atau NON_TUNAI, masuk ke Kas Lainnya, bukan Penjualan Digital
         if (!(isKhusus || isNonTunai)) {
@@ -3083,7 +3100,8 @@ const MainApp: React.FC<MainAppProps> = ({
           if (tx.kategori === 'Isi Saldo Bank') sBank += tx.nominal;
           if (tx.kategori === 'Isi Modal Tunai Kasir') kMod += tx.nominal;
           
-          if (['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(tx.kategori)) {
+          const storeLabels = getStoredCustomLabels(tx.store_id || pantauStoreId);
+          if (isDigitalTransferTx(tx, storeLabels)) {
             sBank -= tx.nominal;
             if (!isLain) pDig += tx.nominal;
           }
@@ -4393,6 +4411,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       transactions={transactions}
                       forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
                       absensiList={absensi}
+                      financialSettings={financialSettings}
                       onSaveFinancial={saveFinancial}
                     />
                   );
@@ -4535,6 +4554,8 @@ const MainApp: React.FC<MainAppProps> = ({
                       setPantauStoreId={setPantauStoreId}
                       stores={stores}
                       isPc={screenSize === 'pc'}
+                      financialSettings={financialSettings}
+                      onSaveFinancial={saveFinancial}
                       onSaveCashierSelf={handleSaveCashierSelf}
                       onJurnalClick={() => setJurnalModalTrigger(prev => prev + 1)}
                     />
@@ -4599,6 +4620,8 @@ const MainApp: React.FC<MainAppProps> = ({
             stores={stores}
             gajiBonusList={gajiBonusList}
             fetchGajiBonus={fetchGajiBonus}
+            financialSettings={financialSettings}
+            onSaveFinancial={saveFinancial}
             onSaveCashierSelf={handleSaveCashierSelf}
             onJurnalClick={() => setJurnalModalTrigger(prev => prev + 1)}
           />
@@ -4704,6 +4727,7 @@ const MainApp: React.FC<MainAppProps> = ({
             transactions={transactions}
             forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
             absensiList={absensi}
+            financialSettings={financialSettings}
             onSaveFinancial={saveFinancial}
           />
 

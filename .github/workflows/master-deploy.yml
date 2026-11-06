@@ -102,19 +102,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.5
-          name: "ALFAZA ALPHA POS v1.6.5"
+          tag_name: v1.6.7
+          name: "ALFAZA ALPHA POS v1.6.7"
           body: |
-            ### Pembaruan Aplikasi v1.6.5
-            - **Drag & Drop Reorder Tujuan Transaksi:**
-              - Fitur klik-tahan lalu geser untuk memindahkan urutan nama tujuan transaksi (Bank, Flip, Order Kuota, DANA, Sinergi Pulsa, Aksesoris) baik di PC (mouse) maupun HP/Tablet (layar sentuh).
-              - Tombol 'Simpan Urutan' otomatis tersinkron ke Cloud Supabase dan perangkat lain.
-            - **Koreksi Perhitungan Fee & Laba Bersih Toko:**
-              - Memperbaiki perhitungan fee aplikasi agar laba admin toko tidak terpotong 2x pada kategori Order Kuota.
-              - Keselarasan perhitungan nominal modal pokok, modal riil, dan laba bersih di struk cetak, drawer, rekap riwayat, dan laporan profit owner.
-            - **Kelola Pilihan Cepat Saldo & Closing (Khusus Akun Owner):**
-              - Owner dapat menambah, mengedit, menghapus, atau mereset nama pilihan cepat di halaman Tambah Saldo (Isi Saldo) dan popup Update Saldo Closing (Laporan).
-              - Posisi popup kelola pilihan closing tampil di lapisan teratas (z-index 300) agar tidak tertutup popup closing.
+            ### Pembaruan Aplikasi v1.6.7
+            - **Audit Laci & Notifikasi Owner:**
+              - Audit laci kini menggunakan kalkulasi dinamis (`isDigitalTransferTx`) sehingga akurat saat kategori transfer diubah namanya di UI.
+              - Riwayat audit selisih laci kini terdaftar di Notifikasi Owner (kategori Audit) dengan tombol 1-klik untuk memeriksa laporan shift kasir terkait.
+            - **Sinkronisasi Grafik & Laporan Profit Owner:**
+              - Sinkronisasi nama kategori dinamis per toko (misal GOPAY vs DANA) di Grafik Kategori Terlaris dan Laporan Profit Owner.
+            - **Penyempurnaan Absensi Kasir & Penguncian Shift Owner:**
+              - Kehadiran kasir sebelum batas toleransi shift (misal datang jam 06:30 s.d 07:15 di Shift Pagi) dihitung SAH dan Tepat Waktu.
+              - Penguncian jam absen masuk pertama: mencegah penimpaan jam absen atau terbentuknya baris absen baru di jam 12 siang.
+              - Penguncian permanen setting jam kerja shift di mode Owner (proteksi deep-merge agar tidak ter-reset saat simpan biaya operasional).
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

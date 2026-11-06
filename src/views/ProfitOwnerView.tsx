@@ -162,6 +162,8 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Transfer Bank': '#8b5cf6',
   'Aksesoris': '#ec4899',
   'DANA': '#0284c7',
+  'GOPAY': '#00aa13',
+  'GoPay': '#00aa13',
   'Voucher': '#f97316',
   'Lainnya': '#64748b'
 };
@@ -202,7 +204,11 @@ export const getCategoryColor = (categoryName: string, customLabels?: Record<str
   if (CATEGORY_COLORS[categoryName]) return CATEGORY_COLORS[categoryName];
   const sysId = resolveSystemId(categoryName, customLabels);
   if (sysId === 'BANK') return CATEGORY_COLORS['Transfer Bank'] || '#8b5cf6';
-  if (sysId === 'ewallet') return CATEGORY_COLORS['DANA'] || '#0284c7';
+  if (sysId === 'ewallet') {
+    const label = getChannelDisplayLabel('ewallet', customLabels).toUpperCase();
+    if (label.includes('GOPAY')) return '#00aa13';
+    return CATEGORY_COLORS['DANA'] || '#0284c7';
+  }
   if (sysId === 'PPOB') return CATEGORY_COLORS['Order Kuota'] || '#f59e0b';
   if (sysId === 'BANK_2') return CATEGORY_COLORS['FLIP'] || '#3b82f6';
   if (sysId === 'PPOB_2') return CATEGORY_COLORS['Sinergi Pulsa'] || '#0d9488';
@@ -280,6 +286,19 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
 
   useEffect(() => {
     setCustomLabels(getStoredCustomLabels(effectiveStoreId));
+    if (effectiveStoreId && effectiveStoreId !== 'all') {
+      supabase
+        .from('store_custom_labels')
+        .select('labels')
+        .eq('store_id', effectiveStoreId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.labels) {
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_custom_labels`, JSON.stringify(data.labels));
+            setCustomLabels(data.labels);
+          }
+        });
+    }
   }, [effectiveStoreId]);
 
   useEffect(() => {
@@ -809,10 +828,12 @@ export const ProfitOwnerView: React.FC<ProfitOwnerViewProps> = ({
       const tDate = t.timestamp ? t.timestamp.substring(0, 10) : '';
       if (!tDate.startsWith(monthKeySelected)) return;
 
-      const normName = getNormalizedCategory(t.kategori, t, customLabels);
+      const txStoreId = t.store_id || (effectiveStoreId !== 'all' ? effectiveStoreId : undefined);
+      const txLabels = txStoreId ? getStoredCustomLabels(txStoreId) : customLabels;
+      const normName = getNormalizedCategory(t.kategori, t, txLabels);
       const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
       const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
-      const cleanAdmin = getCleanAdminProfit(t, customLabels);
+      const cleanAdmin = getCleanAdminProfit(t, txLabels);
       const nominal = Number(t.nominal || 0);
 
       const prev = catMap.get(normName) || { count: 0, omzet: 0, profit: 0, totalFeeApp: 0 };

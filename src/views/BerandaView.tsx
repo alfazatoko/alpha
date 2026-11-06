@@ -75,6 +75,8 @@ interface BerandaViewProps {
   stores?: Store[]
   isPc?: boolean
   userId: string
+  financialSettings?: Record<string, string>
+  onSaveFinancial?: (settings: Record<string, string>) => void
   onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, [key: string]: any }) => Promise<void>
   onJurnalClick?: () => void
 }
@@ -2678,9 +2680,14 @@ const PengaturanPanel: React.FC<{
   }, [activeStoreId])
 
   const handleSaveFinancial = (key: string, value: string) => {
-    const newSettings = { ...financialSettings, [key]: value }
-    setFinancialSettings(newSettings)
     const storeKey = activeStoreId && activeStoreId !== 'all' ? `alphaPro_${activeStoreId}_financial` : 'alphaPro_financial'
+    let currentRaw: Record<string, string> = {}
+    try {
+      const stored = localStorage.getItem(storeKey)
+      if (stored) currentRaw = JSON.parse(stored)
+    } catch (e) {}
+    const newSettings = { ...currentRaw, ...financialSettings, [key]: value }
+    setFinancialSettings(newSettings)
     localStorage.setItem(storeKey, JSON.stringify(newSettings))
   }
 
@@ -4310,6 +4317,8 @@ export interface OwnerNotificationItem {
   isRead: boolean
   actionView?: string
   actionLabel?: string
+  targetDate?: string
+  targetKasir?: string
 }
 
 const NotificationLogPanel: React.FC<{
@@ -4318,7 +4327,9 @@ const NotificationLogPanel: React.FC<{
   onConfirm?: (title: string, msg: string, onOk: () => void) => void
   bonusKasirList?: string[]
   ownerLateKasirs?: { date: string, name: string, lateMins: number, shift: string, time: string, alasan_telat?: string }[]
-}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [], ownerLateKasirs = [] }) => {
+  auditHistory?: any[]
+  onViewAuditDetail?: (tanggalAsli: string, kasirId: string) => void
+}> = ({ activeStoreId, showToast, onConfirm, bonusKasirList = [], ownerLateKasirs = [], auditHistory = [], onViewAuditDetail }) => {
   const [filterType, setFilterType] = useState<string>('all')
   const [notifList, setNotifList] = useState<OwnerNotificationItem[]>([])
 
@@ -4411,6 +4422,44 @@ const NotificationLogPanel: React.FC<{
       })
     }
 
+    // 4. Audit Selisih Shift Kasir (Digital / M-Banking)
+    // Hapus log audit lama yang ternyata setelah dihitung ulang sudah klop / tidak ada selisih >= 50.000
+    const validAuditIds = new Set(
+      auditHistory.filter(a => Math.abs(a.selisih) >= 50000).map(a => `audit_${a.kasirId}_${a.tanggalAsli}`)
+    );
+    if (items.some(i => i.type === 'audit' && !validAuditIds.has(i.id))) {
+      items = items.filter(i => i.type !== 'audit' || validAuditIds.has(i.id));
+      hasChanges = true;
+    }
+
+    if (auditHistory.length > 0) {
+      auditHistory.forEach(audit => {
+        // Rekam audit yang memiliki selisih nyata (misal |selisih| >= 50000)
+        if (Math.abs(audit.selisih) >= 50000) {
+          const auditId = `audit_${audit.kasirId}_${audit.tanggalAsli}`;
+          if (!items.some(i => i.id === auditId)) {
+            const isMinus = audit.selisih < 0;
+            const statusStr = isMinus 
+              ? `KURANG ${formatRupiah(Math.abs(audit.selisih))}` 
+              : `SURPLUS ${formatRupiah(audit.selisih)}`;
+            
+            items.unshift({
+              id: auditId,
+              title: `⚖️ Audit Saldo: ${audit.kasirName} (${isMinus ? 'Minus' : 'Lebih'})`,
+              message: `Pada closing ${audit.dayContext || audit.tanggal}, tercatat selisih saldo digital: ${statusStr}. (Fisik Real HP: ${formatRupiah(audit.saldoReal || 0)} vs Catatan Sistem: ${formatRupiah(audit.saldoBuku || 0)}).`,
+              date: `${audit.tanggalAsli}T23:59:59.000Z`,
+              type: 'audit',
+              isRead: false,
+              actionView: 'view-laporan',
+              targetDate: audit.tanggalAsli,
+              targetKasir: audit.kasirId
+            });
+            hasChanges = true;
+          }
+        }
+      });
+    }
+
     if (hasChanges) {
       // Sort ulang berdasarkan date descending
       items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -4418,7 +4467,7 @@ const NotificationLogPanel: React.FC<{
       syncToCloud(items)
     }
     setNotifList(items)
-  }, [activeStoreId, bonusKasirList, ownerLateKasirs])
+  }, [activeStoreId, bonusKasirList, ownerLateKasirs, auditHistory])
 
   const handleMarkAllRead = () => {
     const storeKey = activeStoreId || 'all'
@@ -4559,14 +4608,27 @@ const NotificationLogPanel: React.FC<{
                   )}></i>
                 </div>
 
-                <div className="min-w-0">
+                <div 
+                  className={cn("min-w-0 flex-1", item.targetDate ? "cursor-pointer group" : "")}
+                  onClick={() => {
+                    if (item.targetDate && onViewAuditDetail) {
+                      onViewAuditDetail(item.targetDate, item.targetKasir || 'Semua');
+                    }
+                  }}
+                >
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <p className="text-[11px] font-black text-slate-800 tracking-tight">{item.title}</p>
+                    <p className="text-[11px] font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">{item.title}</p>
                     <span className="text-[8px] font-extrabold text-slate-400 bg-white px-1.5 py-0.5 rounded-md border border-slate-200">
                       {formattedDate}
                     </span>
                   </div>
                   <p className="text-[10px] font-semibold text-slate-600 leading-snug">{item.message}</p>
+                  {item.targetDate && (
+                    <div className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-black text-indigo-600 group-hover:text-indigo-800 bg-white px-2 py-0.5 rounded-md border border-indigo-100 shadow-2xs">
+                      <i className="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
+                      <span>Lihat Laporan Shift Tanggal Ini</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4642,13 +4704,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const currentTargetStoreId = props.activeStoreId === 'all' ? (props.pantauStoreId || 'all') : (props.activeStoreId || 'all');
   const financialSettings = useMemo(() => {
+    let stored: Record<string, string> = {};
     try {
       const key = currentTargetStoreId !== 'all' ? `alphaPro_${currentTargetStoreId}_financial` : 'alphaPro_financial';
-      const stored = localStorage.getItem(key);
-      if (stored) return JSON.parse(stored);
+      const raw = localStorage.getItem(key);
+      if (raw) stored = JSON.parse(raw);
     } catch(e) {}
-    return {};
-  }, [currentTargetStoreId]);
+    return {
+      ...(props.financialSettings || {}),
+      ...stored
+    };
+  }, [currentTargetStoreId, props.financialSettings]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -4717,14 +4783,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     const entries = (props.absensiList || []).filter(a => a.username === props.username);
     const byDate: Record<string, any> = {};
     entries.forEach(e => {
-      if (!byDate[e.tanggal] || e.jam_masuk < byDate[e.tanggal].jam_masuk) {
+      if (!byDate[e.tanggal] || (e.jam_masuk && e.jam_masuk < byDate[e.tanggal].jam_masuk)) {
         byDate[e.tanggal] = e;
       }
     });
 
     const lates: any[] = [];
     Object.values(byDate).forEach(e => {
-      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      const explicitShift = (e.shift === 'PAGI' || e.shift === 'SIANG' || e.shift === 'MALAM') ? e.shift : undefined;
+      const info = getShiftInfo(e.jam_masuk, financialSettings, explicitShift);
       if (info.isLate) {
         lates.push({
           tanggal: e.tanggal,
@@ -4753,14 +4820,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     // Get unique dates per cashier (first login of the day)
     const firstLogins: Record<string, any> = {};
     entries.forEach(e => {
+      if (e.username === 'owner' || e.nama === 'Owner' || e.username?.toLowerCase() === 'owner') return;
+      if (e.status === 'Libur' || e.status === 'Izin') return;
       const k = `${e.username}_${e.tanggal}`;
-      if (!firstLogins[k] || e.jam_masuk < firstLogins[k].jam_masuk) {
+      if (!firstLogins[k] || (e.jam_masuk && e.jam_masuk < firstLogins[k].jam_masuk)) {
         firstLogins[k] = e;
       }
     });
 
     Object.values(firstLogins).forEach(e => {
-      const info = getShiftInfo(e.jam_masuk, financialSettings);
+      const explicitShift = (e.shift === 'PAGI' || e.shift === 'SIANG' || e.shift === 'MALAM') ? e.shift : undefined;
+      const info = getShiftInfo(e.jam_masuk, financialSettings, explicitShift);
       if (info.isLate) {
         lateEntries.push({
           date: e.tanggal,
@@ -5682,11 +5752,15 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         // Asumsi saldo real diambil dari total, atau mungkin cuma 1 row saat closing
         const saldoReal = saldoRealTxs.reduce((s, t) => s + t.nominal, 0)
         
-        // Hitung saldo sistem
+        // Custom labels untuk toko kasir ini agar support ganti nama channel/kategori transfer apapun
+        const storeId = txs[0]?.store_id || props.activeStoreId
+        const customLabels = getStoredCustomLabels(storeId)
+
+        // Hitung saldo sistem secara akurat persis seperti Jurnal Penyesuaian
         const isiBank = txs.filter(t => t.kategori === 'Isi Saldo Bank').reduce((s, t) => s + t.nominal, 0)
-        const penjualanDigital = txs.filter(t => ['Transfer Bank', 'DANA', 'FLIP', 'Order Kuota'].includes(t.kategori) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).reduce((s, t) => s + t.nominal, 0)
+        const totalDigitalKeluar = txs.filter(t => isDigitalTransferTx(t, customLabels)).reduce((s, t) => s + t.nominal, 0)
         
-        const currentSaldoBank = isiBank - penjualanDigital
+        const currentSaldoBank = isiBank - totalDigitalKeluar
         const selisih = saldoReal - currentSaldoBank
         
         const kasirName = props.kasirList[kasir]?.name || kasir
@@ -5713,13 +5787,22 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           dayContext,
           kasirId: kasir,
           kasirName: kasirName,
-          selisih: selisih
+          saldoReal,
+          saldoBuku: currentSaldoBank,
+          selisih: selisih,
+          storeId: storeId
         })
       }
     }
     
     return results
-  }, [props.allTransactions, props.kasirList])
+  }, [props.allTransactions, props.kasirList, props.activeStoreId])
+
+  const handleViewAuditDetail = (tanggalAsli: string, kasirId: string) => {
+    if (props.setFilterTanggal) props.setFilterTanggal(tanggalAsli);
+    if (props.setFilterKasir) props.setFilterKasir(kasirId);
+    props.setActiveView(props.isPc ? 'view-owner-laporan' : 'view-laporan');
+  };
 
 
   // Auto-close sub-panels when navigating away to any other view
@@ -5802,7 +5885,32 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     .filter(t => t.kategori !== 'Tarik Tunai' && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0);
   const ownerEffectiveStoreId = (props.pantauStoreId && props.pantauStoreId !== 'all') ? props.pantauStoreId : (props.activeStoreId && props.activeStoreId !== 'all' ? props.activeStoreId : undefined);
-  const ownerCustomLabels = getStoredCustomLabels(ownerEffectiveStoreId);
+  const [ownerLabelsTick, setOwnerLabelsTick] = useState(0);
+  const ownerCustomLabels = useMemo(() => getStoredCustomLabels(ownerEffectiveStoreId), [ownerEffectiveStoreId, ownerLabelsTick]);
+
+  useEffect(() => {
+    const handleLabelsUpdate = () => {
+      setOwnerLabelsTick(prev => prev + 1);
+    };
+    window.addEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+    return () => window.removeEventListener('alphaCustomLabelsUpdated', handleLabelsUpdate);
+  }, []);
+
+  useEffect(() => {
+    if (ownerEffectiveStoreId) {
+      supabase
+        .from('store_custom_labels')
+        .select('labels')
+        .eq('store_id', ownerEffectiveStoreId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.labels) {
+            localStorage.setItem(`alphaPro_${ownerEffectiveStoreId}_custom_labels`, JSON.stringify(data.labels));
+            setOwnerLabelsTick(prev => prev + 1);
+          }
+        });
+    }
+  }, [ownerEffectiveStoreId]);
 
   const ownerTotalAdmin = ownerTodayTxs.filter(t => 
     !(t.keterangan || '').includes('[ADMIN_DALAM]') &&
@@ -6466,7 +6574,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
           showNotifBadge={
             props.kasirRole === 'owner' 
               ? totalUnreadCount > 0 
-              : (kasirLateHistory.length > 0 || activePesanMendadak)
+              : (kasirLateHistory.length > 0 || Boolean(activePesanMendadak))
           }
           notifBadgeCount={
             props.kasirRole === 'owner' 
@@ -7195,22 +7303,35 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             if (badAudits.length === 0) return null;
             
             return (
-              <div className="bg-red-50 border-l-4 border-red-500 rounded-r-2xl p-4 shadow-sm animate-pulse">
+              <div className="bg-red-50 border-l-4 border-red-500 rounded-r-2xl p-3.5 shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-500 shrink-0">
                     <i className="fa-solid fa-triangle-exclamation"></i>
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-[11px] font-black text-red-800 uppercase tracking-widest">Peringatan Audit Laci</h4>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-[11px] font-black text-red-800 uppercase tracking-widest">Peringatan Audit Saldo Bank</h4>
+                      <button
+                        onClick={() => props.setActiveView('view-owner-profit')}
+                        className="text-[8px] font-black uppercase text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg transition-all cursor-pointer border border-indigo-200 shrink-0"
+                      >
+                        Buka Log Notifikasi &rarr;
+                      </button>
+                    </div>
                     <p className="text-[9px] text-red-600 font-bold mt-0.5">
-                      Hari ini terdapat selisih fisik &gt; Rp100.000:
+                      Hari ini terdapat selisih saldo digital &gt; Rp100.000:
                     </p>
                     <div className="mt-1.5 space-y-1">
                       {badAudits.map((a, i) => (
-                        <div key={i} className="flex justify-between items-center text-[10px] font-black">
-                          <span className="text-red-700">- {a.kasirName}</span>
+                        <div 
+                          key={i} 
+                          onClick={() => handleViewAuditDetail(a.tanggalAsli, a.kasirId)}
+                          className="flex justify-between items-center text-[10px] font-black cursor-pointer hover:bg-red-100/60 p-1 rounded-lg transition-colors"
+                          title="Klik untuk lihat laporan shift kasir ini"
+                        >
+                          <span className="text-red-700 underline decoration-dotted">- {a.kasirName}</span>
                           <span className={a.selisih < 0 ? "text-red-600" : "text-green-600"}>
-                            {a.selisih < 0 ? "KURANG" : "LEBIH"} {formatRupiah(Math.abs(a.selisih))}
+                            {a.selisih < 0 ? "KURANG" : "LEBIH"} {formatRupiah(Math.abs(a.selisih))} <i className="fa-solid fa-chevron-right text-[8px] ml-1 opacity-70"></i>
                           </span>
                         </div>
                       ))}
@@ -8474,7 +8595,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                                                       const [y, m, d] = (entry.tanggal || '').split('-');
                                                       const dObj = y && m && d ? new Date(Number(y), Number(m)-1, Number(d)) : null;
                                                       const dStr = dObj ? dObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }) : entry.tanggal;
-                                                      const shiftInf = getShiftInfo(entry.jam_masuk, financialSettings);
+                                                      const shiftInf = getShiftInfo(entry.jam_masuk, financialSettings, entry.shift);
                                                       return (
                                                         <div key={eidx} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between shadow-2xs hover:bg-slate-50/80 transition-colors">
                                                           <div className="flex flex-col">
@@ -9403,7 +9524,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   filteredRawTxs.forEach(t => {
                     if (!isPureSalesTx(t)) return;
                     if (!isDateInActiveRange(t.timestamp)) return;
-                    const cat = getTransactionDisplayTitle(t, ownerCustomLabels);
+                    const txStoreId = t.store_id || (ownerEffectiveStoreId !== 'all' ? ownerEffectiveStoreId : undefined);
+                    const txLabels = txStoreId ? getStoredCustomLabels(txStoreId) : ownerCustomLabels;
+                    const cat = getTransactionDisplayTitle(t, txLabels);
                     const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
                     kategoriMap.set(cat, {
                       nominal: prev.nominal + (Number(t.nominal) || 0),
@@ -9415,7 +9538,9 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                     if (!isDateInActiveRange(r.tanggal)) return;
                     if (r.kategori_breakdown && typeof r.kategori_breakdown === 'object') {
                       Object.entries(r.kategori_breakdown).forEach(([rawCat, val]) => {
-                        const cat = getTransactionDisplayTitle({ kategori: rawCat }, ownerCustomLabels);
+                        const txStoreId = (r as any).store_id || (ownerEffectiveStoreId !== 'all' ? ownerEffectiveStoreId : undefined);
+                        const txLabels = txStoreId ? getStoredCustomLabels(txStoreId) : ownerCustomLabels;
+                        const cat = getTransactionDisplayTitle({ kategori: rawCat }, txLabels);
                         const prev = kategoriMap.get(cat) || { nominal: 0, count: 0 };
                         kategoriMap.set(cat, {
                           nominal: prev.nominal + Number(val || 0),
@@ -10447,6 +10572,8 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                   onConfirm={props.onConfirm}
                   bonusKasirList={bonusKasirList}
                   ownerLateKasirs={ownerLateKasirs}
+                  auditHistory={auditHistory}
+                  onViewAuditDetail={handleViewAuditDetail}
                 />
               )}
             </div>
@@ -10578,7 +10705,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
 
         {/* PROGRESS BAR TARGET TRX UNTUK KASIR */}
         {props.kasirRole !== 'owner' && (() => {
-          const target = props.kasirList[props.username]?.targetTrx || financialSettings?.defaultTargetTrx || 0;
+          const target = Number(props.kasirList[props.username]?.targetTrx || financialSettings?.defaultTargetTrx || 0);
           if (target > 0) {
             const pct = Math.min(Math.round((ownerTotalTrx / target) * 100), 100);
             const isCompleted = pct >= 100;

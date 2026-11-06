@@ -51,6 +51,7 @@ interface AkunViewProps {
   transactions?: any[]
   forceTab?: string
   absensiList?: any[]
+  financialSettings?: Record<string, string>
   onSaveFinancial?: (settings: Record<string, string>) => void
 }
 
@@ -576,15 +577,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
     try {
       const key = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
       const saved = localStorage.getItem(key)
-      if (saved) {
-        setFinancialSettings({ ...defaultFinancial, ...JSON.parse(saved) })
-      } else {
-        setFinancialSettings(defaultFinancial)
-      }
+      let parsed = {}
+      if (saved) parsed = JSON.parse(saved)
+      setFinancialSettings({ ...defaultFinancial, ...(props.financialSettings || {}), ...parsed })
     } catch (e) { console.error('Failed to load financial settings', e) }
-  }, [props.activeStoreId])
+  }, [props.activeStoreId, props.financialSettings])
 
   const handleSaveFinancial = (key: string, value: string) => {
+    // Keamanan: Hanya Owner yang berhak menyimpan perubahan pengaturan shift & operasional
+    if (props.kasirRole !== 'owner') return;
+
     const newSettings = { ...financialSettings, [key]: value, app_version: APP_VERSION, min_app_version: '1.3.2' }
     setFinancialSettings(newSettings)
     const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'
@@ -596,6 +598,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   }
 
   const handleSaveMultipleFinancial = (updates: Record<string, string>) => {
+    // Keamanan: Hanya Owner yang berhak menyimpan perubahan pengaturan shift & operasional
+    if (props.kasirRole !== 'owner') return;
+
     const newSettings = { ...financialSettings, ...updates, app_version: APP_VERSION, min_app_version: '1.3.2' }
     setFinancialSettings(newSettings)
     const storeKey = props.activeStoreId && props.activeStoreId !== 'all' ? `alphaPro_${props.activeStoreId}_financial` : 'alphaPro_financial'

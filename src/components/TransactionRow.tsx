@@ -563,11 +563,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       {/* DETAIL POPUP MODAL (DESAIN BARU SESUAI FOTO) */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-2 py-3 sm:p-4 animate-in fade-in duration-200" 
           onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
         >
           <div 
-            className="bg-[#F2F6FC] rounded-3xl w-full max-w-[410px] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200" 
+            className="bg-[#F2F6FC] rounded-3xl w-full max-w-[440px] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Royal Blue with White Checkmark & Title (Lebih pendek & kompak) */}
@@ -620,8 +620,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             
             {/* Body */}
             <div className="p-3 space-y-1.5">
-              {/* KARTU 1: INFO 4 KOTAK (Lebih lebar, kepinggir, muat full teks & tanggal) */}
-              <div className="bg-white rounded-2xl px-3 py-2.5 shadow-xs border border-slate-100 grid grid-cols-2 gap-x-2.5 gap-y-2">
+              {/* KARTU 1: INFO 4 KOTAK (Lebih lebar, kepinggir, muat full teks & tanggal 1 baris) */}
+              <div className="bg-white rounded-2xl px-2.5 sm:px-3 py-2.5 shadow-xs border border-slate-100 grid grid-cols-[1.35fr_1fr] gap-x-2 gap-y-2">
                 {/* Kasir */}
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
@@ -629,45 +629,45 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Kasir</span>
-                    <span className="text-xs font-bold text-gray-900 block leading-tight break-words">
+                    <span className="text-xs font-bold text-gray-900 block leading-tight truncate">
                       {effectiveKasirName}
                     </span>
                   </div>
                 </div>
 
                 {/* Sumber Uang Keluar (Teks Merah) */}
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-bag-shopping text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Sumber Uang Keluar</span>
+                    <span className="text-[10px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Keluar</span>
                     <span className="text-xs font-black text-rose-600 block leading-tight break-words">
                       {modalSumberKeluar}
                     </span>
                   </div>
                 </div>
 
-                {/* Waktu (Muat full teks dan tanggal) */}
+                {/* Waktu (Muat full teks dan tanggal 1 baris) */}
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-calendar-days text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Waktu</span>
-                    <span className="text-xs font-bold text-gray-900 block leading-tight break-words">
+                    <span className="text-[11.5px] sm:text-xs font-bold text-gray-900 block leading-tight whitespace-nowrap">
                       {dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} {jam.replace(':', '.')}
                     </span>
                   </div>
                 </div>
 
                 {/* Sumber Uang Masuk (Teks Hijau) */}
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                     <i className="fa-solid fa-cash-register text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Sumber Uang Masuk</span>
+                    <span className="text-[10px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Masuk</span>
                     <span className="text-xs font-black text-emerald-600 block leading-tight break-words">
                       {modalSumberMasuk}
                     </span>

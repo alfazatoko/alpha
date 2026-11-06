@@ -115,11 +115,11 @@ export const getStoredCustomLabels = (storeId?: string): Record<string, any> => 
     const saved = localStorage.getItem(storeKey);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Guard isolasi ketat: Hanya Toko 2 ('580cb19a-a010-4de2-a3c7-0aa021609dfa') yang menggunakan GOPAY.
-      // Toko 1, toko lainnya, dan default global SELALU menggunakan DANA.
-      if (storeId !== '580cb19a-a010-4de2-a3c7-0aa021609dfa' && parsed.ewallet === 'GOPAY') {
-        parsed.ewallet = 'DANA';
-        try { localStorage.setItem(storeKey, JSON.stringify(parsed)); } catch (e) {}
+      // Sinkronisasi alias ewallet jika salah satu key diubah (ewallet vs DANA)
+      if (parsed.DANA && parsed.DANA !== 'DANA' && (!parsed.ewallet || parsed.ewallet === 'DANA')) {
+        parsed.ewallet = parsed.DANA;
+      } else if (parsed.ewallet && parsed.ewallet !== 'DANA' && (!parsed.DANA || parsed.DANA === 'DANA')) {
+        parsed.DANA = parsed.ewallet;
       }
       return { ...DEFAULT_CUSTOM_BUTTON_LABELS, ...parsed };
     }

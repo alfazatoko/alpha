@@ -369,6 +369,8 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   }, [props.openJurnalModal])
 
   const [catatanKasir, setCatatanKasir] = useState('')
+  const [isEditingCatatan, setIsEditingCatatan] = useState(false)
+  const [tempCatatan, setTempCatatan] = useState('')
   const [confirmSelisih, setConfirmSelisih] = useState(false)
   const [selisihNotification, setSelisihNotification] = useState<{show: boolean, selisih: number}>({show: false, selisih: 0})
   const [isOperkanSaldo, setIsOperkanSaldo] = useState(false)
@@ -560,16 +562,38 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   useEffect(() => {
     if (props.activeStoreId && props.filterTanggal) {
       const savedCatatan = localStorage.getItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`)
-      setCatatanKasir(savedCatatan || '')
+      const val = savedCatatan || ''
+      setCatatanKasir(val)
+      setTempCatatan(val)
+      setIsEditingCatatan(false)
     }
   }, [props.activeStoreId, props.filterTanggal])
 
   const handleCatatanChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setCatatanKasir(val)
+    setTempCatatan(val)
     if (props.activeStoreId && props.filterTanggal) {
       localStorage.setItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`, val)
     }
+  }
+
+  const handleSaveCatatan = () => {
+    setCatatanKasir(tempCatatan)
+    if (props.activeStoreId && props.filterTanggal) {
+      localStorage.setItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`, tempCatatan)
+    }
+    setIsEditingCatatan(false)
+  }
+
+  const handleCancelCatatan = () => {
+    setTempCatatan(catatanKasir)
+    setIsEditingCatatan(false)
+  }
+
+  const handleStartEditCatatan = () => {
+    setTempCatatan(catatanKasir)
+    setIsEditingCatatan(true)
   }
 
   useEffect(() => {
@@ -2508,16 +2532,75 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
             {/* Card 3: Catatan Kasir */}
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700/60 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <i className="fa-solid fa-pen-to-square text-amber-500 text-xs"></i>
-                <h4 className="text-xs font-black text-amber-800 dark:text-amber-500 uppercase tracking-widest">Catatan Kasir / Shift</h4>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-pen-to-square text-amber-500 text-xs"></i>
+                  <h4 className="text-xs font-black text-amber-800 dark:text-amber-500 uppercase tracking-widest">Catatan Kasir / Shift</h4>
+                </div>
+                {!isEditingCatatan && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleStartEditCatatan}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold border border-amber-200/60 transition-all cursor-pointer"
+                      title="Tulis Catatan"
+                    >
+                      <i className="fa-solid fa-plus text-[9px]"></i>
+                      <span>Tulis</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartEditCatatan}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold border border-amber-200/60 transition-all cursor-pointer"
+                      title="Edit Catatan"
+                    >
+                      <i className="fa-solid fa-pen text-[9px]"></i>
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              <textarea
-                value={catatanKasir}
-                onChange={handleCatatanChange}
-                placeholder="Tulis pesan, kendala serah terima, atau keterangan tambahan untuk owner di sini..."
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-2xl p-3 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none min-h-[75px]"
-              />
+
+              {isEditingCatatan ? (
+                <div className="space-y-2 animate-in fade-in duration-150">
+                  <textarea
+                    autoFocus
+                    value={tempCatatan}
+                    onChange={(e) => setTempCatatan(e.target.value)}
+                    placeholder="Tulis pesan, kendala serah terima, atau keterangan tambahan untuk owner di sini..."
+                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-600 rounded-2xl p-3 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none min-h-[75px]"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelCatatan}
+                      className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveCatatan}
+                      className="px-3.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <i className="fa-solid fa-check text-[10px]"></i>
+                      Simpan
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {catatanKasir.trim() ? (
+                    <div className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-2xl p-3 text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed select-text">
+                      {catatanKasir}
+                    </div>
+                  ) : (
+                    <div className="w-full bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-700 rounded-2xl p-3 text-xs text-slate-400 italic min-h-[50px] flex items-center select-none">
+                      <span>Belum ada catatan untuk shift ini...</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -3280,23 +3363,97 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
 
 
 
-        {/* Catatan Kasir Mobile */}
+        {/* Catatan Kasir Mobile (Mode Pesan Mati + Edit Inline) */}
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-100 rounded-[1.8rem] p-4 shadow-lg shadow-amber-500/10 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-amber-200/50 flex items-center justify-center text-amber-600">
-              <i className="fa-solid fa-pen-to-square text-sm"></i>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-amber-200/50 flex items-center justify-center text-amber-600 shadow-2xs">
+                <i className="fa-solid fa-pen-to-square text-sm"></i>
+              </div>
+              <div>
+                <h4 className="text-[13px] font-black text-amber-800 tracking-widest uppercase">Catatan Kasir</h4>
+                <p className="text-[9px] font-bold text-amber-600/80 italic -mt-0.5">Pesan untuk owner</p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-[13px] font-black text-amber-800 tracking-widest uppercase">Catatan Kasir</h4>
-              <p className="text-[9px] font-bold text-amber-600/80 italic -mt-0.5">Pesan untuk owner</p>
-            </div>
+
+            {/* Tombol Tulis & Edit di samping kanan header */}
+            {!isEditingCatatan && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleStartEditCatatan}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white hover:bg-amber-100/70 text-amber-800 border border-amber-200 shadow-2xs text-[11px] font-black active:scale-95 transition-all cursor-pointer"
+                  title="Tulis Catatan"
+                >
+                  <i className="fa-solid fa-plus text-[10px] text-amber-600"></i>
+                  <span>Tulis</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartEditCatatan}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white hover:bg-amber-100/70 text-amber-800 border border-amber-200 shadow-2xs text-[11px] font-black active:scale-95 transition-all cursor-pointer"
+                  title="Edit Catatan"
+                >
+                  <i className="fa-solid fa-pen text-[10px] text-amber-600"></i>
+                  <span>Edit</span>
+                </button>
+              </div>
+            )}
           </div>
-          <textarea
-            value={catatanKasir}
-            onChange={handleCatatanChange}
-            placeholder="Tulis pesan, selisih uang, atau keterangan tambahan shift ini..."
-            className="w-full bg-white/80 backdrop-blur-sm border border-amber-200 rounded-xl p-3 text-[11px] font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 resize-none min-h-[80px] shadow-inner"
-          />
+
+          {isEditingCatatan ? (
+            <div className="space-y-2.5 animate-in fade-in duration-200">
+              <textarea
+                autoFocus
+                value={tempCatatan}
+                onChange={(e) => setTempCatatan(e.target.value)}
+                placeholder="Tulis pesan, selisih uang, atau keterangan tambahan shift ini..."
+                className="w-full bg-white border-2 border-amber-400 rounded-2xl p-3 text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400/50 resize-none min-h-[90px] shadow-sm leading-relaxed"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelCatatan}
+                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-100 text-gray-600 border border-gray-200 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCatatan}
+                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-xs shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-check text-[11px]"></i>
+                  Simpan
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {catatanKasir.trim() ? (
+                <div 
+                  className="w-full bg-white/95 backdrop-blur-sm border border-amber-200/90 rounded-2xl p-3.5 shadow-2xs relative overflow-hidden select-text"
+                >
+                  <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-orange-400 rounded-l-2xl"></div>
+                  <div className="pl-2.5">
+                    <div className="flex items-start gap-2">
+                      <i className="fa-solid fa-quote-left text-amber-400 text-xs mt-0.5 shrink-0"></i>
+                      <p className="text-xs font-semibold text-gray-800 whitespace-pre-wrap leading-relaxed break-words flex-1">
+                        {catatanKasir}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full bg-white/70 border border-amber-200/70 rounded-2xl p-3.5 min-h-[60px] flex items-center shadow-2xs select-none">
+                  <p className="text-[11px] font-medium italic text-gray-400 flex items-center gap-2">
+                    <i className="fa-regular fa-comment-dots text-amber-400 text-sm"></i>
+                    <span>Belum ada catatan untuk shift ini...</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
       </div>

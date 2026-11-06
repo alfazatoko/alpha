@@ -167,7 +167,7 @@ export const getActiveShifts = (
   }
 
   if (!hasExplicit) {
-    const mode = finSettings?.shiftMode || '2-shift-siang-malam';
+    const mode = finSettings?.shiftMode || '2-shift-pagi-siang';
     if (mode === '1-shift-siang') {
       siangEnabled = true;
     } else if (mode === '1-shift-pagi') {
@@ -185,15 +185,15 @@ export const getActiveShifts = (
       siangEnabled = true;
       malamEnabled = true;
     } else {
-      // Default: Siang dan Malam
+      // Default: Pagi dan Siang (standar konter Alfaza)
+      pagiEnabled = true;
       siangEnabled = true;
-      malamEnabled = true;
     }
   }
 
   if (pagiEnabled) {
-    const startTime = finSettings?.shiftPagiStart || '06:00';
-    const endTime = finSettings?.shiftPagiEnd || '11:59';
+    const startTime = finSettings?.shiftPagiStart || '07:00';
+    const endTime = finSettings?.shiftPagiEnd || '15:59';
     shifts.push({
       id: 'PAGI',
       name: 'ABSEN PAGI',
@@ -205,8 +205,8 @@ export const getActiveShifts = (
   }
 
   if (siangEnabled) {
-    const startTime = finSettings?.shiftSiangStart || '12:00';
-    const endTime = finSettings?.shiftSiangEnd || '17:59';
+    const startTime = finSettings?.shiftSiangStart || (pagiEnabled ? '15:00' : '12:00');
+    const endTime = finSettings?.shiftSiangEnd || '22:59';
     shifts.push({
       id: 'SIANG',
       name: 'ABSEN SIANG',
@@ -232,19 +232,19 @@ export const getActiveShifts = (
 
   if (shifts.length === 0 && finSettings?.absenEnabled !== 'false') {
     shifts.push({
-      id: 'SIANG',
-      name: 'ABSEN SIANG',
-      label: '12:00 - 17:59',
-      startTime: '12:00',
-      endTime: '17:59',
+      id: 'PAGI',
+      name: 'ABSEN PAGI',
+      label: '07:00 - 15:59',
+      startTime: '07:00',
+      endTime: '15:59',
       tolerance: 15,
     });
     shifts.push({
-      id: 'MALAM',
-      name: 'ABSEN MALAM',
-      label: '18:00 - 23:59',
-      startTime: '18:00',
-      endTime: '23:59',
+      id: 'SIANG',
+      name: 'ABSEN SIANG',
+      label: '15:00 - 22:59',
+      startTime: '15:00',
+      endTime: '22:59',
       tolerance: 15,
     });
   }
@@ -254,33 +254,35 @@ export const getActiveShifts = (
 
 export const checkShiftLateness = (
   jam_masuk: string,
-  shiftId: 'PAGI' | 'SIANG' | 'MALAM',
+  shiftId: 'PAGI' | 'SIANG' | 'MALAM' | string,
   finSettings?: Record<string, string>
 ) => {
+  const normShift = (shiftId || '').toUpperCase() as 'PAGI' | 'SIANG' | 'MALAM';
   const safeJam = (jam_masuk || '00:00').replace(/\./g, ':');
   const [hStr, mStr] = safeJam.split(':');
   const hour = parseInt(hStr || '0', 10);
   const min = parseInt(mStr || '0', 10);
   const currentMins = hour * 60 + min;
 
-  let startStr = '12:00';
+  let startStr = '07:00';
   let tolStr = '15';
 
-  if (shiftId === 'PAGI') {
-    startStr = finSettings?.shiftPagiStart || '06:00';
+  if (normShift === 'PAGI') {
+    startStr = finSettings?.shiftPagiStart || '07:00';
     tolStr = finSettings?.shiftPagiTolerance || '15';
-  } else if (shiftId === 'SIANG') {
-    startStr = finSettings?.shiftSiangStart || '12:00';
+  } else if (normShift === 'SIANG') {
+    startStr = finSettings?.shiftSiangStart || (finSettings?.shiftPagiEnabled === 'true' ? '15:00' : '12:00');
     tolStr = finSettings?.shiftSiangTolerance || '15';
-  } else if (shiftId === 'MALAM') {
+  } else if (normShift === 'MALAM') {
     startStr = finSettings?.shiftMalamStart || '18:00';
     tolStr = finSettings?.shiftMalamTolerance || '15';
   }
 
-  const [h, m] = startStr.split(':').map(Number);
+  const [h, m] = startStr.replace(/\./g, ':').split(':').map(Number);
   const startMins = (h || 0) * 60 + (m || 0);
   const tol = parseInt(tolStr, 10) || 0;
 
+  // Kasir yang absen jam berapapun sebelum atau tepat pada jam masuk + toleransi adalah SAH & TEPAT WAKTU (TIDAK TELAT)
   let isLate = false;
   let lateMins = 0;
 
@@ -289,23 +291,24 @@ export const checkShiftLateness = (
     lateMins = currentMins - startMins;
   }
 
-  return { isLate, lateMins, shiftName: shiftId };
+  return { isLate, lateMins, shiftName: normShift || 'PAGI' };
 };
 
 export const getShiftInfo = (
   jam_masuk: string,
   finSettings?: Record<string, string>,
-  explicitShift?: 'PAGI' | 'SIANG' | 'MALAM'
+  explicitShift?: 'PAGI' | 'SIANG' | 'MALAM' | string
 ) => {
-  if (explicitShift) {
-    const lateness = checkShiftLateness(jam_masuk, explicitShift, finSettings);
+  const normShift = explicitShift ? (explicitShift.toUpperCase() as 'PAGI' | 'SIANG' | 'MALAM') : undefined;
+  if (normShift && (normShift === 'PAGI' || normShift === 'SIANG' || normShift === 'MALAM')) {
+    const lateness = checkShiftLateness(jam_masuk, normShift, finSettings);
     return {
       isLate: lateness.isLate,
       lateMins: lateness.lateMins,
-      shiftName: explicitShift,
-      isPagi: explicitShift === 'PAGI',
-      isSiang: explicitShift === 'SIANG',
-      isMalam: explicitShift === 'MALAM',
+      shiftName: normShift,
+      isPagi: normShift === 'PAGI',
+      isSiang: normShift === 'SIANG',
+      isMalam: normShift === 'MALAM',
     };
   }
 
@@ -349,18 +352,30 @@ export const getShiftInfo = (
   const hasSiang = activeShifts.some(s => s.id === 'SIANG');
   const hasMalam = activeShifts.some(s => s.id === 'MALAM');
 
+  const siangShift = activeShifts.find(s => s.id === 'SIANG');
+  const malamShift = activeShifts.find(s => s.id === 'MALAM');
+
+  const parseMins = (str?: string, defaultMins: number = 0) => {
+    if (!str) return defaultMins;
+    const [h, m] = str.replace(/\./g, ':').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const siangStartMins = parseMins(siangShift?.startTime, 12 * 60);
+  const malamStartMins = parseMins(malamShift?.startTime, 18 * 60);
+
   if (hasPagi && hasSiang && hasMalam) {
-    if (currentMins < 12 * 60) detectedId = 'PAGI';
-    else if (currentMins < 18 * 60) detectedId = 'SIANG';
+    if (currentMins < siangStartMins) detectedId = 'PAGI';
+    else if (currentMins < malamStartMins) detectedId = 'SIANG';
     else detectedId = 'MALAM';
   } else if (hasSiang && hasMalam) {
-    if (currentMins < 17 * 60 + 30) detectedId = 'SIANG';
+    if (currentMins < malamStartMins) detectedId = 'SIANG';
     else detectedId = 'MALAM';
   } else if (hasPagi && hasSiang) {
-    if (currentMins < 13 * 60 + 30) detectedId = 'PAGI';
+    if (currentMins < siangStartMins) detectedId = 'PAGI';
     else detectedId = 'SIANG';
   } else if (hasPagi && hasMalam) {
-    if (currentMins < 15 * 60) detectedId = 'PAGI';
+    if (currentMins < malamStartMins) detectedId = 'PAGI';
     else detectedId = 'MALAM';
   }
 
