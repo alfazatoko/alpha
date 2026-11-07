@@ -102,19 +102,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.7
-          name: "ALFAZA ALPHA POS v1.6.7"
+          tag_name: v1.6.8
+          name: "ALFAZA ALPHA POS v1.6.8"
           body: |
-            ### Pembaruan Aplikasi v1.6.7
-            - **Audit Laci & Notifikasi Owner:**
-              - Audit laci kini menggunakan kalkulasi dinamis (`isDigitalTransferTx`) sehingga akurat saat kategori transfer diubah namanya di UI.
-              - Riwayat audit selisih laci kini terdaftar di Notifikasi Owner (kategori Audit) dengan tombol 1-klik untuk memeriksa laporan shift kasir terkait.
-            - **Sinkronisasi Grafik & Laporan Profit Owner:**
-              - Sinkronisasi nama kategori dinamis per toko (misal GOPAY vs DANA) di Grafik Kategori Terlaris dan Laporan Profit Owner.
-            - **Penyempurnaan Absensi Kasir & Penguncian Shift Owner:**
-              - Kehadiran kasir sebelum batas toleransi shift (misal datang jam 06:30 s.d 07:15 di Shift Pagi) dihitung SAH dan Tepat Waktu.
-              - Penguncian jam absen masuk pertama: mencegah penimpaan jam absen atau terbentuknya baris absen baru di jam 12 siang.
-              - Penguncian permanen setting jam kerja shift di mode Owner (proteksi deep-merge agar tidak ter-reset saat simpan biaya operasional).
+            ### Pembaruan Aplikasi v1.6.8
+            - **Hierarki & Tampilan Riwayat Transaksi Bersih:**
+              - Judul transaksi transfer di riwayat kini langsung menampilkan **Sumber Aplikasi** (misal `BANK UOB`, `ORDER KUOTA`, `FLIP`, `DANA`).
+              - Baris kedua menampilkan **Layanan/Produk Tujuan** bersih tanpa pengulangan dan tanpa tanda panah gantung (misal `BANK BTN`, `LINKAJA`, `SHOPEEPAY`, `MANDIRI`).
+              - Transaksi Tarik Tunai ringkas dan padat 2 tingkat (`TARIK TUNAI` > `QRIS` / `EDC / ATM` / `Bank`).
+              - Modal Detail Transaksi & Struk Thermal kini memiliki hierarki akuntansi jelas: Kategori Transaksi, Sumber Transaksi, dan Layanan/Produk.
+            - **Pengaturan Suara Notifikasi Transaksi Per-Toko:**
+              - Navigasi tab toko horizontal untuk memilih dan mengatur suara notifikasi masing-masing toko dengan 1 sentuhan.
+              - Penambahan preset nada bawaan baru: "Musik Notifikasi Alfaza" dari audio khusus toko.
+              - 6 koleksi suara bawaan instan (Ting Klasik, Koin Kasir, Bell Toko, Chime Sukses, Digital Beep, Musik Alfaza) + opsi upload mandiri per-toko.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

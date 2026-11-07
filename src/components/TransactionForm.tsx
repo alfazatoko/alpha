@@ -9,7 +9,8 @@ import {
   isChannelHidden, 
   getTransactionSystemId, 
   isPpobTx, 
-  TransferSystemId 
+  TransferSystemId,
+  parseTransactionDetails 
 } from '../lib/categoryHelper'
 
 const SUMBER_APLIKASI_BANK = TRANSFER_CHANNELS.map(c => ({
@@ -658,13 +659,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (sysKey !== sumberAplikasi) {
       setSelectedTujuan('');
       setSelectedTujuanFee(0);
+      setSelectedBank('');
     }
 
+    setActiveMode('DIGITAL');
     setSumberAplikasi(sysKey);
     setKategori(getKategoriForSumber(sysKey));
     setIsKetAuto(true);
     setIsAdminManuallyEdited(false);
     setActiveSubCategory('');
+    setErrorMsg(null);
 
     if (!mode) return;
 
@@ -682,13 +686,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         setClassicPopupMode(mode);
       } else {
         // Klik 1x biasa saat tombol belum aktif:
-        // Langsung otomatis masuk & fokus ke kolom keterangan
+        // Karena tidak ada sub pilihan, langsung siap isi nominal tanpa wajib isi keterangan!
         setClassicPopupMode(null);
-        setKeterangan('');
         setTimeout(() => {
-          keteranganRef.current?.focus();
-          keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 150);
+          nominalRef.current?.focus();
+          nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       }
     }
   };
@@ -737,7 +740,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return isLainnyaItem(selectedTujuan);
     }
     if (activeMode === 'AKSESORIS') {
-      return isLainnyaItem(keterangan) || selectedTujuan === 'LAINNYA';
+      return isLainnyaItem(keterangan) || isLainnyaItem(selectedTujuan);
     }
     return false;
   }, [activeMode, sumberAplikasi, selectedBank, selectedTujuan, keterangan]);
@@ -918,46 +921,85 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   // Auto Keterangan Logic (Prefix calculation)
   const autoTextPrefix = React.useMemo(() => {
     if (!isKetAuto) return '';
-    let autoText = '';
     
-    const bankLabel = customLabels['BANK'] || 'Bank UOB';
-    const flipLabel = customLabels['FLIP'] || 'Flip';
-    const orderKuotaLabel = customLabels['ORDER KUOTA'] || 'Order Kuota';
-    const danaLabel = customLabels['DANA'] || 'DANA';
-    const sinergiLabel = customLabels['SINERGI PULSA'] || 'Sinergi Pulsa';
-    const tarikLabel = customLabels['TARIK'] || 'Tarik Tunai';
-    const tarikSubLabel = selectedSumber === 'DANA' 
-      ? (customLabels['TARIK_DANA'] || 'DANA') 
-      : (selectedSumber === 'BANK' || selectedSumber === 'TRANSFER')
-      ? 'Bank'
-      : (customLabels[selectedSumber] || selectedSumber);
-
+    // Level 1: Mengikuti nama tombol aktif di baris pertama
+    let level1 = '';
     if (activeMode === 'DIGITAL') {
-      if (sumberAplikasi === 'BANK') {
-        autoText = selectedBank ? `${bankLabel} > ${selectedBank}` : bankLabel;
-      } else if (sumberAplikasi === 'FLIP') {
-        const dest = (selectedTujuan || '').replace(/^BANK\s+/i, 'Bank ');
-        autoText = dest ? `${flipLabel} > ${dest}` : flipLabel;
-      } else if (sumberAplikasi === 'ORDER KUOTA') {
-        autoText = selectedTujuan ? `${orderKuotaLabel} > ${selectedTujuan}` : orderKuotaLabel;
-      } else if (sumberAplikasi === 'DANA') {
-        autoText = selectedTujuan ? `${danaLabel} > ${selectedTujuan}` : (customLabels['DANA'] ? danaLabel : `${danaLabel} > Aplikasi Dana`);
-      } else if (sumberAplikasi === 'SINERGI PULSA') {
-        autoText = selectedTujuan ? `${sinergiLabel} > ${selectedTujuan}` : sinergiLabel;
-      } else {
-        autoText = `Topup > ${customLabels[sumberAplikasi] || sumberAplikasi}`;
-      }
+      level1 = (customLabels['DIGITAL'] || 'TRANSFER').toString().trim();
     } else if (activeMode === 'TARIK') {
-      autoText = `${tarikLabel} > ${tarikSubLabel}`;
+      level1 = (customLabels['TARIK'] || 'TARIK TUNAI').toString().trim();
     } else if (activeMode === 'AKSESORIS') {
-      autoText = customLabels['AKSESORIS'] || 'Aksesoris';
+      level1 = (customLabels['AKSESORIS'] || 'AKSESORIS').toString().trim();
+    } else if (activeMode === 'VOUCHER') {
+      level1 = (customLabels['VOUCHER'] || 'VOUCHER').toString().trim();
     } else {
-      const modeCustom = customLabels[activeMode] || kategori;
-      autoText = `${modeCustom}`;
+      level1 = (customLabels[activeMode] || activeMode || kategori || 'TRANSFER').toString().trim();
     }
-    
-    return autoText.toUpperCase();
-  }, [isKetAuto, kategori, nominal, activeMode, selectedBank, selectedSumber, sumberAplikasi, selectedTujuan, activeTheme, customLabels]);
+
+    // Mode DIGITAL (Transfer Bank, E-Wallet, PPOB/Order Kuota, Flip, Sinergi Pulsa)
+    if (activeMode === 'DIGITAL') {
+      // Level 2: Mengikuti nama display sumber/aplikasi (misal Bank UOB, DANA, Order Kuota, Flip)
+      const level2 = getChannelDisplayLabel(sumberAplikasi as any, customLabels).trim();
+      const popupMode = getPopupMode(sumberAplikasi);
+      const subList = popupMode ? (popupLists[popupMode] || []) : [];
+      const hasSubList = subList.length > 0;
+
+      // Level 3: Nama tombol tujuan persis yang diklik kasir
+      let level3 = '';
+      if (sumberAplikasi === 'BANK') {
+        level3 = (selectedBank || '').trim();
+      } else {
+        level3 = (selectedTujuan || '').trim();
+      }
+
+      // Jika channel memiliki sub-pilihan dan kasir sudah memilih sub-tujuan (termasuk LAINNYA)
+      if (hasSubList && level3) {
+        return `${level1} > ${level2} > ${level3}`.toUpperCase();
+      }
+
+      // Jika channel TIDAK memiliki sub-pilihan (misal DANA kosong), atau kasir belum memilih
+      return `${level1} > ${level2}`.toUpperCase();
+    }
+
+    // Mode TARIK TUNAI
+    if (activeMode === 'TARIK') {
+      const tarikSubLabel = selectedSumber === 'DANA' 
+        ? (customLabels['TARIK_DANA'] || 'DANA') 
+        : (selectedSumber === 'BANK' || selectedSumber === 'TRANSFER')
+        ? 'BANK'
+        : (customLabels[selectedSumber] || selectedSumber);
+      
+      if (selectedSumber) {
+        return `${level1} > ${tarikSubLabel}`.toUpperCase();
+      }
+      return level1.toUpperCase();
+    }
+
+    // Mode AKSESORIS
+    if (activeMode === 'AKSESORIS') {
+      const aksItem = selectedTujuan?.trim() || (keterangan && !keterangan.includes('\n') ? keterangan.trim() : '');
+      if (aksItem && aksItem !== 'LAINNYA') {
+        return `${level1} > ${aksItem}`.toUpperCase();
+      } else if (aksItem === 'LAINNYA' || isLainnyaActive) {
+        return `${level1} > LAINNYA`.toUpperCase();
+      }
+      return level1.toUpperCase();
+    }
+
+    return level1.toUpperCase();
+  }, [
+    isKetAuto, 
+    activeMode, 
+    sumberAplikasi, 
+    selectedBank, 
+    selectedTujuan, 
+    selectedSumber, 
+    popupLists, 
+    customLabels, 
+    isLainnyaActive, 
+    kategori, 
+    keterangan
+  ]);
   
   // Split Payment Logic
   const handleNominalCashChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1381,11 +1423,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       const subList = mode ? (popupLists[mode] || []) : [];
       const hasSubList = subList.length > 0;
 
-      const hasSubteks = (sumberAplikasi === 'BANK' && (!hasSubList || Boolean(selectedBank && selectedBank.trim()))) ||
-                         (sumberAplikasi === 'ORDER KUOTA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
-                         (sumberAplikasi === 'FLIP' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
-                         (sumberAplikasi === 'DANA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim()))) ||
-                         (sumberAplikasi === 'SINERGI PULSA' && (!hasSubList || Boolean(selectedTujuan && selectedTujuan.trim())));
+      // Jika channel ada sub-pilihan: valid jika sudah ada sub-tujuan (selectedBank / selectedTujuan) ATAU kasir isi keterangan manual
+      // Jika channel TIDAK ada sub-pilihan (misal DANA kosong): sudah valid otomatis!
+      const hasSubteks = !hasSubList || 
+                         (sumberAplikasi === 'BANK' ? Boolean(selectedBank && selectedBank.trim()) : Boolean(selectedTujuan && selectedTujuan.trim()));
 
       if (!hasSubteks && !keterangan.trim()) {
         setErrorMsg('Pilih sub-kategori/tujuan atau isi keterangan transaksi!');
@@ -1398,14 +1439,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     if (isLainnyaActive) {
       const cleanKet = keterangan.replace(/^TARIK_TUNAI\|/i, '').trim();
       if (!cleanKet || isLainnyaItem(cleanKet)) {
-        setErrorMsg('Pilihan LAINNYA / TAGIHAN LAIN wajib menulis nama bank / layanan / produk pada kolom keterangan!');
+        setErrorMsg('Pilihan LAINNYA wajib menulis nama bank / layanan / produk pada kolom keterangan!');
         keteranganRef.current?.focus();
         keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
     }
     
-    // Combine manual keterangan with auto prefix if needed
+    // Combine manual keterangan with auto prefix (Format 2 Baris: Opsi A)
     let finalKeteranganBase = '';
     if (activeMode === 'TARIK') {
       const tarikSubLabel = selectedSumber === 'DANA' 
@@ -1422,10 +1463,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
     }
 
-    if ((kategori === 'Order Kuota' || kategori === 'FLIP' || sumberAplikasi === 'DANA' || sumberAplikasi === 'BANK' || kategori === 'Transfer Bank' || sumberAplikasi === 'SINERGI PULSA' || kategori === 'Sinergi Pulsa') && selectedTujuanFee > 0) {
-      if (!finalKeteranganBase.includes('[FEE_APP:')) {
-        finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
-      }
+    if (selectedTujuanFee > 0 && !finalKeteranganBase.includes('[FEE_APP:')) {
+      finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
     }
 
     if (activeMode === 'AKSESORIS') {
@@ -1900,11 +1939,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 ref={keteranganRef}
                 onFocus={handleInputFocus}
                 rows={isKetAuto ? 1 : 2} 
-                placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Ketik keterangan tambahan disini"} 
+                placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Keterangan tambahan (opsional)..."} 
                 value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
                 onChange={(e) => {
                   const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                   setKeterangan(val);
+                  setErrorMsg(null);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -2244,6 +2284,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <button
                 key={mode.id}
                 onClick={() => {
+                  setErrorMsg(null);
                   if (mode.id === 'VOUCHER') { if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
                   if (activeMode === mode.id) {
                     setActiveMode('');
@@ -2483,11 +2524,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={keteranganRef}
               onFocus={handleInputFocus}
               rows={1}
-              placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Masukkan keterangan transaksi..."}
+              placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Keterangan tambahan (opsional)..."}
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                 setKeterangan(val);
+                setErrorMsg(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -2918,11 +2960,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               ref={keteranganRef}
               onFocus={handleInputFocus}
               rows={isKetAuto ? 1 : 2}
-              placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Ketik keterangan tambahan disini"} 
+              placeholder={isLainnyaActive ? "Wajib tulis nama layanan / bank / produk disini..." : "Keterangan tambahan (opsional)..."} 
               value={activeMode === 'TARIK' && keterangan.startsWith('TARIK_TUNAI|') ? keterangan.substring(12) : keterangan}
               onChange={(e) => {
                 const val = e.target.value ? e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) : '';
                 setKeterangan(val);
+                setErrorMsg(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -3232,12 +3275,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="w-full h-px bg-gray-100 mb-2"></div>
           <div className="flex justify-between items-start">
             <div className="min-w-0 pr-2">
-              <h3 className="text-[13px] font-black text-black uppercase leading-none tracking-tight truncate">{lastTx.kategori}</h3>
-              {lastTx.keterangan && (
-                <p className="text-[11px] font-bold text-blue-700 mt-1.5 truncate">
-                  {lastTx.keterangan.replace(/\[ADMIN_DALAM\]/ig, '').replace(/\[NON_TUNAI\]/ig, '').trim()}
-                </p>
-              )}
+              {(() => {
+                const lastParsed = parseTransactionDetails(lastTx, customLabels);
+                return (
+                  <>
+                    <h3 className="text-[13px] font-black text-black uppercase leading-none tracking-tight truncate">
+                      {lastParsed.baris1Judul}
+                    </h3>
+                    <div className="mt-1 flex flex-col gap-0.5">
+                      {lastParsed.baris2Sub && (
+                        <p className="text-[11px] font-bold text-blue-700 leading-tight truncate">
+                          {lastParsed.baris2Sub}
+                        </p>
+                      )}
+                      {lastParsed.baris3Catatan && (
+                        <p className="text-[10px] font-medium text-slate-600 leading-tight truncate">
+                          {lastParsed.baris3Catatan}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
               <p className="text-[10px] text-gray-500 font-bold mt-1.5">{new Date(lastTx.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(lastTx.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')}</p>
             </div>
             <div className="text-right shrink-0">
@@ -3644,9 +3703,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             
             <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar pb-2 pt-1">
               {(() => {
-                const list = popupLists[classicPopupMode] || [];
+                const rawList = popupLists[classicPopupMode] || [];
 
-                if (list.length === 0) {
+                if (rawList.length === 0) {
                   return (
                     <div className="col-span-4 flex flex-col items-center justify-center py-6 px-3 text-center bg-slate-50/80 rounded-2xl border border-dashed border-slate-200">
                       <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-2">
@@ -3665,17 +3724,33 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   );
                 }
 
+                // Jika list memiliki pilihan >= 1, pastikan selalu ada opsi "LAINNYA" di paling akhir (jika belum ada)
+                const hasLainnya = rawList.some(item => isLainnyaItem(item.name, item.id));
+                const list = hasLainnya 
+                  ? rawList 
+                  : [
+                      ...rawList, 
+                      { 
+                        id: 'LAINNYA', 
+                        name: 'LAINNYA', 
+                        icon: classicPopupMode === 'BANK' ? 'fa-building-columns' : classicPopupMode === 'AKSESORIS' ? 'fa-headset' : 'fa-ellipsis', 
+                        color: 'text-slate-600', 
+                        fee: 0 
+                      }
+                    ];
+
                 return (
                   <>
                     {list.map((item, index) => {
                       const isDragging = draggedPopupIndex === index;
                       const isDragOver = dragOverPopupIndex === index && draggedPopupIndex !== index;
+                      const isCustomItem = rawList.some(r => (r.id && r.id === item.id) || r.name === item.name);
 
                       return (
                         <div 
                           key={item.id || item.name || index} 
                           data-drag-index={index}
-                          draggable={isEditingPopup}
+                          draggable={isEditingPopup && isCustomItem}
                           onDragStart={(e) => {
                             if (!isEditingPopup) return;
                             e.dataTransfer.setData('text/plain', String(index));
@@ -3816,6 +3891,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             // Cek apakah item adalah pilihan "LAINNYA" atau "TAGIHAN LAIN"
                             if (isLainnyaItem(item.name, item.id)) {
                               setIsKetAuto(true);
+                              setErrorMsg(null);
                               if (classicPopupMode === 'BANK') {
                                 setSelectedBank('LAINNYA');
                                 if (item.fee !== undefined && item.fee !== null) {
@@ -3826,7 +3902,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                               } else if (classicPopupMode === 'AKSESORIS') {
                                 setSelectedTujuan('LAINNYA');
                               } else {
-                                setSelectedTujuan(item.name);
+                                setSelectedTujuan('LAINNYA');
                                 if ((classicPopupMode === 'ORDER_KUOTA' || classicPopupMode === 'FLIP' || classicPopupMode === 'DANA' || classicPopupMode === 'SINERGI_PULSA') && (item.fee !== undefined && item.fee !== null)) {
                                   setSelectedTujuanFee(Number(item.fee));
                                 } else {
@@ -3843,8 +3919,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             }
 
                             setIsKetAuto(true);
+                            setErrorMsg(null);
                             if (classicPopupMode === 'AKSESORIS') {
-                               setKeterangan(item.name);
+                               setSelectedTujuan(item.name);
+                               setKeterangan('');
                                setClassicPopupMode(null);
                                setTimeout(() => {
                                  nominalRef.current?.focus();
@@ -3870,8 +3948,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             setKeterangan(''); // Keterangan manual dibiarkan bersih / kosong
                             setClassicPopupMode(null);
                             setTimeout(() => {
-                              keteranganRef.current?.focus();
-                              keteranganRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              nominalRef.current?.focus();
+                              nominalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }, 150);
                           }} 
                           className={cn(
@@ -3902,7 +3980,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             </div>
                           )}
                         </button>
-                        {isEditingPopup && (
+                        {isEditingPopup && isCustomItem && (
                           <button 
                             type="button"
                             title={`Hapus ${item.name}`}

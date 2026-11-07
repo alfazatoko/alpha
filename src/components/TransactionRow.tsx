@@ -3,7 +3,7 @@ import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { KasirAccount } from './LoginScreen'
 import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from '../lib/printerService'
-import { isPpobTx, getStoredCustomLabels } from '../lib/categoryHelper'
+import { isPpobTx, getStoredCustomLabels, parseTransactionDetails } from '../lib/categoryHelper'
 
 interface TransactionRowProps {
   t: Transaction
@@ -106,11 +106,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     : (t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0));
 
 
-  let displayJenisTransaksi = t.kategori;
-  let displaySubKategori = '';
-  let displayCatatanTambahan = '';
-  const subLabelTitle = 'Layanan / Produk:';
-  const receiptSubLabel = 'Produk    :';
+  const parsed = parseTransactionDetails(t, customLabels);
+
+  const displayJenisTransaksi = parsed.baris1Judul;
+  const displaySubKategori = parsed.baris2Sub;
+  const displayCatatanTambahan = parsed.baris3Catatan;
+  const subLabelTitle = parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Layanan / Metode:' : 'Layanan / Produk:';
+  const receiptSubLabel = parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Metode    :' : 'Tujuan    :';
 
   const cleanDigits = (s: string) => s.replace(/\D/g, '');
 
@@ -122,251 +124,27 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     : "Admin Toko (Tunai):";
 
   const isSplitPayment = (t.keterangan || '').includes('[SPLIT:');
+  
+  // Tentukan Sumber Uang Keluar (menyesuaikan aplikasi/kategori yang dipilih)
+  let modalSumberKeluar = '—';
+  if (parsed.kategoriTransaksi === 'Tarik Tunai') {
+    modalSumberKeluar = 'Laci Kasir';
+  } else if (parsed.kategoriTransaksi === 'Transfer') {
+    modalSumberKeluar = parsed.sumberTransaksi || 'Bank UOB';
+  } else {
+    modalSumberKeluar = '—';
+  }
+
+  // Tentukan Sumber Uang Masuk
   let modalSumberMasuk = 'Laci Kasir';
-  if (t.kategori === 'Tarik Tunai') {
-    modalSumberMasuk = 'EDC / Bank';
+  if (parsed.kategoriTransaksi === 'Tarik Tunai') {
+    modalSumberMasuk = parsed.layananProduk || 'EDC / Bank';
   } else if (isSplitPayment) {
     modalSumberMasuk = 'Sebagian Tunai & Non Tunai';
   } else if (isNonTunai) {
-    modalSumberMasuk = (t.kategori === 'Aksesoris' || t.kategori === 'Voucher') ? 'QRIS' : 'Non Tunai / QRIS';
+    modalSumberMasuk = (parsed.kategoriTransaksi === 'Aksesoris' || parsed.kategoriTransaksi === 'Voucher') ? 'QRIS' : 'Non Tunai / QRIS';
   } else {
     modalSumberMasuk = 'Laci Kasir';
-  }
-
-  // Tentukan Sumber Uang Keluar (menyesuaikan aplikasi yang dipilih)
-  let modalSumberKeluar = '—';
-  if (t.kategori === 'Tarik Tunai') {
-    modalSumberKeluar = 'Laci Kasir';
-  } else if (/order\s*kuota/i.test(t.kategori) || /order\s*kuota/i.test(rawCleanKet)) {
-    modalSumberKeluar = 'Order Kuota';
-  } else if (/sinergi\s*pulsa/i.test(t.kategori) || /sinergi\s*pulsa/i.test(rawCleanKet)) {
-    modalSumberKeluar = 'Sinergi Pulsa';
-  } else if (/flip/i.test(rawCleanKet) || /flip/i.test(t.kategori)) {
-    modalSumberKeluar = 'Flip';
-  } else if (/bank\s*uob/i.test(rawCleanKet) || /bank\s*uob/i.test(t.kategori)) {
-    modalSumberKeluar = 'Bank UOB';
-  } else if (/transfer|bank/i.test(t.kategori) || /transfer|bank/i.test(rawCleanKet)) {
-    modalSumberKeluar = 'Bank UOB';
-  } else if (/dana/i.test(t.kategori) || /dana/i.test(rawCleanKet)) {
-    modalSumberKeluar = 'DANA';
-  } else if (/aksesoris|voucher/i.test(t.kategori) || /aksesoris|voucher/i.test(rawCleanKet)) {
-    modalSumberKeluar = '—';
-  } else {
-    modalSumberKeluar = '—';
-  }
-
-  if (t.kategori === 'Tarik Tunai') {
-    displayJenisTransaksi = 'Tarik Tunai';
-
-    const lines = rawCleanKet.split('\n').map(l => l.trim()).filter(Boolean);
-    let line1 = lines[0] || '';
-    let manualNotes = lines.slice(1).join(' ').trim();
-
-    // Hapus tag teknis dari baris pertama
-    line1 = line1
-      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
-      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
-      .replace(/\[\s*khusus\s*\]/gi, '')
-      .trim();
-
-    // 1. Ekstrak bagian sub-pilihan dari format line1 (misal "TARIK TUNAI > QRIS", "TARIK_TUNAI|QRIS", "TARIK TUNAI : QRIS")
-    let rawSub = '';
-    if (line1.startsWith('TARIK_TUNAI|')) {
-      rawSub = line1.substring(12).trim();
-    } else if (line1.match(/tarik\s*tunai\s*(=|:|>)\s*/i)) {
-      rawSub = line1.replace(/tarik\s*tunai\s*(=|:|>)\s*/i, '').trim();
-    } else {
-      rawSub = line1.replace(/tarik\s*tunai/i, '').replace(/[=>:]/g, '').trim();
-    }
-
-    // 2. Deteksi metode valid (QRIS, EDC/ATM, ATM, DANA, GOPAY, BANK)
-    let metode = '';
-    let extraNoteFromLine1 = '';
-
-    const upperSub = rawSub.toUpperCase();
-    if (upperSub.startsWith('QRIS')) {
-      metode = 'QRIS';
-      extraNoteFromLine1 = rawSub.substring(4).trim();
-    } else if (upperSub.startsWith('EDC/ATM') || upperSub.startsWith('EDC / ATM')) {
-      metode = 'EDC / ATM';
-      extraNoteFromLine1 = rawSub.replace(/^EDC\s*\/\s*ATM/i, '').trim();
-    } else if (upperSub.startsWith('ATM/EDC') || upperSub.startsWith('ATM / EDC')) {
-      metode = 'EDC / ATM';
-      extraNoteFromLine1 = rawSub.replace(/^ATM\s*\/\s*EDC/i, '').trim();
-    } else if (upperSub.startsWith('EDC')) {
-      metode = 'EDC / ATM';
-      extraNoteFromLine1 = rawSub.substring(3).trim();
-    } else if (upperSub.startsWith('ATM')) {
-      metode = 'ATM';
-      extraNoteFromLine1 = rawSub.substring(3).trim();
-    } else if (upperSub.startsWith('DANA')) {
-      metode = 'DANA';
-      extraNoteFromLine1 = rawSub.substring(4).trim();
-    } else if (upperSub.startsWith('GOPAY')) {
-      metode = 'GoPay';
-      extraNoteFromLine1 = rawSub.substring(5).trim();
-    } else if (upperSub.startsWith('BANK') || upperSub.startsWith('TRANSFER')) {
-      metode = 'Bank';
-      extraNoteFromLine1 = rawSub.replace(/^(BANK|TRANSFER)/i, '').trim();
-    } else {
-      // Jika rawSub bukan nama metode (misal catatan nama kasir/konsumen "Amin")
-      extraNoteFromLine1 = rawSub;
-      metode = 'EDC / Bank';
-    }
-
-    // Bersihkan karakter pemisah liar di awal catatan jika ada (seperti '>' atau '-' atau ':')
-    extraNoteFromLine1 = extraNoteFromLine1.replace(/^[->:\s]+/, '').trim();
-
-    let finalCatatan = [extraNoteFromLine1, manualNotes].filter(Boolean).join(' ').trim();
-    finalCatatan = finalCatatan.replace(/^[->:\s]+/, '').trim();
-
-    displaySubKategori = metode;
-    if (finalCatatan) {
-      displayCatatanTambahan = finalCatatan;
-    }
-
-    // 3. Tentukan Sumber Uang Masuk yang benar untuk Tarik Tunai
-    if (metode === 'QRIS') {
-      modalSumberMasuk = 'QRIS';
-    } else if (metode === 'DANA') {
-      modalSumberMasuk = 'DANA';
-    } else if (metode === 'GoPay') {
-      modalSumberMasuk = 'GoPay';
-    } else if (metode === 'Bank') {
-      modalSumberMasuk = 'Bank';
-    } else {
-      modalSumberMasuk = 'EDC / Bank';
-    }
-  } else {
-    const lines = rawCleanKet.split('\n').map(l => l.trim()).filter(Boolean);
-    let line1 = lines[0] || '';
-    let manualNotes = lines.slice(1).join(' ').trim();
-
-    // Hapus technical tags
-    line1 = line1
-      .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
-      .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
-      .replace(/\[\s*khusus\s*\]/gi, '')
-      .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
-      .trim();
-
-    // Deteksi awal Jenis Transaksi berdasarkan t.kategori & teks
-    const isOrderKuota = /order\s*kuota/i.test(t.kategori) || /order\s*kuota/i.test(line1);
-    const isSinergiPulsa = /sinergi\s*pulsa/i.test(t.kategori) || /sinergi\s*pulsa/i.test(line1);
-    const isFlip = /flip/i.test(t.kategori) || /^\s*flip\b/i.test(line1);
-    const isTransferBank = !isFlip && (/transfer|bank/i.test(t.kategori) || /transfer|bank\s*uob/i.test(line1));
-    const isAksesoris = /aksesoris/i.test(t.kategori) || /aksesoris/i.test(line1);
-    const isVoucher = /voucher/i.test(t.kategori) || /voucher/i.test(line1);
-
-    if (isOrderKuota) {
-      displayJenisTransaksi = 'Order Kuota';
-    } else if (isSinergiPulsa) {
-      displayJenisTransaksi = 'Sinergi Pulsa';
-    } else if (isFlip) {
-      displayJenisTransaksi = 'FLIP';
-    } else if (isTransferBank) {
-      displayJenisTransaksi = 'Transfer Bank';
-    } else if (isAksesoris) {
-      displayJenisTransaksi = 'Aksesoris';
-    } else if (isVoucher) {
-      displayJenisTransaksi = 'Voucher';
-    } else {
-      displayJenisTransaksi = t.kategori;
-    }
-
-    let rawSub = '';
-
-    const sepMatch = line1.match(/\s*(=|:|>)\s*/);
-    if (sepMatch && sepMatch.index !== undefined) {
-      const left = line1.substring(0, sepMatch.index).trim();
-      const right = line1.substring(sepMatch.index + sepMatch[0].length).trim();
-
-      if (/order\s*kuota/i.test(left)) {
-        displayJenisTransaksi = 'Order Kuota';
-      } else if (/sinergi\s*pulsa/i.test(left)) {
-        displayJenisTransaksi = 'Sinergi Pulsa';
-      } else if (/flip/i.test(left) || /flip/i.test(t.kategori)) {
-        displayJenisTransaksi = 'FLIP';
-      } else if (/transfer|bank\s*uob/i.test(left)) {
-        displayJenisTransaksi = 'Transfer Bank';
-      } else if (/aksesoris/i.test(left)) {
-        displayJenisTransaksi = 'Aksesoris';
-      } else if (/voucher/i.test(left)) {
-        displayJenisTransaksi = 'Voucher';
-      }
-
-      rawSub = right;
-    } else {
-      const catNames = [t.kategori, 'Order Kuota', 'Transfer Bank', 'Transfer', 'FLIP', 'Flip', 'Bank UOB', 'Aksesoris', 'Voucher']
-        .filter(Boolean)
-        .join('|');
-      const catPrefixMatch = line1.match(new RegExp(`^(${catNames})\\s+`, 'i'));
-      if (catPrefixMatch) {
-        rawSub = line1.substring(catPrefixMatch[0].length).trim();
-      } else if (line1.toUpperCase() !== t.kategori.toUpperCase()) {
-        rawSub = line1;
-      }
-    }
-
-    // Khusus Aksesoris atau Voucher: jika nama produk berada di baris berikutnya
-    if ((isAksesoris || isVoucher) && !rawSub && manualNotes) {
-      rawSub = manualNotes;
-      manualNotes = '';
-    }
-
-    // Pertahankan nama produk dan angka denom lengkap (seperti ISI 20, ISI 25, ISI 50)
-    let cleanSub = rawSub.trim();
-    cleanSub = cleanSub.replace(/^Bank\s+UOB\s+/i, '').trim();
-
-    // Khusus Order Kuota: gabungkan [TUJUAN] - [PRESET] (Pilihan 1)
-    // Nama sub transaksi (tujuan) tetap ditulis, tanda pemisah ' - ', nama preset tetap ditulis
-    // Contoh: MAXIM - MAXIM ISI 15 atau MAXIM - MAXIM ISI 40
-    if (isOrderKuota) {
-      if (manualNotes) {
-        const noteLines = manualNotes.split('\n').map(l => l.trim()).filter(Boolean);
-        let firstNote = noteLines[0] || '';
-        const extraNotes = noteLines.slice(1).join(' ').trim();
-
-        // Jika firstNote sudah memiliki awalan '[TUJUAN] - ', bersihkan agar tidak dobel
-        if (cleanSub && firstNote.toUpperCase().startsWith(`${cleanSub.toUpperCase()} - `)) {
-          firstNote = firstNote.substring(`${cleanSub} - `.length).trim();
-        }
-
-        if (cleanSub && firstNote) {
-          cleanSub = `${cleanSub} - ${firstNote}`;
-        } else if (firstNote) {
-          cleanSub = firstNote;
-        }
-        manualNotes = extraNotes;
-      } else if (cleanSub && !cleanSub.includes(' - ')) {
-        // Jika data berada dalam 1 baris (misal 'MAXIM MAXIM ISI 15' dari data yang sudah tersimpan)
-        const matchDouble = cleanSub.match(/^([A-Za-z0-9_]+)\s+\1(\s+.*)$/i);
-        if (matchDouble) {
-          cleanSub = `${matchDouble[1]} - ${matchDouble[1]}${matchDouble[2]}`;
-        }
-      }
-    }
-
-    // Jika cleanSub hanya angka yang sama dengan nominal transaksi, jangan jadikan sub-kategori
-    if (cleanSub && cleanDigits(cleanSub) === cleanDigits(t.nominal.toString())) {
-      cleanSub = '';
-    }
-
-    // Rapikan penamaan Bank (misal BRI -> Bank BRI) jika transaksi Transfer Bank atau FLIP
-    if ((displayJenisTransaksi === 'Transfer Bank' || displayJenisTransaksi === 'FLIP') && cleanSub) {
-      if (/^(BRI|BCA|BNI|MANDIRI|BSI|BTN|CIMB|PERMATA|JAGO|SEABANK|NEO)$/i.test(cleanSub)) {
-        cleanSub = 'Bank ' + cleanSub.toUpperCase();
-      }
-    }
-
-    if (cleanSub && /[a-zA-Z]/.test(cleanSub)) {
-      displaySubKategori = cleanSub.replace(/\b\w/g, l => l.toUpperCase());
-    }
-
-    // Catatan tambahan manual
-    if (manualNotes && cleanDigits(manualNotes) !== cleanDigits(t.nominal.toString())) {
-      displayCatatanTambahan = manualNotes;
-    }
   }
 
   let modalTransaksiLabel = displaySubKategori 
@@ -375,8 +153,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   let modalKeterangan = displayCatatanTambahan || '-';
   let listKeterangan = displaySubKategori || displayCatatanTambahan || (appFee > 0 ? `Fee App: Rp ${formatRp(appFee)}` : '-');
 
-  // Khusus detail transaksi dan struk: transaksi FLIP tetap berlabel Transfer Bank, sedangkan di list riwayat tetap FLIP
-  const displayDetailTransaksi = (displayJenisTransaksi === 'FLIP') ? 'Transfer Bank' : displayJenisTransaksi;
+  const displayDetailTransaksi = parsed.kategoriTransaksi;
 
   const effectiveStoreName = storeName || (() => {
     try {
@@ -433,12 +210,16 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
     text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += formatReceiptDivider() + '\n';
-    text += `Transaksi : ${displayDetailTransaksi.toUpperCase().substring(0, 20)}\n`;
-    if (displaySubKategori) {
-      text += `${receiptSubLabel} ${displaySubKategori.toUpperCase().substring(0, 20)}\n`;
+    text += `Transaksi : ${parsed.kategoriTransaksi.toUpperCase().substring(0, 20)}\n`;
+    if (parsed.kategoriTransaksi === 'Transfer' && parsed.sumberTransaksi && parsed.sumberTransaksi !== '-') {
+      text += `Sumber    : ${parsed.sumberTransaksi.toUpperCase().substring(0, 20)}\n`;
     }
-    if (displayCatatanTambahan) {
-      text += `Ket       : ${displayCatatanTambahan.substring(0, 20)}\n`;
+    if (parsed.layananProduk) {
+      const subLabel = parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Metode    :' : 'Tujuan    :';
+      text += `${subLabel} ${parsed.layananProduk.toUpperCase().substring(0, 20)}\n`;
+    }
+    if (parsed.catatanTambahan) {
+      text += `Ket       : ${parsed.catatanTambahan.substring(0, 20)}\n`;
     }
     text += formatReceiptDivider() + '\n';
 
@@ -675,22 +456,30 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
               </div>
 
-              {/* KARTU 2: JENIS TRANSAKSI & LAYANAN / PRODUK (MINIMALIS 2 BARIS DENGAN GARIS PEMISAH TIPIS) */}
+              {/* KARTU 2: STRUKTUR HIERARKI KATEGORI, SUMBER & LAYANAN / PRODUK */}
               <div className="bg-[#EBF3FF] border border-blue-100 rounded-2xl px-3 py-2 flex flex-col shadow-2xs">
                 <div className="flex items-center justify-between text-xs pb-1.5 border-b border-blue-200/60">
-                  <span className="text-gray-500 font-medium">Jenis Transaksi :</span>
-                  <span className="font-black text-gray-900 text-right">{displayDetailTransaksi}</span>
+                  <span className="text-gray-500 font-medium">Kategori Transaksi :</span>
+                  <span className="font-black text-gray-900 text-right">{parsed.kategoriTransaksi}</span>
                 </div>
+                {parsed.kategoriTransaksi === 'Transfer' && parsed.sumberTransaksi && parsed.sumberTransaksi !== '-' && (
+                  <div className="flex items-center justify-between text-xs py-1.5 border-b border-blue-200/60">
+                    <span className="text-gray-500 font-medium">Sumber Transaksi :</span>
+                    <span className="font-black text-blue-700 text-right uppercase">{parsed.sumberTransaksi}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-xs pt-1.5">
-                  <span className="text-gray-500 font-medium">Layanan / Produk :</span>
+                  <span className="text-gray-500 font-medium">
+                    {parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Layanan / Metode :' : 'Layanan / Produk :'}
+                  </span>
                   <span className="font-black text-gray-900 text-right uppercase">
-                    {displaySubKategori || displayCatatanTambahan || t.kategori}
+                    {parsed.layananProduk || t.kategori}
                   </span>
                 </div>
-                {displaySubKategori && displayCatatanTambahan && (
+                {parsed.catatanTambahan && (
                   <div className="flex items-center justify-between text-[11px] pt-1.5 mt-1 border-t border-blue-200/50">
                     <span className="text-gray-400 font-medium">Ket. Tambahan:</span>
-                    <span className="font-semibold text-gray-700 text-right">{displayCatatanTambahan}</span>
+                    <span className="font-semibold text-gray-700 text-right">{parsed.catatanTambahan}</span>
                   </div>
                 )}
               </div>
@@ -886,18 +675,26 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 <div className="flex flex-col gap-0.5">
                   <div className="flex justify-between items-start text-[10px]">
                     <span className="text-slate-500 font-sans font-bold">Transaksi:</span>
-                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displayDetailTransaksi}</span>
+                    <span className="font-bold text-slate-800 text-right flex-1 ml-2">{parsed.kategoriTransaksi.toUpperCase()}</span>
                   </div>
-                  {displaySubKategori && (
+                  {parsed.kategoriTransaksi === 'Transfer' && parsed.sumberTransaksi && parsed.sumberTransaksi !== '-' && (
                     <div className="flex justify-between items-start text-[10px]">
-                      <span className="text-slate-500 font-sans font-bold">Layanan / Produk:</span>
-                      <span className="font-bold text-slate-800 text-right flex-1 ml-2">{displaySubKategori}</span>
+                      <span className="text-slate-500 font-sans font-bold">Sumber:</span>
+                      <span className="font-bold text-slate-800 text-right flex-1 ml-2">{parsed.sumberTransaksi.toUpperCase()}</span>
                     </div>
                   )}
-                  {displayCatatanTambahan && (
+                  {parsed.layananProduk && (
+                    <div className="flex justify-between items-start text-[10px]">
+                      <span className="text-slate-500 font-sans font-bold">
+                        {parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Metode:' : 'Tujuan:'}
+                      </span>
+                      <span className="font-bold text-slate-800 text-right flex-1 ml-2">{parsed.layananProduk.toUpperCase()}</span>
+                    </div>
+                  )}
+                  {parsed.catatanTambahan && (
                     <div className="flex justify-between items-start text-[10px]">
                       <span className="text-slate-500 font-sans font-bold">Ket  :</span>
-                      <span className="text-slate-700 text-right flex-1 ml-2 break-words">{displayCatatanTambahan}</span>
+                      <span className="text-slate-700 text-right flex-1 ml-2 break-words">{parsed.catatanTambahan}</span>
                     </div>
                   )}
                 </div>

@@ -11,7 +11,7 @@ import { saveKasirAccounts, type KasirAccount } from '../components/LoginScreen'
 import ProfitOwnerView from './ProfitOwnerView'
 import { printThermalReceipt, isAndroidBridgeAvailable } from '../lib/printerService'
 import { AbsenSelfieGalleryModal } from '../components/AbsenSelfieGalleryModal'
-import { isDigitalTransferTx, getStoredCustomLabels, getTransactionDisplayTitle } from '../lib/categoryHelper'
+import { isDigitalTransferTx, getStoredCustomLabels, getTransactionDisplayTitle, parseTransactionDetails } from '../lib/categoryHelper'
 interface BerandaViewProps {
   active: boolean
   activeView: string
@@ -10692,7 +10692,10 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
             <div>
               <p className="text-[10px] text-black font-black uppercase tracking-tighter">TERAKHIR</p>
               <p className="text-[12px] font-black text-black leading-none mt-0.5">
-                {props.lastTx ? `${props.lastTx.kategori} • ${formatRupiah(props.lastTx.nominal)}` : 'Belum ada'}
+                {props.lastTx ? (() => {
+                  const p = parseTransactionDetails(props.lastTx, ownerCustomLabels);
+                  return `${p.baris1Judul} (${p.baris2Sub}) • ${formatRupiah(props.lastTx.nominal)}`;
+                })() : 'Belum ada'}
               </p>
             </div>
           </div>

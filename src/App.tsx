@@ -4312,7 +4312,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       activeView={activeView}
                       isPc={screenSize === 'pc'}
                       setActiveView={setActiveView}
-                      activeStoreId={targetStoreId}
+                      activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
                       transactions={displayTransactions}
                       filterTanggalMulai={filterTanggalMulai}
                       setFilterTanggalMulai={setFilterTanggalMulai}
@@ -4371,7 +4371,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       storePhoto={storePhoto}
                       kasirName={account.name}
                       setIsSidePanelOpen={setIsSidePanelOpen}
-                      activeStoreId={targetStoreId}
+                      activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
                       openJurnalModal={jurnalModalTrigger}
                     />
                   );
@@ -4386,6 +4386,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       kasirRole={activeRole}
                       googleEmail={googleEmail}
                       googleUid={googleUid}
+                      stores={stores}
                       onLogout={onLogout}
                       onUploadToCloud={handleUploadToCloud}
                       onDownloadFromCloud={handleDownloadFromCloud}
@@ -4407,7 +4408,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       currentUsername={username}
                       kasirList={kasirList}
                       onSaveCashierSelf={handleSaveCashierSelf}
-                      activeStoreId={targetStoreId}
+                      activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
                       transactions={transactions}
                       forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
                       absensiList={absensi}
@@ -4470,7 +4471,7 @@ const MainApp: React.FC<MainAppProps> = ({
                       kasirRole={activeRole}
                       setIsSidePanelOpen={setIsSidePanelOpen}
                       onConfirm={handleConfirm}
-                      activeStoreId={targetStoreId}
+                      activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
                     />
                   );
                 case 'view-owner-performa':
@@ -4629,7 +4630,7 @@ const MainApp: React.FC<MainAppProps> = ({
           <RiwayatView 
             active={activeView === 'view-transaksi'}
             setActiveView={setActiveView}
-            activeStoreId={targetStoreId}
+            activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
             transactions={displayTransactions}
             filterTanggalMulai={filterTanggalMulai}
             setFilterTanggalMulai={setFilterTanggalMulai}
@@ -4691,7 +4692,7 @@ const MainApp: React.FC<MainAppProps> = ({
             storePhoto={storePhoto}
             kasirName={account.name}
             setIsSidePanelOpen={setIsSidePanelOpen}
-            activeStoreId={targetStoreId}
+            activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
             openJurnalModal={jurnalModalTrigger}
           />
 
@@ -4702,6 +4703,7 @@ const MainApp: React.FC<MainAppProps> = ({
             kasirRole={activeRole}
             googleEmail={googleEmail}
             googleUid={googleUid}
+            stores={stores}
             onLogout={onLogout}
             onUploadToCloud={handleUploadToCloud}
             onDownloadFromCloud={handleDownloadFromCloud}
@@ -4723,7 +4725,7 @@ const MainApp: React.FC<MainAppProps> = ({
             currentUsername={username}
             kasirList={kasirList}
             onSaveCashierSelf={handleSaveCashierSelf}
-            activeStoreId={targetStoreId}
+            activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
             transactions={transactions}
             forceTab={activeView === 'view-akun-karyawan' ? 'karyawan' : undefined}
             absensiList={absensi}
@@ -4775,7 +4777,7 @@ const MainApp: React.FC<MainAppProps> = ({
             kasirRole={activeRole}
             setIsSidePanelOpen={setIsSidePanelOpen}
             onConfirm={handleConfirm}
-            activeStoreId={targetStoreId}
+            activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
           />
 
           <PerformaKasirView

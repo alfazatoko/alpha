@@ -346,3 +346,194 @@ export const resolveSystemId = (
 
   return 'OTHER';
 };
+
+export interface ParsedTransactionDetails {
+  kategoriTransaksi: string;
+  sumberTransaksi: string;
+  layananProduk: string;
+  catatanTambahan: string;
+  baris1Judul: string;
+  baris2Sub: string;
+  baris3Catatan: string;
+}
+
+/**
+ * Parser Terstandarisasi untuk Seluruh Tampilan Riwayat & Struk
+ * Memecah transaksi menjadi hierarki 3 tingkat (Transfer) atau 2 tingkat (Tarik Tunai/Aksesoris/Voucher)
+ */
+export const parseTransactionDetails = (
+  tx: { kategori?: string; keterangan?: string; nominal?: number } | undefined | null,
+  customLabels?: Record<string, any>
+): ParsedTransactionDetails => {
+  if (!tx) {
+    return {
+      kategoriTransaksi: '-',
+      sumberTransaksi: '-',
+      layananProduk: '-',
+      catatanTambahan: '',
+      baris1Judul: '-',
+      baris2Sub: '-',
+      baris3Catatan: ''
+    };
+  }
+
+  const labels = customLabels || getStoredCustomLabels();
+  const sysId = getTransactionSystemId(tx, labels);
+  const rawKet = (tx.keterangan || '').trim();
+
+  // Bersihkan semua technical tags
+  const cleanKet = rawKet
+    .replace(/\[\s*non[_\s]tunai\s*\]/gi, '')
+    .replace(/\[\s*admin[_\s]dalam\s*\]/gi, '')
+    .replace(/\[\s*khusus\s*\]/gi, '')
+    .replace(/\[\s*fee_app:\d+\s*\]/gi, '')
+    .replace(/\[\s*sys:[^\]]+\]/gi, '')
+    .replace(/\[\s*split:[^\]]+\]/gi, '')
+    .trim();
+
+  const lines = cleanKet.split('\n').map(l => l.trim()).filter(Boolean);
+  let line1 = lines[0] || '';
+  let manualNotes = lines.slice(1).join(' ').trim();
+
+  // Sanitasi karakter pemisah liar di awal / akhir
+  const sanitize = (str: string) => str.replace(/^[>:\-=\s]+|[>:\-=\s]+$/g, '').trim();
+
+  line1 = sanitize(line1);
+
+  // 1. KASUS TARIK TUNAI (2 Tingkat: Kategori & Layanan/Metode)
+  if (sysId === 'TARIK' || /tarik\s*tunai/i.test(tx.kategori || '') || /tarik\s*tunai/i.test(line1)) {
+    let rawSub = line1
+      .replace(/tarik[_\s]*tunai/gi, '')
+      .replace(/^\|\s*/, '')
+      .trim();
+    rawSub = sanitize(rawSub);
+
+    let metode = 'QRIS';
+    let extraNote = '';
+    const upperSub = rawSub.toUpperCase();
+
+    if (upperSub.startsWith('QRIS')) {
+      metode = 'QRIS';
+      extraNote = sanitize(rawSub.substring(4));
+    } else if (upperSub.includes('EDC') || upperSub.includes('ATM')) {
+      metode = 'EDC / ATM';
+      extraNote = sanitize(rawSub.replace(/^(EDC\s*\/\s*ATM|ATM\s*\/\s*EDC|EDC|ATM)/gi, ''));
+    } else if (upperSub.startsWith('DANA')) {
+      metode = 'DANA';
+      extraNote = sanitize(rawSub.substring(4));
+    } else if (upperSub.startsWith('GOPAY')) {
+      metode = 'GoPay';
+      extraNote = sanitize(rawSub.substring(5));
+    } else if (upperSub.startsWith('BANK') || upperSub.startsWith('TRANSFER')) {
+      metode = 'Bank';
+      extraNote = sanitize(rawSub.replace(/^(BANK|TRANSFER)/gi, ''));
+    } else if (rawSub) {
+      metode = rawSub;
+    }
+
+    const note = [extraNote, manualNotes].filter(Boolean).join(' ').trim();
+
+    return {
+      kategoriTransaksi: 'Tarik Tunai',
+      sumberTransaksi: 'Tunai Laci Kasir',
+      layananProduk: metode,
+      catatanTambahan: note,
+      baris1Judul: 'TARIK TUNAI',
+      baris2Sub: metode,
+      baris3Catatan: note
+    };
+  }
+
+  // 2. KASUS AKSESORIS ATAU VOUCHER (2 Tingkat: Kategori & Produk)
+  if (sysId === 'AKSESORIS' || sysId === 'VOUCHER' || /aksesoris|voucher/i.test(tx.kategori || '')) {
+    const isVoucher = sysId === 'VOUCHER' || /voucher/i.test(tx.kategori || '');
+    const katName = isVoucher ? 'Voucher' : 'Aksesoris';
+    let rawItem = line1.replace(new RegExp(`^${katName}\\s*>\\s*`, 'i'), '').replace(new RegExp(`^${katName}\\s*`, 'i'), '').trim();
+    rawItem = sanitize(rawItem);
+
+    if (!rawItem && manualNotes) {
+      rawItem = manualNotes;
+      manualNotes = '';
+    }
+
+    const finalItem = rawItem || katName;
+    return {
+      kategoriTransaksi: katName,
+      sumberTransaksi: '-',
+      layananProduk: finalItem,
+      catatanTambahan: manualNotes,
+      baris1Judul: katName.toUpperCase(),
+      baris2Sub: finalItem,
+      baris3Catatan: manualNotes
+    };
+  }
+
+  // 3. KASUS TRANSFER / DIGITAL (3 Tingkat: Kategori, Sumber Aplikasi, Layanan/Produk)
+  // Dapatkan Nama Sumber Aplikasi
+  let sumberNama = '';
+  if (['BANK', 'ewallet', 'PPOB', 'BANK_2', 'PPOB_2'].includes(sysId)) {
+    sumberNama = getChannelDisplayLabel(sysId as TransferSystemId, labels);
+  } else {
+    if (/order\s*kuota/i.test(line1) || /order\s*kuota/i.test(tx.kategori || '')) sumberNama = getChannelDisplayLabel('PPOB', labels);
+    else if (/flip/i.test(line1) || /flip/i.test(tx.kategori || '')) sumberNama = getChannelDisplayLabel('BANK_2', labels);
+    else if (/dana/i.test(line1) || /dana/i.test(tx.kategori || '')) sumberNama = getChannelDisplayLabel('ewallet', labels);
+    else if (/sinergi/i.test(line1) || /sinergi/i.test(tx.kategori || '')) sumberNama = getChannelDisplayLabel('PPOB_2', labels);
+    else sumberNama = getChannelDisplayLabel('BANK', labels);
+  }
+
+  // Parsing segmen line1 dengan pemisah '>'
+  const parts = line1.split('>').map(p => sanitize(p)).filter(Boolean);
+  let targetLayanan = '';
+
+  if (parts.length >= 3) {
+    // Format standar: "TRANSFER > ORDER KUOTA > LINKAJA" atau "TRANSFER > BANK UOB > BANK BTN"
+    targetLayanan = parts.slice(2).join(' > ');
+  } else if (parts.length === 2) {
+    const p0 = parts[0].toUpperCase();
+    const p1 = parts[1].toUpperCase();
+
+    if (p0 === 'TRANSFER' || p0 === 'TRANSFER BANK') {
+      const isKnownChannel = /order\s*kuota|flip|bank\s*uob|dana|gopay/i.test(parts[1]);
+      if (isKnownChannel && (sysId === 'ewallet' || p1 === 'DANA')) {
+        targetLayanan = parts[1];
+      } else {
+        targetLayanan = parts[1];
+      }
+    } else {
+      // Misal "FLIP > GOPAY" atau "ORDER KUOTA > SHOPEEPAY"
+      targetLayanan = parts[1];
+    }
+  } else if (parts.length === 1) {
+    const p0 = parts[0].toUpperCase();
+    if (p0 === 'TRANSFER' || p0 === 'TRANSFER BANK') {
+      targetLayanan = '';
+    } else {
+      let cleanP0 = parts[0];
+      cleanP0 = cleanP0.replace(new RegExp(`^${sumberNama}\\s*`, 'i'), '').trim();
+      cleanP0 = sanitize(cleanP0);
+      targetLayanan = cleanP0 || parts[0];
+    }
+  }
+
+  // Rapikan nama bank singkatan
+  if (/^(BRI|BCA|BNI|MANDIRI|BSI|BTN|CIMB|PERMATA|JAGO|SEABANK|NEO)$/i.test(targetLayanan)) {
+    targetLayanan = 'Bank ' + targetLayanan.toUpperCase();
+  }
+
+  // Jika targetLayanan kosong atau sama dengan 'TRANSFER', fallback ke nama sumber
+  if (!targetLayanan || targetLayanan.toUpperCase() === 'TRANSFER' || targetLayanan.toUpperCase() === 'TRANSFER BANK') {
+    targetLayanan = sumberNama;
+  }
+
+  targetLayanan = sanitize(targetLayanan);
+
+  return {
+    kategoriTransaksi: 'Transfer',
+    sumberTransaksi: sumberNama,
+    layananProduk: targetLayanan,
+    catatanTambahan: manualNotes,
+    baris1Judul: sumberNama.toUpperCase(),
+    baris2Sub: targetLayanan,
+    baris3Catatan: manualNotes
+  };
+};

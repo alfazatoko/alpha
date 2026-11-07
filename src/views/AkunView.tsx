@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { cn, compressImage, getShiftInfo, getActiveShifts, APP_VERSION } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { AUDIO_PRESETS, playPresetSound, preloadTransactionSound } from '../lib/audioManager'
 import { 
   printThermalReceipt, 
   formatReceiptCenter, 
@@ -48,6 +49,7 @@ interface AkunViewProps {
   kasirList?: Record<string, any>
   onSaveCashierSelf?: (username: string, updatedAccount: { name: string, pin: string, alamat?: string, tempatLahir?: string, tanggalLahir?: string, avatar?: string, [key: string]: any }) => Promise<void>
   activeStoreId?: string | 'all'
+  stores?: { id: string; name: string; subtext?: string }[]
   transactions?: any[]
   forceTab?: string
   absensiList?: any[]
@@ -657,6 +659,189 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [bannerInitialSize, setBannerInitialSize] = useState({ w: 336, h: 140 })
   const [isDraggingBannerEditor, setIsDraggingBannerEditor] = useState(false)
   const [dragStartBannerEditor, setDragStartBannerEditor] = useState({ x: 0, y: 0 })
+
+  // ── Audio Settings State Per-Toko ──
+  const [audioStoresList, setAudioStoresList] = useState<{ id: string; name: string; subtext?: string }[]>(() => {
+    if (props.stores && props.stores.length > 0) return props.stores;
+    try {
+      const saved = localStorage.getItem('alphaPro_stores');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [selectedAudioStoreId, setSelectedAudioStoreId] = useState<string>(() => {
+    if (props.activeStoreId && props.activeStoreId !== 'all') return props.activeStoreId;
+    const pantau = localStorage.getItem('alphaPro_pantau_store_id');
+    if (pantau && pantau !== 'all') return pantau;
+    const act = localStorage.getItem('alphaPro_active_store_id');
+    if (act && act !== 'all') return act;
+    return '';
+  });
+
+  const [activeSoundPreset, setActiveSoundPreset] = useState<string>('ting');
+  const [activeCustomAudioUrl, setActiveCustomAudioUrl] = useState<string | null>(null);
+  const [audioSaveToast, setAudioSaveToast] = useState<string | null>(null);
+  const [isPlayingSoundId, setIsPlayingSoundId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (props.stores && props.stores.length > 0) {
+      setAudioStoresList(props.stores);
+    } else if (props.googleUid) {
+      supabase.from('stores').select('id, name, subtext').eq('user_id', props.googleUid).order('created_at', { ascending: true }).then(({ data }) => {
+        if (data && data.length > 0) setAudioStoresList(data);
+      });
+    }
+  }, [props.stores, props.googleUid]);
+
+  useEffect(() => {
+    if ((!selectedAudioStoreId || selectedAudioStoreId === 'all') && audioStoresList.length > 0) {
+      setSelectedAudioStoreId(audioStoresList[0].id);
+    }
+  }, [audioStoresList, selectedAudioStoreId]);
+
+  useEffect(() => {
+    if (!selectedAudioStoreId || selectedAudioStoreId === 'all') return;
+
+    let localPreset = 'ting';
+    let localCustom: string | null = null;
+    const saved = localStorage.getItem(`alphaPro_${selectedAudioStoreId}_audio_settings`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.transaction_sound_type) localPreset = parsed.transaction_sound_type;
+        if (parsed.transaction_sound_url) localCustom = parsed.transaction_sound_url;
+      } catch (e) {}
+    }
+    setActiveSoundPreset(localPreset);
+    setActiveCustomAudioUrl(localCustom);
+
+    supabase.from('store_settings').select('audio_settings').eq('store_id', selectedAudioStoreId).maybeSingle().then(({ data }) => {
+      if (data?.audio_settings) {
+        const s = data.audio_settings;
+        const sPreset = s.transaction_sound_type || 'ting';
+        const sCustom = s.transaction_sound_url || null;
+        setActiveSoundPreset(sPreset);
+        setActiveCustomAudioUrl(sCustom);
+        localStorage.setItem(`alphaPro_${selectedAudioStoreId}_audio_settings`, JSON.stringify(s));
+      }
+    });
+  }, [selectedAudioStoreId]);
+
+  const handleSelectSoundPreset = async (presetId: string) => {
+    if (!selectedAudioStoreId || selectedAudioStoreId === 'all') {
+      alert('Pilih toko terlebih dahulu!');
+      return;
+    }
+
+    setIsPlayingSoundId(presetId);
+    playPresetSound(presetId);
+    setTimeout(() => setIsPlayingSoundId(null), 1000);
+
+    setActiveSoundPreset(presetId);
+
+    try {
+      const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', selectedAudioStoreId).maybeSingle();
+      const existing = data?.audio_settings || {};
+      const updated = {
+        ...existing,
+        transaction_sound_type: presetId
+      };
+
+      await supabase.from('store_settings').upsert({
+        store_id: selectedAudioStoreId,
+        audio_settings: updated
+      });
+
+      localStorage.setItem(`alphaPro_${selectedAudioStoreId}_audio_settings`, JSON.stringify(updated));
+      preloadTransactionSound(selectedAudioStoreId);
+
+      const storeName = audioStoresList.find(s => s.id === selectedAudioStoreId)?.name || 'Toko';
+      const presetObj = AUDIO_PRESETS.find(p => p.id === presetId);
+      setAudioSaveToast(`Suara "${presetObj?.name || presetId}" aktif untuk ${storeName}!`);
+      setTimeout(() => setAudioSaveToast(null), 3000);
+    } catch (err: any) {
+      console.error('Failed to save audio setting:', err);
+    }
+  };
+
+  const handleUploadCustomSound = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 250 * 1024) {
+      alert('Ukuran file maksimal 250KB!');
+      return;
+    }
+    if (!selectedAudioStoreId || selectedAudioStoreId === 'all') {
+      alert('Pilih toko terlebih dahulu!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const base64Audio = ev.target?.result as string;
+        setActiveCustomAudioUrl(base64Audio);
+        setActiveSoundPreset('custom');
+
+        playPresetSound('custom', base64Audio);
+
+        const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', selectedAudioStoreId).maybeSingle();
+        const existing = data?.audio_settings || {};
+        const updated = {
+          ...existing,
+          transaction_sound_type: 'custom',
+          transaction_sound_url: base64Audio
+        };
+
+        await supabase.from('store_settings').upsert({
+          store_id: selectedAudioStoreId,
+          audio_settings: updated
+        });
+
+        localStorage.setItem(`alphaPro_${selectedAudioStoreId}_audio_settings`, JSON.stringify(updated));
+        preloadTransactionSound(selectedAudioStoreId);
+
+        const storeName = audioStoresList.find(s => s.id === selectedAudioStoreId)?.name || 'Toko';
+        setAudioSaveToast(`Suara custom tersimpan untuk ${storeName}!`);
+        setTimeout(() => setAudioSaveToast(null), 3000);
+      } catch (err: any) {
+        console.error('Error saving custom audio:', err);
+        alert('Gagal simpan audio: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteCustomSound = async () => {
+    if (!selectedAudioStoreId || selectedAudioStoreId === 'all') return;
+    if (!confirm('Hapus suara custom dan gunakan suara bawaan (Ting Klasik)?')) return;
+
+    try {
+      setActiveCustomAudioUrl(null);
+      setActiveSoundPreset('ting');
+      playPresetSound('ting');
+
+      const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', selectedAudioStoreId).maybeSingle();
+      const existing = { ...(data?.audio_settings || {}) };
+      delete existing.transaction_sound_url;
+      existing.transaction_sound_type = 'ting';
+
+      await supabase.from('store_settings').upsert({
+        store_id: selectedAudioStoreId,
+        audio_settings: existing
+      });
+
+      localStorage.setItem(`alphaPro_${selectedAudioStoreId}_audio_settings`, JSON.stringify(existing));
+      preloadTransactionSound(selectedAudioStoreId);
+
+      setAudioSaveToast('Suara custom dihapus, kembali ke Ting Klasik.');
+      setTimeout(() => setAudioSaveToast(null), 3000);
+    } catch (err: any) {
+      console.error('Error deleting custom audio:', err);
+    }
+  };
 
   const FRAME_W = 336
   const FRAME_H = 140
@@ -4122,81 +4307,186 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                   <i className={cn("fa-solid fa-chevron-down text-[10px] text-gray-300 ml-2 transition-transform duration-200", openCategory === 'audio' && "rotate-180")} />
                 </button>
                 {openCategory === 'audio' && (
-                  <div className="mt-2 mx-4 mb-2 p-3 bg-purple-50 border border-purple-200 rounded-[1.5rem] animate-in slide-in-from-top-2 duration-300 shadow-sm">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 shadow-sm border border-purple-200 shrink-0">
-                          <i className="fa-solid fa-music text-xs"></i>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Suara Custom</p>
-                          <p className="text-[8px] text-purple-700 font-bold mt-0.5 leading-snug">Pilih file audio (.mp3, .wav) maksimal 150KB</p>
-                        </div>
+                  <div className="mt-2 mx-4 mb-2 p-3 bg-purple-50/70 border border-purple-200 rounded-[1.5rem] animate-in slide-in-from-top-2 duration-300 shadow-sm flex flex-col gap-3">
+                    
+                    {/* 1. Header & Pilihan Toko */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9.5px] font-black text-purple-900 uppercase tracking-widest flex items-center gap-1.5">
+                          <i className="fa-solid fa-store text-purple-600"></i> Pilih Toko yang Diatur:
+                        </span>
+                        {audioStoresList.find(s => s.id === selectedAudioStoreId) && (
+                          <span className="text-[8.5px] font-bold text-purple-600 bg-purple-100/80 px-2 py-0.5 rounded-full">
+                            Aktif: {audioStoresList.find(s => s.id === selectedAudioStoreId)?.name}
+                          </span>
+                        )}
                       </div>
-                      
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => document.getElementById('audioInput')?.click()}
-                          className="flex-1 bg-white border border-purple-200 text-purple-700 rounded-lg py-2 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"
-                        >
-                          <i className="fa-solid fa-upload"></i> Upload Suara
-                        </button>
-                        <input 
-                          id="audioInput" 
-                          type="file" 
-                          accept="audio/mp3,audio/wav,audio/*" 
-                          className="hidden" 
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (file.size > 200 * 1024) {
-                              alert('Ukuran file maksimal 200KB!');
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onload = async (ev) => {
-                              const base64Audio = ev.target?.result as string;
-                              
-                              const activeStoreId = localStorage.getItem('alphaPro_active_store_id') || 'all';
-                              if (activeStoreId === 'all') return alert('Pilih toko dulu di Beranda');
 
-                              const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', activeStoreId).maybeSingle();
-                              const newAudioSettings = { ...(data?.audio_settings || {}), transaction_sound_url: base64Audio };
-                              
-                              await supabase.from('store_settings').upsert({
-                                store_id: activeStoreId,
-                                audio_settings: newAudioSettings
-                              });
-                              alert('Suara berhasil disimpan!');
-                              window.location.reload();
-                            };
-                            reader.readAsDataURL(file);
-                          }} 
-                        />
-                        <button 
-                          onClick={async () => {
-                            const activeStoreId = localStorage.getItem('alphaPro_active_store_id') || 'all';
-                            if (activeStoreId === 'all') return;
-                            
-                            if (confirm('Hapus suara custom dan gunakan suara bawaan (Ting)?')) {
-                              const { data } = await supabase.from('store_settings').select('audio_settings').eq('store_id', activeStoreId).maybeSingle();
-                              const newAudioSettings = { ...(data?.audio_settings || {}) };
-                              delete newAudioSettings.transaction_sound_url;
-                              
-                              await supabase.from('store_settings').upsert({
-                                store_id: activeStoreId,
-                                audio_settings: newAudioSettings
-                              });
-                              alert('Suara berhasil dihapus!');
-                              window.location.reload();
-                            }
-                          }}
-                          className="w-10 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg flex items-center justify-center active:scale-95 transition-transform"
-                        >
-                          <i className="fa-solid fa-trash-can"></i>
-                        </button>
+                      {/* Store Tabs */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        {audioStoresList.map(st => {
+                          const isSel = st.id === selectedAudioStoreId;
+                          return (
+                            <button
+                              key={st.id}
+                              type="button"
+                              onClick={() => setSelectedAudioStoreId(st.id)}
+                              className={cn(
+                                "px-3 py-1.5 rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 border cursor-pointer",
+                                isSel 
+                                  ? "bg-[#0066ff] text-white border-[#0066ff] shadow-md shadow-blue-500/20 scale-[1.02]" 
+                                  : "bg-white text-slate-700 border-purple-200 hover:border-blue-300 hover:bg-blue-50/50"
+                              )}
+                            >
+                              <i className="fa-solid fa-store text-[8.5px]"></i>
+                              <span>{st.name}</span>
+                              {isSel && <i className="fa-solid fa-check text-[7.5px] ml-0.5"></i>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
+
+                    {/* Toast Notification */}
+                    {audioSaveToast && (
+                      <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black flex items-center gap-2 animate-in fade-in">
+                        <i className="fa-solid fa-circle-check text-xs"></i>
+                        <span>{audioSaveToast}</span>
+                      </div>
+                    )}
+
+                    {/* 2. Daftar Preset Suara Siap Pakai */}
+                    <div>
+                      <p className="text-[9px] font-black text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <i className="fa-solid fa-music text-purple-600"></i> Koleksi Nada Siap Pakai (Klik untuk pilih & simpan):
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {AUDIO_PRESETS.map((preset) => {
+                          const isSelected = activeSoundPreset === preset.id;
+                          const isPlaying = isPlayingSoundId === preset.id;
+
+                          return (
+                            <div
+                              key={preset.id}
+                              onClick={() => handleSelectSoundPreset(preset.id)}
+                              className={cn(
+                                "p-2.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between gap-2 bg-white group",
+                                isSelected 
+                                  ? "border-blue-600 ring-2 ring-blue-100 shadow-sm bg-blue-50/30" 
+                                  : "border-purple-100 hover:border-purple-300 hover:bg-purple-50/40"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={cn(
+                                  "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                                  isSelected ? "bg-blue-600 text-white" : "bg-purple-100 text-purple-600 group-hover:bg-purple-200"
+                                )}>
+                                  <i className={cn("fa-solid text-[11px]", preset.icon)}></i>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className={cn("text-[10px] font-black leading-tight uppercase tracking-tight truncate", isSelected ? "text-blue-900" : "text-slate-800")}>
+                                    {preset.name}
+                                  </p>
+                                  <p className="text-[8px] font-medium text-slate-400 leading-tight mt-0.5 truncate">
+                                    {preset.description}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  title="Dengar suara ini"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsPlayingSoundId(preset.id);
+                                    playPresetSound(preset.id);
+                                    setTimeout(() => setIsPlayingSoundId(null), 1000);
+                                  }}
+                                  className={cn(
+                                    "w-7 h-7 rounded-lg flex items-center justify-center border transition-all active:scale-90",
+                                    isPlaying 
+                                      ? "bg-purple-600 text-white border-purple-600 shadow-sm scale-105" 
+                                      : "bg-white text-purple-600 border-purple-200 hover:bg-purple-100"
+                                  )}
+                                >
+                                  <i className={cn("fa-solid text-[10px]", isPlaying ? "fa-volume-high animate-pulse" : "fa-play")}></i>
+                                </button>
+                                {isSelected ? (
+                                  <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[8px]">
+                                    <i className="fa-solid fa-check"></i>
+                                  </div>
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full border border-slate-300"></div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 3. Suara Custom Upload Sendiri */}
+                    <div className="pt-2 border-t border-purple-200/60 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[9.5px] font-black text-purple-900 uppercase tracking-wider">Upload Suara Custom Sendiri</p>
+                          <p className="text-[8px] text-slate-500 font-medium leading-tight">File .mp3 / .wav (maks 250KB)</p>
+                        </div>
+                        {activeSoundPreset === 'custom' && (
+                          <span className="text-[8px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Sedang Dipakai
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('customAudioInput')?.click()}
+                          className="flex-1 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 rounded-xl py-2 text-[9.5px] font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+                        >
+                          <i className="fa-solid fa-cloud-arrow-up text-xs"></i>
+                          <span>{activeCustomAudioUrl ? 'Ganti File Audio' : 'Upload File Audio'}</span>
+                        </button>
+                        <input
+                          id="customAudioInput"
+                          type="file"
+                          accept="audio/mp3,audio/wav,audio/*"
+                          className="hidden"
+                          onChange={handleUploadCustomSound}
+                        />
+
+                        {activeCustomAudioUrl && (
+                          <>
+                            <button
+                              type="button"
+                              title="Dengar suara custom"
+                              onClick={() => {
+                                setIsPlayingSoundId('custom');
+                                playPresetSound('custom', activeCustomAudioUrl);
+                                setTimeout(() => setIsPlayingSoundId(null), 1200);
+                              }}
+                              className="px-3 bg-purple-100 text-purple-700 border border-purple-300 rounded-xl flex items-center gap-1.5 text-[9px] font-bold active:scale-95 transition-all"
+                            >
+                              <i className={cn("fa-solid", isPlayingSoundId === 'custom' ? "fa-volume-high animate-pulse" : "fa-play")}></i>
+                              <span>Tes</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              title="Hapus suara custom"
+                              onClick={handleDeleteCustomSound}
+                              className="w-9 bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 rounded-xl flex items-center justify-center active:scale-95 transition-all cursor-pointer"
+                            >
+                              <i className="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
                 )}
 
