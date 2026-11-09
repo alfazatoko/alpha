@@ -735,6 +735,12 @@ const MainApp: React.FC<MainAppProps> = ({
   useEffect(() => {
     if (activeRole === 'owner') {
       localStorage.setItem('alphaPro_pantau_store_id', pantauStoreId)
+      if (pantauStoreId !== 'all') {
+        try {
+          const storedList = localStorage.getItem(`alphaPro_${pantauStoreId}_kasir_list`)
+          if (storedList) setKasirList(JSON.parse(storedList))
+        } catch (e) {}
+      }
     }
   }, [pantauStoreId, activeRole])
 
@@ -1094,6 +1100,14 @@ const MainApp: React.FC<MainAppProps> = ({
             localStorage.setItem(`alphaPro_${effectiveStoreId}_promoBanners`, JSON.stringify(incoming))
             localStorage.setItem('alphaPro_promoBanners', JSON.stringify(incoming))
           }
+          // ── SINKRONISASI SUARA NOTIFIKASI REAL-TIME ──
+          // Saat Owner mengubah setting suara di HP manapun, semua HP kasir
+          // yang terhubung ke toko yang sama langsung update localStorage audio_settings-nya.
+          if (payload.new && payload.new.audio_settings && typeof payload.new.audio_settings === 'object') {
+            const incomingAudio = payload.new.audio_settings
+            localStorage.setItem(`alphaPro_${effectiveStoreId}_audio_settings`, JSON.stringify(incomingAudio))
+            console.log('[Audio Sync] Setting suara notifikasi diperbarui oleh Owner, berlaku sekarang.')
+          }
           if (payload.new && Array.isArray(payload.new.presets)) {
             const incomingPresets = payload.new.presets
             const popupObj = incomingPresets.find((p: any) => p && p.id === '_POPUP_LISTS_')
@@ -1198,6 +1212,28 @@ const MainApp: React.FC<MainAppProps> = ({
       supabase.removeChannel(clChannel)
     }
   }, [activeStoreId, pantauStoreId, activeRole, isLoggedIn, activeStore?.id])
+
+  // ── SINKRONISASI SUARA SAAT APP DIBUKA KEMBALI (visibilitychange) ──
+  // Setiap kali HP kasir membuka kembali aplikasi (dari background / layar nyala),
+  // setting suara terbaru dari Supabase langsung diambil dan disimpan ke localStorage lokal.
+  // Dengan ini, jika Owner ganti suara saat kasir sedang tidak aktif,
+  // suara baru langsung berlaku pada transaksi pertama setelah HP aktif kembali.
+  useEffect(() => {
+    if (!activeStoreId || activeStoreId === 'all') return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const targetId = activeRole === 'owner'
+          ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId)
+          : activeStoreId
+        if (!targetId || targetId === 'all') return
+        preloadTransactionSound(targetId)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [activeStoreId, activeRole, pantauStoreId])
 
   // Realtime subscription: sinkronisasi PIN Owner ke localStorage secara instan saat diubah dari perangkat lain
   useEffect(() => {
@@ -4335,6 +4371,9 @@ const MainApp: React.FC<MainAppProps> = ({
                       storePhoto={storePhoto}
                       kasirName={account.name}
                       setIsSidePanelOpen={setIsSidePanelOpen}
+                      stores={stores}
+                      pantauStoreId={pantauStoreId}
+                      setPantauStoreId={setPantauStoreId}
                     />
                   );
                 case 'view-laporan':
@@ -4373,6 +4412,9 @@ const MainApp: React.FC<MainAppProps> = ({
                       setIsSidePanelOpen={setIsSidePanelOpen}
                       activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
                       openJurnalModal={jurnalModalTrigger}
+                      stores={stores}
+                      pantauStoreId={pantauStoreId}
+                      setPantauStoreId={setPantauStoreId}
                     />
                   );
                 case 'view-akun':
@@ -4653,6 +4695,9 @@ const MainApp: React.FC<MainAppProps> = ({
             storePhoto={storePhoto}
             kasirName={account.name}
             setIsSidePanelOpen={setIsSidePanelOpen}
+            stores={stores}
+            pantauStoreId={pantauStoreId}
+            setPantauStoreId={setPantauStoreId}
           />
 
           <LaporanView 
@@ -4694,6 +4739,9 @@ const MainApp: React.FC<MainAppProps> = ({
             setIsSidePanelOpen={setIsSidePanelOpen}
             activeStoreId={activeRole === 'owner' ? (pantauStoreId !== 'all' ? pantauStoreId : activeStoreId) : activeStoreId}
             openJurnalModal={jurnalModalTrigger}
+            stores={stores}
+            pantauStoreId={pantauStoreId}
+            setPantauStoreId={setPantauStoreId}
           />
 
           <AkunView 

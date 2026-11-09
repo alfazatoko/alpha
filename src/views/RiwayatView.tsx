@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, cn, parseLocalISO, getLocalDateString } from '../lib/utils'
-import type { Transaction } from '../types'
+import type { Transaction, Store } from '../types'
 import TransactionRow from '../components/TransactionRow'
 import type { KasirAccount } from '../components/LoginScreen'
 import { 
@@ -40,11 +40,107 @@ interface RiwayatViewProps {
   setIsSidePanelOpen?: (v: boolean) => void
   isPc?: boolean
   activeStoreId?: string
+  stores?: Store[]
+  pantauStoreId?: string | 'all'
+  setPantauStoreId?: (id: string | 'all') => void
 }
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
+
+  const currentStoreId = props.pantauStoreId || 'all';
+
+  const availableStores = useMemo(() => {
+    if (props.stores && props.stores.length > 0) {
+      return props.stores;
+    }
+    try {
+      const cached = localStorage.getItem('alphaPro_cached_stores');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    try {
+      const active = localStorage.getItem('alphaPro_active_store');
+      if (active) {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.id) return [parsed];
+      }
+    } catch {}
+    return [];
+  }, [props.stores]);
+
+  const currentCashierOptions = useMemo(() => {
+    const cashiersMap = new Map<string, string>();
+
+    const addFromList = (list: Record<string, any> | null | undefined) => {
+      if (!list) return;
+      Object.entries(list).forEach(([id, acc]) => {
+        if (!id) return;
+        const lowerId = id.toLowerCase();
+        const role = ((acc && acc.role) || '').toLowerCase();
+        if (lowerId === 'owner' || role === 'owner') return;
+        const name = (acc && acc.name) || id;
+        cashiersMap.set(id, name);
+      });
+    };
+
+    if (currentStoreId !== 'all') {
+      try {
+        const raw = localStorage.getItem(`alphaPro_${currentStoreId}_kasir_list`);
+        if (raw) addFromList(JSON.parse(raw));
+      } catch {}
+
+      if (props.activeStoreId === currentStoreId && props.kasirList) {
+        addFromList(props.kasirList);
+      }
+
+      if (props.transactions) {
+        props.transactions.forEach(t => {
+          if (t.store_id === currentStoreId && t.kasir_id && t.kasir_id.toLowerCase() !== 'owner') {
+            if (!cashiersMap.has(t.kasir_id)) {
+              cashiersMap.set(t.kasir_id, t.kasir_id);
+            }
+          }
+        });
+      }
+    } else {
+      availableStores.forEach(s => {
+        try {
+          const raw = localStorage.getItem(`alphaPro_${s.id}_kasir_list`);
+          if (raw) addFromList(JSON.parse(raw));
+        } catch {}
+      });
+
+      if (props.kasirList) {
+        addFromList(props.kasirList);
+      }
+
+      if (props.transactions) {
+        props.transactions.forEach(t => {
+          if (t.kasir_id && t.kasir_id.toLowerCase() !== 'owner') {
+            if (!cashiersMap.has(t.kasir_id)) {
+              cashiersMap.set(t.kasir_id, t.kasir_id);
+            }
+          }
+        });
+      }
+    }
+
+    return Array.from(cashiersMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [currentStoreId, availableStores, props.kasirList, props.transactions, props.activeStoreId]);
+
+  const handleStoreChange = (newStoreId: string) => {
+    if (props.setPantauStoreId) {
+      props.setPantauStoreId(newStoreId as any);
+    }
+    if (props.setFilterKasir) {
+      props.setFilterKasir('Semua');
+    }
+    setCurrentPage(1);
+  };
 
   const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(props.activeStoreId))
 
@@ -147,11 +243,14 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
 
 
 
-  // 1. Filter berdasarkan Rentang Tanggal (Untuk Kartu Dashboard Atas)
+  // 1. Filter berdasarkan Rentang Tanggal, Toko & Kasir (Untuk Kartu Dashboard Atas)
   const dateFilteredTransactions = props.transactions.filter(t => {
     if (t.kategori.startsWith('Isi')) return false
     const date = t.timestamp.split('T')[0]
-    return date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
+    const matchDate = date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
+    const matchStore = !props.pantauStoreId || props.pantauStoreId === 'all' || t.store_id === props.pantauStoreId
+    const matchKasir = !props.filterKasir || props.filterKasir === 'Semua' || t.kasir_id === props.filterKasir
+    return matchDate && matchStore && matchKasir
   })
 
   // 2. Filter berdasarkan Kategori, Pencarian, & Kasir (Untuk List & Footer Bawah)
@@ -209,11 +308,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
     if (!t.kategori.startsWith('Isi')) return false
     const date = t.timestamp.split('T')[0]
     const matchDate = date >= props.filterTanggalMulai && date <= props.filterTanggalAkhir
+    const matchStore = !props.pantauStoreId || props.pantauStoreId === 'all' || t.store_id === props.pantauStoreId
+    const matchKasir = !props.filterKasir || props.filterKasir === 'Semua' || t.kasir_id === props.filterKasir
     const matchType = props.activeSaldoFilter === 'Semua' || 
                     (props.activeSaldoFilter === 'Saldo Bank' && t.kategori.includes('Saldo Bank')) ||
                     (props.activeSaldoFilter === 'Saldo Real' && t.kategori.includes('Real Aplikasi')) ||
                     (props.activeSaldoFilter === 'Modal Tunai' && t.kategori.includes('Modal Tunai'))
-    return matchDate && matchType
+    return matchDate && matchStore && matchKasir && matchType
   })
 
   const totalSaldoNominal = filteredSaldoTransactions.reduce((s, t) => s + t.nominal, 0)
@@ -569,8 +670,28 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                   </div>
                 </div>
 
+                {/* Owner Store Filter */}
+                {props.kasirRole === 'owner' && (
+                  <div className="w-[130px] shrink-0">
+                    <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Pilih Toko</label>
+                    <div className="relative">
+                      <select 
+                        value={currentStoreId}
+                        onChange={(e) => handleStoreChange(e.target.value)}
+                        className="w-full h-[28px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg pl-2 pr-6 py-0.5 text-[11px] font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer appearance-none truncate"
+                      >
+                        <option value="all">Semua Toko</option>
+                        {availableStores.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
+                    </div>
+                  </div>
+                )}
+
                 {/* Owner Kasir Filter */}
-                {props.kasirRole === 'owner' && props.kasirList && (
+                {props.kasirRole === 'owner' && (
                   <div className="w-[120px] shrink-0">
                     <label className="block text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Pantau Kasir</label>
                     <div className="relative">
@@ -583,11 +704,9 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                         className="w-full h-[28px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg pl-2 pr-6 py-0.5 text-[11px] font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer appearance-none truncate"
                       >
                         <option value="Semua">Semua Kasir</option>
-                        {Object.entries(props.kasirList)
-                          .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
-                          .map(([id, acc]) => (
-                            <option key={id} value={id}>{acc.name}</option>
-                          ))}
+                        {currentCashierOptions.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
                       </select>
                       <i className="fa-solid fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none"></i>
                     </div>
@@ -995,22 +1114,43 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           {/* FILTER KASIR & TANGGAL DI DALAM HEADER BIRU */}
           <div className="mt-3.5 pt-3 border-t border-white/10 flex flex-col gap-2">
             
-            {/* OWNER ONLY: FILTER KASIR */}
-            {props.kasirRole === 'owner' && props.kasirList && (
-              <div className="flex-1 bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2 shadow-sm transition-all">
-                <div className="flex-1 flex items-center min-w-0">
+            {/* OWNER ONLY: 2 KOLOM (FILTER PERTOKO & FILTER PERKASIR) */}
+            {props.kasirRole === 'owner' && (
+              <div className="grid grid-cols-2 gap-2">
+                {/* Kolom 1: Filter per Toko */}
+                <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 shadow-sm transition-all min-w-0">
+                  <i className="fa-solid fa-store text-[10px] text-white/80 shrink-0"></i>
+                  <div className="relative flex-1 min-w-0">
+                    <select 
+                      value={currentStoreId}
+                      onChange={(e) => handleStoreChange(e.target.value)}
+                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
+                    >
+                      <option value="all" className="text-slate-800 font-bold">Semua Toko</option>
+                      {availableStores.map(s => (
+                        <option key={s.id} value={s.id} className="text-slate-800 font-bold">{s.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
+                  </div>
+                </div>
+
+                {/* Kolom 2: Filter per Kasir */}
+                <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 shadow-sm transition-all min-w-0">
+                  <i className="fa-solid fa-user text-[10px] text-white/80 shrink-0"></i>
                   <div className="relative flex-1 min-w-0">
                     <select 
                       value={props.filterKasir || 'Semua'}
-                      onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-4 truncate font-sans"
+                      onChange={(e) => {
+                        props.setFilterKasir && props.setFilterKasir(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
                     >
-                      <option value="Semua" className="text-slate-800">Semua Kasir</option>
-                      {Object.entries(props.kasirList)
-                        .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
-                        .map(([id, acc]) => (
-                          <option key={id} value={id} className="text-slate-800">{acc.name}</option>
-                        ))}
+                      <option value="Semua" className="text-slate-800 font-bold">Semua Kasir</option>
+                      {currentCashierOptions.map(c => (
+                        <option key={c.id} value={c.id} className="text-slate-800 font-bold">{c.name}</option>
+                      ))}
                     </select>
                     <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
                   </div>

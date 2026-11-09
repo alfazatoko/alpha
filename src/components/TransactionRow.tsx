@@ -3,7 +3,7 @@ import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { KasirAccount } from './LoginScreen'
 import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from '../lib/printerService'
-import { isPpobTx, getStoredCustomLabels, parseTransactionDetails } from '../lib/categoryHelper'
+import { isPpobTx, isDigitalTransferTx, getStoredCustomLabels, parseTransactionDetails } from '../lib/categoryHelper'
 
 interface TransactionRowProps {
   t: Transaction
@@ -17,21 +17,21 @@ interface TransactionRowProps {
   kasirList?: Record<string, KasirAccount>
 }
 
-const TransactionRow: React.FC<TransactionRowProps> = ({ 
-  t, 
-  index, 
-  onEdit, 
-  onDelete, 
+const TransactionRow: React.FC<TransactionRowProps> = ({
+  t,
+  index,
+  onEdit,
+  onDelete,
   kasirRole,
   storeName,
   storeSubtext,
   kasirName,
-  kasirList 
+  kasirList
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [showStrukPreview, setShowStrukPreview] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
-  
+
   useEffect(() => {
     const handleOpen = (e: any) => {
       if (e.detail === t.id) {
@@ -95,6 +95,31 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     }
   }
 
+  const parsed = parseTransactionDetails(t, customLabels);
+  const isDigital = isDigitalTransferTx(t, customLabels);
+
+  const isTarikTunai = (
+    t.kategori === 'Tarik Tunai' || 
+    parsed.kategoriTransaksi === 'Tarik Tunai' || 
+    (t.keterangan || '').toUpperCase().includes('TARIK TUNAI')
+  );
+
+  const isAksesorisOrVoucher = (
+    t.kategori === 'Aksesoris' ||
+    t.kategori === 'Voucher' ||
+    parsed.kategoriTransaksi === 'Aksesoris' ||
+    parsed.kategoriTransaksi === 'Voucher' ||
+    (t.keterangan || '').toUpperCase().includes('AKSESORIS') ||
+    (t.keterangan || '').toUpperCase().includes('VOUCHER')
+  );
+
+  // KUNCI UTAMA ZERO-ERROR:
+  // Hanya transaksi DIGITAL (PPOB, E-Wallet, Transfer Bank, Flip, Sinergi) yang boleh memiliki Fee Aplikasi.
+  // Tarik Tunai, Aksesoris, Voucher, dan transaksi non-digital lainnya MUTLAK TIDAK BOLEH memiliki Fee Aplikasi!
+  if (!isDigital || isTarikTunai || isAksesorisOrVoucher) {
+    appFee = 0;
+  }
+
   const isOrderKuota = isPpobTx(t, customLabels);
   // Untuk Order Kuota: di database t.nominal sudah modal riil (termasuk fee app), dan t.adminFee sudah laba bersih (Jual - Modal Riil).
   // Untuk kategori lain (Flip, Bank, Dana, Sinergi): t.nominal adalah nominal murni, dan t.adminFee adalah tarif kotor kasir.
@@ -103,10 +128,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const displayAdminFee = (appFee > 0 && !isOrderKuota) ? Math.max(0, t.adminFee - appFee) : t.adminFee;
   const displayTotal = appFee > 0
     ? (displayTotalModal + displayAdminFee)
-    : (t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') && t.kategori !== 'Tarik Tunai' ? t.adminFee : 0));
-
-
-  const parsed = parseTransactionDetails(t, customLabels);
+    : (t.nominal + (!t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0));
 
   const displayJenisTransaksi = parsed.baris1Judul;
   const displaySubKategori = parsed.baris2Sub;
@@ -117,14 +139,14 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const cleanDigits = (s: string) => s.replace(/\D/g, '');
 
   const hasAdminDalam = (t.keterangan || '').toUpperCase().includes('[ADMIN_DALAM]');
-  let adminFeeLabel = hasAdminDalam 
-    ? "Admin Toko (Potong Dalam):" 
-    : isNonTunai 
-    ? "Admin Toko (Non Tunai):" 
-    : "Admin Toko (Tunai):";
+  let adminFeeLabel = hasAdminDalam
+    ? "Admin Toko (Potong Dalam):"
+    : isNonTunai
+      ? "Admin Toko (Non Tunai):"
+      : "Admin Toko (Tunai):";
 
   const isSplitPayment = (t.keterangan || '').includes('[SPLIT:');
-  
+
   // Tentukan Sumber Uang Keluar (menyesuaikan aplikasi/kategori yang dipilih)
   let modalSumberKeluar = '—';
   if (parsed.kategoriTransaksi === 'Tarik Tunai') {
@@ -147,8 +169,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     modalSumberMasuk = 'Laci Kasir';
   }
 
-  let modalTransaksiLabel = displaySubKategori 
-    ? `${displayJenisTransaksi} > ${displaySubKategori}` 
+  let modalTransaksiLabel = displaySubKategori
+    ? `${displayJenisTransaksi} > ${displaySubKategori}`
     : displayJenisTransaksi;
   let modalKeterangan = displayCatatanTambahan || '-';
   let listKeterangan = displaySubKategori || displayCatatanTambahan || (appFee > 0 ? `Fee App: Rp ${formatRp(appFee)}` : '-');
@@ -159,7 +181,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     try {
       const savedStore = localStorage.getItem('alphaPro_active_store')
       if (savedStore) return JSON.parse(savedStore).name || 'ALFAZA CELL'
-    } catch {}
+    } catch { }
     return 'ALFAZA CELL'
   })()
 
@@ -167,7 +189,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     try {
       const savedStore = localStorage.getItem('alphaPro_active_store')
       if (savedStore) return JSON.parse(savedStore).subtext || ''
-    } catch {}
+    } catch { }
     return ''
   })()
 
@@ -192,7 +214,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
           const parsed = JSON.parse(globalKasirs)
           if (parsed[t.kasir_id]?.name) return parsed[t.kasir_id].name
         }
-      } catch {}
+      } catch { }
       return t.kasir_id
     }
     // 2. Fallback jika t.kasir_id belum tercatat di data lama
@@ -230,13 +252,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       text += formatReceiptRow(adminFeeLabel.replace(' :', '').replace(':', ''), 'Rp ' + formatRp(displayAdminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(displayTotal)) + '\n';
-    } else if (t.kategori === 'Tarik Tunai') {
+    } else if (isTarikTunai || t.kategori === 'Tarik Tunai') {
       const totalTarik = t.nominal + (!hasAdminDalam ? t.adminFee : 0);
       text += formatReceiptRow('Nominal Tarik', 'Rp ' + formatRp(t.nominal - (hasAdminDalam ? t.adminFee : 0))) + '\n';
       text += formatReceiptRow(hasAdminDalam ? 'Admin (Potong)' : 'Admin (Tunai)', 'Rp ' + formatRp(t.adminFee)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(totalTarik)) + '\n';
-    } else if (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) {
+    } else if (isAksesorisOrVoucher || t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) {
       text += formatReceiptRow('Harga Barang', 'Rp ' + formatRp(t.nominal)) + '\n';
       text += formatReceiptDivider() + '\n';
       text += formatReceiptRow('TOTAL', 'Rp ' + formatRp(t.nominal)) + '\n';
@@ -273,7 +295,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
   return (
     <div className="flex flex-col group transaction-row-container border-b border-slate-200/60 last:border-b-0 pb-1.5 mb-1.5">
-      <div 
+      <div
         className="flex justify-between items-start py-1 cursor-pointer active:bg-slate-50 transition-all px-1"
         onClick={() => setIsOpen(!isOpen)}
       >
@@ -287,24 +309,24 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
           {/* INFO UTAMA */}
           <div className="flex flex-col gap-[2px]">
             <div className={cn("text-[13px] font-black tracking-tight uppercase leading-tight", rowColorClass)}>
-               {displayJenisTransaksi}
+              {displayJenisTransaksi}
             </div>
             {displaySubKategori ? (
               <div className="text-[10px] text-blue-900 font-black tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-tight">
-                 {displaySubKategori}
+                {displaySubKategori}
               </div>
             ) : listKeterangan && listKeterangan !== '-' ? (
               <div className="text-[9px] text-blue-900 font-bold tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
-                 {listKeterangan}
+                {listKeterangan}
               </div>
             ) : null}
             {displaySubKategori && displayCatatanTambahan && (
               <div className="text-[9px] text-slate-500 font-medium tracking-tight truncate max-w-[180px] sm:max-w-[260px] leading-none">
-                 {displayCatatanTambahan}
+                {displayCatatanTambahan}
               </div>
             )}
             <div className="text-[9px] text-slate-500 font-bold tracking-tight leading-none mt-0.5">
-               {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
+              {dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}
             </div>
           </div>
         </div>
@@ -319,12 +341,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             )}
             <div className={cn(
               "text-[13px] font-black tracking-tight leading-tight",
-              isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : (t.kategori === 'Tarik Tunai' ? "text-rose-600" : "text-slate-900")
+              isKhusus ? "text-orange-600" : isNonTunai ? "text-purple-600" : ((isTarikTunai || t.kategori === 'Tarik Tunai') ? "text-rose-600" : "text-slate-900")
             )}>
               {(appFee > 0 && isOrderKuota ? displayModalPokok : t.nominal).toLocaleString('id-ID')}
             </div>
           </div>
-          {t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
+          {isAksesorisOrVoucher || t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || displayAdminFee === 0 ? (
             isNonTunai ? (
               <span className="text-[8px] font-black uppercase text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                 NON TUNAI
@@ -332,7 +354,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
             ) : null
           ) : (
             <div className={cn(
-              "text-[11px] font-extrabold uppercase", 
+              "text-[11px] font-extrabold uppercase",
               isKhusus ? "text-orange-400" : isNonTunai ? "text-purple-600" : ((t.keterangan || '').includes('[ADMIN_DALAM]') ? "text-[#0066AE]" : "text-emerald-600")
             )}>
               Admin: {displayAdminFee.toLocaleString('id-ID')}
@@ -343,12 +365,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
       {/* DETAIL POPUP MODAL (DESAIN BARU SESUAI FOTO) */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-2 py-3 sm:p-4 animate-in fade-in duration-200" 
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-2 py-3 sm:p-4 animate-in fade-in duration-200"
           onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
         >
-          <div 
-            className="bg-[#F2F6FC] rounded-3xl w-full max-w-[440px] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200" 
+          <div
+            className="bg-[#F2F6FC] rounded-3xl w-full max-w-[440px] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Royal Blue with White Checkmark & Title (Lebih pendek & kompak) */}
@@ -367,7 +389,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5 relative z-10">
-                <button 
+                <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -379,7 +401,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   <i className="fa-solid fa-print text-xs"></i>
                 </button>
                 {canDelete && (
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => { setIsOpen(false); handleDeleteClick(e); }}
                     className="w-7 h-7 rounded-full bg-white/20 hover:bg-rose-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
@@ -388,7 +410,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                     <i className="fa-solid fa-trash-can text-[11px]"></i>
                   </button>
                 )}
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
@@ -398,7 +420,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </button>
               </div>
             </div>
-            
+
             {/* Body */}
             <div className="p-3 space-y-1.5">
               {/* KARTU 1: INFO 4 KOTAK (Lebih lebar, kepinggir, muat full teks & tanggal 1 baris) */}
@@ -526,7 +548,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                         <span className="font-black text-emerald-600 tabular-nums">Rp {formatRp(displayAdminFee)}</span>
                       </div>
                     </>
-                  ) : (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
+                  ) : (isAksesorisOrVoucher || t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-gray-700">
                         <i className="fa-solid fa-box text-[#0066FF] text-xs w-3.5 text-center"></i>
@@ -539,7 +561,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2 text-gray-700">
                           <i className="fa-solid fa-wallet text-[#0066FF] text-xs w-3.5 text-center"></i>
-                          <span className="font-medium">{t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal'}</span>
+                          <span className="font-medium">{isTarikTunai ? 'Nominal Tarik' : (t.kategori === 'Order Kuota' ? 'Harga Modal' : 'Nominal')}</span>
                         </div>
                         <span className="font-black text-gray-900 tabular-nums">Rp {formatRp(t.nominal - (t.keterangan?.includes('[ADMIN_DALAM]') ? t.adminFee : 0))}</span>
                       </div>
@@ -610,14 +632,14 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
       {/* MODAL REVIEW STRUK TRANSAKSI SEBELUM DICETAK */}
       {showStrukPreview && (
-        <div 
+        <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 animate-in fade-in duration-150"
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            if (!isPrinting) setShowStrukPreview(false); 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isPrinting) setShowStrukPreview(false);
           }}
         >
-          <div 
+          <div
             className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[320px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
@@ -632,7 +654,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   <p className="text-[9px] text-slate-400 font-medium">Ringkasan sebelum dicetak</p>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
                 disabled={isPrinting}
                 onClick={() => setShowStrukPreview(false)}
@@ -727,7 +749,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                         <span>Rp {formatRp(displayTotal)}</span>
                       </div>
                     </>
-                  ) : t.kategori === 'Tarik Tunai' ? (
+                  ) : (isTarikTunai || t.kategori === 'Tarik Tunai') ? (
                     <>
                       <div className="flex justify-between text-[10px]">
                         <span className="text-slate-600">Nominal Tarik</span>
@@ -743,7 +765,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                         <span>Rp {formatRp(t.nominal + (!hasAdminDalam ? t.adminFee : 0))}</span>
                       </div>
                     </>
-                  ) : (t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
+                  ) : (isAksesorisOrVoucher || t.kategori === 'Aksesoris' || t.kategori === 'Voucher' || t.adminFee === 0) ? (
                     <>
                       <div className="flex justify-between text-[10px]">
                         <span className="text-slate-600">Harga Barang</span>

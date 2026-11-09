@@ -327,8 +327,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const setActiveMode = (mode: 'DIGITAL' | 'TARIK' | 'AKSESORIS' | 'VOUCHER' | '') => {
     setActiveModeState(mode)
     if (mode === 'TARIK') {
+      setSelectedTujuanFee(0)
+      setSelectedTujuan('')
       setIsAdminNonTunai(true)
-    } else if (mode === 'DIGITAL' || mode === 'AKSESORIS' || mode === 'VOUCHER') {
+    } else if (mode === 'AKSESORIS' || mode === 'VOUCHER') {
+      setSelectedTujuanFee(0)
+      setSelectedTujuan('')
+      setIsAdminNonTunai(false)
+    } else if (mode === 'DIGITAL') {
       setIsAdminNonTunai(false)
     }
     if (onModeChange && mode) onModeChange(mode)
@@ -873,7 +879,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           }
           return;
         }
-        if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setActiveMode('TARIK'); setKategori('Tarik Tunai'); setIsAdminManuallyEdited(false); return; }
+        if (e.key === 'w' || e.key === 'W') { e.preventDefault(); setActiveMode('TARIK'); setKategori('Tarik Tunai'); setSelectedTujuanFee(0); setIsAdminManuallyEdited(false); return; }
         if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setActiveMode('AKSESORIS'); setKategori('Aksesoris'); setIsAdminManuallyEdited(false); setClassicPopupMode('AKSESORIS'); return; }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (onOpenVoucherJualCepat) onOpenVoucherJualCepat(); return; }
         if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setIsSumberModalOpen(true); return; }
@@ -1057,7 +1063,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     } else {
       // Sistem Nominal & Admin (Flip, Transfer Bank, DANA, Order Kuota, Tarik Tunai, dll)
       totalJual = m + a;
-      labaBersih = a - selectedTujuanFee;
+      labaBersih = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
     }
 
     const labelTotal = activeMode === 'TARIK' ? 'Total Transaksi' : 'Total Jual';
@@ -1463,7 +1469,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         : (keterangan.trim() ? keterangan.trim() : (autoTextPrefix || kategori));
     }
 
-    if (selectedTujuanFee > 0 && !finalKeteranganBase.includes('[FEE_APP:')) {
+    if (activeMode === 'DIGITAL' && selectedTujuanFee > 0 && !finalKeteranganBase.includes('[FEE_APP:')) {
       finalKeteranganBase += ` [FEE_APP:${selectedTujuanFee}]`;
     }
 
@@ -1593,6 +1599,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       setKeterangan('')
       setNominalCashSplit('')
       setNominalNonTunaiSplit('')
+      setSelectedTujuanFee(0)
     }
     setPrevSaving(isSaving)
   }, [isSaving, prevSaving])
@@ -1732,6 +1739,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 setActiveMode(mode.id as any); setIsAdminManuallyEdited(false)
                 if (mode.id === 'TARIK') {
                   setKategori('Tarik Tunai')
+                  setSelectedTujuanFee(0)
                 } else if (mode.id === 'AKSESORIS') {
                   setKategori('Aksesoris')
                   setClassicPopupMode('AKSESORIS')
@@ -1843,6 +1851,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     onClick={() => { 
                       const val = item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name;
                       setSelectedSumber(val); 
+                      setSelectedTujuanFee(0);
                       setIsKetAuto(true);
                       setSumberAplikasi('TUNAI LACI KASIR');
                       setTujuanMasuk(val);
@@ -2171,7 +2180,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     }
                     const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
                       ? a - (m + selectedTujuanFee)
-                      : a - selectedTujuanFee;
+                      : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                     return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
                       : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
@@ -2378,6 +2387,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     onClick={() => { 
                       const val = item.name === 'EDC/ATM' ? 'ATM/EDC' : item.name === 'TRANSFER' ? 'BANK' : item.name;
                       setSelectedSumber(val); 
+                      setSelectedTujuanFee(0);
                       setIsKetAuto(true);
                       setSumberAplikasi('TUNAI LACI KASIR');
                       setTujuanMasuk(val);
@@ -2719,7 +2729,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         ? "bg-purple-50/80 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100" 
                         : "bg-gray-50/50 border-gray-200 text-gray-900 focus:bg-white focus:border-purple-400 focus:ring-purple-50";
                     }
-                    const laba = a - selectedTujuanFee;
+                    const laba = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                     return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
                       : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
@@ -2731,7 +2741,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 const m = parseInt(nominal.replace(/[^0-9]/g, '')) || 0;
                 const a = parseInt(admin.replace(/[^0-9]/g, '')) || 0;
                 if (m <= 0 || a <= 0) return null;
-                const laba = a - selectedTujuanFee;
+                const laba = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                 if (laba > 0) {
                   return (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
@@ -3154,7 +3164,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       }
                       const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
                         ? a - (m + selectedTujuanFee)
-                        : a - selectedTujuanFee;
+                        : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                       return laba <= 0
                         ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
                         : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
@@ -3167,7 +3177,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   if (m <= 0 || a <= 0) return null;
                   const laba = (kategori === 'Order Kuota' && !isCurrentNominalAdmin)
                     ? a - (m + selectedTujuanFee)
-                    : a - selectedTujuanFee;
+                    : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                   if (laba > 0) {
                     return (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
@@ -3582,6 +3592,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                           onClick={() => {
                             setActiveMode('TARIK');
                             setSelectedSumber(s);
+                            setSelectedTujuanFee(0);
                             setIsKetAuto(true);
                             setIsAdminManuallyEdited(false);
                             setIsTema3SheetOpen(false);
@@ -3859,6 +3870,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                               if (hasDraggedPopupRef.current) return;
                               if (isEditingPopup) {
                                if (classicPopupMode === 'AKSESORIS') {
+                               setSelectedTujuanFee(0);
                                  const newName = window.prompt(`Ubah nama aksesoris "${item.name}":`, item.name);
                                  if (newName && newName.trim()) {
                                    const trimmed = newName.trim().toUpperCase();
@@ -3900,6 +3912,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                                   setSelectedTujuanFee(0);
                                 }
                               } else if (classicPopupMode === 'AKSESORIS') {
+                                setSelectedTujuanFee(0);
                                 setSelectedTujuan('LAINNYA');
                               } else {
                                 setSelectedTujuan('LAINNYA');
@@ -3921,6 +3934,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                             setIsKetAuto(true);
                             setErrorMsg(null);
                             if (classicPopupMode === 'AKSESORIS') {
+                               setSelectedTujuanFee(0);
                                setSelectedTujuan(item.name);
                                setKeterangan('');
                                setClassicPopupMode(null);

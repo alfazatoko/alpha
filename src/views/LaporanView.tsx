@@ -2,7 +2,7 @@ import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
 import { formatRupiah, formatInputRupiah, cn } from '../lib/utils'
-import type { Transaction } from '../types'
+import type { Transaction, Store } from '../types'
 import { supabase } from '../lib/supabase'
 import { 
   getStoredCustomLabels, 
@@ -47,6 +47,9 @@ interface LaporanViewProps {
   isPc?: boolean
   activeStoreId?: string
   openJurnalModal?: number
+  stores?: Store[]
+  pantauStoreId?: string | 'all'
+  setPantauStoreId?: (id: string | 'all') => void
 }
 
 interface VoucherItem {
@@ -173,6 +176,98 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   ])
 
   const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(props.activeStoreId));
+
+  const currentStoreId = props.pantauStoreId || 'all';
+
+  const availableStores = useMemo(() => {
+    if (props.stores && props.stores.length > 0) {
+      return props.stores;
+    }
+    try {
+      const cached = localStorage.getItem('alphaPro_cached_stores');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    try {
+      const active = localStorage.getItem('alphaPro_active_store');
+      if (active) {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.id) return [parsed];
+      }
+    } catch {}
+    return [];
+  }, [props.stores]);
+
+  const currentCashierOptions = useMemo(() => {
+    const cashiersMap = new Map<string, string>();
+
+    const addFromList = (list: Record<string, any> | null | undefined) => {
+      if (!list) return;
+      Object.entries(list).forEach(([id, acc]) => {
+        if (!id) return;
+        const lowerId = id.toLowerCase();
+        const role = ((acc && acc.role) || '').toLowerCase();
+        if (lowerId === 'owner' || role === 'owner') return;
+        const name = (acc && acc.name) || id;
+        cashiersMap.set(id, name);
+      });
+    };
+
+    if (currentStoreId !== 'all') {
+      try {
+        const raw = localStorage.getItem(`alphaPro_${currentStoreId}_kasir_list`);
+        if (raw) addFromList(JSON.parse(raw));
+      } catch {}
+
+      if (props.activeStoreId === currentStoreId && props.kasirList) {
+        addFromList(props.kasirList);
+      }
+
+      if (props.allTransactions) {
+        props.allTransactions.forEach(t => {
+          if (t.store_id === currentStoreId && t.kasir_id && t.kasir_id.toLowerCase() !== 'owner') {
+            if (!cashiersMap.has(t.kasir_id)) {
+              cashiersMap.set(t.kasir_id, t.kasir_id);
+            }
+          }
+        });
+      }
+    } else {
+      availableStores.forEach(s => {
+        try {
+          const raw = localStorage.getItem(`alphaPro_${s.id}_kasir_list`);
+          if (raw) addFromList(JSON.parse(raw));
+        } catch {}
+      });
+
+      if (props.kasirList) {
+        addFromList(props.kasirList);
+      }
+
+      if (props.allTransactions) {
+        props.allTransactions.forEach(t => {
+          if (t.kasir_id && t.kasir_id.toLowerCase() !== 'owner') {
+            if (!cashiersMap.has(t.kasir_id)) {
+              cashiersMap.set(t.kasir_id, t.kasir_id);
+            }
+          }
+        });
+      }
+    }
+
+    return Array.from(cashiersMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [currentStoreId, availableStores, props.kasirList, props.allTransactions, props.activeStoreId]);
+
+  const handleStoreChange = (newStoreId: string) => {
+    if (props.setPantauStoreId) {
+      props.setPantauStoreId(newStoreId as any);
+    }
+    if (props.setFilterKasir) {
+      props.setFilterKasir('Semua');
+    }
+  };
 
   useEffect(() => {
     const handleLabelsUpdate = (e: any) => {
@@ -1992,6 +2087,23 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
               </div>
             </div>
 
+            {/* Toko / Cabang (Owner Only) */}
+            {props.kasirRole === 'owner' && (
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Pilih Toko</span>
+                <select 
+                  value={currentStoreId}
+                  onChange={(e) => handleStoreChange(e.target.value)}
+                  className="h-[38px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer shadow-sm"
+                >
+                  <option value="all">Semua Toko</option>
+                  {availableStores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Pantau Kasir (Owner Only) */}
             {props.kasirRole === 'owner' && props.setFilterKasir && (
               <div className="flex flex-col">
@@ -2002,11 +2114,9 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
                   className="h-[38px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-violet-500/20 cursor-pointer shadow-sm"
                 >
                   <option value="Semua">Semua Kasir</option>
-                  {Object.entries(props.kasirList)
-                    .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
-                    .map(([id, acc]) => (
-                      <option key={id} value={id}>{acc.name}</option>
-                    ))}
+                  {currentCashierOptions.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -2940,23 +3050,48 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
           
         </div>
 
-        {props.kasirRole === 'owner' && props.setFilterKasir && (
-          <div className="mt-2.5 bg-white shadow-sm p-2.5 rounded-[1.25rem] border border-blue-100 flex items-center justify-between mx-0.5">
-            <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wider flex items-center"><div className="w-5 h-5 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center mr-2"><i className="fa-solid fa-user-tie text-[9px]"></i></div> Mode Pantau Kasir:</span>
-            <div className="relative">
-              <select 
-                value={props.filterKasir || 'Semua'}
-                onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
-                className="bg-gray-50 text-blue-700 text-[10px] font-black rounded-lg pl-3 pr-7 py-1.5 outline-none border border-gray-100 appearance-none cursor-pointer shadow-sm"
-              >
-                <option value="Semua">Semua Kasir</option>
-                {Object.entries(props.kasirList)
-                  .filter(([id, acc]) => id.toLowerCase() !== 'owner' && (acc.role || '').toLowerCase() !== 'owner')
-                  .map(([id, acc]) => (
-                    <option key={id} value={id}>{acc.name}</option>
+        {props.kasirRole === 'owner' && (
+          <div className="mt-2.5 grid grid-cols-2 gap-2 mx-0.5">
+            {/* Kolom 1: Filter per Toko */}
+            <div className="bg-white shadow-sm p-2.5 rounded-[1.25rem] border border-blue-100 flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-store text-[10px]"></i>
+              </div>
+              <div className="relative flex-1 min-w-0">
+                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Toko / Cabang</span>
+                <select 
+                  value={currentStoreId}
+                  onChange={(e) => handleStoreChange(e.target.value)}
+                  className="w-full bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
+                >
+                  <option value="all" className="text-slate-800 font-bold">Semua Toko</option>
+                  {availableStores.map(s => (
+                    <option key={s.id} value={s.id} className="text-slate-800 font-bold">{s.name}</option>
                   ))}
-              </select>
-              <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+                </select>
+                <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+              </div>
+            </div>
+
+            {/* Kolom 2: Filter per Kasir */}
+            <div className="bg-white shadow-sm p-2.5 rounded-[1.25rem] border border-blue-100 flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-user-tie text-[10px]"></i>
+              </div>
+              <div className="relative flex-1 min-w-0">
+                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Pantau Kasir</span>
+                <select 
+                  value={props.filterKasir || 'Semua'}
+                  onChange={(e) => props.setFilterKasir && props.setFilterKasir(e.target.value)}
+                  className="w-full bg-transparent text-blue-700 text-[10px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
+                >
+                  <option value="Semua" className="text-slate-800 font-bold">Semua Kasir</option>
+                  {currentCashierOptions.map(c => (
+                    <option key={c.id} value={c.id} className="text-slate-800 font-bold">{c.name}</option>
+                  ))}
+                </select>
+                <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-blue-500 pointer-events-none"></i>
+              </div>
             </div>
           </div>
         )}

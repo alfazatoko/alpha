@@ -102,19 +102,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.8
-          name: "ALFAZA ALPHA POS v1.6.8"
+          tag_name: v1.6.9
+          name: "ALFAZA ALPHA POS v1.6.9"
           body: |
-            ### Pembaruan Aplikasi v1.6.8
-            - **Hierarki & Tampilan Riwayat Transaksi Bersih:**
-              - Judul transaksi transfer di riwayat kini langsung menampilkan **Sumber Aplikasi** (misal `BANK UOB`, `ORDER KUOTA`, `FLIP`, `DANA`).
-              - Baris kedua menampilkan **Layanan/Produk Tujuan** bersih tanpa pengulangan dan tanpa tanda panah gantung (misal `BANK BTN`, `LINKAJA`, `SHOPEEPAY`, `MANDIRI`).
-              - Transaksi Tarik Tunai ringkas dan padat 2 tingkat (`TARIK TUNAI` > `QRIS` / `EDC / ATM` / `Bank`).
-              - Modal Detail Transaksi & Struk Thermal kini memiliki hierarki akuntansi jelas: Kategori Transaksi, Sumber Transaksi, dan Layanan/Produk.
-            - **Pengaturan Suara Notifikasi Transaksi Per-Toko:**
-              - Navigasi tab toko horizontal untuk memilih dan mengatur suara notifikasi masing-masing toko dengan 1 sentuhan.
-              - Penambahan preset nada bawaan baru: "Musik Notifikasi Alfaza" dari audio khusus toko.
-              - 6 koleksi suara bawaan instan (Ting Klasik, Koin Kasir, Bell Toko, Chime Sukses, Digital Beep, Musik Alfaza) + opsi upload mandiri per-toko.
+            ### Pembaruan Aplikasi v1.6.9
+            - **Filter 2 Kolom (Toko & Kasir) Mode Owner:**
+              - Pada halaman **Riwayat** dan **Laporan**, filter kasir mode owner kini dibagi rapi menjadi 2 kolom berdampingan: Filter Toko/Cabang dan Filter Kasir.
+              - Logika cascading cerdas: memilih toko otomatis memfilter daftar kasir milik toko tersebut dan me-reset filter kasir ke 'Semua Kasir'.
+            - **Sinkronisasi Otomatis Suara Notifikasi Per-Toko:**
+              - Suara notifikasi yang dipilih Owner kini otomatis tersinkronisasi secara real-time ke semua HP kasir per toko masing-masing via Supabase Realtime & auto-reload saat aplikasi aktif.
+            - **Perbaikan Rincian Modal & Fee Transaksi:**
+              - Memastikan Fee Aplikasi 0 pada transaksi non-digital (Aksesoris, Voucher, Tarik Tunai) agar modal dan laba 100% akurat.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
