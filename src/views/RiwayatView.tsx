@@ -1100,75 +1100,92 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       />
 
       <div className="mx-1.5 mb-3 mt-[-1.25rem] relative z-[40]">
-        <div className="bg-gradient-to-r from-[#004A8B] to-[#0069BA] rounded-t-[1.5rem] rounded-b-[2rem] shadow-lg border-[2px] border-white p-3.5 overflow-hidden relative">
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full border border-white/40 bg-white/10 flex items-center justify-center shrink-0">
-               <i className="fa-solid fa-clock text-lg text-white"></i>
-             </div>
-             <div className="flex-1 min-w-0">
-               <p className="text-[10px] font-bold text-white mb-0.5 truncate">Arus kas keluar masuk</p>
-               <h2 className="text-base font-black text-white leading-none truncate">Data Transaksi</h2>
-             </div>
+        <div className="bg-gradient-to-r from-[#0052FF] via-[#0066FF] to-[#00A0FF] rounded-[1.75rem] shadow-xl shadow-blue-500/20 border-2 border-white/70 p-3.5 sm:p-4 overflow-hidden relative">
+          {/* Background Decorative Trend Vector */}
+          <div className="absolute right-0 top-0 bottom-0 w-36 pointer-events-none opacity-15 flex items-center justify-end pr-2">
+            <svg viewBox="0 0 100 60" className="w-full h-full text-white fill-current">
+              <path d="M0,50 Q25,45 50,25 T100,5 L100,60 L0,60 Z" />
+              <polyline points="0,50 25,45 50,25 75,18 100,5" fill="none" stroke="white" strokeWidth="3" />
+            </svg>
+          </div>
+
+          <div className="flex items-center justify-between relative z-10 mb-3">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center shrink-0 shadow-inner">
+                <i className="fa-solid fa-clock text-lg text-white"></i>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-[11px] font-semibold text-blue-100 mb-0.5 truncate leading-none">Arus kas keluar masuk</p>
+                <h2 className="text-base sm:text-lg font-black text-white leading-tight tracking-tight truncate">Data Transaksi</h2>
+              </div>
+            </div>
+
+            {/* Ilustrasi Grafik Naik di Kanan Atas */}
+            <div className="flex items-end gap-1 text-white/90 shrink-0">
+              <div className="w-1.5 h-2.5 bg-white/40 rounded-full"></div>
+              <div className="w-1.5 h-4 bg-white/60 rounded-full"></div>
+              <div className="w-1.5 h-6 bg-white/80 rounded-full"></div>
+              <div className="w-1.5 h-8 bg-white rounded-full"></div>
+              <i className="fa-solid fa-arrow-trend-up text-xs text-white ml-0.5 mb-1"></i>
+            </div>
           </div>
 
           {/* FILTER KASIR & TANGGAL DI DALAM HEADER BIRU */}
-          <div className="mt-3.5 pt-3 border-t border-white/10 flex flex-col gap-2">
+          <div className="flex flex-col gap-2 relative z-10">
             
-            {/* OWNER ONLY: 2 KOLOM (FILTER PERTOKO & FILTER PERKASIR) */}
-            {props.kasirRole === 'owner' && (
-              <div className="grid grid-cols-2 gap-2">
-                {/* Kolom 1: Filter per Toko */}
-                <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 shadow-sm transition-all min-w-0">
-                  <i className="fa-solid fa-store text-[10px] text-white/80 shrink-0"></i>
-                  <div className="relative flex-1 min-w-0">
-                    <select 
-                      value={currentStoreId}
-                      onChange={(e) => handleStoreChange(e.target.value)}
-                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
-                    >
-                      <option value="all" className="text-slate-800 font-bold">Semua Toko</option>
-                      {availableStores.map(s => (
-                        <option key={s.id} value={s.id} className="text-slate-800 font-bold">{s.name}</option>
-                      ))}
-                    </select>
-                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                  </div>
-                </div>
-
-                {/* Kolom 2: Filter per Kasir */}
-                <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 shadow-sm transition-all min-w-0">
-                  <i className="fa-solid fa-user text-[10px] text-white/80 shrink-0"></i>
-                  <div className="relative flex-1 min-w-0">
-                    <select 
-                      value={props.filterKasir || 'Semua'}
-                      onChange={(e) => {
-                        props.setFilterKasir && props.setFilterKasir(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="w-full bg-transparent text-white text-[10px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
-                    >
-                      <option value="Semua" className="text-slate-800 font-bold">Semua Kasir</option>
-                      {currentCashierOptions.map(c => (
-                        <option key={c.id} value={c.id} className="text-slate-800 font-bold">{c.name}</option>
-                      ))}
-                    </select>
-                    <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/70 pointer-events-none"></i>
-                  </div>
+            {/* 2 KOLOM (FILTER PERTOKO & FILTER PERKASIR) */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Kolom 1: Filter per Toko */}
+              <div className="bg-white/15 border border-white/25 backdrop-blur-md rounded-2xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all min-w-0">
+                <i className="fa-solid fa-store text-[11px] text-white shrink-0"></i>
+                <div className="relative flex-1 min-w-0">
+                  <select 
+                    value={currentStoreId}
+                    onChange={(e) => handleStoreChange(e.target.value)}
+                    className="w-full bg-transparent text-white text-[10.5px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
+                  >
+                    <option value="all" className="text-slate-800 font-bold">Semua Toko</option>
+                    {availableStores.map(s => (
+                      <option key={s.id} value={s.id} className="text-slate-800 font-bold">{s.name}</option>
+                    ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/80 pointer-events-none"></i>
                 </div>
               </div>
-            )}
 
-            {/* FILTER TANGGAL */}
-            <div className="w-full bg-white/10 border border-white/20 backdrop-blur-sm rounded-xl px-2.5 py-1.5 flex justify-between items-center transition-all shadow-sm">
+              {/* Kolom 2: Filter per Kasir */}
+              <div className="bg-white/15 border border-white/25 backdrop-blur-md rounded-2xl px-3 py-2 flex items-center gap-2 shadow-xs transition-all min-w-0">
+                <i className="fa-solid fa-user text-[11px] text-white shrink-0"></i>
+                <div className="relative flex-1 min-w-0">
+                  <select 
+                    value={props.filterKasir || 'Semua'}
+                    onChange={(e) => {
+                      props.setFilterKasir && props.setFilterKasir(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full bg-transparent text-white text-[10.5px] sm:text-[11px] font-black outline-none border-none cursor-pointer appearance-none pr-3.5 truncate font-sans"
+                  >
+                    <option value="Semua" className="text-slate-800 font-bold">Semua Kasir</option>
+                    {currentCashierOptions.map(c => (
+                      <option key={c.id} value={c.id} className="text-slate-800 font-bold">{c.name}</option>
+                    ))}
+                  </select>
+                  <i className="fa-solid fa-chevron-down absolute right-0 top-1/2 -translate-y-1/2 text-[8px] text-white/80 pointer-events-none"></i>
+                </div>
+              </div>
+            </div>
+
+            {/* FILTER TANGGAL & NAVIGASI PANAH */}
+            <div className="flex items-center gap-2">
               <div 
-                className="flex items-center gap-2 text-left flex-1 overflow-hidden cursor-pointer active:opacity-70 pl-1"
+                className="flex-1 bg-white/15 border border-white/25 backdrop-blur-md rounded-2xl px-3.5 py-2 flex items-center gap-2 shadow-xs cursor-pointer active:scale-[0.99] transition-all min-w-0 overflow-hidden"
                 onClick={() => setIsFilterOpen(true)}
               >
-                <i className="fa-solid fa-sliders text-[10px] text-white shrink-0"></i>
-                <div className="min-w-0 flex-1 flex items-center">
-                  <span className="text-[9px] sm:text-[10px] font-black text-white uppercase tracking-wider truncate">
+                <i className="fa-solid fa-sliders text-[11px] text-white shrink-0"></i>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9.5px] sm:text-[10.5px] font-black text-white uppercase tracking-wider truncate block leading-tight">
                     {(() => {
-                      const cat = props.filterKategori.includes('Semua') ? 'Riwayat' : props.filterKategori.join(', ');
+                      const cat = props.filterKategori.includes('Semua') ? 'RIWAYAT' : props.filterKategori.join(', ');
                       const search = props.filterPencarian ? ` "${props.filterPencarian}"` : '';
                       let dateText = '';
                       if (props.filterTanggalMulai === props.filterTanggalAkhir) {
@@ -1194,7 +1211,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                 </div>
               </div>
               
-              <div className="flex items-center gap-1 shrink-0 ml-1">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1208,7 +1225,7 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       setCurrentPage(1);
                     }
                   }}
-                  className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+                  className="w-8 h-8 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-95 shadow-xs"
                 >
                   <i className="fa-solid fa-chevron-left text-[11px]"></i>
                 </button>
@@ -1226,19 +1243,9 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       setCurrentPage(1);
                     }
                   }}
-                  className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all active:scale-95"
+                  className="w-8 h-8 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-95 shadow-xs"
                 >
                   <i className="fa-solid fa-chevron-right text-[11px]"></i>
-                </button>
-                
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsFilterOpen(true);
-                  }}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 transition-all active:scale-95 ml-0.5"
-                >
-                  <i className="fa-solid fa-chevron-down text-[12px]"></i>
                 </button>
               </div>
             </div>
@@ -1249,77 +1256,144 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       <div className="px-1.5 pb-20 pt-1">
 
         {/* SUMMARY CARDS — 2x2 grid: TRX | Admin / Uang Masuk | Tarik Tunai */}
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {/* Baris 1 kiri: TRX */}
-          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
-              <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest">TRX Hari Ini</div>
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mb-2.5">
+          {/* Card 1: TRX Hari Ini */}
+          <div className="bg-gradient-to-br from-white via-[#F3F8FF] to-[#DDEBFE] border border-blue-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+            {/* Soft decorative wave on bottom corner */}
+            <div className="absolute -bottom-1 -right-1 w-20 h-10 pointer-events-none opacity-30 overflow-hidden">
+              <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full text-blue-500 fill-current">
+                <path d="M0,35 Q40,10 70,25 T100,10 L100,50 L0,50 Z" />
+              </svg>
             </div>
-            <div className="text-3xl font-black text-blue-600 leading-none mt-1">{todayCount}</div>
-            <div className="text-[8px] font-bold text-slate-400 mt-1">Jumlah Transaksi</div>
+
+            <div className="flex items-center gap-1.5 relative z-10">
+              <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#0066FF] shrink-0 shadow-xs shadow-blue-500/50"></span>
+              <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#0066FF] uppercase tracking-wider">TRX HARI INI</span>
+            </div>
+
+            <div className="flex items-center justify-between my-0.5 sm:my-1 gap-1 relative z-10">
+              <div className="text-xl min-[360px]:text-2xl sm:text-3xl font-black text-[#0047BA] leading-none tracking-tight tabular-nums truncate">
+                {todayCount}
+              </div>
+              <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200/70 shadow-xs group-hover:scale-105 transition-transform">
+                <i className="fa-solid fa-chart-simple text-xs min-[360px]:text-sm sm:text-base"></i>
+              </div>
+            </div>
+
+            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">Jumlah Transaksi</div>
           </div>
 
-          {/* Baris 1 kanan: Admin */}
-          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
-              <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Admin Fee</div>
+          {/* Card 2: Admin Fee */}
+          <div className="bg-gradient-to-br from-white via-[#F0FDF5] to-[#D1FAE5] border border-emerald-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+            {/* Soft decorative wave on bottom corner */}
+            <div className="absolute -bottom-1 -right-1 w-20 h-10 pointer-events-none opacity-30 overflow-hidden">
+              <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full text-emerald-500 fill-current">
+                <path d="M0,35 Q40,10 70,25 T100,10 L100,50 L0,50 Z" />
+              </svg>
             </div>
-            <div className="text-base font-black text-emerald-600 leading-tight mt-1 truncate">
-              {formatRupiah(todayAdmin).replace(',00', '')}
+
+            <div className="flex items-center gap-1.5 relative z-10">
+              <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#10B981] shrink-0 shadow-xs shadow-emerald-500/50"></span>
+              <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#059669] uppercase tracking-wider">ADMIN FEE</span>
             </div>
-            <div className="text-[8px] font-bold text-slate-400 mt-1">Total Admin Fee</div>
+
+            <div className="flex items-center justify-between my-0.5 sm:my-1 gap-1 relative z-10">
+              <div className="text-[12.5px] min-[360px]:text-[13.5px] min-[400px]:text-[15px] sm:text-[17px] md:text-xl font-black text-[#047857] leading-none tracking-tight tabular-nums whitespace-nowrap truncate">
+                {formatRupiah(todayAdmin).replace(',00', '')}
+              </div>
+              <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200/70 shadow-xs group-hover:scale-105 transition-transform">
+                <i className="fa-solid fa-coins text-xs min-[360px]:text-sm sm:text-base"></i>
+              </div>
+            </div>
+
+            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">Total Admin Fee</div>
           </div>
 
-          {/* Baris 2 kiri: Uang Masuk */}
-          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0"></div>
-              <div className="text-[9px] font-black text-violet-600 uppercase tracking-widest">Uang Masuk</div>
+          {/* Card 3: Uang Masuk */}
+          <div className="bg-gradient-to-br from-white via-[#FAF5FF] to-[#EDE9FE] border border-purple-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+            {/* Soft decorative wave on bottom corner */}
+            <div className="absolute -bottom-1 -right-1 w-20 h-10 pointer-events-none opacity-30 overflow-hidden">
+              <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full text-purple-500 fill-current">
+                <path d="M0,35 Q40,10 70,25 T100,10 L100,50 L0,50 Z" />
+              </svg>
             </div>
-            <div className="text-sm font-black text-violet-700 leading-tight mt-1 truncate">
-              {formatRupiah(todayUangMasuk).replace(',00', '')}
+
+            <div className="flex items-center gap-1.5 relative z-10">
+              <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#8B5CF6] shrink-0 shadow-xs shadow-purple-500/50"></span>
+              <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#7C3AED] uppercase tracking-wider">UANG MASUK</span>
             </div>
-            <div className="text-[8px] font-bold text-slate-400 mt-0.5">Penjualan → Laci</div>
+
+            <div className="flex items-center justify-between my-0.5 sm:my-1 gap-1 relative z-10">
+              <div className="text-[12.5px] min-[360px]:text-[13.5px] min-[400px]:text-[15px] sm:text-[17px] md:text-xl font-black text-[#6D28D9] leading-none tracking-tight tabular-nums whitespace-nowrap truncate">
+                {formatRupiah(todayUangMasuk).replace(',00', '')}
+              </div>
+              <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-purple-600 flex items-center justify-center shrink-0 border border-purple-200/70 shadow-xs group-hover:scale-105 transition-transform">
+                <i className="fa-solid fa-wallet text-xs min-[360px]:text-sm sm:text-base"></i>
+              </div>
+            </div>
+
+            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">Penjualan → Laci</div>
           </div>
 
-          {/* Baris 2 kanan: Tarik Tunai */}
-          <div className="bg-white border border-gray-100 rounded-2xl py-3 px-3 flex flex-col justify-between shadow-sm">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></div>
-              <div className="text-[9px] font-black text-rose-600 uppercase tracking-widest">Tarik Tunai</div>
+          {/* Card 4: Tarik Tunai */}
+          <div className="bg-gradient-to-br from-white via-[#FFF1F2] to-[#FFE4E6] border border-rose-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+            {/* Soft decorative wave on bottom corner */}
+            <div className="absolute -bottom-1 -right-1 w-20 h-10 pointer-events-none opacity-30 overflow-hidden">
+              <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full text-rose-500 fill-current">
+                <path d="M0,35 Q40,10 70,25 T100,10 L100,50 L0,50 Z" />
+              </svg>
             </div>
-            <div className="text-sm font-black text-rose-600 leading-tight mt-1 truncate">
-              {formatRupiah(todayTarikTunai).replace(',00', '')}
+
+            <div className="flex items-center gap-1.5 relative z-10">
+              <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#EF4444] shrink-0 shadow-xs shadow-rose-500/50"></span>
+              <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#DC2626] uppercase tracking-wider">TARIK TUNAI</span>
             </div>
-            <div className="text-[8px] font-bold text-slate-400 mt-0.5">Laci → Pembeli</div>
+
+            <div className="flex items-center justify-between my-0.5 sm:my-1 gap-1 relative z-10">
+              <div className="text-[12.5px] min-[360px]:text-[13.5px] min-[400px]:text-[15px] sm:text-[17px] md:text-xl font-black text-[#B91C1C] leading-none tracking-tight tabular-nums whitespace-nowrap truncate">
+                {formatRupiah(todayTarikTunai).replace(',00', '')}
+              </div>
+              <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200/70 shadow-xs group-hover:scale-105 transition-transform">
+                <i className="fa-solid fa-money-bill-wave text-xs min-[360px]:text-sm sm:text-base"></i>
+              </div>
+            </div>
+
+            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">Laci → Pembeli</div>
           </div>
         </div>
 
-        {/* TABS TRANSAKSI & SALDO */}
-        <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+        {/* TABS TRANSAKSI & SALDO (2 KAPSUL BERDAMPINGAN DENGAN CHEVRON) */}
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mb-2.5">
           <button 
             onClick={() => setActivePcTab('transaksi')}
             className={cn(
-              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
+              "py-2.5 px-3 rounded-2xl text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-wider transition-all flex items-center justify-between shadow-xs cursor-pointer",
               activePcTab === 'transaksi' 
-                ? "bg-[#118ee9] text-white border-[#118ee9] shadow-md shadow-[#118ee9]/20" 
-                : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
+                ? "bg-gradient-to-r from-[#0062FF] to-[#0095FF] text-white shadow-md shadow-blue-500/20 border border-blue-400/30" 
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             )}
           >
-            Riwayat Transaksi
+            <div className="flex items-center gap-1.5 sm:gap-2 truncate">
+              <i className="fa-solid fa-clock-rotate-left text-xs shrink-0"></i>
+              <span className="truncate">Riwayat Transaksi</span>
+            </div>
+            <i className="fa-solid fa-chevron-right text-[9px] shrink-0 opacity-80"></i>
           </button>
+
           <button 
             onClick={() => setActivePcTab('tambah-saldo')}
             className={cn(
-              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shrink-0",
+              "py-2.5 px-3 rounded-2xl text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-wider transition-all flex items-center justify-between shadow-xs cursor-pointer",
               activePcTab === 'tambah-saldo' 
-                ? "bg-[#118ee9] text-white border-[#118ee9] shadow-md shadow-[#118ee9]/20" 
-                : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"
+                ? "bg-gradient-to-r from-[#0062FF] to-[#0095FF] text-white shadow-md shadow-blue-500/20 border border-blue-400/30" 
+                : "bg-white text-[#0062FF] border border-blue-200/80 hover:bg-blue-50/50"
             )}
           >
-            Riwayat Tambah Saldo
+            <div className="flex items-center gap-1.5 sm:gap-2 truncate">
+              <i className="fa-solid fa-circle-plus text-xs shrink-0"></i>
+              <span className="truncate">Riwayat Tambah Saldo</span>
+            </div>
+            <i className="fa-solid fa-chevron-right text-[9px] shrink-0 opacity-80"></i>
           </button>
         </div>
 
@@ -1329,13 +1403,14 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           <div className="relative flex items-center mb-4 group">
             <button 
               onClick={() => handleScroll('left')}
-              className="absolute left-0 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -ml-3 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-0 z-10 w-7 h-7 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
             >
-              <i className="fa-solid fa-chevron-left text-[10px]"></i>
+              <i className="fa-solid fa-chevron-left text-[9px]"></i>
             </button>
-            <div ref={scrollRef} className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 w-full px-2 scroll-smooth">
+            <div ref={scrollRef} className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 w-full px-1 scroll-smooth">
               {availableCategories.map(cat => {
                 const isActive = props.filterKategori.includes(cat);
+                const isSemua = cat === 'Semua';
                 return (
                   <button 
                     key={cat}
@@ -1344,22 +1419,24 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
                       setCurrentPage(1);
                     }}
                     className={cn(
-                      "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all border shrink-0",
+                      "px-4 py-2.5 rounded-2xl text-[10.5px] font-black uppercase tracking-wider whitespace-nowrap transition-all border shrink-0 flex items-center gap-1.5 shadow-xs cursor-pointer",
                       isActive 
-                        ? "bg-[#118ee9] border-[#118ee9] text-white shadow-md shadow-[#118ee9]/20" 
-                        : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                        ? "bg-gradient-to-r from-[#0062FF] to-[#0095FF] border-[#0062FF] text-white shadow-md shadow-blue-500/20" 
+                        : "bg-white border-blue-100/90 text-blue-950 hover:bg-blue-50/50 hover:text-blue-600"
                     )}
                   >
-                    {cat === 'Semua' ? 'Semua Kategori' : cat}
+                    {isSemua && <i className="fa-solid fa-table-cells-large text-[10.5px]"></i>}
+                    <span>{isSemua ? 'Semua Kategori' : cat}</span>
+                    {isSemua && <i className="fa-solid fa-chevron-right text-[8px] opacity-80"></i>}
                   </button>
                 );
               })}
             </div>
             <button 
               onClick={() => handleScroll('right')}
-              className="absolute right-0 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -mr-3 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-0 z-10 w-7 h-7 rounded-full bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center -mr-2 opacity-0 group-hover:opacity-100 transition-opacity"
             >
-              <i className="fa-solid fa-chevron-right text-[10px]"></i>
+              <i className="fa-solid fa-chevron-right text-[9px]"></i>
             </button>
           </div>
 

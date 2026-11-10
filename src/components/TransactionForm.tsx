@@ -1083,6 +1083,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       );
     }
 
+    if (isAdminNonTunai) {
+      return (
+        <div className={containerClassName}>
+          <div className="bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+            <span className="text-[10px] font-black text-purple-800 uppercase tracking-wide">
+              {labelTotal}: Rp {totalJual.toLocaleString('id-ID')}
+            </span>
+            <span className="text-[10px] font-black text-purple-600 uppercase tracking-wide">
+              Laba: Rp {labaBersih.toLocaleString('id-ID')} ✓
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={containerClassName}>
         <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
@@ -2183,7 +2198,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                       : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                     return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                      : (isAdminNonTunai
+                          ? "bg-purple-50 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100");
                   })()
                 )}
               />
@@ -2197,7 +2214,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                   : a - selectedTujuanFee;
                 if (laba > 0) {
                   return (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                    <div className={cn("absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center shadow", isAdminNonTunai ? "bg-purple-600" : "bg-emerald-500")}>
                       <i className="fa-solid fa-check text-white text-[10px]"></i>
                     </div>
                   );
@@ -2732,7 +2749,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     const laba = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                     return laba <= 0
                       ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                      : (isAdminNonTunai
+                          ? "bg-purple-50 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100");
                   })()
                 )}
               />
@@ -2744,7 +2763,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 const laba = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                 if (laba > 0) {
                   return (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                    <div className={cn("absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center shadow", isAdminNonTunai ? "bg-purple-600" : "bg-emerald-500")}>
                       <i className="fa-solid fa-check text-white text-[10px]"></i>
                     </div>
                   );
@@ -3167,7 +3186,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                         : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                       return laba <= 0
                         ? "bg-red-50 text-red-700 border-red-300 focus:border-red-400 focus:ring-red-100"
-                        : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+                        : (isAdminNonTunai
+                            ? "bg-purple-50 text-purple-700 border-purple-300 focus:border-purple-400 focus:ring-purple-100"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100");
                     })()
                   )}
                 />
@@ -3180,7 +3201,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     : a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
                   if (laba > 0) {
                     return (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow">
+                      <div className={cn("absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center shadow", isAdminNonTunai ? "bg-purple-600" : "bg-emerald-500")}>
                         <i className="fa-solid fa-check text-white text-[10px]"></i>
                       </div>
                     );
