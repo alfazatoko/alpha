@@ -84,10 +84,11 @@ interface TransactionFormProps {
   lastTx?: any
   onOpenRiwayatDetail?: (tx: any) => void
   isOwner?: boolean
+  onOpenTeksOtomatis?: () => void
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({
-  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx, onOpenRiwayatDetail, isOwner
+  onSave, isSaving, presets = [], onOpenVoucherJualCepat, activeStoreId, adminRules, initialMode, onModeChange, hideModeTabs, hideHeader, lastTx, onOpenRiwayatDetail, isOwner, onOpenTeksOtomatis
 }) => {
   const userRole = isOwner !== undefined 
     ? (isOwner ? 'owner' : 'kasir') 
@@ -1633,19 +1634,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
         <div className="flex items-center gap-1.5 p-1 bg-white border border-gray-200 rounded-full shadow-sm">
-          {isActualOwner && (
-            <button
-              type="button"
-              onClick={() => {
+          <button
+            type="button"
+            onClick={() => {
+              if (isActualOwner) {
                 setTempLabels({ ...customLabels });
                 setIsEditLabelsModalOpen(true);
-              }}
-              className="w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shadow-sm hover:scale-105 transition-all"
-              title="Kustomisasi Nama Tombol (Khusus Owner)"
-            >
-              <i className="fa-solid fa-pencil text-[13px]"></i>
-            </button>
-          )}
+              } else {
+                onOpenTeksOtomatis?.();
+              }
+            }}
+            className="w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shadow-sm hover:scale-105 transition-all active:scale-95"
+            title={isActualOwner ? "Kustomisasi Nama Tombol & Teks Otomatis" : "Setting Keterangan Otomatis"}
+          >
+            <i className="fa-solid fa-pencil text-[13px]"></i>
+          </button>
 
           <button
             onClick={() => { setShowCalc(v => !v); setIsThemeMenuOpen(false); }}
@@ -4088,22 +4091,39 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           <div className="bg-white rounded-[24px] max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Modal */}
             <div className="px-5 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
                   <i className="fa-solid fa-pencil text-sm text-white"></i>
                 </div>
-                <div>
-                  <h3 className="text-[13px] font-black uppercase tracking-wider">Kustomisasi Nama Tombol</h3>
-                  <p className="text-[10px] text-amber-100 font-bold">Khusus Owner • Terapkan Online ke Seluruh HP Kasir</p>
+                <div className="min-w-0">
+                  <h3 className="text-[13px] font-black uppercase tracking-wider truncate">Kustomisasi Nama Tombol</h3>
+                  <p className="text-[10px] text-amber-100 font-bold truncate">Khusus Owner • Terapkan Online ke Seluruh HP Kasir</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsEditLabelsModalOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all"
-              >
-                <i className="fa-solid fa-xmark text-xs"></i>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {onOpenTeksOtomatis && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditLabelsModalOpen(false);
+                      onOpenTeksOtomatis();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white text-[10.5px] font-black tracking-wide transition-all shadow-xs"
+                    title="Buka Setting Keterangan / Teks Otomatis"
+                  >
+                    <i className="fa-solid fa-bolt text-amber-200 text-[11px]"></i>
+                    <span className="hidden sm:inline">Teks Otomatis</span>
+                    <span className="sm:hidden">Teks Oto</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditLabelsModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all active:scale-95"
+                >
+                  <i className="fa-solid fa-xmark text-xs"></i>
+                </button>
+              </div>
             </div>
 
             {/* Body Modal */}

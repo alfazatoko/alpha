@@ -363,28 +363,28 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
         </div>
       </div>
 
-      {/* DETAIL POPUP MODAL (DESAIN BARU SESUAI FOTO) */}
+      {/* DETAIL POPUP MODAL (DESAIN BARU SESUAI FOTO - RESPONSIF LANDSCAPE & PORTRAIT) */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-2 py-3 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200"
           onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
         >
           <div
-            className="bg-[#F2F6FC] rounded-3xl w-full max-w-[440px] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200"
+            className="bg-[#F2F6FC] rounded-2xl sm:rounded-3xl w-full max-w-[430px] max-h-[96vh] sm:max-h-[92vh] overflow-hidden shadow-2xl border border-blue-100 flex flex-col animate-in zoom-in-95 duration-200 my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Royal Blue with White Checkmark & Title (Lebih pendek & kompak) */}
-            <div className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] py-2.5 px-3.5 text-white flex items-center justify-between relative overflow-hidden">
+            <div className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] py-2 px-3 sm:py-2.5 sm:px-3.5 text-white flex items-center justify-between relative overflow-hidden shrink-0">
               <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
 
-              <div className="flex items-center gap-2.5 relative z-10">
-                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[#0066FF] shadow-xs shrink-0">
-                  <i className="fa-solid fa-check text-sm font-black"></i>
+              <div className="flex items-center gap-2 relative z-10">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white flex items-center justify-center text-[#0066FF] shadow-xs shrink-0">
+                  <i className="fa-solid fa-check text-xs sm:text-sm font-black"></i>
                 </div>
-                <div className="h-6 w-[1.5px] bg-white/30 shrink-0"></div>
+                <div className="h-5 sm:h-6 w-[1.5px] bg-white/30 shrink-0"></div>
                 <div>
-                  <h3 className="font-bold text-white text-sm tracking-tight leading-tight">Rincian Transaksi</h3>
-                  <p className="text-[10px] text-blue-100/90 font-medium leading-none mt-0.5">Transaksi berhasil diproses</p>
+                  <h3 className="font-bold text-white text-xs sm:text-sm tracking-tight leading-tight">Rincian Transaksi</h3>
+                  <p className="text-[9.5px] sm:text-[10px] text-blue-100/90 font-medium leading-none mt-0.5">Transaksi berhasil diproses</p>
                 </div>
               </div>
 
@@ -421,18 +421,18 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               </div>
             </div>
 
-            {/* Body */}
-            <div className="p-3 space-y-1.5">
-              {/* KARTU 1: INFO 4 KOTAK (Lebih lebar, kepinggir, muat full teks & tanggal 1 baris) */}
-              <div className="bg-white rounded-2xl px-2.5 sm:px-3 py-2.5 shadow-xs border border-slate-100 grid grid-cols-[1.35fr_1fr] gap-x-2 gap-y-2">
+            {/* Body (Scrollable vertikal otomatis jika layar pendek di mode landscape) */}
+            <div className="px-2 pt-1 pb-2 sm:px-2.5 sm:pt-1 sm:pb-2.5 space-y-1 sm:space-y-1.5 overflow-y-auto flex-1 overscroll-contain">
+              {/* KARTU 1: INFO 4 KOTAK (Lebih mepet ke atas mendekati header biru) */}
+              <div className="bg-white rounded-xl sm:rounded-2xl px-2.5 sm:px-3 py-1.5 shadow-xs border border-slate-100 grid grid-cols-[1.35fr_1fr] gap-x-2 gap-y-1">
                 {/* Kasir */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-user text-xs"></i>
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-user text-[10.5px] sm:text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Kasir</span>
-                    <span className="text-xs font-bold text-gray-900 block leading-tight truncate">
+                    <span className="text-[9px] sm:text-[9.5px] text-gray-400 font-medium block leading-none mb-0.5">Kasir</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-gray-900 block leading-tight truncate">
                       {effectiveKasirName}
                     </span>
                   </div>
@@ -440,25 +440,25 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
                 {/* Sumber Uang Keluar (Teks Merah) */}
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-bag-shopping text-xs"></i>
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-bag-shopping text-[10.5px] sm:text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Keluar</span>
-                    <span className="text-xs font-black text-rose-600 block leading-tight break-words">
+                    <span className="text-[9px] sm:text-[9.5px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Keluar</span>
+                    <span className="text-[11px] sm:text-xs font-black text-rose-600 block leading-tight break-words">
                       {modalSumberKeluar}
                     </span>
                   </div>
                 </div>
 
                 {/* Waktu (Muat full teks dan tanggal 1 baris) */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-calendar-days text-xs"></i>
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-calendar-days text-[10.5px] sm:text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-none mb-0.5">Waktu</span>
-                    <span className="text-[11.5px] sm:text-xs font-bold text-gray-900 block leading-tight whitespace-nowrap">
+                    <span className="text-[9px] sm:text-[9.5px] text-gray-400 font-medium block leading-none mb-0.5">Waktu</span>
+                    <span className="text-[10.5px] sm:text-[11.5px] font-bold text-gray-900 block leading-tight whitespace-nowrap">
                       {dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} {jam.replace(':', '.')}
                     </span>
                   </div>
@@ -466,12 +466,12 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
                 {/* Sumber Uang Masuk (Teks Hijau) */}
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-cash-register text-xs"></i>
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-cash-register text-[10.5px] sm:text-xs"></i>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Masuk</span>
-                    <span className="text-xs font-black text-emerald-600 block leading-tight break-words">
+                    <span className="text-[9px] sm:text-[9.5px] text-gray-400 font-medium block leading-tight truncate mb-0.5">Sumber Uang Masuk</span>
+                    <span className="text-[11px] sm:text-xs font-black text-emerald-600 block leading-tight break-words">
                       {modalSumberMasuk}
                     </span>
                   </div>
@@ -479,18 +479,18 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               </div>
 
               {/* KARTU 2: STRUKTUR HIERARKI KATEGORI, SUMBER & LAYANAN / PRODUK */}
-              <div className="bg-[#EBF3FF] border border-blue-100 rounded-2xl px-3 py-2 flex flex-col shadow-2xs">
-                <div className="flex items-center justify-between text-xs pb-1.5 border-b border-blue-200/60">
+              <div className="bg-[#EBF3FF] border border-blue-100 rounded-xl sm:rounded-2xl px-2.5 sm:px-3 py-1.5 flex flex-col shadow-2xs">
+                <div className="flex items-center justify-between text-xs pb-1 border-b border-blue-200/60">
                   <span className="text-gray-500 font-medium">Kategori Transaksi :</span>
                   <span className="font-black text-gray-900 text-right">{parsed.kategoriTransaksi}</span>
                 </div>
                 {parsed.kategoriTransaksi === 'Transfer' && parsed.sumberTransaksi && parsed.sumberTransaksi !== '-' && (
-                  <div className="flex items-center justify-between text-xs py-1.5 border-b border-blue-200/60">
+                  <div className="flex items-center justify-between text-xs py-1 border-b border-blue-200/60">
                     <span className="text-gray-500 font-medium">Sumber Transaksi :</span>
                     <span className="font-black text-blue-700 text-right uppercase">{parsed.sumberTransaksi}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-xs pt-1.5">
+                <div className="flex items-center justify-between text-xs pt-1">
                   <span className="text-gray-500 font-medium">
                     {parsed.kategoriTransaksi === 'Tarik Tunai' ? 'Layanan / Metode :' : 'Layanan / Produk :'}
                   </span>
@@ -499,7 +499,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                   </span>
                 </div>
                 {parsed.catatanTambahan && (
-                  <div className="flex items-center justify-between text-[11px] pt-1.5 mt-1 border-t border-blue-200/50">
+                  <div className="flex items-center justify-between text-[11px] pt-1 mt-0.5 border-t border-blue-200/50">
                     <span className="text-gray-400 font-medium">Ket. Tambahan:</span>
                     <span className="font-semibold text-gray-700 text-right">{parsed.catatanTambahan}</span>
                   </div>
@@ -507,13 +507,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
               </div>
 
               {/* KARTU 3: RINCIAN MODAL */}
-              <div className="bg-white rounded-2xl border border-slate-100 px-3 py-2.5 shadow-xs space-y-2">
-                <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
-                  <i className="fa-solid fa-coins text-[#0066FF] text-sm"></i>
+              <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 px-2.5 sm:px-3 py-1.5 shadow-xs space-y-1">
+                <div className="flex items-center gap-1.5 pb-1 border-b border-slate-100">
+                  <i className="fa-solid fa-coins text-[#0066FF] text-xs"></i>
                   <h4 className="text-xs font-black text-gray-900">Rincian Modal</h4>
                 </div>
 
-                <div className="space-y-2 text-xs">
+                <div className="space-y-1 text-xs">
                   {appFee > 0 ? (
                     <>
                       <div className="flex justify-between items-center">
@@ -578,29 +578,29 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                 </div>
               </div>
 
-              {/* KARTU 4: TOTAL BANNER BESAR */}
-              <div className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] rounded-2xl p-3.5 shadow-md text-white flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white text-sm">
+              {/* KARTU 4: TOTAL BANNER LEBIH RAMPING */}
+              <div className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] rounded-xl px-2.5 py-1.5 sm:py-2 shadow-md text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center text-white text-xs">
                     <i className="fa-solid fa-tag"></i>
                   </div>
-                  <div className="h-5 w-[1.5px] bg-white/30"></div>
-                  <span className="text-sm font-bold text-white tracking-wide">Total</span>
+                  <div className="h-3.5 w-[1px] bg-white/30"></div>
+                  <span className="text-xs font-bold text-white tracking-wide">Total</span>
                 </div>
-                <span className="text-xl font-black text-white tabular-nums tracking-tight">
+                <span className="text-[15px] sm:text-lg font-black text-white tabular-nums tracking-tight">
                   Rp {formatRp(displayTotal)}
                 </span>
               </div>
 
-              {/* TOMBOL AKSI BAWAH (PRINT & LOCKED / EDIT - LEBIH KOMPAK & MINIMALIS) */}
-              <div className="grid grid-cols-2 gap-2 pt-0.5">
+              {/* TOMBOL AKSI BAWAH (PRINT & LOCKED / EDIT - LEBIH KOMPAK & RAMPING) */}
+              <div className="grid grid-cols-2 gap-1.5 pt-0 shrink-0">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowStrukPreview(true);
                   }}
-                  className="bg-white hover:bg-blue-50 text-[#0066FF] border border-blue-300 font-bold rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 text-xs shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="bg-white hover:bg-blue-50 text-[#0066FF] border border-blue-300 font-bold rounded-xl py-1.5 px-2.5 flex items-center justify-center gap-1.5 text-xs shadow-2xs active:scale-95 transition-all cursor-pointer"
                 >
                   <i className="fa-solid fa-print text-xs"></i>
                   Print
@@ -613,13 +613,13 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       setIsOpen(false);
                       handleEditClick(e);
                     }}
-                    className="bg-[#0066FF] hover:bg-blue-700 text-white font-bold rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 text-xs shadow-xs active:scale-95 transition-all cursor-pointer"
+                    className="bg-[#0066FF] hover:bg-blue-700 text-white font-bold rounded-xl py-1.5 px-2.5 flex items-center justify-center gap-1.5 text-xs shadow-xs active:scale-95 transition-all cursor-pointer"
                   >
                     <i className="fa-solid fa-pen text-xs"></i>
                     Edit
                   </button>
                 ) : (
-                  <div className="bg-[#0066FF] text-white font-bold rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 text-xs shadow-xs opacity-90 select-none">
+                  <div className="bg-[#0066FF] text-white font-bold rounded-xl py-1.5 px-2.5 flex items-center justify-center gap-1.5 text-xs shadow-xs opacity-90 select-none">
                     <i className="fa-solid fa-lock text-xs"></i>
                     Locked
                   </div>
@@ -633,7 +633,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
       {/* MODAL REVIEW STRUK TRANSAKSI SEBELUM DICETAK */}
       {showStrukPreview && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 animate-in fade-in duration-150"
           onClick={(e) => {
             e.stopPropagation();
             if (!isPrinting) setShowStrukPreview(false);

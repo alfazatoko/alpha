@@ -1,6 +1,7 @@
 import { KasSummary } from '../components/KasSummary';
 import React, { useState, useEffect, useMemo } from 'react'
 import { GlobalHeader } from '../components/GlobalHeader';
+import { SaldoRealClosingModal } from '../components/SaldoRealClosingModal';
 import { formatRupiah, formatInputRupiah, cn } from '../lib/utils'
 import type { Transaction, Store } from '../types'
 import { supabase } from '../lib/supabase'
@@ -170,10 +171,6 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   const [isAuditBannerDismissed, setIsAuditBannerDismissed] = useState(() => {
     return localStorage.getItem('alphaPro_audit_banner_dismissed') === 'true'
   })
-  const [saldoRealRows, setSaldoRealRows] = useState<{nominal: string, keterangan: string}[]>([
-    {nominal: '', keterangan: ''},
-    {nominal: '', keterangan: ''}
-  ])
 
   const [customLabels, setCustomLabels] = useState(() => getStoredCustomLabels(props.activeStoreId));
 
@@ -416,43 +413,6 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     setIsSavingClosingOptions(false);
     setShowManageClosingOptionsModal(false);
   };
-
-  const toggleRowOption = (opt: string) => {
-    setSaldoRealRows(prev => {
-      const existingIndex = prev.findIndex(r => r.keterangan === opt)
-      if (existingIndex !== -1) {
-        const newRows = [...prev]
-        newRows.splice(existingIndex, 1)
-        if (newRows.length === 0) return [{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]
-        if (newRows.length === 1) return [...newRows, {nominal: '', keterangan: ''}]
-        return newRows
-      } else {
-        const newRows = [...prev]
-        const emptyIndex = newRows.findIndex(r => r.keterangan === '' && (!r.nominal || r.nominal === '0' || r.nominal === ''))
-        if (emptyIndex !== -1) {
-          newRows[emptyIndex].keterangan = opt
-        } else {
-          newRows.push({ nominal: '', keterangan: opt })
-        }
-        return newRows
-      }
-    })
-  }
-
-  useEffect(() => {
-    if (!showSaldoRealModal) return
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-
-      if (e.key === '1') { e.preventDefault(); toggleRowOption(quickOptions[0] || getChannelDisplayLabel('BANK', customLabels)); }
-      if (e.key === '2') { e.preventDefault(); toggleRowOption(quickOptions[1] || getChannelDisplayLabel('BANK_2', customLabels)); }
-      if (e.key === '3') { e.preventDefault(); toggleRowOption(quickOptions[2] || getChannelDisplayLabel('PPOB', customLabels)); }
-      if (e.key === '4') { e.preventDefault(); toggleRowOption(quickOptions[3] || getChannelDisplayLabel('ewallet', customLabels)); }
-    }
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [showSaldoRealModal, quickOptions, customLabels])
 
   // Hanya buka jurnal modal jika ada trigger baru setelah halaman terbuka (bukan auto-open saat pertama masuk)
   const lastJurnalTriggerRef = React.useRef(props.openJurnalModal || 0)
@@ -832,34 +792,63 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   }, [props.activeStoreId, props.filterTanggal, syncTrigger, props.filterKasir, props.kasirList])
 
   // Hitung ulang total berdasarkan transaksi yang difilter agar laporan akurat sesuai tanggal terpilih
-  const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.nominal, 0)
-  const sumAdmin = (txs: Transaction[]) => txs.reduce((s, t) => s + t.adminFee, 0)
-  
-  const currentIsiBank = sum(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank'))
-  const currentPenjualanDigital = sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  const currentSaldoBank = currentIsiBank - sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels)))
-  
-  const currentTotalAksesoris = sum(props.transactions.filter(t => (t.kategori === 'Aksesoris' || getTransactionSystemId(t, customLabels) === 'AKSESORIS') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  const currentTotalTarik = sum(props.transactions.filter(t => (t.kategori === 'Tarik Tunai' || getTransactionSystemId(t, customLabels) === 'TARIK') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  
-  // Kas Lain Nya Calculations
-  const txsAdminDalam = props.transactions.filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
-  const totalAdminDalam = sumAdmin(txsAdminDalam)
+  const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.nominal, 0);
+  const sumAdmin = (txs: Transaction[]) => txs.reduce((s, t) => s + t.adminFee, 0);
+  const totalTunaiVoucher = totalUangKeseluruhan - totalUangQris;
+  const {
+    currentIsiBank,
+    currentPenjualanDigital,
+    currentSaldoBank,
+    currentTotalAksesoris,
+    currentTotalTarik,
+    totalAdminDalam,
+    totalNonTunai,
+    totalKhusus,
+    currentTotalAdmin,
+    currentTotalSaldoKasLama,
+    currentTotalSaldoKas,
+    currentTxCount,
+    currentUangMasuk
+  } = useMemo(() => {
+    const isiBank = sum(props.transactions.filter(t => t.kategori === 'Isi Saldo Bank'));
+    const penjualanDigital = sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels) && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const saldoBank = isiBank - sum(props.transactions.filter(t => isDigitalTransferTx(t, customLabels)));
 
-  const txsNonTunai = props.transactions.filter(t => (t.keterangan || '').includes('[NON_TUNAI]'))
-  const totalNonTunai = txsNonTunai.reduce((s, t) => s + t.nominal + t.adminFee, 0)
+    const totalAksesoris = sum(props.transactions.filter(t => (t.kategori === 'Aksesoris' || getTransactionSystemId(t, customLabels) === 'AKSESORIS') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const totalTarik = sum(props.transactions.filter(t => (t.kategori === 'Tarik Tunai' || getTransactionSystemId(t, customLabels) === 'TARIK') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
 
-  const txsKhusus = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'))
-  const totalKhusus = txsKhusus.reduce((s, t) => s + t.nominal + t.adminFee, 0)
+    const txsAdminDalam = props.transactions.filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'));
+    const adminDalam = sumAdmin(txsAdminDalam);
 
-  // Admin fee (exclude Admin Dalam and transactions from LAIN tab)
-  const currentTotalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
-  const totalTunaiVoucher = totalUangKeseluruhan - totalUangQris
-  const currentTotalSaldoKasLama = props.kasModal + currentPenjualanDigital + currentTotalAksesoris + currentTotalAdmin - currentTotalTarik
-  const currentTotalSaldoKas = currentTotalSaldoKasLama + totalTunaiVoucher
-  
-  const currentTxCount = props.transactions.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length
-  const currentUangMasuk = sum(props.transactions.filter(t => (t.kategori !== 'Tarik Tunai' && getTransactionSystemId(t, customLabels) !== 'TARIK') && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')))
+    const txsNonTunai = props.transactions.filter(t => (t.keterangan || '').includes('[NON_TUNAI]'));
+    const nonTunai = txsNonTunai.reduce((s, t) => s + t.nominal + t.adminFee, 0);
+
+    const txsKhusus = props.transactions.filter(t => (t.keterangan || '').includes('[KHUSUS]'));
+    const khusus = txsKhusus.reduce((s, t) => s + t.nominal + t.adminFee, 0);
+
+    const totalAdmin = sumAdmin(props.transactions.filter(t => !(t.keterangan || '').includes('[ADMIN_DALAM]') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+    const totalSaldoKasLama = props.kasModal + penjualanDigital + totalAksesoris + totalAdmin - totalTarik;
+    const totalSaldoKas = totalSaldoKasLama + totalTunaiVoucher;
+
+    const txCount = props.transactions.filter(t => !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')).length;
+    const uangMasuk = sum(props.transactions.filter(t => (t.kategori !== 'Tarik Tunai' && getTransactionSystemId(t, customLabels) !== 'TARIK') && !t.kategori.startsWith('Isi') && !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]')));
+
+    return {
+      currentIsiBank: isiBank,
+      currentPenjualanDigital: penjualanDigital,
+      currentSaldoBank: saldoBank,
+      currentTotalAksesoris: totalAksesoris,
+      currentTotalTarik: totalTarik,
+      totalAdminDalam: adminDalam,
+      totalNonTunai: nonTunai,
+      totalKhusus: khusus,
+      currentTotalAdmin: totalAdmin,
+      currentTotalSaldoKasLama: totalSaldoKasLama,
+      currentTotalSaldoKas: totalSaldoKas,
+      currentTxCount: txCount,
+      currentUangMasuk: uangMasuk
+    };
+  }, [props.transactions, customLabels, props.kasModal, totalTunaiVoucher]);
 
   const yesterdayStats = useMemo(() => {
     if (!props.allTransactions || !props.filterTanggal) return null;
@@ -1511,37 +1500,30 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
     }
   };
 
-  const handleSaveSaldoReal = (andShareWA = false) => {
-    const finalRows = saldoRealRows
-      .map(r => ({ nominal: parseInt(r.nominal.replace(/\./g, '')) || 0, keterangan: r.keterangan.trim() }))
-      .filter(r => r.nominal > 0);
-      
-    if (finalRows.length === 0) {
-      alert('Silakan isi minimal 1 saldo aplikasi!');
-      return;
+  const handleModalCatatanChange = (val: string) => {
+    setCatatanKasir(val);
+    setTempCatatan(val);
+    if (props.activeStoreId && props.filterTanggal) {
+      localStorage.setItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`, val);
+    }
+  };
+
+  const handleSaveFromModal = (
+    finalRows: { nominal: number; keterangan: string }[],
+    options: { isOperkan: boolean; targetKasirId: string },
+    catatan: string,
+    andShareWA: boolean
+  ) => {
+    setCatatanKasir(catatan);
+    setTempCatatan(catatan);
+    if (props.activeStoreId && props.filterTanggal) {
+      localStorage.setItem(`alphaPro_${props.activeStoreId}_catatan_laporan_${props.filterTanggal}`, catatan);
     }
 
-    if (isOperkanSaldo && !targetKasirId) {
-      alert('Pilih kasir penerima terlebih dahulu!');
-      return;
-    }
-    
-    const totalNominal = finalRows.reduce((sum, r) => sum + r.nominal, 0);
-    const currentSelisih = totalNominal - currentSaldoBank;
-    
-    if (currentSelisih < 0 && !confirmSelisih) {
-      setConfirmSelisih(true);
-      setSelisihNotification({ show: true, selisih: currentSelisih });
-      setTimeout(() => setSelisihNotification(prev => ({...prev, show: false})), 5000);
-      return;
-    }
-    
-    props.onUpdateSaldoReal?.(finalRows, { isOperkan: isOperkanSaldo, targetKasirId });
-    setSaldoRealRows([{nominal: '', keterangan: ''}, {nominal: '', keterangan: ''}]);
+    props.onUpdateSaldoReal?.(finalRows, options);
     setIsOperkanSaldo(false);
     setTargetKasirId('');
     setShowSaldoRealModal(false);
-    setConfirmSelisih(false);
 
     if (andShareWA) {
       setTimeout(() => {
@@ -1674,347 +1656,32 @@ const LaporanView: React.FC<LaporanViewProps> = (props) => {
   };
 
   const renderSaldoRealModal = () => {
-    if (!showSaldoRealModal) return renderManageClosingOptionsModal();
-
-    const totalNominal = saldoRealRows.reduce((sum, r) => sum + (parseInt(r.nominal.replace(/\./g, '')) || 0), 0);
-    const selisihLive = totalNominal - currentSaldoBank;
-    const isKlopLive = totalNominal > 0 && selisihLive === 0;
-    const isSurplusLive = totalNominal > 0 && selisihLive > 0;
-
     return (
       <>
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-        <div 
-          className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" 
-          onClick={() => !props.isSaving && setShowSaldoRealModal(false)}
-        ></div>
-        
-        <div className="bg-white dark:bg-slate-800 rounded-[2rem] w-full max-w-xl sm:max-w-2xl overflow-hidden shadow-2xl relative z-10 border border-slate-100 dark:border-slate-700/80 flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in zoom-in-95 duration-200">
-          
-          {/* MODAL HEADER */}
-          <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-700/80 flex justify-between items-center bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center border border-white/20 shadow-inner">
-                <i className="fa-solid fa-calculator text-lg"></i>
-              </div>
-              <div>
-                <h3 className="font-black text-sm sm:text-base uppercase tracking-wider leading-tight">
-                  Update Saldo Closing & Catatan
-                </h3>
-                <p className="text-[10px] sm:text-[11px] text-emerald-100 font-medium">
-                  Sisa saldo riil aplikasi M-Banking & pesan serah terima kasir
-                </p>
-              </div>
-            </div>
-            <button 
-              type="button"
-              onClick={() => setShowSaldoRealModal(false)}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all text-white border border-white/20"
-              disabled={props.isSaving}
-              title="Tutup"
-            >
-              <i className="fa-solid fa-xmark text-sm"></i>
-            </button>
-          </div>
-
-          {/* MODAL BODY (SCROLLABLE) */}
-          <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-            <datalist id="aplikasi-suggestions">
-              {quickOptions.map(opt => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
-
-            {/* QUICK CHIPS */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                    Pilihan Cepat Aplikasi:
-                  </span>
-                  {props.kasirRole === 'owner' && (
-                    <button 
-                      type="button" 
-                      onClick={handleOpenManageClosingOptions}
-                      className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 transition-all"
-                      title="Atur Pilihan Cepat (Khusus Owner)"
-                    >
-                      <i className="fa-solid fa-pen-to-square text-[8px]" /> Atur Pilihan (Owner)
-                    </button>
-                  )}
-                </div>
-                <span className="text-[9px] font-bold text-slate-400 italic">
-                  Klik untuk pasang / hapus
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {quickOptions.map((opt, idx) => {
-                  const isSelected = saldoRealRows.some(r => r.keterangan === opt && r.nominal !== '');
-                  return (
-                    <button 
-                      key={opt}
-                      type="button"
-                      onClick={() => toggleRowOption(opt)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95", 
-                        isSelected 
-                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm shadow-emerald-600/30" 
-                          : "bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-500 hover:text-emerald-600"
-                      )}
-                    >
-                      <span className="w-4 h-4 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center text-[9px]">{idx + 1}</span>
-                      {opt}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* LIST KOLOM SALDO APLIKASI */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                  Daftar Akun / Aplikasi & Nominal:
-                </span>
-                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                  {saldoRealRows.filter(r => r.nominal).length} Terisi
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {saldoRealRows.map((row, index) => (
-                  <div 
-                    key={index} 
-                    className="p-2 sm:p-2.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-900/40 hover:border-emerald-300/70 dark:hover:border-emerald-600/50 transition-all flex items-center gap-2 group shadow-xs"
-                  >
-                    <div className="w-5 text-center shrink-0">
-                      <span className="text-[10px] font-black text-slate-400">#{index + 1}</span>
-                    </div>
-
-                    {/* Input Nama Aplikasi */}
-                    <div className="flex-[4] min-w-0">
-                      <input 
-                        id={`ket-${index}`}
-                        type="text"
-                        list="aplikasi-suggestions"
-                        value={row.keterangan}
-                        onChange={(e) => {
-                          const newRows = [...saldoRealRows];
-                          newRows[index].keterangan = e.target.value;
-                          setSaldoRealRows(newRows);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            document.getElementById(`nom-${index}`)?.focus();
-                          }
-                        }}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 sm:px-3 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-xs"
-                        placeholder="Nama Akun (BCA, DANA..)"
-                      />
-                    </div>
-
-                    {/* Input Nominal Saldo */}
-                    <div className="flex-[5] min-w-0 relative">
-                      <span className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[11px] font-black text-slate-400 select-none">Rp</span>
-                      <input 
-                        id={`nom-${index}`}
-                        type="text"
-                        inputMode="numeric"
-                        value={row.nominal}
-                        onChange={(e) => {
-                          const newRows = [...saldoRealRows];
-                          newRows[index].nominal = formatInputRupiah(e.target.value);
-                          setSaldoRealRows(newRows);
-                          setConfirmSelisih(false);
-                          setSelisihNotification({show: false, selisih: 0});
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const nextKet = document.getElementById(`ket-${index + 1}`);
-                            if (nextKet) {
-                              nextKet.focus();
-                            } else {
-                              setSaldoRealRows(prev => [...prev, {nominal: '', keterangan: ''}]);
-                              setTimeout(() => document.getElementById(`ket-${index + 1}`)?.focus(), 50);
-                            }
-                          }
-                        }}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-xs"
-                        placeholder="0"
-                      />
-                    </div>
-
-                    {/* Tombol Hapus Baris */}
-                    <div className="w-8 shrink-0 flex items-center justify-center">
-                      {saldoRealRows.length > 1 ? (
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const newRows = [...saldoRealRows];
-                            newRows.splice(index, 1);
-                            setSaldoRealRows(newRows);
-                            setConfirmSelisih(false);
-                            setSelisihNotification({show: false, selisih: 0});
-                          }}
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition-all active:scale-95"
-                          title="Hapus baris"
-                        >
-                          <i className="fa-solid fa-trash-can text-xs"></i>
-                        </button>
-                      ) : (
-                        <div className="w-7 sm:w-8"></div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button 
-                type="button"
-                onClick={() => setSaldoRealRows([...saldoRealRows, {nominal: '', keterangan: ''}])}
-                className="w-full py-2.5 rounded-xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 font-black text-[11px] uppercase tracking-wider hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-center gap-2 active:scale-98"
-              >
-                <i className="fa-solid fa-plus text-xs"></i> Tambah Kolom Aplikasi
-              </button>
-            </div>
-
-            {/* CATATAN KASIR / PESAN CLOSING */}
-            <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                  <i className="fa-solid fa-note-sticky text-amber-600"></i>
-                  Catatan Kasir / Pesan Closing
-                </label>
-                <span className="text-[9px] font-bold text-amber-700/70 dark:text-amber-400/70 italic">
-                  Tersinkron ke Laporan & WA
-                </span>
-              </div>
-              <textarea
-                value={catatanKasir}
-                onChange={handleCatatanChange}
-                rows={2}
-                placeholder="Tulis pesan kendala shift, selisih uang, catatan operan saldo, atau info penting..."
-                className="w-full bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-700/70 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none font-medium shadow-xs transition-all"
-              />
-            </div>
-
-            {/* OPERKAN SALDO KE SHIFT SELANJUTNYA */}
-            <div className="p-3 sm:p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 rounded-2xl space-y-2">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={isOperkanSaldo}
-                  onChange={(e) => {
-                    setIsOperkanSaldo(e.target.checked);
-                    if (!e.target.checked) setTargetKasirId('');
-                  }}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                />
-                <span className="text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider">
-                  Operkan Saldo Ini ke Kasir Selanjutnya
-                </span>
-              </label>
-
-              {isOperkanSaldo && (
-                <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 animate-in fade-in duration-200">
-                  <label className="block text-[9px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-1">
-                    Pilih Kasir Penerima (Shift Selanjutnya)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowKasirPenerimaSheet(true)}
-                    className="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 cursor-pointer text-left flex justify-between items-center shadow-xs hover:bg-slate-50 transition-colors"
-                  >
-                    {targetKasirId ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-[9px] font-black shadow-xs uppercase">
-                          {(props.kasirList[targetKasirId]?.name || targetKasirId).charAt(0)}
-                        </div>
-                        <span>{props.kasirList[targetKasirId]?.name || targetKasirId}</span>
-                      </div>
-                    ) : (
-                      <span className="opacity-70">-- Pilih Kasir Penerima --</span>
-                    )}
-                    <i className="fa-solid fa-chevron-down text-[10px] opacity-50"></i>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* LIVE SUMMARY / SELISIH */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/70 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Total Input Saldo Kasir:</span>
-                <span className="font-black text-sm text-slate-900 dark:text-white">{formatRupiah(totalNominal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Sisa Saldo Seharusnya (Buku):</span>
-                <span className="font-bold text-xs text-slate-700 dark:text-slate-300">{formatRupiah(currentSaldoBank)}</span>
-              </div>
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Status Saldo:</span>
-                {totalNominal === 0 ? (
-                  <span className="text-[11px] font-bold text-slate-400 italic">Belum ada input</span>
-                ) : isKlopLive ? (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-emerald-300 dark:border-emerald-800">
-                    <i className="fa-solid fa-circle-check text-emerald-600"></i> KLOP / PAS (Rp 0)
-                  </span>
-                ) : isSurplusLive ? (
-                  <span className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-blue-300 dark:border-blue-800">
-                    <i className="fa-solid fa-arrow-trend-up text-blue-600"></i> SURPLUS +{formatRupiah(selisihLive)}
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs border border-rose-300 dark:border-rose-800">
-                    <i className="fa-solid fa-triangle-exclamation text-rose-600"></i> MINUS {formatRupiah(selisihLive)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* MODAL FOOTER (ACTION BUTTONS) */}
-          <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-700/80 bg-white dark:bg-slate-800 shrink-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleSaveSaldoReal(false)}
-                disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
-                className={cn(
-                  "w-full text-white rounded-xl py-3 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2",
-                  confirmSelisih 
-                    ? "bg-gradient-to-r from-rose-600 to-red-600 shadow-rose-500/20" 
-                    : "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20 hover:from-emerald-700 hover:to-teal-700"
-                )}
-              >
-                {props.isSaving ? (
-                  <><i className="fa-solid fa-spinner fa-spin text-sm"></i> MENYIMPAN...</>
-                ) : confirmSelisih ? (
-                  <><i className="fa-solid fa-triangle-exclamation text-sm"></i> TETAP SIMPAN</>
-                ) : (
-                  <><i className="fa-solid fa-floppy-disk text-sm"></i> SIMPAN SALDO</>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSaveSaldoReal(true)}
-                disabled={props.isSaving || saldoRealRows.every(r => !r.nominal)}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-3 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
-                title="Simpan data dan langsung buka menu kirim teks ke WhatsApp"
-              >
-                <i className="fa-brands fa-whatsapp text-sm text-emerald-300"></i>
-                <span>SIMPAN & BAGIKAN WA</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      {renderManageClosingOptionsModal()}
-    </>
+        <SaldoRealClosingModal
+          isOpen={showSaldoRealModal}
+          onClose={() => setShowSaldoRealModal(false)}
+          currentSaldoBank={currentSaldoBank}
+          isSaving={props.isSaving || false}
+          kasirRole={props.kasirRole}
+          quickOptions={quickOptions}
+          kasirList={props.kasirList}
+          initialCatatan={catatanKasir}
+          onCatatanChange={handleModalCatatanChange}
+          onSave={handleSaveFromModal}
+          onOpenManageClosingOptions={handleOpenManageClosingOptions}
+          onOpenKasirPenerimaSheet={() => setShowKasirPenerimaSheet(true)}
+          targetKasirId={targetKasirId}
+          setTargetKasirId={setTargetKasirId}
+          isOperkanSaldo={isOperkanSaldo}
+          setIsOperkanSaldo={setIsOperkanSaldo}
+        />
+        {renderManageClosingOptionsModal()}
+      </>
     );
   };
+
+
 
   if (props.isPc) {
     if (!props.active) return null;

@@ -1362,38 +1362,38 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
         </div>
 
-        {/* TABS TRANSAKSI & SALDO (2 KAPSUL BERDAMPINGAN DENGAN CHEVRON) */}
-        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mb-2.5">
+        {/* TABS TRANSAKSI & SALDO (2 KAPSUL BERDAMPINGAN DENGAN CHEVRON - RESPONSIF HP & TABLET) */}
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mb-2 sm:mb-2.5">
           <button 
             onClick={() => setActivePcTab('transaksi')}
             className={cn(
-              "py-2.5 px-3 rounded-2xl text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-wider transition-all flex items-center justify-between shadow-xs cursor-pointer",
+              "py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl sm:rounded-2xl text-[9px] min-[360px]:text-[9.5px] min-[400px]:text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-tight sm:tracking-normal transition-all flex items-center justify-between shadow-xs cursor-pointer",
               activePcTab === 'transaksi' 
                 ? "bg-gradient-to-r from-[#0062FF] to-[#0095FF] text-white shadow-md shadow-blue-500/20 border border-blue-400/30" 
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             )}
           >
-            <div className="flex items-center gap-1.5 sm:gap-2 truncate">
-              <i className="fa-solid fa-clock-rotate-left text-xs shrink-0"></i>
-              <span className="truncate">Riwayat Transaksi</span>
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+              <i className="fa-solid fa-clock-rotate-left text-[10.5px] sm:text-xs shrink-0"></i>
+              <span className="whitespace-nowrap truncate">Riwayat Transaksi</span>
             </div>
-            <i className="fa-solid fa-chevron-right text-[9px] shrink-0 opacity-80"></i>
+            <i className="fa-solid fa-chevron-right text-[7.5px] sm:text-[9px] shrink-0 opacity-80 ml-0.5 sm:ml-1"></i>
           </button>
 
           <button 
             onClick={() => setActivePcTab('tambah-saldo')}
             className={cn(
-              "py-2.5 px-3 rounded-2xl text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-wider transition-all flex items-center justify-between shadow-xs cursor-pointer",
+              "py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl sm:rounded-2xl text-[9px] min-[360px]:text-[9.5px] min-[400px]:text-[10.5px] sm:text-[11.5px] font-black uppercase tracking-tight sm:tracking-normal transition-all flex items-center justify-between shadow-xs cursor-pointer",
               activePcTab === 'tambah-saldo' 
                 ? "bg-gradient-to-r from-[#0062FF] to-[#0095FF] text-white shadow-md shadow-blue-500/20 border border-blue-400/30" 
                 : "bg-white text-[#0062FF] border border-blue-200/80 hover:bg-blue-50/50"
             )}
           >
-            <div className="flex items-center gap-1.5 sm:gap-2 truncate">
-              <i className="fa-solid fa-circle-plus text-xs shrink-0"></i>
-              <span className="truncate">Riwayat Tambah Saldo</span>
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+              <i className="fa-solid fa-circle-plus text-[10.5px] sm:text-xs shrink-0"></i>
+              <span className="whitespace-nowrap truncate">Riwayat Tambah Saldo</span>
             </div>
-            <i className="fa-solid fa-chevron-right text-[9px] shrink-0 opacity-80"></i>
+            <i className="fa-solid fa-chevron-right text-[7.5px] sm:text-[9px] shrink-0 opacity-80 ml-0.5 sm:ml-1"></i>
           </button>
         </div>
 

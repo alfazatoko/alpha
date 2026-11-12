@@ -271,7 +271,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [editKasirTempatLahir, setEditKasirTempatLahir] = useState('')
   const [editKasirTanggalLahir, setEditKasirTanggalLahir] = useState('')
   const [editKasirAvatar, setEditKasirAvatar] = useState('')
-  const [showKasirPin, setShowKasirPin] = useState(false)
+  const [showKasirPin, setShowKasirPin] = useState(true)
 
   // State untuk Zoom, Drag & Crop Avatar
   const [showAvatarEditor, setShowAvatarEditor] = useState(false)
@@ -358,7 +358,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
   const [ownerPinOld, setOwnerPinOld] = useState('')
   const [ownerPinNew, setOwnerPinNew] = useState('')
   const [ownerPinConfirm, setOwnerPinConfirm] = useState('')
-  const [showOwnerPin, setShowOwnerPin] = useState(false)
+  const [showOwnerPin, setShowOwnerPin] = useState(true)
 
   // State untuk Kredensial Cloud (Password Owner)
   const [cloudPasswordInput, setCloudPasswordInput] = useState('')
@@ -2062,57 +2062,54 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
 
                     <div className="space-y-4 mt-6">
                       <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Lama</label>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Password Lama</label>
                         <div className="relative">
                           <input
                             type={showOwnerPin ? 'text' : 'password'}
-                            inputMode="numeric"
-                            maxLength={8}
+                            maxLength={30}
                             value={ownerPinOld}
-                            onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
-                            placeholder="Masukkan PIN lama"
+                            onChange={e => setOwnerPinOld(e.target.value)}
+                            placeholder="Masukkan Password lama"
                             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
                           />
                           <button type="button" onClick={() => setShowOwnerPin(v => !v)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                            <i className={showOwnerPin ? 'fa-solid fa-eye-slash text-sm' : 'fa-solid fa-eye text-sm'}></i>
+                            <i className={showOwnerPin ? 'fa-solid fa-eye text-sm' : 'fa-solid fa-eye-slash text-sm'}></i>
                           </button>
                         </div>
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Baru (min. 4 digit)</label>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Password Baru (min. 4 karakter)</label>
                         <input
                           type={showOwnerPin ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
+                          maxLength={30}
                           value={ownerPinNew}
-                          onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Masukkan PIN baru"
+                          onChange={e => setOwnerPinNew(e.target.value)}
+                          placeholder="Masukkan Password baru"
                           className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Konfirmasi PIN Baru</label>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Konfirmasi Password Baru</label>
                         <input
                           type={showOwnerPin ? 'text' : 'password'}
-                          inputMode="numeric"
-                          maxLength={8}
+                          maxLength={30}
                           value={ownerPinConfirm}
-                          onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Ulangi PIN baru"
+                          onChange={e => setOwnerPinConfirm(e.target.value)}
+                          placeholder="Ulangi Password baru"
                           className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
                         />
                       </div>
                       <button
                         onClick={() => {
-                          if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
-                          if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
-                          // Verifikasi PIN lama: coba dari kasirList, fallback ke localStorage
+                          if (!ownerPinNew || ownerPinNew.length < 4) return alert('Password baru minimal 4 karakter!');
+                          if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi Password tidak cocok!');
+                          // Verifikasi Password lama: coba dari kasirList, fallback ke localStorage
                           const ownerAcc = props.kasirList?.['owner']
                           const googleUid = props.googleUid
                           const localPin = googleUid ? localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000' : null
                           const correctOldPin = (ownerAcc?.pin) || localPin
-                          if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
-                          // Simpan PIN baru
+                          if (correctOldPin && correctOldPin !== ownerPinOld) return alert('Password lama tidak sesuai!');
+                          // Simpan Password baru
                           if (props.onSaveCashierSelf) {
                             props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew, role: 'owner' })
                               .then(() => {
@@ -2120,7 +2117,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                                 setTimeout(() => setSavedStatus(false), 2000);
                                 setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
                               })
-                              .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
+                              .catch((err: any) => alert(err.message || 'Gagal menyimpan Password'));
                           }
                         }}
                         className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 mt-2"
@@ -3054,14 +3051,14 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         </div>
 
                         <div>
-                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">PIN Keamanan Kasir (Minimal 4 Angka)</label>
+                          <label className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2 ml-1">Password Keamanan Kasir (Minimal 4 Karakter)</label>
                           <div className="relative">
                             <input
                               type={showKasirPin ? "text" : "password"}
-                              inputMode="numeric"
-                              maxLength={8}
+                              maxLength={30}
                               value={editKasirPin}
-                              onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
+                              onChange={e => setEditKasirPin(e.target.value)}
+                              placeholder="Masukkan Password"
                               className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-800 tracking-widest"
                               style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                             />
@@ -3069,8 +3066,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               type="button"
                               onClick={() => setShowKasirPin(!showKasirPin)}
                               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                              title={showKasirPin ? "Sembunyikan Password" : "Lihat Password"}
                             >
-                              <i className={showKasirPin ? "fa-solid fa-eye-slash text-sm" : "fa-solid fa-eye text-sm"}></i>
+                              <i className={showKasirPin ? "fa-solid fa-eye text-sm" : "fa-solid fa-eye-slash text-sm"}></i>
                             </button>
                           </div>
                         </div>
@@ -3119,7 +3117,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                             return;
                           }
                           if (editKasirPin.length < 4) {
-                            alert("PIN minimal harus 4 digit angka!");
+                            alert("Password minimal harus 4 karakter!");
                             return;
                           }
                           try {
@@ -3624,16 +3622,16 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                     />
                   </div>
 
-                  {/* PIN */}
+                  {/* Password */}
                   <div>
-                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">PIN Kasir (Minimal 4 angka)</label>
+                    <label className="text-[9px] font-black text-indigo-900 uppercase tracking-widest block mb-1">Password Kasir (Minimal 4 Karakter)</label>
                     <div className="relative">
                       <input
                         type={showKasirPin ? "text" : "password"}
-                        inputMode="numeric"
-                        maxLength={8}
+                        maxLength={30}
                         value={editKasirPin}
-                        onChange={e => setEditKasirPin(e.target.value.replace(/\D/g, ''))}
+                        onChange={e => setEditKasirPin(e.target.value)}
+                        placeholder="Masukkan Password"
                         className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-black outline-none focus:border-indigo-400 font-bold tracking-widest"
                         style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
                       />
@@ -3641,8 +3639,9 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         type="button"
                         onClick={() => setShowKasirPin(!showKasirPin)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        title={showKasirPin ? "Sembunyikan Password" : "Lihat Password"}
                       >
-                        <i className={showKasirPin ? "fa-solid fa-eye-slash text-xs" : "fa-solid fa-eye text-xs"}></i>
+                        <i className={showKasirPin ? "fa-solid fa-eye text-xs" : "fa-solid fa-eye-slash text-xs"}></i>
                       </button>
                     </div>
                   </div>
@@ -3692,7 +3691,7 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                         return;
                       }
                       if (editKasirPin.length < 4) {
-                        alert("PIN minimal harus 4 digit angka!");
+                        alert("Password minimal harus 4 karakter!");
                         return;
                       }
                       try {
@@ -4750,44 +4749,41 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                           {openSecuritySub === 'ownerPin' && (
                             <div className="px-4 pb-4 pt-1 bg-amber-50/20 border-t border-amber-100/60 animate-in slide-in-from-top-2 duration-200 space-y-2.5">
                               <div className="flex items-center justify-between pt-1">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">Form PIN Owner</span>
+                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">Form Password Owner</span>
                                 <button
                                   type="button"
                                   onClick={() => setShowOwnerPin(v => !v)}
                                   className="text-[10px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer"
                                 >
-                                  <i className={showOwnerPin ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i>
-                                  <span>{showOwnerPin ? 'Sembunyikan' : 'Lihat PIN'}</span>
+                                  <i className={showOwnerPin ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'}></i>
+                                  <span>{showOwnerPin ? 'Sembunyikan' : 'Lihat Password'}</span>
                                 </button>
                               </div>
 
                               <div className="space-y-2">
                                 <input
                                   type={showOwnerPin ? 'text' : 'password'}
-                                  inputMode="numeric"
-                                  maxLength={8}
+                                  maxLength={30}
                                   value={ownerPinOld}
-                                  onChange={e => setOwnerPinOld(e.target.value.replace(/\D/g, ''))}
-                                  placeholder="PIN Lama"
+                                  onChange={e => setOwnerPinOld(e.target.value)}
+                                  placeholder="Password Lama"
                                   className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
                                 />
                                 <div className="grid grid-cols-2 gap-2">
                                   <input
                                     type={showOwnerPin ? 'text' : 'password'}
-                                    inputMode="numeric"
-                                    maxLength={8}
+                                    maxLength={30}
                                     value={ownerPinNew}
-                                    onChange={e => setOwnerPinNew(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="PIN Baru (min 4)"
+                                    onChange={e => setOwnerPinNew(e.target.value)}
+                                    placeholder="Password Baru (min 4)"
                                     className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
                                   />
                                   <input
                                     type={showOwnerPin ? 'text' : 'password'}
-                                    inputMode="numeric"
-                                    maxLength={8}
+                                    maxLength={30}
                                     value={ownerPinConfirm}
-                                    onChange={e => setOwnerPinConfirm(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="Ulangi PIN Baru"
+                                    onChange={e => setOwnerPinConfirm(e.target.value)}
+                                    placeholder="Ulangi Password Baru"
                                     className="w-full bg-white border border-slate-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 tracking-widest outline-none transition-all placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
                                   />
                                 </div>
@@ -4796,28 +4792,28 @@ const AkunView: React.FC<AkunViewProps> = (props) => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (!ownerPinNew || ownerPinNew.length < 4) return alert('PIN baru minimal 4 digit!');
-                                  if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi PIN tidak cocok!');
+                                  if (!ownerPinNew || ownerPinNew.length < 4) return alert('Password baru minimal 4 karakter!');
+                                  if (ownerPinNew !== ownerPinConfirm) return alert('Konfirmasi Password tidak cocok!');
                                   const ownerAcc = props.kasirList?.['owner'];
                                   const googleUid = props.googleUid
                                   const localPin = googleUid ? localStorage.getItem(`alphaPro_${googleUid}_ownerPin`) || '0000' : null
                                   const correctOldPin = (ownerAcc?.pin) || localPin
-                                  if (correctOldPin && correctOldPin !== ownerPinOld) return alert('PIN lama tidak sesuai!');
+                                  if (correctOldPin && correctOldPin !== ownerPinOld) return alert('Password lama tidak sesuai!');
                                   if (props.onSaveCashierSelf) {
                                     props.onSaveCashierSelf('owner', { name: 'Owner', pin: ownerPinNew, role: 'owner' })
                                       .then(() => {
                                         setOwnerPinOld(''); setOwnerPinNew(''); setOwnerPinConfirm('');
-                                        alert('PIN Owner berhasil diubah!');
+                                        alert('Password Owner berhasil diubah!');
                                         setOpenSecuritySub(null);
                                       })
-                                      .catch((err: any) => alert(err.message || 'Gagal menyimpan PIN'));
+                                      .catch((err: any) => alert(err.message || 'Gagal menyimpan Password'));
                                   }
                                 }}
                                 className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white font-black py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                                 style={{ color: '#ffffff' }}
                               >
                                 <i className="fa-solid fa-shield-halved text-xs"></i>
-                                Simpan PIN Owner
+                                Simpan Password Owner
                               </button>
                             </div>
                           )}

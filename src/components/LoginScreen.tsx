@@ -504,16 +504,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       return
     }
 
-    // 1. Validasi PIN terlebih dahulu (Keamanan utama)
+    // 1. Validasi Password terlebih dahulu (Keamanan utama)
     if (isPinEnabled) {
       if (!pin) {
-        setError('PIN harus diisi.')
+        setError('Password harus diisi.')
         triggerShake()
         return
       }
 
       if (account.pin !== pin) {
-        setError('PIN salah. Coba lagi.')
+        setError('Password salah. Coba lagi.')
         setPin('')
         triggerShake()
         return
@@ -795,29 +795,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
           )}
 
-          {/* PIN Input (Hidden if PIN is disabled) */}
+          {/* Password Input (Hidden if PIN/Password is disabled) */}
           {isPinEnabled && (
             <div className="login-field">
               <label className="login-label font-bold text-slate-700 text-xs sm:text-[13px] mb-1.5">
-                Masukkan PIN
+                Masukkan Password
               </label>
               <div className="relative">
                 <i className="fa-solid fa-lock absolute text-gray-400 pointer-events-none left-4 top-1/2 -translate-y-1/2 text-sm sm:text-base z-10"></i>
                 <input
                   type={showPin ? "text" : "password"}
                   value={pin}
-                  onChange={(e) => { setPin(e.target.value.replace(/[^0-9]/g, '')); setError('') }}
-                  placeholder="MASUKKAN PIN"
-                  maxLength={6}
+                  onChange={(e) => { setPin(e.target.value); setError('') }}
+                  placeholder="MASUKKAN PASSWORD"
+                  maxLength={30}
                   className="login-input tracking-wider py-3.5 !pl-14 !pr-12 text-base sm:text-lg rounded-2xl h-14 tracking-widest font-black border-slate-300 shadow-sm"
                   style={{ paddingLeft: '3.75rem', paddingRight: '3rem' }}
-                  inputMode="numeric"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
                   className="absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors p-1 flex items-center justify-center cursor-pointer right-3.5 z-10"
-                  title={showPin ? "Sembunyikan PIN" : "Tampilkan PIN"}
+                  title={showPin ? "Sembunyikan Password" : "Tampilkan Password"}
                 >
                   <i className={`fa-solid ${showPin ? 'fa-eye' : 'fa-eye-slash'} text-sm sm:text-base`}></i>
                 </button>

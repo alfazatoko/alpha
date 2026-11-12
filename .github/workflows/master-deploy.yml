@@ -102,17 +102,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.6.9
-          name: "ALFAZA ALPHA POS v1.6.9"
+          tag_name: v1.7.0
+          name: "ALFAZA ALPHA POS v1.7.0"
           body: |
-            ### Pembaruan Aplikasi v1.6.9
-            - **Filter 2 Kolom (Toko & Kasir) Mode Owner:**
-              - Pada halaman **Riwayat** dan **Laporan**, filter kasir mode owner kini dibagi rapi menjadi 2 kolom berdampingan: Filter Toko/Cabang dan Filter Kasir.
-              - Logika cascading cerdas: memilih toko otomatis memfilter daftar kasir milik toko tersebut dan me-reset filter kasir ke 'Semua Kasir'.
-            - **Sinkronisasi Otomatis Suara Notifikasi Per-Toko:**
-              - Suara notifikasi yang dipilih Owner kini otomatis tersinkronisasi secara real-time ke semua HP kasir per toko masing-masing via Supabase Realtime & auto-reload saat aplikasi aktif.
-            - **Perbaikan Rincian Modal & Fee Transaksi:**
-              - Memastikan Fee Aplikasi 0 pada transaksi non-digital (Aksesoris, Voucher, Tarik Tunai) agar modal dan laba 100% akurat.
+            ### Pembaruan Aplikasi v1.7.0
+            - **Keamanan Login Password QWERTY:**
+              - Mengganti sistem PIN angka menjadi Password keyboard QWERTY fleksibel (huruf & angka) untuk mencegah salah login akun dan titip absen antar kasir.
+              - Tombol intip mata (👁️) aktif secara default (password terlihat jelas saat mengetik), dan dapat diklik untuk menyembunyikan karakter.
+              - Kompatibilitas 100% dengan data PIN angka kasir & owner sebelumnya.
+            - **Optimasi Modal Update Saldo Real Closing:**
+              - Performa super ringan dan anti-lag di HP dengan komponen terisolasi mandiri dan debounce update.
+              - Tampilan mepet, tombol bagikan WA pindah ke header atas berdampingan dengan tombol X, serta toggle catatan kasir kolapsibel.
+            - **Navigasi Pintasan Teks Otomatis:**
+              - Tombol pensil di form transaksi kini aktif untuk Kasir (langsung ke Teks Otomatis) dan Owner (tombol pintasan modal).
+              - Navigasi kembali (←) ergonomis langsung mengembalikan ke form Transaksi (navbar tengah).
+            - **Penyempurnaan UI Riwayat & Rincian Transaksi:**
+              - Desain modal popup rincian transaksi lebih ramping, kompak, dan responsif untuk layar HP kecil maupun mode lanskap.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

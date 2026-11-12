@@ -7624,7 +7624,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                       <div className="space-y-2">
                         <input type="text" placeholder="ID Kasir (contoh: kasir3)" value={kasirFormId} onChange={e => setKasirFormId(e.target.value)} disabled={!!editKasirId} className="w-full text-xs p-2 rounded-lg border outline-none font-bold disabled:bg-gray-100 disabled:text-gray-500" />
                         <input type="text" placeholder="Nama Kasir" value={kasirFormName} onChange={e => setKasirFormName(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
-                        <input type="text" placeholder="PIN (4-6 digit)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
+                        <input type="text" placeholder="Password Kasir (min. 4 karakter)" value={kasirFormPin} onChange={e => setKasirFormPin(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                         <input type="number" placeholder="Target TRX Harian (Opsional)" value={kasirFormTargetTrx} onChange={e => setKasirFormTargetTrx(e.target.value)} className="w-full text-xs p-2 rounded-lg border outline-none font-bold" />
                         
                         {editKasirId && (
@@ -7638,7 +7638,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           if (!editKasirId && existingIds.includes(kasirFormId.trim())) {
                             return props.showToast(`ID "${kasirFormId}" sudah digunakan kasir lain!`);
                           }
-                          if (kasirFormPin.length < 4) return props.showToast('PIN minimal 4 digit!');
+                          if (kasirFormPin.length < 4) return props.showToast('Password minimal 4 karakter!');
                           const newKasirList = { ...props.kasirList, [kasirFormId.trim()]: { pin: kasirFormPin, role: 'kasir' as any, name: kasirFormName.trim(), targetTrx: parseInt(kasirFormTargetTrx) || 0 } };
                           const targetStoreId = props.pantauStoreId;
                           if (targetStoreId && targetStoreId !== 'all') {
@@ -7666,7 +7666,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                           <div key={id} className="p-3 border border-gray-100 rounded-2xl flex justify-between items-center bg-gray-50/50">
                             <div>
                               <p className="text-xs font-black text-gray-800">{account.name}</p>
-                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PIN: {account.pin} {account.targetTrx ? `| TARGET: ${account.targetTrx} TRX` : ''}</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">ID: {id} | PASSWORD: {account.pin} {account.targetTrx ? `| TARGET: ${account.targetTrx} TRX` : ''}</p>
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setKasirFormId(id); setKasirFormName(account.name); setKasirFormPin(account.pin); setKasirFormTargetTrx(account.targetTrx ? account.targetTrx.toString() : ''); setEditKasirId(id); }} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">

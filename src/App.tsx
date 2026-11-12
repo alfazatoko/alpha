@@ -4202,6 +4202,10 @@ const MainApp: React.FC<MainAppProps> = ({
                                   window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
                                 }, 300);
                               }}
+                              onOpenTeksOtomatis={() => {
+                                sessionStorage.setItem('alphaPro_otomatis_return_view', activeView || 'view-input-transaksi');
+                                setActiveView('view-otomatis');
+                              }}
                             />
                           </div>
                         </div>
@@ -4885,6 +4889,10 @@ const MainApp: React.FC<MainAppProps> = ({
                     setTimeout(() => {
                       window.dispatchEvent(new CustomEvent('openRiwayatDetail', { detail: tx.id }));
                     }, 300);
+                  }}
+                  onOpenTeksOtomatis={() => {
+                    sessionStorage.setItem('alphaPro_otomatis_return_view', activeView || 'view-input-transaksi');
+                    setActiveView('view-otomatis');
                   }}
                 />
             </div>
