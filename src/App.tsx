@@ -23,6 +23,13 @@ import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
 import { PrinterReconnectModal } from './components/PrinterReconnectModal'
 import { isDigitalTransferTx, getStoredCustomLabels } from './lib/categoryHelper'
+import { 
+  getOfflineQueue, 
+  saveToOfflineQueue, 
+  syncOfflineTransactions, 
+  fetchStoreTotalTransactionCount, 
+  incrementStoreTotalCount 
+} from './lib/offlineSyncService'
 
 
 // Views
@@ -3231,6 +3238,54 @@ const MainApp: React.FC<MainAppProps> = ({
     return () => clearInterval(interval)
   }, [googleUid, username, onLogout])
 
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(() => getOfflineQueue().length)
+
+  // Inisialisasi total hitungan transaksi toko seumur hidup saat store aktif berubah
+  useEffect(() => {
+    const targetStore = activeRole === 'owner' ? (pantauStoreId === 'all' ? null : pantauStoreId) : activeStoreId
+    if (targetStore && targetStore !== 'all') {
+      fetchStoreTotalTransactionCount(targetStore)
+    }
+  }, [activeRole, pantauStoreId, activeStoreId])
+
+  // Listener untuk update antrean offline queue
+  useEffect(() => {
+    const handleQueueUpdated = (e: any) => {
+      setOfflineQueueCount(e.detail?.count ?? getOfflineQueue().length)
+    }
+    window.addEventListener('alphaOfflineQueueUpdated', handleQueueUpdated)
+    return () => window.removeEventListener('alphaOfflineQueueUpdated', handleQueueUpdated)
+  }, [])
+
+  // Auto-Sync saat koneksi internet kembali online atau interval berkala tiap 10 detik
+  useEffect(() => {
+    const triggerSync = async () => {
+      if (navigator.onLine && getOfflineQueue().length > 0) {
+        const res = await syncOfflineTransactions((syncedTx) => {
+          setTransactions(prev => {
+            const exists = prev.some(t => t.id === syncedTx.id)
+            return exists ? prev : [syncedTx, ...prev]
+          })
+        })
+        if (res.success > 0) {
+          showToast(`✅ ${res.success} Transaksi Offline Berhasil Disinkronkan!`)
+        }
+      }
+    }
+
+    const handleOnline = () => {
+      triggerSync()
+    }
+
+    window.addEventListener('online', handleOnline)
+    const interval = setInterval(triggerSync, 10000)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      clearInterval(interval)
+    }
+  }, [])
+
   // Handlers
   const showToast = (msg: string) => {
     setToast({ show: true, message: msg })
@@ -3329,44 +3384,59 @@ const MainApp: React.FC<MainAppProps> = ({
       store_id: finalStoreId
     }
 
-    supabase.from('transactions').insert(newTx).then(async ({ error }) => {
-      if (error) {
-        setIsSaving(false)
-        showToast('Gagal simpan: ' + error.message)
-      } else {
-        const optimisticTx: Transaction = {
-          id: newTx.id,
-          kategori: newTx.kategori,
-          nominal: newTx.nominal,
-          adminFee: newTx.admin_fee,
-          keterangan: newTx.keterangan,
-          timestamp: newTx.timestamp,
-          kasir_id: newTx.kasir_id,
-          store_id: newTx.store_id || undefined
-        }
-        setTransactions(prev => [optimisticTx, ...prev])
-        
-        // Play notification sound
-        playTransactionSound(finalStoreId)
+    // Helper untuk update UI lokal setelah simpan (baik online maupun offline)
+    const handleSuccessSavedLocally = (isOfflineMode: boolean = false) => {
+      incrementStoreTotalCount(finalStoreId)
+      const optimisticTx: Transaction = {
+        id: newTx.id,
+        kategori: newTx.kategori,
+        nominal: newTx.nominal,
+        adminFee: newTx.admin_fee,
+        keterangan: newTx.keterangan,
+        timestamp: newTx.timestamp,
+        kasir_id: newTx.kasir_id,
+        store_id: newTx.store_id || undefined
+      }
+      setTransactions(prev => [optimisticTx, ...prev])
+      
+      // Play notification sound
+      playTransactionSound(finalStoreId)
 
-        // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
-        if (options?.isSplit && nonTunaiAmount > 0) {
-          const adjId = (Date.now() + 1).toString()
-          const tunaiAmount = finalNominal - nonTunaiAmount
-          const adjKet = `Transfer Opsi 2x bayar\nNominal Tunai : ${tunaiAmount.toLocaleString('id-ID')}\nNominal Non tunai : ${nonTunaiAmount.toLocaleString('id-ID')}\nTotal ${finalNominal.toLocaleString('id-ID')}`
-          const adjTx = {
-            id: adjId,
-            user_id: googleUid,
-            kasir_id: username,
-            kategori: 'Tarik Tunai',
-            nominal: nonTunaiAmount,
-            admin_fee: 0,
-            keterangan: adjKet,
-            timestamp: getLocalISOString(),
-            store_id: finalStoreId
+      // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
+      if (options?.isSplit && nonTunaiAmount > 0) {
+        const adjId = (Date.now() + 1).toString()
+        const tunaiAmount = finalNominal - nonTunaiAmount
+        const adjKet = `Transfer Opsi 2x bayar\nNominal Tunai : ${tunaiAmount.toLocaleString('id-ID')}\nNominal Non tunai : ${nonTunaiAmount.toLocaleString('id-ID')}\nTotal ${finalNominal.toLocaleString('id-ID')}`
+        const adjTx = {
+          id: adjId,
+          user_id: googleUid,
+          kasir_id: username,
+          kategori: 'Tarik Tunai',
+          nominal: nonTunaiAmount,
+          admin_fee: 0,
+          keterangan: adjKet,
+          timestamp: getLocalISOString(),
+          store_id: finalStoreId
+        }
+
+        if (isOfflineMode || !navigator.onLine) {
+          saveToOfflineQueue(adjTx)
+          const optimisticAdj: Transaction = {
+            id: adjTx.id,
+            kategori: adjTx.kategori,
+            nominal: adjTx.nominal,
+            adminFee: 0,
+            keterangan: adjTx.keterangan,
+            timestamp: adjTx.timestamp,
+            kasir_id: adjTx.kasir_id,
+            store_id: adjTx.store_id || undefined
           }
-          const { error: adjError } = await supabase.from('transactions').insert(adjTx)
-          if (!adjError) {
+          setTransactions(prev => [optimisticAdj, ...prev])
+        } else {
+          supabase.from('transactions').insert(adjTx).then(({ error: adjErr }) => {
+            if (adjErr) {
+              saveToOfflineQueue(adjTx)
+            }
             const optimisticAdj: Transaction = {
               id: adjTx.id,
               kategori: adjTx.kategori,
@@ -3378,13 +3448,41 @@ const MainApp: React.FC<MainAppProps> = ({
               store_id: adjTx.store_id || undefined
             }
             setTransactions(prev => [optimisticAdj, ...prev])
-          }
+          })
         }
+      }
 
-        setIsSaving(false)
+      setIsSaving(false)
+      if (isOfflineMode) {
+        showToast('⚠️ Disimpan Offline (Menunggu Sinyal)')
+      } else {
         showToast('Transaksi Berhasil Disimpan!')
       }
-    })
+    }
+
+    // STRATEGI ONLINE-FIRST:
+    // Jika ada koneksi internet, coba kirim langsung ke Supabase terlebih dahulu
+    if (navigator.onLine) {
+      supabase.from('transactions').insert(newTx).then(async ({ error }) => {
+        if (error) {
+          // Jika error karena masalah jaringan/koneksi putus di tengah jalan, fallback simpan offline
+          console.warn('Gagal online, simpan ke antrean offline:', error.message)
+          saveToOfflineQueue(newTx)
+          handleSuccessSavedLocally(true)
+        } else {
+          handleSuccessSavedLocally(false)
+        }
+      }).catch(err => {
+        // Fallback jika fetch network error
+        console.warn('Network catch error, simpan offline:', err)
+        saveToOfflineQueue(newTx)
+        handleSuccessSavedLocally(true)
+      })
+    } else {
+      // Jika memang sedang tidak ada sinyal sama sekali, langsung simpan ke antrean lokal
+      saveToOfflineQueue(newTx)
+      handleSuccessSavedLocally(true)
+    }
   }
 
 
@@ -5098,7 +5196,19 @@ const MainApp: React.FC<MainAppProps> = ({
               <i className="fa-solid fa-power-off text-2xl animate-pulse"></i>
             </div>
             <h3 className="font-black text-xs uppercase tracking-widest text-red-600 mb-2">KELUAR & SYNC</h3>
-            <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">Yakin ingin keluar? Pengaturan (kasir & preset) lokal Anda akan otomatis di-upload sebagai backup online di Cloud.</p>
+            {offlineQueueCount > 0 ? (
+              <div className="mb-5 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-left">
+                <div className="flex items-center gap-1.5 text-amber-800 font-black text-[11px] mb-1">
+                  <i className="fa-solid fa-triangle-exclamation text-amber-600"></i>
+                  <span>Ada {offlineQueueCount} Transaksi Offline!</span>
+                </div>
+                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                  Data belum terkirim ke server online. Mohon sambungkan internet dan sinkronkan terlebih dahulu sebelum logout agar transaksi shift Anda tidak tertinggal.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] font-bold text-gray-500 mb-6 leading-relaxed px-2">Yakin ingin keluar? Pengaturan (kasir & preset) lokal Anda akan otomatis di-upload sebagai backup online di Cloud.</p>
+            )}
             <div className="flex gap-2 w-full">
               <button 
                 onClick={() => setShowLogoutConfirm(false)}
@@ -5107,24 +5217,53 @@ const MainApp: React.FC<MainAppProps> = ({
               >
                 Batal
               </button>
-              <button 
-                onClick={async () => {
-                  setIsSaving(true)
-                  await handleUploadToCloud()
-                  setIsSaving(false)
-                  setShowLogoutConfirm(false)
-                  onLogout()
-                }}
-                disabled={isSaving}
-                className="flex-1 bg-red-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <i className="fa-solid fa-circle-notch fa-spin"></i>
-                ) : (
-                  <i className="fa-solid fa-cloud-arrow-up"></i>
-                )}
-                {isSaving ? "Sync & Keluar..." : "Keluar & Sync"}
-              </button>
+              {offlineQueueCount > 0 ? (
+                <button 
+                  onClick={async () => {
+                    setIsSaving(true)
+                    const res = await syncOfflineTransactions((syncedTx) => {
+                      setTransactions(prev => {
+                        const exists = prev.some(t => t.id === syncedTx.id)
+                        return exists ? prev : [syncedTx, ...prev]
+                      })
+                    })
+                    setIsSaving(false)
+                    if (res.success > 0) {
+                      showToast(`✅ Berhasil sinkron ${res.success} transaksi!`)
+                    } else {
+                      showToast('❌ Gagal sinkron, periksa koneksi internet!')
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="flex-1 bg-amber-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  ) : (
+                    <i className="fa-solid fa-rotate"></i>
+                  )}
+                  Sinkron Dulu
+                </button>
+              ) : (
+                <button 
+                  onClick={async () => {
+                    setIsSaving(true)
+                    await handleUploadToCloud()
+                    setIsSaving(false)
+                    setShowLogoutConfirm(false)
+                    onLogout()
+                  }}
+                  disabled={isSaving}
+                  className="flex-1 bg-red-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  ) : (
+                    <i className="fa-solid fa-cloud-arrow-up"></i>
+                  )}
+                  {isSaving ? "Sync & Keluar..." : "Keluar & Sync"}
+                </button>
+              )}
             </div>
           </div>
         </div>

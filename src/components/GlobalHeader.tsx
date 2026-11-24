@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
+import { getOfflineQueue, syncOfflineTransactions } from '../lib/offlineSyncService';
 
 export interface GlobalHeaderProps {
   storePhoto?: string;
@@ -31,6 +32,26 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [offlineCount, setOfflineCount] = useState<number>(() => getOfflineQueue().length);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  
+  useEffect(() => {
+    const handleQueueUpdated = (e: any) => {
+      setOfflineCount(e.detail?.count ?? getOfflineQueue().length);
+    };
+    window.addEventListener('alphaOfflineQueueUpdated', handleQueueUpdated);
+    return () => window.removeEventListener('alphaOfflineQueueUpdated', handleQueueUpdated);
+  }, []);
+
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      alert('Tidak ada koneksi internet. Sambungkan ke WiFi/data seluler untuk sinkronisasi.');
+      return;
+    }
+    setIsSyncingNow(true);
+    await syncOfflineTransactions();
+    setIsSyncingNow(false);
+  };
   
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -180,29 +201,46 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       </div>
 
       {/* BOTTOM ROW: White Bar */}
-      <div className="sticky top-2 z-[60] px-1.5 transition-all w-full" style={{ marginTop: compactMode ? '-6rem' : '-1.5rem' }}>
-        <div className="bg-white/95 backdrop-blur-sm w-full flex items-center justify-between px-2 py-1 rounded-full shadow-md border border-gray-200/50">
-          <div className="flex items-center gap-1">
-            <span className="bg-blue-50/50 text-blue-800 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">
-              <i className="fa-solid fa-user-circle text-[11px] text-blue-600"></i>
-              {kasirRole === 'owner' ? 'Owner : ' : 'Kasir : '}{kasirName}
+      <div className="sticky top-2 z-[60] px-1 sm:px-1.5 transition-all w-full" style={{ marginTop: compactMode ? '-6rem' : '-1.5rem' }}>
+        <div className="bg-white/95 backdrop-blur-sm w-full flex items-center justify-between px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full shadow-md border border-gray-200/50 min-w-0 gap-1">
+          {/* Kolom Kiri: Kasir / Owner + Status LIVE/OFFLINE + Badge Offline */}
+          <div className="flex items-center gap-0.5 sm:gap-1 min-w-0 shrink">
+            <span className="bg-blue-50/50 text-blue-800 text-[7.5px] min-[360px]:text-[8px] sm:text-[9px] font-black px-1 sm:px-1.5 py-0.5 rounded-full flex items-center gap-0.5 sm:gap-1 truncate">
+              <i className="fa-solid fa-user-circle text-[9px] sm:text-[11px] text-blue-600 shrink-0"></i>
+              <span className="truncate">{kasirRole === 'owner' ? '' : ''}{kasirName}</span>
             </span>
+
             <span className={cn(
-              "text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded-full font-black flex items-center gap-1 border",
+              "text-[7px] min-[360px]:text-[7.5px] sm:text-[8.5px] px-1 sm:px-1.5 py-0.5 rounded-full font-black flex items-center gap-0.5 sm:gap-1 border shrink-0",
               isOnline 
                 ? "text-emerald-600 border-emerald-100 bg-emerald-50/50" 
                 : "text-red-500 border-red-100 bg-red-50/50"
             )}>
-              <span className={cn("w-1.5 h-1.5 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500")}></span>
-              {isOnline ? 'LIVE' : 'OFFLINE'}
+              <span className={cn("w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full shrink-0", isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500")}></span>
+              {isOnline ? 'LIVE' : 'OFF'}
             </span>
+
+            {offlineCount > 0 && (
+              <button 
+                onClick={handleManualSync}
+                disabled={isSyncingNow}
+                title="Klik untuk sinkronkan data transaksi offline ke server"
+                className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-[7px] min-[360px]:text-[7.5px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-full flex items-center gap-0.5 sm:gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap animate-pulse shrink-0"
+              >
+                <i className={cn("fa-solid text-[6.5px] sm:text-[7px]", isSyncingNow ? "fa-circle-notch fa-spin" : "fa-cloud-arrow-up")}></i>
+                <span>{offlineCount} Off</span>
+              </button>
+            )}
           </div>
           
-          <div className="text-[8px] sm:text-[8.5px] font-black text-gray-700 flex items-center gap-1">
-            <i className="fa-regular fa-calendar text-blue-500"></i>
-            <span>{dayName}, {fullDate.split(' ').slice(0, 3).join(' ')}</span>
-            <span className="text-[8.5px] sm:text-[9px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 rounded-md tabular-nums border border-blue-100/50">
-              {clockStr}
+          {/* Kolom Kanan: Tanggal & Jam */}
+          <div className="text-[7px] min-[360px]:text-[7.5px] sm:text-[8.5px] font-black text-gray-700 flex items-center gap-0.5 sm:gap-1 shrink-0">
+            <span className="hidden min-[380px]:inline-flex items-center gap-0.5 text-gray-500">
+              <i className="fa-regular fa-calendar text-blue-500 text-[7px] sm:text-[8px]"></i>
+              <span>{dayName.slice(0, 3)}, {fullDate.split(' ').slice(0, 2).join(' ')}</span>
+            </span>
+            <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-[9px] text-blue-600 bg-blue-50/80 px-1 sm:px-1.5 py-0.5 rounded-md tabular-nums border border-blue-100/50 font-black">
+              {clockStr.slice(0, 5)}
             </span>
           </div>
         </div>

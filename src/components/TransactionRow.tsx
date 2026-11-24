@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
+
 import type { Transaction } from '../types'
 import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { KasirAccount } from './LoginScreen'
 import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from '../lib/printerService'
 import { isPpobTx, isDigitalTransferTx, getStoredCustomLabels, parseTransactionDetails } from '../lib/categoryHelper'
+import { formatDisplayInvoiceId, getOfflineQueue } from '../lib/offlineSyncService'
 
 interface TransactionRowProps {
   t: Transaction
@@ -99,8 +101,8 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
   const isDigital = isDigitalTransferTx(t, customLabels);
 
   const isTarikTunai = (
-    t.kategori === 'Tarik Tunai' || 
-    parsed.kategoriTransaksi === 'Tarik Tunai' || 
+    t.kategori === 'Tarik Tunai' ||
+    parsed.kategoriTransaksi === 'Tarik Tunai' ||
     (t.keterangan || '').toUpperCase().includes('TARIK TUNAI')
   );
 
@@ -222,6 +224,10 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     return localStorage.getItem('alphaPro_name') || 'Kasir'
   })()
 
+  // Format Nomor Urut Transaksi: #TRX-[SeumurHidup]-[DDMMYY]-[HariIni]
+  const isOfflinePending = getOfflineQueue().some(q => q.id === t.id)
+  const displayFormattedId = formatDisplayInvoiceId(index + 1, t.timestamp, index + 1)
+
   const generateReceiptText = () => {
     let text = formatReceiptCenter(effectiveStoreName.toUpperCase()) + '\n';
     if (effectiveStoreSubtext) {
@@ -229,7 +235,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     }
     text += formatReceiptDoubleDivider() + '\n';
     text += `Kasir : ${effectiveKasirName}\n`;
-    text += `No    : ${t.id ? t.id.slice(0, 18) : '-'}\n`;
+    text += `No    : ${displayFormattedId}\n`;
     text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += formatReceiptDivider() + '\n';
     text += `Transaksi : ${parsed.kategoriTransaksi.toUpperCase().substring(0, 20)}\n`;
@@ -475,6 +481,25 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
                       {modalSumberMasuk}
                     </span>
                   </div>
+                </div>
+
+                {/* ID Transaksi (Baris Khusus 1 Baris Penuh: #TRX-2845-241126-015) */}
+                <div className="col-span-2 pt-1 mt-0.5 border-t border-slate-100 flex items-center justify-between min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-receipt text-[9px]"></i>
+                    </div>
+                    <span className="text-[9.5px] text-gray-400 font-bold whitespace-nowrap">ID Trx:</span>
+                    <span className="text-[10px] sm:text-[11px] font-black text-slate-800 tracking-tight whitespace-nowrap tabular-nums">
+                      {displayFormattedId}
+                    </span>
+                  </div>
+                  {isOfflinePending && (
+                    <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[8px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 whitespace-nowrap">
+                      <i className="fa-solid fa-cloud-arrow-up text-[7px] animate-pulse"></i>
+                      Menunggu Sinyal
+                    </span>
+                  )}
                 </div>
               </div>
 
