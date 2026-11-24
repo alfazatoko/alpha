@@ -3463,21 +3463,22 @@ const MainApp: React.FC<MainAppProps> = ({
     // STRATEGI ONLINE-FIRST:
     // Jika ada koneksi internet, coba kirim langsung ke Supabase terlebih dahulu
     if (navigator.onLine) {
-      supabase.from('transactions').insert(newTx).then(async ({ error }) => {
-        if (error) {
-          // Jika error karena masalah jaringan/koneksi putus di tengah jalan, fallback simpan offline
-          console.warn('Gagal online, simpan ke antrean offline:', error.message)
+      (async () => {
+        try {
+          const { error } = await supabase.from('transactions').insert(newTx)
+          if (error) {
+            console.warn('Gagal online, simpan ke antrean offline:', error.message)
+            saveToOfflineQueue(newTx)
+            handleSuccessSavedLocally(true)
+          } else {
+            handleSuccessSavedLocally(false)
+          }
+        } catch (err: any) {
+          console.warn('Network catch error, simpan offline:', err)
           saveToOfflineQueue(newTx)
           handleSuccessSavedLocally(true)
-        } else {
-          handleSuccessSavedLocally(false)
         }
-      }).catch(err => {
-        // Fallback jika fetch network error
-        console.warn('Network catch error, simpan offline:', err)
-        saveToOfflineQueue(newTx)
-        handleSuccessSavedLocally(true)
-      })
+      })()
     } else {
       // Jika memang sedang tidak ada sinyal sama sekali, langsung simpan ke antrean lokal
       saveToOfflineQueue(newTx)
