@@ -1056,13 +1056,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     let totalJual = 0;
     let labaBersih = 0;
 
+    const isTarikAdminDalam = activeMode === 'TARIK' && isAdminNonTunai;
+
     // Mode MODAL_JUAL khusus Order Kuota pada Tema 1 (jika kasir memilih Jual & Modal)
     if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) {
       totalJual = a; // Harga Jual
       const modalRiil = m + selectedTujuanFee; // Modal Dasar + Fee Aplikasi
       labaBersih = a - modalRiil;
+    } else if (isTarikAdminDalam) {
+      // KHUSUS TARIK TUNAI POTONG DALAM (NON TUNAI):
+      // Total transaksi masuk adalah m (misal Rp 505.000)
+      // Kasir menyerahkan uang tunai ke customer m - a (misal Rp 500.000)
+      // Laba toko adalah a (misal Rp 5.000)
+      totalJual = m;
+      labaBersih = a;
     } else {
-      // Sistem Nominal & Admin (Flip, Transfer Bank, DANA, Order Kuota, Tarik Tunai, dll)
+      // Sistem Nominal & Admin (Flip, Transfer Bank, DANA, Order Kuota, Tarik Tunai Admin Cash, dll)
       totalJual = m + a;
       labaBersih = a - (activeMode === 'TARIK' ? 0 : selectedTujuanFee);
     }
@@ -1088,11 +1097,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       return (
         <div className={containerClassName}>
           <div className="bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
-            <span className="text-[10px] font-black text-purple-800 uppercase tracking-wide">
-              {labelTotal}: Rp {totalJual.toLocaleString('id-ID')}
-            </span>
-            <span className="text-[10px] font-black text-purple-600 uppercase tracking-wide">
-              Laba: Rp {labaBersih.toLocaleString('id-ID')} ✓
+            {isTarikAdminDalam ? (
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-black text-purple-800 uppercase tracking-tight truncate">
+                  TOTAL: Rp {totalJual.toLocaleString('id-ID')}
+                </span>
+                <span className="text-[7.5px] sm:text-[8px] font-bold text-purple-600/90 whitespace-nowrap">
+                  (Kasih Tunai: Rp {Math.max(0, m - a).toLocaleString('id-ID')})
+                </span>
+              </div>
+            ) : (
+              <span className="text-[10px] font-black text-purple-800 uppercase tracking-wide">
+                {labelTotal}: Rp {totalJual.toLocaleString('id-ID')}
+              </span>
+            )}
+            <span className="text-[9px] sm:text-[10px] font-black text-purple-600 uppercase tracking-tight shrink-0 ml-1">
+              LABA: Rp {labaBersih.toLocaleString('id-ID')} ✓
             </span>
           </div>
         </div>
@@ -2292,6 +2312,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               const j = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
               return j > 0 ? ` (Rp ${j.toLocaleString('id-ID')})` : '';
             }
+            if (activeMode === 'TARIK' && isAdminNonTunai) {
+              return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
+            }
             const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
             return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');
           })()}`}
@@ -2840,6 +2863,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               if (activeMode === 'AKSESORIS') {
                 return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
               }
+              if (activeMode === 'TARIK' && isAdminNonTunai) {
+                return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
+              }
               const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
               return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');
             })()}`}
@@ -3280,6 +3306,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             if (kategori === 'Order Kuota' && !isCurrentNominalAdmin) {
               const j = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
               return j > 0 ? ` (Rp ${j.toLocaleString('id-ID')})` : '';
+            }
+            if (activeMode === 'TARIK' && isAdminNonTunai) {
+              return n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '';
             }
             const a = parseInt(admin.replace(/[^0-9]/g,'')) || 0;
             return (n + a) > 0 ? ` (Rp ${(n + a).toLocaleString('id-ID')})` : (n > 0 ? ` (Rp ${n.toLocaleString('id-ID')})` : '');

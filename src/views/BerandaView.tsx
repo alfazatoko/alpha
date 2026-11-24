@@ -5912,11 +5912,21 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
     }
   }, [ownerEffectiveStoreId]);
 
-  const ownerTotalAdmin = ownerTodayTxs.filter(t => 
+  const [showAdminDetail, setShowAdminDetail] = useState(false);
+
+  const ownerTotalAdminTunai = ownerTodayTxs.filter(t => 
     !(t.keterangan || '').includes('[ADMIN_DALAM]') &&
     !(t.keterangan || '').includes('[KHUSUS]') && 
     !(t.keterangan || '').includes('[NON_TUNAI]')
   ).reduce((s, t) => s + t.adminFee, 0)
+
+  const ownerTotalAdminNonTunai = ownerTodayTxs.filter(t => 
+    !(t.keterangan || '').includes('[KHUSUS]') && 
+    ((t.keterangan || '').includes('[ADMIN_DALAM]') || (t.keterangan || '').includes('[NON_TUNAI]'))
+  ).reduce((s, t) => s + t.adminFee, 0)
+
+  // Total Admin Gabungan untuk display Laba (Tunai + Non Tunai)
+  const ownerTotalAdmin = ownerTotalAdminTunai + ownerTotalAdminNonTunai
   
   const ownerTotalTrx = ownerTodayTxs.length
   const ownerTotalVolume = ownerTodayTxs.reduce((s, t) => s + t.nominal, 0)
@@ -5953,7 +5963,7 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         .filter(t => (t.keterangan || '').includes('[ADMIN_DALAM]'))
         .reduce((s, t) => s + (t.adminFee || (t as any).admin || 0), 0)
 
-  const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdmin - ownerTotalTarik
+  const ownerTotalLaci = ownerKasModal + ownerPenjualanDigital + ownerTotalAksesoris + ownerTotalAdminTunai - ownerTotalTarik
   
   // ownerSaldoBank calculation (Contribution to bank balance/plafon)
   const ownerTotalBankOut = ownerTodayTxs.filter(t => 
@@ -6768,10 +6778,17 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
                 <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
 
                 {/* 2. ADMIN / LABA */}
-                <div className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0">
-                  <p className="text-[9px] font-black text-emerald-300 uppercase tracking-wider mb-0.5 whitespace-nowrap">ADMIN / LABA</p>
+                <div 
+                  onClick={() => setShowAdminDetail(true)}
+                  title="Klik untuk lihat rincian Tunai & Non Tunai"
+                  className="min-w-[105px] flex-1 px-2.5 flex flex-col items-center justify-center text-center shrink-0 cursor-pointer select-none active:scale-95 transition-all"
+                >
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <p className="text-[9px] font-black text-emerald-300 uppercase tracking-wider whitespace-nowrap">ADMIN / LABA</p>
+                    <i className="fa-solid fa-circle-info text-[8px] text-emerald-300/80"></i>
+                  </div>
                   <p className="text-xs font-black text-emerald-200 tabular-nums leading-tight mb-0.5 whitespace-nowrap">{formatRupiah(ownerTotalAdmin)}</p>
-                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Fee & Laba</p>
+                  <p className="text-[9px] font-medium text-blue-100/75 leading-none whitespace-nowrap">Tunai & Non Tunai</p>
                 </div>
 
                 <div className="w-[1px] h-7 bg-white/20 shrink-0 rounded-full"></div>
@@ -6823,6 +6840,64 @@ const BerandaView: React.FC<BerandaViewProps> = (props) => {
         
         {/* WHITE CAROUSEL HAS BEEN MOVED INTO BLUE CARD */}
       </div>
+
+      {/* POPUP RINGKAS RINCIAN FEE (ADMIN / LABA) */}
+      {showAdminDetail && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setShowAdminDetail(false)}
+          />
+          <div className="relative w-full max-w-[290px] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10 animate-in zoom-in-95 duration-200">
+            {/* Header Popup Ringkas */}
+            <div className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <i className="fa-solid fa-coins text-xs"></i>
+                <span className="text-[11px] font-black tracking-wide uppercase">Rincian Admin Fee</span>
+              </div>
+              <button 
+                onClick={() => setShowAdminDetail(false)}
+                className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition active:scale-90"
+              >
+                <i className="fa-solid fa-xmark text-[11px]"></i>
+              </button>
+            </div>
+
+            {/* Isi Ringkas & Padat */}
+            <div className="p-3 space-y-2">
+              {/* Baris Tunai */}
+              <div className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span className="text-[11px] font-bold text-emerald-950">Tunai (Laci)</span>
+                </div>
+                <span className="text-[12px] font-black text-emerald-700 tabular-nums">
+                  {formatRupiah(ownerTotalAdminTunai).replace(',00', '')}
+                </span>
+              </div>
+
+              {/* Baris Non Tunai */}
+              <div className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-purple-50 border border-purple-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                  <span className="text-[11px] font-bold text-purple-950">Non Tunai</span>
+                </div>
+                <span className="text-[12px] font-black text-purple-700 tabular-nums">
+                  {formatRupiah(ownerTotalAdminNonTunai).replace(',00', '')}
+                </span>
+              </div>
+
+              {/* Garis Total */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-1">
+                <span className="text-[11px] font-black text-slate-600 uppercase">Total Fee</span>
+                <span className="text-[13px] font-black text-slate-900 tabular-nums">
+                  {formatRupiah(ownerTotalAdmin).replace(',00', '')}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mx-1.5 mb-0.5 relative z-50 space-y-2">
         

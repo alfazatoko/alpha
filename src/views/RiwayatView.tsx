@@ -47,6 +47,7 @@ interface RiwayatViewProps {
 
 const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const [currentPage, setCurrentPage] = useState(1)
+  const [showAdminDetail, setShowAdminDetail] = useState(false)
   const itemsPerPage = 50
 
   const currentStoreId = props.pantauStoreId || 'all';
@@ -281,8 +282,13 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
   const todayVolume = dateFilteredTransactions
     .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
     .reduce((s, t) => s + t.nominal, 0)
-  const todayAdmin = dateFilteredTransactions
-    .filter(t => !(t.keterangan || '').includes('[KHUSUS]') && !(t.keterangan || '').includes('[NON_TUNAI]'))
+  // Total Admin Tunai (kasir terima uang admin tunai)
+  const todayAdminTunai = dateFilteredTransactions
+    .filter(t => 
+      !(t.keterangan || '').includes('[KHUSUS]') && 
+      !(t.keterangan || '').includes('[NON_TUNAI]') && 
+      !(t.keterangan || '').includes('[ADMIN_DALAM]')
+    )
     .reduce((s, t) => {
       const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
       const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
@@ -290,6 +296,23 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
       const cleanAdmin = (appFee > 0 && !isPpob) ? Math.max(0, t.adminFee - appFee) : t.adminFee;
       return s + cleanAdmin;
     }, 0)
+
+  // Total Admin Non Tunai (potong dalam saldo / via digital)
+  const todayAdminNonTunai = dateFilteredTransactions
+    .filter(t => 
+      !(t.keterangan || '').includes('[KHUSUS]') && 
+      ((t.keterangan || '').includes('[NON_TUNAI]') || (t.keterangan || '').includes('[ADMIN_DALAM]'))
+    )
+    .reduce((s, t) => {
+      const feeMatch = (t.keterangan || '').match(/\[FEE_APP:(\d+)\]/i);
+      const appFee = feeMatch ? parseInt(feeMatch[1], 10) : 0;
+      const isPpob = isPpobTx(t, customLabels);
+      const cleanAdmin = (appFee > 0 && !isPpob) ? Math.max(0, t.adminFee - appFee) : t.adminFee;
+      return s + cleanAdmin;
+    }, 0)
+
+  // Total Admin Keseluruhan (Gabungan Tunai + Non Tunai)
+  const todayAdmin = todayAdminTunai + todayAdminNonTunai
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
@@ -1284,7 +1307,11 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
           </div>
 
           {/* Card 2: Admin Fee */}
-          <div className="bg-gradient-to-br from-white via-[#F0FDF5] to-[#D1FAE5] border border-emerald-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+          <div 
+            onClick={() => setShowAdminDetail(prev => !prev)}
+            title="Klik untuk lihat rincian Tunai & Non Tunai"
+            className="bg-gradient-to-br from-white via-[#F0FDF5] to-[#D1FAE5] border border-emerald-200/80 rounded-2xl sm:rounded-3xl p-2.5 min-[360px]:p-3 flex flex-col justify-between shadow-xs relative overflow-hidden group hover:shadow-md transition-all cursor-pointer select-none active:scale-95"
+          >
             {/* Soft decorative wave on bottom corner */}
             <div className="absolute -bottom-1 -right-1 w-20 h-10 pointer-events-none opacity-30 overflow-hidden">
               <svg viewBox="0 0 100 50" preserveAspectRatio="none" className="w-full h-full text-emerald-500 fill-current">
@@ -1292,21 +1319,50 @@ const RiwayatView: React.FC<RiwayatViewProps> = (props) => {
               </svg>
             </div>
 
-            <div className="flex items-center gap-1.5 relative z-10">
-              <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#10B981] shrink-0 shadow-xs shadow-emerald-500/50"></span>
-              <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#059669] uppercase tracking-wider">ADMIN FEE</span>
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 min-[360px]:w-2.5 min-[360px]:h-2.5 rounded-full bg-[#10B981] shrink-0 shadow-xs shadow-emerald-500/50"></span>
+                <span className="text-[9px] min-[360px]:text-[9.5px] sm:text-[10px] font-black text-[#059669] uppercase tracking-wider">ADMIN FEE</span>
+              </div>
+              <span className="text-[8px] font-black text-emerald-600 bg-emerald-100/80 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                <i className={cn("fa-solid text-[7px]", showAdminDetail ? "fa-chevron-up" : "fa-chevron-down")}></i>
+                {showAdminDetail ? "Tutup" : "Rincian"}
+              </span>
             </div>
 
             <div className="flex items-center justify-between my-0.5 sm:my-1 gap-1 relative z-10">
-              <div className="text-[12.5px] min-[360px]:text-[13.5px] min-[400px]:text-[15px] sm:text-[17px] md:text-xl font-black text-[#047857] leading-none tracking-tight tabular-nums whitespace-nowrap truncate">
-                {formatRupiah(todayAdmin).replace(',00', '')}
-              </div>
-              <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200/70 shadow-xs group-hover:scale-105 transition-transform">
-                <i className="fa-solid fa-coins text-xs min-[360px]:text-sm sm:text-base"></i>
-              </div>
+              {showAdminDetail ? (
+                <div className="flex flex-col gap-0.5 w-full">
+                  <div className="flex items-center justify-between text-[11px] min-[360px]:text-[12px] font-black leading-tight">
+                    <span className="text-emerald-700 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                      Tunai:
+                    </span>
+                    <span className="text-emerald-700 tabular-nums">{formatRupiah(todayAdminTunai).replace(',00', '')}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] min-[360px]:text-[12px] font-black leading-tight">
+                    <span className="text-purple-700 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block"></span>
+                      Non Tunai:
+                    </span>
+                    <span className="text-purple-700 tabular-nums">{formatRupiah(todayAdminNonTunai).replace(',00', '')}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-[12.5px] min-[360px]:text-[13.5px] min-[400px]:text-[15px] sm:text-[17px] md:text-xl font-black text-[#047857] leading-none tracking-tight tabular-nums whitespace-nowrap truncate">
+                    {formatRupiah(todayAdmin).replace(',00', '')}
+                  </div>
+                  <div className="w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-white/80 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200/70 shadow-xs group-hover:scale-105 transition-transform">
+                    <i className="fa-solid fa-coins text-xs min-[360px]:text-sm sm:text-base"></i>
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">Total Admin Fee</div>
+            <div className="text-[8px] min-[360px]:text-[8.5px] sm:text-[9.5px] font-bold text-slate-400 truncate relative z-10">
+              {showAdminDetail ? "Klik untuk tutup rincian" : "Total Admin Fee (Klik detail)"}
+            </div>
           </div>
 
           {/* Card 3: Uang Masuk */}
