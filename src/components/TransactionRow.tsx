@@ -5,7 +5,7 @@ import { cn, parseLocalISO, getLocalDateString } from '../lib/utils'
 import type { KasirAccount } from './LoginScreen'
 import { printThermalReceipt, formatReceiptCenter, formatReceiptRow, formatReceiptDivider, formatReceiptDoubleDivider } from '../lib/printerService'
 import { isPpobTx, isDigitalTransferTx, getStoredCustomLabels, parseTransactionDetails } from '../lib/categoryHelper'
-import { formatDisplayInvoiceId, getOfflineQueue } from '../lib/offlineSyncService'
+import { formatDisplayInvoiceId, formatDisplayOfflineId, getOfflineQueue } from '../lib/offlineSyncService'
 
 interface TransactionRowProps {
   t: Transaction
@@ -226,7 +226,11 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
   // Format Nomor Urut Transaksi: #TRX-[SeumurHidup]-[DDMMYY]-[HariIni]
   const isOfflinePending = getOfflineQueue().some(q => q.id === t.id)
-  const displayFormattedId = formatDisplayInvoiceId(index + 1, t.timestamp, index + 1)
+  const displayFormattedId = (t.trx_seq_lifetime != null && t.trx_seq_daily != null)
+    ? formatDisplayInvoiceId(t.trx_seq_lifetime, t.timestamp, t.trx_seq_daily)
+    : isOfflinePending
+      ? formatDisplayOfflineId(t.timestamp)
+      : formatDisplayInvoiceId(index + 1, t.timestamp, index + 1)
 
   const generateReceiptText = () => {
     let text = formatReceiptCenter(effectiveStoreName.toUpperCase()) + '\n';
@@ -235,7 +239,7 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
     }
     text += formatReceiptDoubleDivider() + '\n';
     text += `Kasir : ${effectiveKasirName}\n`;
-    text += `No    : ${displayFormattedId}\n`;
+    text += `ID TRX: ${displayFormattedId}\n`;
     text += `Waktu : ${dateObj.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} ${jam}\n`;
     text += formatReceiptDivider() + '\n';
     text += `Transaksi : ${parsed.kategoriTransaksi.toUpperCase().substring(0, 20)}\n`;
@@ -704,17 +708,17 @@ const TransactionRow: React.FC<TransactionRowProps> = ({
 
                 <div className="border-b border-dashed border-slate-300 my-2"></div>
 
-                <div className="flex justify-between text-[10px] text-slate-600">
-                  <span>Kasir :</span>
-                  <span className="font-semibold text-slate-800">{effectiveKasirName}</span>
+                <div className="flex justify-between text-[10px] text-slate-600 gap-2">
+                  <span className="shrink-0">Kasir :</span>
+                  <span className="font-semibold text-slate-800 text-right truncate">{effectiveKasirName}</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-600">
-                  <span>No    :</span>
-                  <span className="font-semibold text-slate-800 truncate max-w-[140px]">{t.id ? t.id.slice(0, 16) : '-'}</span>
+                <div className="flex justify-between text-[10px] text-slate-600 gap-2">
+                  <span className="shrink-0">ID TRX :</span>
+                  <span className="font-semibold text-slate-800 text-right whitespace-nowrap tabular-nums">{displayFormattedId}</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-600">
-                  <span>Waktu :</span>
-                  <span className="font-semibold text-slate-800">{dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}</span>
+                <div className="flex justify-between text-[10px] text-slate-600 gap-2">
+                  <span className="shrink-0">Waktu :</span>
+                  <span className="font-semibold text-slate-800 text-right">{dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {jam}</span>
                 </div>
 
                 <div className="border-b border-dashed border-slate-300 my-2"></div>

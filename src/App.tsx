@@ -2759,7 +2759,9 @@ const MainApp: React.FC<MainAppProps> = ({
           keterangan: row.keterangan || '-',
           timestamp: row.timestamp,
           kasir_id: row.kasir_id,
-          store_id: row.store_id
+          store_id: row.store_id,
+          trx_seq_lifetime: row.trx_seq_lifetime != null ? Number(row.trx_seq_lifetime) : undefined,
+          trx_seq_daily: row.trx_seq_daily != null ? Number(row.trx_seq_daily) : undefined
         }))
         setTransactions(mappedTx)
       }
@@ -2992,7 +2994,9 @@ const MainApp: React.FC<MainAppProps> = ({
           keterangan: row.keterangan || '-',
           timestamp: row.timestamp,
           kasir_id: row.kasir_id,
-          store_id: row.store_id
+          store_id: row.store_id,
+          trx_seq_lifetime: row.trx_seq_lifetime != null ? Number(row.trx_seq_lifetime) : undefined,
+          trx_seq_daily: row.trx_seq_daily != null ? Number(row.trx_seq_daily) : undefined
         }))
         
         setTransactions(prev => {
@@ -3264,7 +3268,11 @@ const MainApp: React.FC<MainAppProps> = ({
         const res = await syncOfflineTransactions((syncedTx) => {
           setTransactions(prev => {
             const exists = prev.some(t => t.id === syncedTx.id)
-            return exists ? prev : [syncedTx, ...prev]
+            return exists
+              ? prev.map(t => t.id === syncedTx.id
+                  ? { ...t, trx_seq_lifetime: syncedTx.trx_seq_lifetime, trx_seq_daily: syncedTx.trx_seq_daily }
+                  : t)
+              : [syncedTx, ...prev]
           })
         })
         if (res.success > 0) {
@@ -3385,7 +3393,7 @@ const MainApp: React.FC<MainAppProps> = ({
     }
 
     // Helper untuk update UI lokal setelah simpan (baik online maupun offline)
-    const handleSuccessSavedLocally = (isOfflineMode: boolean = false) => {
+    const handleSuccessSavedLocally = (isOfflineMode: boolean = false, serverRow?: any) => {
       incrementStoreTotalCount(finalStoreId)
       const optimisticTx: Transaction = {
         id: newTx.id,
@@ -3395,7 +3403,9 @@ const MainApp: React.FC<MainAppProps> = ({
         keterangan: newTx.keterangan,
         timestamp: newTx.timestamp,
         kasir_id: newTx.kasir_id,
-        store_id: newTx.store_id || undefined
+        store_id: newTx.store_id || undefined,
+        trx_seq_lifetime: serverRow?.trx_seq_lifetime != null ? Number(serverRow.trx_seq_lifetime) : undefined,
+        trx_seq_daily: serverRow?.trx_seq_daily != null ? Number(serverRow.trx_seq_daily) : undefined
       }
       setTransactions(prev => [optimisticTx, ...prev])
       
@@ -3433,10 +3443,11 @@ const MainApp: React.FC<MainAppProps> = ({
           }
           setTransactions(prev => [optimisticAdj, ...prev])
         } else {
-          supabase.from('transactions').insert(adjTx).then(({ error: adjErr }) => {
+          supabase.from('transactions').insert(adjTx).select().then(({ data: adjData, error: adjErr }) => {
             if (adjErr) {
               saveToOfflineQueue(adjTx)
             }
+            const adjServerRow = adjData?.[0]
             const optimisticAdj: Transaction = {
               id: adjTx.id,
               kategori: adjTx.kategori,
@@ -3445,7 +3456,9 @@ const MainApp: React.FC<MainAppProps> = ({
               keterangan: adjTx.keterangan,
               timestamp: adjTx.timestamp,
               kasir_id: adjTx.kasir_id,
-              store_id: adjTx.store_id || undefined
+              store_id: adjTx.store_id || undefined,
+              trx_seq_lifetime: adjServerRow?.trx_seq_lifetime != null ? Number(adjServerRow.trx_seq_lifetime) : undefined,
+              trx_seq_daily: adjServerRow?.trx_seq_daily != null ? Number(adjServerRow.trx_seq_daily) : undefined
             }
             setTransactions(prev => [optimisticAdj, ...prev])
           })
@@ -3465,13 +3478,13 @@ const MainApp: React.FC<MainAppProps> = ({
     if (navigator.onLine) {
       (async () => {
         try {
-          const { error } = await supabase.from('transactions').insert(newTx)
+          const { data: insertedRows, error } = await supabase.from('transactions').insert(newTx).select()
           if (error) {
             console.warn('Gagal online, simpan ke antrean offline:', error.message)
             saveToOfflineQueue(newTx)
             handleSuccessSavedLocally(true)
           } else {
-            handleSuccessSavedLocally(false)
+            handleSuccessSavedLocally(false, insertedRows?.[0])
           }
         } catch (err: any) {
           console.warn('Network catch error, simpan offline:', err)
@@ -5225,7 +5238,11 @@ const MainApp: React.FC<MainAppProps> = ({
                     const res = await syncOfflineTransactions((syncedTx) => {
                       setTransactions(prev => {
                         const exists = prev.some(t => t.id === syncedTx.id)
-                        return exists ? prev : [syncedTx, ...prev]
+                        return exists
+                          ? prev.map(t => t.id === syncedTx.id
+                              ? { ...t, trx_seq_lifetime: syncedTx.trx_seq_lifetime, trx_seq_daily: syncedTx.trx_seq_daily }
+                              : t)
+                          : [syncedTx, ...prev]
                       })
                     })
                     setIsSaving(false)

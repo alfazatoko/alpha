@@ -1,0 +1,13 @@
+-- ==============================================================================
+-- PANDUAN EKSEKUSI SQL PENOMORAN ID TRANSAKSI PERMANEN (ANTI-TIMEOUT)
+-- ==============================================================================
+-- Karena tabel transactions memiliki ribuan data historis + trigger profit,
+-- eksekusi telah dipecah menjadi 3 langkah ringan agar selesai dalam ~1 detik per langkah:
+--
+-- LANGKAH 1: Jalankan seluruh isi file -> supabase_trx_step1_setup.sql
+--
+-- LANGKAH 2: Jalankan query di bawah ini berulang kali sampai remaining_count = 0:
+--            SELECT * FROM public.backfill_trx_seq_batch(3000);
+--
+-- LANGKAH 3: Setelah remaining_count = 0, jalankan seluruh isi file -> supabase_trx_step3_finalize.sql
+-- ==============================================================================

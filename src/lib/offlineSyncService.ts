@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { parseLocalISO } from './utils';
 import type { Transaction } from '../types';
 
 export interface OfflinePendingTransaction {
@@ -126,7 +127,7 @@ export const formatDisplayInvoiceId = (
   timestampStr: string,
   todayNo: number | string
 ): string => {
-  const d = new Date(timestampStr || Date.now());
+  const d = timestampStr ? parseLocalISO(timestampStr) : new Date();
   const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
@@ -136,6 +137,17 @@ export const formatDisplayInvoiceId = (
   const todayStr = String(todayNo || '1').padStart(3, '0');
 
   return `#TRX-${lifetimeStr}-${ddmmyy}-${todayStr}`;
+};
+
+/**
+ * Format sementara untuk transaksi yang dibuat saat offline (menunggu nomor resmi server)
+ */
+export const formatDisplayOfflineId = (timestampStr: string): string => {
+  const d = timestampStr ? parseLocalISO(timestampStr) : new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `#TRX-OFFLINE-${dd}${mm}${yy}`;
 };
 
 /**
@@ -172,13 +184,15 @@ export const syncOfflineTransactions = async (
       };
 
       // Gunakan upsert dengan onConflict id agar 100% aman (idempotent / tidak duplikat)
-      const { error } = await supabase
+      const { data: syncedRows, error } = await supabase
         .from('transactions')
-        .upsert(payload, { onConflict: 'id' });
+        .upsert(payload, { onConflict: 'id' })
+        .select();
 
       if (!error) {
         removeFromOfflineQueue(item.id);
         successCount++;
+        const syncedRow = syncedRows?.[0];
         if (onSuccessEach) {
           onSuccessEach({
             id: item.id,
@@ -188,7 +202,9 @@ export const syncOfflineTransactions = async (
             keterangan: item.keterangan,
             timestamp: item.timestamp,
             kasir_id: item.kasir_id,
-            store_id: item.store_id
+            store_id: item.store_id,
+            trx_seq_lifetime: syncedRow?.trx_seq_lifetime != null ? Number(syncedRow.trx_seq_lifetime) : undefined,
+            trx_seq_daily: syncedRow?.trx_seq_daily != null ? Number(syncedRow.trx_seq_daily) : undefined
           });
         }
       } else {

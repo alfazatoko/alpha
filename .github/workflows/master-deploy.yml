@@ -102,22 +102,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.7.0
-          name: "ALFAZA ALPHA POS v1.7.0"
+          tag_name: v1.7.3
+          name: "ALFAZA ALPHA POS v1.7.3"
           body: |
-            ### Pembaruan Aplikasi v1.7.0
-            - **Keamanan Login Password QWERTY:**
-              - Mengganti sistem PIN angka menjadi Password keyboard QWERTY fleksibel (huruf & angka) untuk mencegah salah login akun dan titip absen antar kasir.
-              - Tombol intip mata (👁️) aktif secara default (password terlihat jelas saat mengetik), dan dapat diklik untuk menyembunyikan karakter.
-              - Kompatibilitas 100% dengan data PIN angka kasir & owner sebelumnya.
-            - **Optimasi Modal Update Saldo Real Closing:**
-              - Performa super ringan dan anti-lag di HP dengan komponen terisolasi mandiri dan debounce update.
-              - Tampilan mepet, tombol bagikan WA pindah ke header atas berdampingan dengan tombol X, serta toggle catatan kasir kolapsibel.
-            - **Navigasi Pintasan Teks Otomatis:**
-              - Tombol pensil di form transaksi kini aktif untuk Kasir (langsung ke Teks Otomatis) dan Owner (tombol pintasan modal).
-              - Navigasi kembali (←) ergonomis langsung mengembalikan ke form Transaksi (navbar tengah).
-            - **Penyempurnaan UI Riwayat & Rincian Transaksi:**
-              - Desain modal popup rincian transaksi lebih ramping, kompak, dan responsif untuk layar HP kecil maupun mode lanskap.
+            ### Pembaruan Aplikasi v1.7.3
+            - **Sistem Penomoran ID TRX Permanen & Anti-Bentrok:**
+              - Format resmi: `#TRX-[TotalSeumurHidup]-[DDMMYY]-[UrutanHarian]`.
+              - Sinkronisasi counter atomik via database Supabase: aman dari nomor kembar antar-kasir (Kasir 1, 2, 3 bersambung rapi).
+              - Proteksi edit dan hapus: transaksi yang diedit atau transaksi lain yang dihapus tidak akan pernah mengubah/menggeser ID TRX yang sudah tercatat.
+            - **Pembaruan Struk Thermal & Review Preview:**
+              - Label `No :` diganti menjadi `ID TRX :` dengan nomor kode resmi penuh pada hasil cetak printer Bluetooth dan preview popup.
+            - **Penyempurnaan UI Riwayat & Responsivitas:**
+              - Kolom "Riwayat Transaksi" dan "Riwayat Tambah Saldo" lebih proporsional dan teks terbaca penuh di layar HP.
+              - Modal rincian transaksi lebih kompak, mepet header, dan didukung batas tinggi maksimal serta scroll otomatis untuk mode tablet landscape.
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:

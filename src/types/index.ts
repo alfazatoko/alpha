@@ -23,6 +23,8 @@ export interface Transaction {
   originalKategori?: string;
   kasir_id?: string;
   store_id?: string; // Menyimpan ID toko transaksi ini
+  trx_seq_lifetime?: number; // Nomor urut permanen seumur hidup toko sejak launching
+  trx_seq_daily?: number; // Nomor urut permanen harian toko (gabungan kasir 1, 2, 3)
 }
 
 export interface GajiBonusRecord {
