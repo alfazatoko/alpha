@@ -107,6 +107,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [authenticatedAccount, setAuthenticatedAccount] = useState<KasirAccount | null>(null)
   const [absenModalError, setAbsenModalError] = useState('')
   const [isSubmittingAbsen, setIsSubmittingAbsen] = useState(false)
+  const [isShiftDropdownOpen, setIsShiftDropdownOpen] = useState(false)
+  const [isLateNoteOpen, setIsLateNoteOpen] = useState(false)
 
   // Reset foto selfie jika kasir atau shift berganti
   useEffect(() => {
@@ -403,6 +405,65 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     return checkShiftLateness(currentTimeStr, selectedShift, liveFinancialSettings)
   }, [selectedShift, currentTimeStr, liveFinancialSettings, activeShifts])
 
+  const selectedShiftObj = useMemo(() => {
+    return activeShifts.find(s => s.id === selectedShift) || activeShifts[0] || null
+  }, [activeShifts, selectedShift])
+
+  const getShiftVisual = (shiftId?: string, isSelected?: boolean) => {
+    let bgClasses = ''
+    let iconElement: React.ReactNode = null
+    let titleClasses = ''
+    let pillClasses = ''
+    let badgeElement: React.ReactNode = null
+
+    if (isSelected) {
+      // ── Shift Terpilih / Diceklis (Berwarna & Kontras Tinggi) ──
+      titleClasses = 'text-white font-black uppercase tracking-wider text-xs drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]'
+
+      // Lingkaran berwarna dengan centang putih tebal
+      badgeElement = (
+        <span className="absolute top-2 right-2 w-5 h-5 sm:w-5.5 sm:h-5.5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-md ring-2 ring-white">
+          <i className="fa-solid fa-check"></i>
+        </span>
+      )
+
+      if (shiftId === 'PAGI') {
+        bgClasses = 'bg-gradient-to-br from-sky-600 via-blue-700 to-amber-700 ring-2 ring-emerald-400 shadow-md scale-[1.01] border-amber-300/40'
+        iconElement = <i className="fa-solid fa-cloud-sun text-amber-300 text-sm filter drop-shadow shrink-0"></i>
+        pillClasses = 'text-amber-100 bg-black/40 border-white/20 font-bold'
+      } else if (shiftId === 'SIANG') {
+        bgClasses = 'bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 ring-2 ring-emerald-400 shadow-md scale-[1.01] border-indigo-300/40'
+        iconElement = <i className="fa-solid fa-sun text-yellow-300 text-sm filter drop-shadow shrink-0"></i>
+        pillClasses = 'text-indigo-100 bg-black/40 border-white/20 font-bold'
+      } else {
+        bgClasses = 'bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 ring-2 ring-emerald-400 shadow-md scale-[1.01] border-purple-400/40'
+        iconElement = <i className="fa-solid fa-moon text-indigo-200 text-sm filter drop-shadow shrink-0"></i>
+        pillClasses = 'text-indigo-200 bg-black/40 border-white/20 font-bold'
+      }
+    } else {
+      // ── Shift Tidak Terpilih (Soft dengan Line Garis Lingkaran & Border Berwarna Biru Langsung) ──
+      bgClasses = 'bg-slate-50/90 hover:bg-blue-50/40 border-2 border-blue-400/80 transition-all shadow-xs group'
+      titleClasses = 'text-slate-700 font-extrabold uppercase tracking-wider text-xs'
+      pillClasses = 'text-slate-600 bg-slate-200/90 border-slate-300/80 font-bold'
+
+      // Line garis lingkaran langsung berwarna biru tegas tanpa harus dipilih/hover dulu (mode HP)
+      badgeElement = (
+        <span className="absolute top-2 right-2 w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full border-2 border-blue-600 bg-white flex items-center justify-center shadow-xs ring-2 ring-blue-300">
+        </span>
+      )
+
+      if (shiftId === 'PAGI') {
+        iconElement = <i className="fa-solid fa-cloud-sun text-slate-400 text-sm shrink-0"></i>
+      } else if (shiftId === 'SIANG') {
+        iconElement = <i className="fa-solid fa-sun text-slate-400 text-sm shrink-0"></i>
+      } else {
+        iconElement = <i className="fa-solid fa-moon text-slate-400 text-sm shrink-0"></i>
+      }
+    }
+
+    return { bgClasses, iconElement, titleClasses, pillClasses, badgeElement }
+  }
+
   useEffect(() => {
     if (kasirListOverride) {
       setKasirList(kasirListOverride)
@@ -531,6 +592,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       // Buka popup modal absen (Anti-Skip Gate)
       setAuthenticatedAccount(account)
       setIsAbsenModalOpen(true)
+      setIsShiftDropdownOpen(activeShifts.length > 1)
+      setIsLateNoteOpen(false)
       setAbsenModalError('')
       return
     }
@@ -550,11 +613,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setAbsenModalError('')
 
     if (!selectedShift) {
+      if (activeShifts.length > 1) {
+        setIsShiftDropdownOpen(true)
+      }
       setAbsenModalError('Harap pilih shift kerja Anda.')
       return
     }
 
     if (shiftLateness.isLate && !alasanTelat.trim()) {
+      setIsLateNoteOpen(true)
       setAbsenModalError('Wajib isi keterangan alasan keterlambatan.')
       return
     }
@@ -671,6 +738,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setCapturedSelfie(null)
     setAlasanTelat('')
     setAbsenModalError('')
+    setIsShiftDropdownOpen(false)
+    setIsLateNoteOpen(false)
   }
 
   const triggerShake = () => {
@@ -929,103 +998,194 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
 
               {/* Shift Selection */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <i className="fa-solid fa-business-time text-blue-600"></i>
-                    Pilih Shift Hari Ini
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-semibold">
-                    Ketuk untuk memilih
-                  </span>
-                </div>
-                <div className={`grid gap-2 ${activeShifts.length === 1 ? 'grid-cols-1' : activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                  {activeShifts.map((shift) => {
-                    const isSelected = selectedShift === shift.id
-
-                    let bgClasses = ''
-                    let iconElement = null
-                    let labelColor = 'text-white'
-
-                    if (shift.id === 'PAGI') {
-                      bgClasses = isSelected
-                        ? 'bg-gradient-to-br from-sky-600 via-blue-700 to-amber-700 ring-2 ring-amber-400 shadow-md scale-[1.01]'
-                        : 'bg-gradient-to-br from-sky-700 via-blue-800 to-amber-800 hover:scale-[1.01] shadow-xs border-amber-300/30'
-                      iconElement = <i className="fa-solid fa-cloud-sun text-amber-300 text-sm filter drop-shadow shrink-0"></i>
-                      labelColor = 'text-amber-100'
-                    } else if (shift.id === 'SIANG') {
-                      bgClasses = isSelected
-                        ? 'bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 ring-2 ring-indigo-300 shadow-md scale-[1.01]'
-                        : 'bg-gradient-to-br from-blue-800 via-indigo-800 to-purple-900 hover:scale-[1.01] shadow-xs border-indigo-300/30'
-                      iconElement = <i className="fa-solid fa-sun text-yellow-300 text-sm filter drop-shadow shrink-0"></i>
-                      labelColor = 'text-indigo-100'
-                    } else {
-                      bgClasses = isSelected
-                        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 ring-2 ring-purple-400 shadow-md scale-[1.01]'
-                        : 'bg-gradient-to-br from-slate-900 via-gray-950 to-slate-950 hover:scale-[1.01] shadow-xs border-slate-700/50'
-                      iconElement = <i className="fa-solid fa-moon text-indigo-200 text-sm filter drop-shadow shrink-0"></i>
-                      labelColor = 'text-indigo-200'
-                    }
-
-                    return (
-                      <button
-                        key={shift.id}
-                        type="button"
-                        onClick={() => { setSelectedShift(shift.id); setAbsenModalError(''); }}
-                        className={`relative rounded-2xl py-2.5 px-2 text-white transition-all flex flex-col items-center justify-center text-center cursor-pointer border select-none ${bgClasses}`}
-                      >
-                        {isSelected && (
-                          <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-white text-emerald-600 rounded-full flex items-center justify-center text-[8px] font-black shadow ring-1 ring-emerald-500">
-                            <i className="fa-solid fa-check"></i>
+              {activeShifts.length > 0 && (
+                <div className="space-y-2">
+                  {/* Kondisi 1: Dropdown Sedang Terbuka (Pilihan Shift Ditampilkan) */}
+                  {activeShifts.length > 1 && isShiftDropdownOpen ? (
+                    <div className="bg-slate-50 border border-blue-200/80 rounded-2xl p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-black uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                          <i className="fa-solid fa-business-time text-blue-600"></i>
+                          Pilih Shift Hari Ini
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-blue-600 font-bold bg-blue-100/70 px-2 py-0.5 rounded-full border border-blue-200">
+                            Ketuk untuk memilih
                           </span>
-                        )}
-                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                          {iconElement}
-                          <span className="text-xs font-black uppercase tracking-wider text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-none">
-                            {shift.name}
-                          </span>
+                          {selectedShift && (
+                            <button
+                              type="button"
+                              onClick={() => setIsShiftDropdownOpen(false)}
+                              className="text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer"
+                              title="Tutup pilihan shift"
+                            >
+                              <i className="fa-solid fa-xmark"></i>
+                            </button>
+                          )}
                         </div>
-                        <span className={`text-[9px] font-bold tracking-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] bg-black/40 px-2 py-0.5 rounded-full border border-white/10 ${labelColor} leading-none mt-1`}>
-                          {shift.label}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+                      </div>
 
-              {/* Foto Selfie Absensi (Wajib jika diaktifkan oleh Owner di Pengaturan - Tepat di bawah pilih shift) */}
-              {isAbsenSelfieEnabled(liveFinancialSettings) && (
+                      <div className={`grid gap-2 ${activeShifts.length === 2 ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                        {activeShifts.map((shift) => {
+                          const isSelected = selectedShift === shift.id
+                          const { bgClasses, iconElement, titleClasses, pillClasses, badgeElement } = getShiftVisual(shift.id, isSelected)
+
+                          return (
+                            <button
+                              key={shift.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedShift(shift.id as any)
+                                setIsShiftDropdownOpen(false)
+                                setAbsenModalError('')
+                              }}
+                              className={`relative rounded-2xl py-3 px-2 transition-all flex flex-col items-center justify-center text-center cursor-pointer select-none active:scale-95 ${bgClasses}`}
+                            >
+                              {badgeElement}
+                              <div className="flex items-center justify-center gap-1.5 mb-1">
+                                {iconElement}
+                                <span className={`leading-none ${titleClasses}`}>
+                                  {shift.name}
+                                </span>
+                              </div>
+                              <span className={`text-[9px] tracking-tight px-2 py-0.5 rounded-full border leading-none ${pillClasses}`}>
+                                {shift.label}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Kondisi 2: Shift Sudah Dipilih (Atau Toko Hanya Punya 1 Shift) */
+                    <div className="space-y-2 animate-in fade-in duration-150">
+                      {/* Bar Dropdown Kecil (Hanya muncul jika toko punya lebih dari 1 shift) */}
+                      {activeShifts.length > 1 && (
+                        <div 
+                          onClick={() => setIsShiftDropdownOpen(true)}
+                          className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded-xl px-3 py-1.5 cursor-pointer transition-all shadow-2xs group"
+                          title="Klik untuk mengganti pilihan shift"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <i className="fa-solid fa-business-time text-blue-600 text-xs shrink-0"></i>
+                            <span className="text-[11px] font-bold text-slate-500 shrink-0">Pilihan Shift:</span>
+                            <span className="text-[11px] font-black text-slate-800 truncate">
+                              {selectedShiftObj?.name || selectedShift}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setIsShiftDropdownOpen(true)
+                            }}
+                            className="text-[10px] font-black text-blue-600 group-hover:text-blue-700 bg-blue-50 group-hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                          >
+                            <span>Ganti Shift</span>
+                            <i className="fa-solid fa-chevron-down text-[8px]"></i>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Tampilan Kolom/Card Absen Shift Yang Dipilih (Sesuai Foto) */}
+                      {selectedShiftObj && (() => {
+                        const { bgClasses, iconElement, titleClasses, pillClasses, badgeElement } = getShiftVisual(selectedShiftObj.id, true)
+                        return (
+                          <div
+                            onClick={() => {
+                              if (activeShifts.length > 1) setIsShiftDropdownOpen(true)
+                            }}
+                            className={`relative rounded-2xl py-3 px-3 transition-all flex flex-col items-center justify-center text-center border select-none ${
+                              activeShifts.length > 1 ? 'cursor-pointer hover:scale-[1.008]' : ''
+                            } ${bgClasses}`}
+                            title={activeShifts.length > 1 ? 'Ketuk untuk mengganti shift' : undefined}
+                          >
+                            {badgeElement}
+                            <div className="flex items-center justify-center gap-2 mb-1">
+                              {iconElement}
+                              <span className={`text-sm leading-none ${titleClasses}`}>
+                                {selectedShiftObj.name}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] tracking-tight px-3 py-0.5 rounded-full border leading-none ${pillClasses}`}>
+                              {selectedShiftObj.label}
+                            </span>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Foto Selfie Absensi (Wajib jika diaktifkan oleh Owner di Pengaturan - Muncul setelah shift dipilih) */}
+              {!isShiftDropdownOpen && isAbsenSelfieEnabled(liveFinancialSettings) && (
                 <div>
                   <AbsenSelfieCapture
                     storeName={storeName || 'ALFAZA CELL'}
                     cashierName={authenticatedAccount.name || selectedUser}
-                    shiftName={activeShifts.find(s => s.id === selectedShift)?.name || selectedShift}
+                    shiftName={selectedShiftObj?.name || selectedShift}
                     onSelfieCaptured={setCapturedSelfie}
                   />
                 </div>
               )}
 
-              {/* Keterangan Terlambat (OTOMATIS MUNCUL HANYA JIKA TERLAMBAT - Posisi paling bawah & lebih compact) */}
-              {shiftLateness.isLate && (
-                <div className="bg-rose-50/90 border border-rose-200 rounded-2xl p-2.5 space-y-1.5 animate-in fade-in slide-in-from-top-1 shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10.5px] font-black text-rose-800 flex items-center gap-1.5">
-                      <i className="fa-solid fa-triangle-exclamation text-rose-600"></i>
-                      Keterangan Terlambat Absen <span className="text-rose-500">*</span>
-                    </label>
-                    <span className="text-[8.5px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
-                      <i className="fa-solid fa-clock text-[8px]"></i> Telat {shiftLateness.lateMins} Menit
-                    </span>
-                  </div>
-                  <textarea
-                    className="w-full text-xs p-2 rounded-xl border border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-normal h-12"
-                    placeholder="Tulis alasan keterlambatan Anda di sini (wajib diisi)..."
-                    rows={2}
-                    value={alasanTelat}
-                    onChange={(e) => { setAlasanTelat(e.target.value); setAbsenModalError(''); }}
-                    autoFocus
-                  />
+              {/* Keterangan Terlambat (OTOMATIS MUNCUL HANYA JIKA TERLAMBAT & SHIFT SUDAH DIPILIH) */}
+              {!isShiftDropdownOpen && shiftLateness.isLate && (
+                <div>
+                  {!isLateNoteOpen && !alasanTelat.trim() ? (
+                    <div className="bg-rose-50/90 border border-rose-200 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in duration-200">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <i className="fa-solid fa-triangle-exclamation text-rose-600 text-xs shrink-0"></i>
+                        <span className="text-[9px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 shrink-0 flex items-center gap-1">
+                          <i className="fa-solid fa-clock text-[8px]"></i> Telat {shiftLateness.lateMins} Menit
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLateNoteOpen(true)
+                          setAbsenModalError('')
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10.5px] transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0 active:scale-95"
+                      >
+                        <i className="fa-solid fa-plus text-[9px]"></i>
+                        <span>Tulis Keterangan Terlambat</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-50/90 border border-rose-200 rounded-2xl p-2.5 space-y-1.5 animate-in fade-in slide-in-from-top-1 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10.5px] font-black text-rose-800 flex items-center gap-1.5">
+                          <i className="fa-solid fa-triangle-exclamation text-rose-600"></i>
+                          Keterangan Terlambat Absen <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8.5px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+                            <i className="fa-solid fa-clock text-[8px]"></i> Telat {shiftLateness.lateMins} Menit
+                          </span>
+                          {!alasanTelat.trim() && (
+                            <button
+                              type="button"
+                              onClick={() => setIsLateNoteOpen(false)}
+                              className="text-rose-500 hover:text-rose-700 text-[10px] p-0.5 cursor-pointer"
+                              title="Tutup form keterangan"
+                            >
+                              <i className="fa-solid fa-xmark"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <textarea
+                        className="w-full text-xs p-2 rounded-xl border border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-200 bg-white placeholder-gray-400 text-gray-800 outline-none resize-none transition-all shadow-inner leading-normal h-12"
+                        placeholder="Tulis alasan keterlambatan Anda di sini (wajib diisi)..."
+                        rows={2}
+                        value={alasanTelat}
+                        onChange={(e) => { setAlasanTelat(e.target.value); setAbsenModalError(''); }}
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1040,26 +1200,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
             {/* Modal Footer Actions (Anti-Skip Gate) */}
             <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-col gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleConfirmAbsenAndLogin}
-                disabled={isSubmittingAbsen}
-                className={`w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm tracking-wide shadow-lg shadow-blue-500/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  isSubmittingAbsen ? 'opacity-70 cursor-wait' : ''
-                }`}
-              >
-                {isSubmittingAbsen ? (
-                  <>
-                    <i className="fa-solid fa-circle-notch fa-spin"></i>
-                    <span>Menyimpan Absensi Cloud...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="fa-solid fa-arrow-right-to-bracket"></i>
-                    <span>KIRIM ABSENSI & BUKA KASIR</span>
-                  </>
-                )}
-              </button>
+              {isShiftDropdownOpen ? (
+                <div className="text-center py-1">
+                  <span className="text-xs font-bold text-slate-500 flex items-center justify-center gap-1.5">
+                    <i className="fa-solid fa-hand-pointer text-blue-500 animate-bounce"></i>
+                    Silakan ketuk salah satu shift di atas
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConfirmAbsenAndLogin}
+                  disabled={isSubmittingAbsen}
+                  className={`w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-sm tracking-wide shadow-lg shadow-blue-500/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    isSubmittingAbsen ? 'opacity-70 cursor-wait' : ''
+                  }`}
+                >
+                  {isSubmittingAbsen ? (
+                    <>
+                      <i className="fa-solid fa-circle-notch fa-spin"></i>
+                      <span>Menyimpan Absensi Cloud...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-arrow-right-to-bracket"></i>
+                      <span>KIRIM ABSENSI & BUKA KASIR</span>
+                    </>
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"

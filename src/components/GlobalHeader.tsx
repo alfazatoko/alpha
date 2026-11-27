@@ -61,6 +61,19 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   const dayName = propDayName || currentTime.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
   const fullDate = propFullDate || currentTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
   const clockStr = propClockStr || currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // Format tanggal singkat dengan tahun: e.g. "Jum, 27 Nov 2026"
+  const formattedDate = currentTime.toLocaleDateString('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  // Jam dengan detik berjalan: e.g. "09.21.45"
+  const liveClock = (propClockStr && propClockStr.length >= 8)
+    ? propClockStr
+    : currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -233,14 +246,14 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             )}
           </div>
           
-          {/* Kolom Kanan: Tanggal & Jam */}
-          <div className="text-[7px] min-[360px]:text-[7.5px] sm:text-[8.5px] font-black text-gray-700 flex items-center gap-0.5 sm:gap-1 shrink-0">
-            <span className="hidden min-[380px]:inline-flex items-center gap-0.5 text-gray-500">
-              <i className="fa-regular fa-calendar text-blue-500 text-[7px] sm:text-[8px]"></i>
-              <span>{dayName.slice(0, 3)}, {fullDate.split(' ').slice(0, 2).join(' ')}</span>
+          {/* Kolom Kanan: Tanggal & Jam dengan Detik Berjalan */}
+          <div className="text-[7.5px] min-[360px]:text-[8px] sm:text-[9px] font-black text-gray-700 flex items-center gap-0.5 sm:gap-1 shrink-0">
+            <span className="inline-flex items-center gap-0.5 sm:gap-1 text-gray-600 bg-gray-50/90 px-1 sm:px-1.5 py-0.5 rounded-md border border-gray-200/50 font-bold whitespace-nowrap">
+              <i className="fa-regular fa-calendar text-blue-500 text-[7.5px] sm:text-[8.5px]"></i>
+              <span>{formattedDate}</span>
             </span>
-            <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-[9px] text-blue-600 bg-blue-50/80 px-1 sm:px-1.5 py-0.5 rounded-md tabular-nums border border-blue-100/50 font-black">
-              {clockStr.slice(0, 5)}
+            <span className="text-[7.5px] min-[360px]:text-[8px] sm:text-[9px] text-blue-600 bg-blue-50/90 px-1.5 sm:px-2 py-0.5 rounded-md tabular-nums border border-blue-100/60 font-black whitespace-nowrap shadow-2xs">
+              {liveClock}
             </span>
           </div>
         </div>

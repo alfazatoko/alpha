@@ -102,19 +102,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.7.3
-          name: "ALFAZA ALPHA POS v1.7.3"
+          tag_name: v1.7.4
+          name: "ALFAZA ALPHA POS v1.7.4"
           body: |
-            ### Pembaruan Aplikasi v1.7.3
-            - **Sistem Penomoran ID TRX Permanen & Anti-Bentrok:**
-              - Format resmi: `#TRX-[TotalSeumurHidup]-[DDMMYY]-[UrutanHarian]`.
-              - Sinkronisasi counter atomik via database Supabase: aman dari nomor kembar antar-kasir (Kasir 1, 2, 3 bersambung rapi).
-              - Proteksi edit dan hapus: transaksi yang diedit atau transaksi lain yang dihapus tidak akan pernah mengubah/menggeser ID TRX yang sudah tercatat.
-            - **Pembaruan Struk Thermal & Review Preview:**
-              - Label `No :` diganti menjadi `ID TRX :` dengan nomor kode resmi penuh pada hasil cetak printer Bluetooth dan preview popup.
-            - **Penyempurnaan UI Riwayat & Responsivitas:**
-              - Kolom "Riwayat Transaksi" dan "Riwayat Tambah Saldo" lebih proporsional dan teks terbaca penuh di layar HP.
-              - Modal rincian transaksi lebih kompak, mepet header, dan didukung batas tinggi maksimal serta scroll otomatis untuk mode tablet landscape.
+            ### Pembaruan Aplikasi v1.7.4
+            - **Desain Baru Alur Absen Kasir (Multi-Shift):**
+              - Dropdown shift otomatis terbuka saat ada lebih dari 1 shift aktif sehingga kasir bisa langsung memilih shift dalam 1 klik.
+              - Panel pilihan shift otomatis menyusut ramping setelah dipilih (`Pilihan Shift: [Nama Shift] [Ganti Shift ▾]`).
+              - Kartu shift yang dipilih tampil kontras berwarna penuh dengan centang aktif dan outline biru.
+              - Kartu shift yang tidak dipilih bergaris biru tegas langsung (tanpa perlu sentuh/hover kursor), optimal untuk layar HP.
+              - Keterangan terlambat lebih rapi dan minimalis, tersembunyi di balik tombol toggle `+ Tulis Keterangan Terlambat` beserta badge durasi menit keterlambatan.
+            - **Penyempurnaan Tanggal & Jam Live di Header:**
+              - Format tanggal singkat lengkap dengan tahun: `Jum, 27 Nov 2026`.
+              - Jam digital dilengkapi detik berjalan dinamis (real-time live clock: `09.21.45`).
           files: |
             android/app/build/outputs/apk/release/app-release.apk
         env:
