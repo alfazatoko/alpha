@@ -71,7 +71,7 @@ const ITEMS: Record<string, { id: string, name: string, icon: string, color: str
 };
 
 interface TransactionFormProps {
-  onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }) => void
+  onSave: (data: { kategori: string, nominal: string, admin: string, keterangan: string }, options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number, tunaiAmount?: number }) => void
   isSaving?: boolean
   presets?: any[]
   onOpenVoucherJualCepat?: () => void
@@ -1590,7 +1590,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       if (tujuanMasuk === '2X BAYAR (TUNAI & NON TUNAI)') {
         const nonTunaiAmount = parseInt(nominalNonTunaiSplit.replace(/\D/g, '') || '0', 10)
         const tunaiAmount = parseInt(nominalCashSplit.replace(/\D/g, '') || '0', 10)
-        const totNominal = parseInt(saveNominal.replace(/\D/g, '') || '0', 10)
+        const totNominal = parseInt(nominal.replace(/\D/g, '') || '0', 10)
         
         if (tunaiAmount + nonTunaiAmount !== totNominal) {
           setErrorMsg('Total Tunai + Non Tunai harus sama dengan Nominal!')
@@ -1598,7 +1598,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         }
         
         const splitKeterangan = `${withSysKet} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
-        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
+        onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount, tunaiAmount })
       } else {
         onSave({ kategori, nominal: saveNominal, admin: saveAdmin, keterangan: withSysKet }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
       }
@@ -1620,7 +1620,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       }
       
       const splitKeterangan = `${finalKeteranganBase} [SPLIT: Tunai ${tunaiAmount.toLocaleString('id-ID')}, NonTunai ${nonTunaiAmount.toLocaleString('id-ID')}]`
-      onSave({ kategori, nominal, admin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount })
+      onSave({ kategori, nominal, admin, keterangan: splitKeterangan }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai, isSplit: true, nonTunaiAmount, tunaiAmount })
     } else {
       onSave({ kategori, nominal, admin, keterangan: finalKeteranganBase }, { activeTab, subTab: subMode === 'NORMAL' ? 'KHUSUS' : (subTab as any), isAdminNonTunai })
     }

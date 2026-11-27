@@ -22,7 +22,7 @@ import PromoBannerSlider from './components/PromoBannerSlider'
 import type { Store } from './types'
 import { preloadTransactionSound, playTransactionSound } from './lib/audioManager'
 import { PrinterReconnectModal } from './components/PrinterReconnectModal'
-import { isDigitalTransferTx, getStoredCustomLabels } from './lib/categoryHelper'
+import { isDigitalTransferTx, isPpobTx, getStoredCustomLabels } from './lib/categoryHelper'
 import { 
   getOfflineQueue, 
   saveToOfflineQueue, 
@@ -3306,7 +3306,7 @@ const MainApp: React.FC<MainAppProps> = ({
 
   const handleSimpanTransaksi = (
     data?: { kategori: string, nominal: string, admin: string, keterangan: string },
-    options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number }, 
+    options?: { activeTab: string, subTab: string, isAdminNonTunai: boolean, isSplit?: boolean, nonTunaiAmount?: number, tunaiAmount?: number }, 
     bypassDuplicateCheck = false
   ) => {
     if (!data) return
@@ -3322,7 +3322,8 @@ const MainApp: React.FC<MainAppProps> = ({
     let finalNominal = nominal
     let finalAdmin = admin
 
-    if (data.kategori === 'Order Kuota') {
+    const storeLabelsForSave = getStoredCustomLabels(activeRole === 'owner' ? (pantauStoreId === 'all' ? activeStoreId : pantauStoreId) : activeStoreId)
+    if (data.kategori === 'Order Kuota' || isPpobTx({ kategori: data.kategori, keterangan: data.keterangan }, storeLabelsForSave)) {
       finalAdmin = admin - nominal
       finalNominal = nominal
     }
@@ -3415,8 +3416,9 @@ const MainApp: React.FC<MainAppProps> = ({
       // Jika 2-Opsi aktif, buat transaksi penyesuaian Non Tunai otomatis
       if (options?.isSplit && nonTunaiAmount > 0) {
         const adjId = (Date.now() + 1).toString()
-        const tunaiAmount = finalNominal - nonTunaiAmount
-        const adjKet = `Transfer Opsi 2x bayar\nNominal Tunai : ${tunaiAmount.toLocaleString('id-ID')}\nNominal Non tunai : ${nonTunaiAmount.toLocaleString('id-ID')}\nTotal ${finalNominal.toLocaleString('id-ID')}`
+        const tunaiAmount = options?.tunaiAmount ?? (finalNominal - nonTunaiAmount)
+        const totalSplitNominal = tunaiAmount + nonTunaiAmount
+        const adjKet = `Transfer Opsi 2x bayar\nNominal Tunai : ${tunaiAmount.toLocaleString('id-ID')}\nNominal Non tunai : ${nonTunaiAmount.toLocaleString('id-ID')}\nTotal ${totalSplitNominal.toLocaleString('id-ID')}`
         const adjTx = {
           id: adjId,
           user_id: googleUid,
